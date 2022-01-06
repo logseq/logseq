@@ -354,7 +354,7 @@
   ([repo names]
    (when repo
      (let [lookup-refs (map (fn [name]
-                              [:block/name (string/lower-case name)]) names)]
+                              [:block/name (util/page-name-sanity-lc name)]) names)]
        (->> (db-utils/pull-many repo '[:db/id] lookup-refs)
             (mapv :db/id))))))
 
@@ -364,9 +364,9 @@
     (when (seq alias-ids)
       (let [names (->> (get-page-names-by-ids repo alias-ids)
                        distinct
-                       (remove #(= (string/lower-case %) (string/lower-case page-name))))
+                       (remove #(= (util/page-name-sanity-lc %) (util/page-name-sanity-lc page-name))))
             lookup-refs (map (fn [name]
-                               [:block/name (string/lower-case name)]) names)]
+                               [:block/name (util/page-name-sanity-lc name)]) names)]
         (->> (db-utils/pull-many repo '[:block/name :block/original-name] lookup-refs)
              (map (fn [m]
                     (or (:block/original-name m) (:block/name m)))))))))
@@ -739,7 +739,7 @@
   [page-name]
   (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
-    (db-utils/entity [:block/name (string/lower-case page-name)])))
+    (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn- heading-block?
   [block]
@@ -748,18 +748,18 @@
    (= "Heading" (first block))))
 
 (defn get-redirect-page-name
+  "Accepts both sanitized or unsanitized"
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]
    (when page-name
-     (let [page-name (string/lower-case page-name)
+     (let [page-name (util/page-name-sanity-lc page-name)
            page-entity (db-utils/entity [:block/name page-name])]
        (cond
          alias?
          page-name
 
          (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-         (let [source-page (get-alias-source-page (state/get-current-repo)
-                                                  (string/lower-case page-name))]
+         (let [source-page (get-alias-source-page (state/get-current-repo) page-name)]
            (or (when source-page (:block/name source-page))
                page-name))
 
@@ -1454,16 +1454,17 @@
     (namespace-children root)))
 
 (defn get-namespace-hierarchy
+  "Unsanitized namespaces"
   [repo namespace]
   (let [children (get-namespace-pages repo namespace)
-        namespace-id (:db/id (db-utils/entity [:block/name (string/lower-case namespace)]))
+        namespace-id (:db/id (db-utils/entity [:block/name (util/page-name-sanity-lc namespace)]))
         root {:db/id namespace-id}
         col (conj children root)]
     (tree col root)))
 
 (defn get-page-namespace
   [repo page]
-  (:block/namespace (db-utils/entity repo [:block/name (string/lower-case page)])))
+  (:block/namespace (db-utils/entity repo [:block/name (util/page-name-sanity-lc page)])))
 
 (defn get-page-namespace-routes
   [repo page]

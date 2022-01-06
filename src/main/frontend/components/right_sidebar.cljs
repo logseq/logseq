@@ -130,7 +130,7 @@
 
   (let [item
         (if (= :page block-type)
-          (let [lookup-ref (if (number? db-id) db-id [:block/name (string/lower-case db-id)])
+          (let [lookup-ref (if (number? db-id) db-id [:block/name (util/page-name-sanity-lc db-id)])
                 page (db/query-entity-in-component lookup-ref)]
             (when (seq page)
               (build-sidebar-item repo idx db-id block-type page t)))

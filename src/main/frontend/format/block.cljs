@@ -255,13 +255,12 @@
   "Convert journal file name to user' custom date format"
   [original-page-name]
   (when original-page-name
-    (let [page-name (-> (string/lower-case original-page-name)
-                        (util/page-name-sanity))
+    (let [page-name (util/page-name-sanity-lc original-page-name)
           day (date/journal-title->int page-name)]
-      (if day
-        (let [original-page-name (date/int->journal-title day)]
-          [original-page-name (string/lower-case original-page-name) day])
-        [original-page-name page-name day]))))
+     (if day
+       (let [original-page-name (date/int->journal-title day)]
+         [original-page-name (util/page-name-sanity-lc original-page-name) day])
+       [original-page-name page-name day]))))
 
 (defn page-name->map
   [original-page-name with-id?]
@@ -281,7 +280,7 @@
              (when namespace?
                (let [namespace (first (util/split-last "/" original-page-name))]
                  (when-not (string/blank? namespace)
-                   {:block/namespace {:block/name (string/lower-case namespace)}}))))]
+                   {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}}))))]
       (if journal-day
         (merge m
                {:block/journal? true
@@ -407,7 +406,7 @@
                                 (remove string/blank?)
                                 (map (fn [ref]
                                        (if (string? ref)
-                                         {:block/name (string/lower-case ref)}
+                                         {:block/name (util/page-name-sanity-lc ref)}
                                          ref)))
                                 (remove vector?)
                                 (remove nil?)
@@ -421,7 +420,7 @@
   (if (seq tags)
     (assoc block :tags (map (fn [tag]
                               (let [tag (text/page-ref-un-brackets! tag)]
-                                [:block/name (string/lower-case tag)])) tags))
+                                [:block/name (util/page-name-sanity-lc tag)])) tags))
     block))
 
 (defn src-block?

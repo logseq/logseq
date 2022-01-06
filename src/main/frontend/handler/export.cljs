@@ -286,7 +286,7 @@
      :block-refs block-refs}))
 
 (defn get-page-page&block-refs [repo page-name embed-pages embed-blocks block-refs]
-  (let [page-name* (string/lower-case page-name)
+  (let [page-name* (util/page-name-sanity-lc page-name)
         page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
         ast (mldoc/->edn page-content (mldoc/default-config format))

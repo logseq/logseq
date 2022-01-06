@@ -451,7 +451,7 @@
                                                       [:span
                                                        [:span.text-sm.mr-2 "Alias:"]
                                                        page-original-name])])
-                           (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                           (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                              (when-let [f (state/get-page-blocks-cp)]
                                (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
@@ -620,7 +620,7 @@
 (defn- get-page
   [label]
   (when-let [label-text (get-label-text label)]
-    (db/entity [:block/name (string/lower-case label-text)])))
+    (db/entity [:block/name (util/page-name-sanity-lc label-text)])))
 
 (defn- macro->text
   [name arguments]
@@ -985,7 +985,7 @@
                     config (assoc config :redirect-page-name redirect-page-name)
                     label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:block/name (db/get-file-page (string/replace href "file:" ""))}
+                           {:block/name (util/page-name-sanity-lc (db/get-file-page (string/replace href "file:" "")))}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
@@ -2004,7 +2004,7 @@
   [config block label]
   (if (= block :page)                   ; page
     (when label
-      (let [page (db/entity [:block/name (string/lower-case label)])]
+      (let [page (db/entity [:block/name (util/page-name-sanity-lc label)])]
         (page-cp config page)))
     [:a {:on-mouse-down
          (fn [e]

@@ -95,10 +95,9 @@
                   split-namespace?    true}}]
    (let [title (string/trim title)
          title (util/remove-boundary-slashes title)
-         page (string/lower-case title)]
-     (when-not (db/entity [:block/name page])
-       (let [title    (string/trim title)
-             pages    (if split-namespace?
+         page-name (util/page-name-sanity-lc title)]
+     (when-not (db/entity [:block/name page-name])
+       (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
@@ -118,14 +117,14 @@
          (db/transact! txs)
 
          (when create-first-block?
-           (editor-handler/insert-first-page-block-if-not-exists! page))
+           (editor-handler/insert-first-page-block-if-not-exists! page-name))
 
-         (when-let [page (db/entity [:block/name page])]
+         (when-let [page (db/entity [:block/name page-name])]
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect-to-page! page))
-         page)))))
+           (route-handler/redirect-to-page! page-name))
+         page-name)))))
 
 (defn delete-file!
   [repo page-name]

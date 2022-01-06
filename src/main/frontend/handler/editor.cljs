@@ -683,7 +683,7 @@
     (let [before? (if page false before?)
           sibling? (if before? true (if page false sibling?))
           block (if page
-                  (db/entity [:block/name (string/lower-case page)])
+                  (db/entity [:block/name (util/page-name-sanity-lc page)])
                   (db/entity [:block/uuid block-uuid]))]
       (when block
         (let [last-block (when (not sibling?)
@@ -2369,7 +2369,7 @@
   (when id
     (when-let [entity (if (util/uuid-string? (str id))
                         (db/entity [:block/uuid (uuid id)])
-                        (db/entity [:block/name (string/lower-case id)]))]
+                        (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
 (defn- insert
