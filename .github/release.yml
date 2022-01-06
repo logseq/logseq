@@ -6,21 +6,21 @@ changelog:
       - test
       - chore
       - ci
-      - :type/dev
+      - ":type/dev"
   categories:
     - title: Exciting New Features 🎉
       labels:
-        - :type/feature-request
-        - :type/feature
+        - ":type/feature-request"
+        - ":type/feature"
     - title: Bug Fixes 🐛
       labels:
-        - :type/bug
-        - :type/bug-fix
-        - :type/regression
+        - ":type/bug"
+        - ":type/bug-fix"
+        - ":type/regression"
     - title: Enhancements 🔧
       labels:
-        - :type/enhancement
-        - :type/performance
+        - ":type/enhancement"
+        - ":type/performance"
     - title: Other Changes 🚧
       labels:
         - "*"
