@@ -126,7 +126,7 @@
   [page theme]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-      (let [page (string/lower-case page)
+      (let [page (util/page-name-sanity-lc page)
             page-entity (db/entity [:block/name page])
             original-page-name (:block/original-name page-entity)
             tags (:tags (:block/properties page-entity))

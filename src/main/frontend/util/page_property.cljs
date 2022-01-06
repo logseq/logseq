@@ -50,7 +50,7 @@
 (defn add-property!
   "Sanitized page-name, unsanitized key / value"
   [page-name key value]
-  (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
+  (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
     (let [repo (state/get-current-repo)
           key (keyword key)
           pre-block (db/get-pre-block repo (:db/id page))

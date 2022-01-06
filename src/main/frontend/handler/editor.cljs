@@ -742,7 +742,7 @@
 (defn insert-first-page-block-if-not-exists!
   [page-name]
   (when (string? page-name)
-    (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (api-insert-new-block! "" {:page page-name})))))
 
@@ -783,7 +783,7 @@
 (defn add-default-title-property-if-needed!
   [page-name]
   (when (string? page-name)
-    (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (let [title (or (:block/original-name page)
                         (:block/name page))

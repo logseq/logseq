@@ -4,6 +4,7 @@
             [frontend.handler.notification :as notification-handler]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -25,7 +26,7 @@
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
-                        (:db/id (db/entity repo [:block/name (string/lower-case page-db-id)]))
+                        (:db/id (db/entity repo [:block/name (util/page-name-sanity-lc page-db-id)]))
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
        (p/let [blocks (search/block-search repo q opts)]

@@ -780,7 +780,7 @@
 
                  ;; search key
                  pages (if-not (string/blank? @*search-key)
-                         (search/fuzzy-search pages @*search-key
+                         (search/fuzzy-search pages (util/page-name-sanity-lc @*search-key)
                                               :limit 20
                                               :extract-fn :block/name)
                          pages)

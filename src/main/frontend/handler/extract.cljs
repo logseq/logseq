@@ -105,7 +105,7 @@
                                            aliases (when (seq aliases)
                                                      (map
                                                        (fn [alias]
-                                                         {:block/name (string/lower-case alias)})
+                                                         {:block/name (util/page-name-sanity-lc alias)})
                                                        aliases))]
                                        (if (seq aliases)
                                          {:block/name page-name

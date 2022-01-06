@@ -84,7 +84,7 @@
            [?page :block/original-name ?original-name]
            [?page :block/name ?name]]
          (conn/get-conn repo)
-         (string/lower-case tag-name))))
+         (util/page-name-sanity-lc tag-name))))
 
 (defn get-all-tagged-pages
   [repo]
@@ -131,14 +131,15 @@
                     [?page :block/name ?page-name]
                     [?page :block/alias ?alias]]
                   conn
-                  page-name)
+                  (util/page-name-sanity-lc page-name))
              db-utils/seq-flatten
              distinct)))
 
 (defn get-alias-source-page
   [repo alias]
   (when-let [conn (and repo (conn/get-conn repo))]
-    (let [pages (->>
+    (let [alias (util/page-name-sanity-lc alias)
+          pages (->>
                  (d/q '[:find (pull ?p [*])
                         :in $ ?alias
                         :where
@@ -150,7 +151,7 @@
       (when (seq pages)
         (some (fn [page]
                 (let [aliases (->> (get-in page [:block/properties :alias])
-                                   (map string/lower-case)
+                                   (map util/page-name-sanity-lc)
                                    set)]
                   (when (contains? aliases alias)
                     page)))
@@ -299,7 +300,7 @@
 (defn get-page-format
   [page-name]
   (or
-   (let [page (db-utils/entity [:block/name page-name])]
+   (let [page (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
      (or
       (:block/format page)
       (when-let [file (:block/file page)]
@@ -310,7 +311,7 @@
 
 (defn page-alias-set
   [repo-url page]
-  (when-let [page-id (:db/id (db-utils/entity repo-url [:block/name page]))]
+  (when-let [page-id (:db/id (db-utils/entity repo-url [:block/name (util/page-name-sanity-lc page)]))]
     (->>
      (d/q '[:find ?e
             :in $ ?page-name %
@@ -318,7 +319,7 @@
             [?page :block/name ?page-name]
             (alias ?page ?e)]
           (conn/get-conn repo-url)
-          page
+          (util/page-name-sanity-lc page)
           '[[(alias ?e2 ?e1)
              [?e2 :block/alias ?e1]]
             [(alias ?e2 ?e1)
@@ -391,7 +392,7 @@
 
 (defn get-page-properties
   [page]
-  (when-let [page (db-utils/entity [:block/name page])]
+  (when-let [page (db-utils/entity [:block/name (util/page-name-sanity-lc page)])]
     (:block/properties page)))
 
 ;; FIXME: alert
@@ -475,7 +476,7 @@
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (when page
-     (let [page (string/lower-case (string/trim page))
+     (let [page (util/page-name-sanity-lc (string/trim page))
            page-entity (or (db-utils/entity repo-url [:block/name page])
                            (db-utils/entity repo-url [:block/original-name page]))
            page-id (:db/id page-entity)
@@ -501,7 +502,7 @@
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
    (when page
-     (let [page (string/lower-case page)
+     (let [page (util/page-name-sanity-lc page)
            page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
                        (:db/id (db-utils/entity repo-url [:block/original-name page])))
            db (conn/get-conn repo-url)]
@@ -520,7 +521,7 @@
   [repo page-id]
   (let [page-id (if (integer? page-id)
                   page-id
-                  [:block/name page-id])]
+                  [:block/name (util/page-name-sanity-lc page-id)])]
     (empty? (:block/_parent (db-utils/entity repo page-id)))))
 
 (defn page-empty-or-dummy?
@@ -590,7 +591,7 @@
   [repo partition]
   (when-let [conn (conn/get-conn repo)]
     (when-not (string/blank? partition)
-      (let [partition (string/lower-case (string/trim partition))
+      (let [partition (util/page-name-sanity-lc (string/trim partition))
             ids (->> (d/datoms conn :aevt :block/name)
                      (filter (fn [datom]
                                (let [page (:v datom)]
@@ -818,8 +819,9 @@
 (defn get-page-referenced-pages
   [repo page]
   (when (conn/get-conn repo)
-    (let [pages (page-alias-set repo page)
-          page-id (:db/id (db-utils/entity [:block/name page]))
+    (let [page-name (util/page-name-sanity-lc page)
+          pages (page-alias-set repo page)
+          page-id (:db/id (db-utils/entity [:block/name page-name]))
           ref-pages (->> (react/q repo [:page/ref-pages page-id] {:use-cache? false}
                                   '[:find ?ref-page-name
                                     :in $ ?pages
@@ -848,7 +850,7 @@
         [?other-p :block/original-name ?ref-page]]
       conn
       rules
-      page)
+      (util/page-name-sanity-lc page))
      (distinct))))
 
 ;; Ignore files with empty blocks for now
@@ -879,7 +881,7 @@
 (defn get-pages-that-mentioned-page
   [repo page]
   (when (conn/get-conn repo)
-    (let [page-id (:db/id (db-utils/entity [:block/name page]))
+    (let [page-id (:db/id (db-utils/entity [:block/name (util/page-name-sanity-lc page)]))
           pages (page-alias-set repo page)
           mentioned-pages (->> (react/q repo [:page/mentioned-pages page-id] {:use-cache? false}
                                         '[:find ?mentioned-page-name
@@ -953,7 +955,7 @@
   ([repo page]
    (when repo
      (when (conn/get-conn repo)
-       (let [page-id (:db/id (db-utils/entity [:block/name page]))
+       (let [page-id (:db/id (db-utils/entity [:block/name (util/page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
              query-result (if (seq aliases)
@@ -1000,7 +1002,7 @@
   ([repo page]
    (when repo
      (when-let [conn (conn/get-conn repo)]
-       (let [page-id (:db/id (db-utils/entity [:block/name page]))
+       (let [page-id (:db/id (db-utils/entity [:block/name (util/page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
              query-result (if (seq aliases)
@@ -1068,7 +1070,8 @@
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
-      (let [page-id     (:db/id (db-utils/entity [:block/name page]))
+      (let [page (util/page-name-sanity-lc page)
+            page-id     (:db/id (db-utils/entity [:block/name page]))
             alias-names (get-page-alias-names repo page)
             patterns    (->> (conj alias-names page)
                              (map pattern))
@@ -1158,6 +1161,7 @@
                         (mapv (fn [id] [:block/uuid id]) block-uuids))))
 
 (defn journal-page?
+  "sanitized page-name only"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
 
@@ -1361,7 +1365,7 @@
   [repo-url page]
   (when page
     (let [db (conn/get-conn repo-url)
-          page (db-utils/pull [:block/name (string/lower-case page)])]
+          page (db-utils/pull [:block/name (util/page-name-sanity-lc page)])]
       (when page
         (let [datoms (d/datoms db :avet :block/page (:db/id page))
               block-eids (mapv :e datoms)]
@@ -1390,7 +1394,7 @@
   (let [pages (->> (mapv get-file-page files)
                    (remove nil?))]
     (when (seq pages)
-      (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map string/lower-case pages)))))
+      (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map util/page-name-sanity-lc pages)))))
 
 (defn remove-all-aliases!
   [repo]
@@ -1504,7 +1508,7 @@
         orphaned-pages (->>
                         (map
                           (fn [page]
-                            (let [name (string/lower-case page)]
+                            (let [name (util/page-name-sanity-lc page)]
                               (when-let [page (db-utils/entity [:block/name name])]
                                 (and
                                  (empty-ref-f page)
