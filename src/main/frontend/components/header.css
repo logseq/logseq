@@ -261,6 +261,10 @@ html.is-native-ipad {
     .cp__right-sidebar-topbar {
         padding-top: 37px;
     }
+
+    .ui__modal {
+        top: 20vh;
+    }
   }
 
 html.is-native-iphone {
@@ -277,7 +281,7 @@ html.is-native-iphone {
     }
 
     #main-container {
-        padding-top: 75px;
+        padding-top: 83px;
     }
 
     @media (orientation: landscape) {
@@ -289,11 +293,7 @@ html.is-native-iphone {
         }
 
         #main-container {
-            padding-top: 20px;
-        }
-        
-        #main-content{
-            padding-top: 0px;
+            padding-top: 45px;
         }
     }
 }
@@ -302,6 +302,10 @@ html.is-native-iphone-without-notch {
     
     --ls-headbar-inner-top-padding: 15px;
     --ls-headbar-height: 2.5rem;
+
+    #main-container {
+        padding-top: 55px;
+    }
 
     @media (orientation: landscape) {
 
@@ -313,7 +317,7 @@ html.is-native-iphone-without-notch {
         }
 
         #main-container {
-            padding-top: 20px;
+            padding-top: 40px;
         }
     }
 }
