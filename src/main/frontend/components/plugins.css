@@ -93,6 +93,11 @@
         background: transparent;
         font-size: 12px;
         opacity: .8;
+        display: none;
+
+        @screen md {
+          display: block;
+        }
       }
 
       &.load-unpacked {
