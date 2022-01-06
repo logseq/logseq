@@ -7,11 +7,13 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn render-local-images!
   []
-  (when-not (and (util/electron?)
+  (when-not (and (or (util/electron?)
+                     (mobile-util/native-ios?))
                  (config/local-db? (state/get-current-repo)))
     (try
       (let [images (array-seq (gdom/getElementsByTagName "img"))

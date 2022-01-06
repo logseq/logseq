@@ -248,9 +248,11 @@
 
 (defn namespace-page?
   [p]
-  (and (not (string/starts-with? p "../"))
+  (and (string? p)
+       (string/includes? p "/")
+       (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (re-find #"(?i)^http[s]?://" p))))
+       (not (util/url? p))))
 
 (defn add-timestamp
   [content key value]

@@ -61,12 +61,12 @@
           page (get-page-name file ast)
           [page page-name journal-day] (block/convert-page-if-journal page)
           blocks (->> (block/extract-blocks ast content false format)
-                      (block/with-parent-and-left {:block/name (string/lower-case page)}))
+                      (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
                         (let [block-ref-pages (seq (:block/refs block))
-                              page-lookup-ref [:block/name (string/lower-case page)]
+                              page-lookup-ref [:block/name page-name]
                               block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
                                                         (remove nil?))]
                           (when block-ref-pages
@@ -74,7 +74,7 @@
                           (-> block
                               (dissoc :ref-pages)
                               (assoc :block/format format
-                                     :block/page [:block/name (string/lower-case page)]
+                                     :block/page [:block/name page-name]
                                      :block/refs block-ref-pages
                                      :block/path-refs block-path-ref-pages))))
                    blocks)
@@ -96,7 +96,8 @@
                           (assoc :block/alias
                                  (map
                                    (fn [alias]
-                                     (let [page-name (string/lower-case alias)
+                                     (let [alias (util/page-name-sanity alias)
+                                           page-name (string/lower-case alias)
                                            aliases (distinct
                                                     (conj
                                                      (remove #{alias} aliases)
@@ -117,19 +118,27 @@
                                                    tags (if (string? tags) [tags] tags)
                                                    tags (remove string/blank? tags)]
                                                (swap! ref-tags set/union (set tags))
-                                               (map (fn [tag] {:block/name (string/lower-case tag)
+                                               (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
                                                  tags)))))
+          namespace-pages (let [page (:block/original-name page-entity)]
+                            (when (text/namespace-page? page)
+                              (->> (util/split-namespace-pages page)
+                                   (map (fn [page]
+                                          (-> (block/page-name->map page true)
+                                              (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
                       @ref-pages
                       (map
                         (fn [page]
                           {:block/original-name page
-                           :block/name (string/lower-case page)})
-                        @ref-tags))
+                           :block/name (util/page-name-sanity-lc page)})
+                        @ref-tags)
+                      namespace-pages)
                      ;; remove block references
-                     (remove vector?))
+                     (remove vector?)
+                     (remove nil?))
           pages (util/distinct-by :block/name pages)
           block-ids (->>
                      (mapv (fn [block]
@@ -154,7 +163,8 @@
              _ (println "Parsing start : " file)
              parse-f (if (and (mobile/is-native-platform?) config/dev?)
                        mldoc/->edn
-                       mldoc/->edn-async)
+                       (fn [content config]
+                         (mldoc/->edn-async file content config)))
              ast (parse-f content (mldoc/default-config format))]
        _ (println "Parsing finished : " file)
        (let [journal? (config/journal? file)

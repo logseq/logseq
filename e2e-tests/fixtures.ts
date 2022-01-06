@@ -1,9 +1,14 @@
+import fs from 'fs'
+import path from 'path'
 import { test as base, expect, ConsoleMessage } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
+import { loadLocalGraph, randomString } from './utils';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
+let repoName = randomString(10)
+export let graphDir = path.resolve(__dirname, '../tmp/e2e-graph', repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
@@ -19,9 +24,14 @@ base.beforeAll(async () => {
     return
   }
 
+  fs.mkdirSync(graphDir, {
+    recursive: true,
+  });
+
   electronApp = await electron.launch({
     cwd: "./static",
     args: ["electron.js"],
+    locale: 'en',
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
@@ -51,6 +61,8 @@ base.beforeAll(async () => {
     console.log('Page loaded!')
     await page.screenshot({ path: 'startup.png' })
   })
+
+  await loadLocalGraph(page, graphDir);
 })
 
 base.beforeEach(async () => {

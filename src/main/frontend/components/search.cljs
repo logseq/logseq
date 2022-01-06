@@ -44,7 +44,7 @@
             [:div
              (when-not (string/blank? before)
                [:span before])
-             [:mark {:class "p-0 rounded-none"} (subs content i (+ i (count q)))]
+             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
              (when-not (string/blank? after)
                [:span after])])
           (let [elements (loop [words q-words
@@ -60,7 +60,7 @@
                                         (vec
                                          (concat result
                                                  [[:span (subs content 0 i)]
-                                                  [:mark (subs content i (+ i (count word)))]])))
+                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
                                  (recur nil
                                         content
                                         result)))
@@ -76,8 +76,7 @@
 
 (rum/defc block-search-result-item
   [repo uuid format content q search-mode]
-  [:div [
-         (when (not= search-mode :page)
+  [:div [(when (not= search-mode :page)
            [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
                                                                       :block? true
                                                                       :search? true}
@@ -85,59 +84,6 @@
                                                                      (clojure.core/uuid uuid)
                                                                      {:indent? false})])
          [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
-
-(rum/defc highlight-fuzzy
-  [content indexes]
-  (let [n (count content)
-        max-hightlighted-len 512
-        max-surrounding-len 512
-
-        first-index (first indexes)
-        last-index (nth indexes (dec (count indexes)))
-        last-index (min (+ first-index max-hightlighted-len -1) last-index)
-        last-index* (+ last-index max-surrounding-len)
-        indexes (take-while #(<= % last-index*) indexes)
-        content-begin (max 0 (- first-index max-surrounding-len))
-        content-end   (min n (+ last-index 1 max-surrounding-len)) ; exclusive
-
-        ; finds inconsecutive sections
-        sections (partition-between #(> (- %2 %) 1) indexes)
-        hl-ranges (for [sec sections
-                        :let [begin (first sec)
-                              end (-> sec last inc)]]
-                    [begin end]) ; `end` is exclusive
-        hl-ranges* (concat [[content-begin content-begin]]
-                           hl-ranges
-                           [[content-end content-end]])
-        normal-ranges (for [[[_ begin] [end _]] (partition 2 1 hl-ranges*)] [begin end])
-        normal-hl-pairs (partition-all 2 (medley/interleave-all normal-ranges hl-ranges))]
-    [:p
-     (mapcat
-      (fn [[normal highlighted]]
-        [(when-some [[begin end] normal]
-           [:span (subs content begin end)])
-         (when-some [[begin end] highlighted]
-           [:mark (subs content begin end)])])
-      normal-hl-pairs)]))
-
-(rum/defc highlight
-  [content q]
-  (let [q-pattern (->> q
-                       (search/escape-str)
-                       (str "(?i)")
-                       (re-pattern))
-        n (count content)
-        [before after] (string/split content q-pattern 2)
-        [before after] (if (>= n 64)
-                         [(when before (apply str (take-last 48 before)))
-                          (when after (apply str (take 48 after)))]
-                         [before after])]
-    [:p
-     (when-not (string/blank? before)
-       [:span before])
-     [:mark q]
-     (when-not (string/blank? after)
-       [:span after])]))
 
 (defonce search-timeout (atom nil))
 
@@ -196,11 +142,16 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
-                          (if collapsed?
-                            (route/redirect-to-page! block-uuid)
-                            (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                              (route/redirect-to-page! page  (str "ls-block-" (:block/uuid data))))))
+                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)
+                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                          (if page
+                            (if collapsed?
+                             (route/redirect-to-page! block-uuid)
+                             (route/redirect-to-page! page (str "ls-block-" (:block/uuid data))))
+                            ;; search indice outdated
+                            (println "[Error] Block page missing: "
+                                     {:block-id block-uuid
+                                      :block (db/pull [:block/uuid block-uuid])})))
                         nil)
                       (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
@@ -256,8 +207,7 @@
 
                                                   :block
                                                   (let [{:block/keys [page content uuid]} data
-                                                        page (or (:block/original-name page)
-                                                                (:block/name page))
+                                                        page (util/get-page-original-name page)
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)]
                                                     [:span {:data-block-ref uuid}

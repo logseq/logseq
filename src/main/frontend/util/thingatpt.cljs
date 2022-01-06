@@ -59,7 +59,7 @@
                   (:full-content page-ref)))))
 
 (defn embed-macro-at-point [& [input]]
-  (when-let [macro (thing-at-point ["{{embed" "}}"] (first input) " ")]
+  (when-let [macro (thing-at-point ["{{embed" "}}"] input)]
     (assoc macro :type "macro")))
 
 (defn properties-at-point [& [input]]
@@ -99,12 +99,13 @@
   (when-let [line (line-at-point input)]
     (when-let [[_ indent bullet checkbox]
                (get-list-item-indent&bullet (:raw-content line))]
-      (assoc line
-             :type "list-item"
-             :indent indent
-             :bullet bullet
-             :checkbox checkbox
-             :ordered (int? (cljs.reader/read-string bullet))))))
+      (let [bullet (cljs.reader/read-string bullet)]
+        (assoc line
+               :type "list-item"
+               :indent indent
+               :bullet bullet
+               :checkbox checkbox
+               :ordered (int? bullet))))))
 
 (defn- get-markup-at-point [& [input]]
   (let [format (state/get-preferred-format)]

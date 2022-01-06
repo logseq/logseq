@@ -1,15 +1,20 @@
 (ns electron.state
   (:require [clojure.core.async :as async]
-            [electron.configs :as config]))
+            [electron.configs :as config]
+            [medley.core :as medley]))
 
 (defonce persistent-dbs-chan (async/chan 1))
 
 (defonce state
-  (atom {:graph/current nil
-         :git/auto-commit-interval nil
+  (atom {:git/auto-commit-interval nil
 
          :config (config/get-config)
-         :db/persisted-before-closing-non-main-window? nil}))
+
+         ;; FIXME: replace with :window/graph
+         :graph/current nil
+
+         ;; window -> current graph
+         :window/graph {}}))
 
 (defn set-state!
   [path value]
@@ -37,3 +42,7 @@
 (defn get-graph-path
   []
   (:graph/current @state))
+
+(defn close-window!
+  [window]
+  (swap! state medley/dissoc-in [:window/graph window]))

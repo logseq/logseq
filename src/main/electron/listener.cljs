@@ -1,9 +1,11 @@
 (ns electron.listener
   (:require [frontend.state :as state]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
+            [datascript.core :as d]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
@@ -79,8 +81,15 @@
                      (fn [data]
                        (let [{:keys [payload]} (bean/->clj data)
                              payload (update payload :to keyword)]
-                         (prn {:payload payload})
-                         (route-handler/redirect! payload)))))
+                         (route-handler/redirect! payload))))
+
+  (js/window.apis.on "dbsync"
+                     (fn [data]
+                       (let [{:keys [graph tx-data]} (bean/->clj data)
+                             tx-data (db/string->db (:data tx-data))]
+                         (when-let [conn (db/get-conn graph false)]
+                           (d/transact! conn tx-data {:dbsync? true}))
+                         (ui-handler/re-render-root!)))))
 
 (defn listen!
   []

@@ -654,7 +654,8 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (when-let [input (gdom/getElement input-id)]
-      (util/insert-at-current-position! input (str macro " ")))))
+      (when macro
+       (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)

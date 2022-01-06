@@ -125,7 +125,9 @@
         *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
-     (p/let [result (fs/open-dir (fn [path handle]
+     (p/let [_ (when (mobile-util/native-ios?)
+                    (.downloadFilesFromiCloud mobile-util/download-icloud-files))
+             result (fs/open-dir (fn [path handle]
                                    (when nfs?
                                      (swap! path-handles assoc path handle))))
              root-handle (first result)

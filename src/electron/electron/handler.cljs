@@ -139,11 +139,14 @@
                  (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
-(defmethod handle :openDir [^js window _messages]
+(defn open-dir-dialog []
   (p/let [result (.showOpenDialog dialog (bean/->js
                                           {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
-          result (get (js->clj result) "filePaths")
-          path (first result)]
+          result (get (js->clj result) "filePaths")]
+    (p/resolved (first result))))
+
+(defmethod handle :openDir [^js window _messages]
+  (p/let [path (open-dir-dialog)]
     (if path
       (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
@@ -269,10 +272,7 @@
     (watcher/watch-dir! window dir)))
 
 (defmethod handle :openDialog [^js window messages]
-  (p/let [result (.showOpenDialog dialog (bean/->js
-                                          {:properties ["openDirectory"]}))
-          result (get (js->clj result) "filePaths")]
-    (p/resolved (first result))))
+  (open-dir-dialog))
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
@@ -300,9 +300,10 @@
 (defmethod handle :getAppBaseInfo [^js win [_ opts]]
   {:isFullScreen (.isFullScreen win)})
 
-(defmethod handle :setCurrentGraph [_ [_ path]]
-  (let [path (when path (string/replace path "logseq_local_" ""))]
+(defmethod handle :setCurrentGraph [^js win [_ path]]
+  (let [path (when path (utils/get-graph-dir path))]
     (swap! state/state assoc :graph/current path)
+    (swap! state/state assoc-in [:window/graph win] path)
     nil))
 
 (defmethod handle :runGit [_ [_ args]]
@@ -328,6 +329,28 @@
   (doseq [window (win/get-all-windows)]
     (utils/send-to-renderer window "graphUnlinked" (bean/->clj repo))))
 
+(defmethod handle :dbsync [^js win [_ graph tx-data]]
+  (let [dir (utils/get-graph-dir graph)]
+    (doseq [window (win/get-graph-all-windows dir)]
+      (utils/send-to-renderer window "dbsync"
+                              (bean/->clj {:graph graph
+                                           :tx-data tx-data})))))
+
+(defn- graph-has-other-windows? [win graph]
+  (let [dir (utils/get-graph-dir graph)
+        windows (win/get-graph-all-windows dir)
+        windows (filter #(.isVisible %) windows)]
+    (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
+
+(defmethod handle :graphHasOtherWindow [^js win [_ graph]]
+  (graph-has-other-windows? win graph))
+
+(defmethod handle :graphHasMultipleWindows [^js _win [_ graph]]
+  (let [dir (utils/get-graph-dir graph)
+        windows (win/get-graph-all-windows dir)
+        windows (filter #(.isVisible %) windows)]
+    (> (count windows) 1)))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
@@ -341,7 +364,7 @@
                  (catch js/Error e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (println "IPC error: " {:event event
-                                            :args args-js}
+                                             :args args-js}
                              e))
                    e))))
     #(.removeHandler ipcMain main-channel)))

@@ -46,6 +46,7 @@
             [frontend.util.marker :as marker]
             [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
+            [frontend.util.priority :as priority]
             [frontend.util.thingatpt :as thingatpt]
             [frontend.util.list :as list]
             [goog.dom :as gdom]
@@ -914,6 +915,17 @@
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
     (save-block-if-changed! block new-content)))
+
+(defn cycle-priority!
+  []
+  (when (state/get-edit-block)
+    (let [format (or (db/get-page-format (state/get-current-page))
+                     (state/get-preferred-format))
+          input-id (state/get-edit-input-id)
+          content (state/get-edit-content)
+          new-priority (priority/cycle-priority-state content)
+          new-value (priority/add-or-update-priority content format new-priority)]
+      (state/set-edit-content! input-id new-value))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid repo] :as _block} children?]
@@ -2436,16 +2448,15 @@
         (let [input (state/get-input)]
           (when-let [item (thingatpt/list-item-at-point input)]
             (let [{:keys [full-content indent bullet checkbox ordered _]} item
-                  current-bullet (cljs.reader/read-string bullet)
-                  next-bullet (if ordered (str (inc current-bullet) ".") bullet)
+                  next-bullet (if ordered (str (inc bullet) ".") bullet)
                   checkbox (when checkbox "[ ] ")]
               (if (= (count full-content)
-                     (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
+                     (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
                 (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
                 (do (cursor/move-cursor-to-line-end input)
                     (insert (str "\n" indent next-bullet " " checkbox))
                     (when ordered
-                      (let [bullet-atom (atom (inc current-bullet))]
+                      (let [bullet-atom (atom (inc bullet))]
                         (while (when-let [next-item (list/get-next-item input)]
                                  (swap! bullet-atom inc)
                                  (let [{:keys [full-content start end]} next-item
@@ -2455,6 +2466,113 @@
                                    true))
                           nil)
                         (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+
+(defn toggle-list!
+  []
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)
+              format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+              new-unordered-bullet (case format :org "-" "*")
+              current-pos (cursor/pos input)
+              content (state/get-edit-content)
+              pos (atom current-pos)]
+          (if-let [item (thingatpt/list-item-at-point input)]
+            (let [{:keys [ordered]} item
+                  list-beginning-pos (list/list-beginning-pos input)
+                  list-end-pos (list/list-end-pos input)
+                  list (subs content list-beginning-pos list-end-pos)
+                  items (string/split-lines list)
+                  splitter-reg (if ordered #"[\d]*\.\s*" #"[-\*]{1}\s*")
+                  items-without-bullet (vec (map #(last (string/split % splitter-reg 2)) items))
+                  new-list (string/join "\n"
+                                        (if ordered
+                                          (map #(str new-unordered-bullet " " %) items-without-bullet)
+                                          (map-indexed #(str (inc %1) ". " %2) items-without-bullet)))
+                  index-of-current-item (inc (.indexOf items-without-bullet
+                                                       (last (string/split (:raw-content item) splitter-reg 2))))
+                  numbers-length (->> (map-indexed
+                                       #(str (inc %1) ". ")
+                                       (subvec items-without-bullet 0 index-of-current-item))
+                                      string/join
+                                      count)
+                  pos-diff (- numbers-length (* 2 index-of-current-item))]
+              (delete-and-update input list-beginning-pos list-end-pos)
+              (insert new-list)
+              (reset! pos (if ordered
+                            (- current-pos pos-diff)
+                            (+ current-pos pos-diff))))
+            (let [prev-item (list/get-prev-item input)]
+              (cursor/move-cursor-down input)
+              (cursor/move-cursor-to-line-beginning input)
+              (if prev-item
+                (let [{:keys [bullet ordered]} prev-item
+                      current-bullet (if ordered (str (inc bullet) ".") bullet)]
+                  (insert (str current-bullet " "))
+                  (reset! pos (+ current-pos (count current-bullet) 1)))
+                (do (insert (str new-unordered-bullet " "))
+                    (reset! pos (+ current-pos 2))))))
+          (cursor/move-cursor-to input @pos))))))
+
+(defn toggle-page-reference-embed
+  [parent-id]
+  (let [{:keys [block]} (get-state)]
+    (when block
+      (let [input (state/get-input)
+            page-ref-fn (fn [bounds backward-pos]
+                          (commands/simple-insert!
+                           parent-id bounds
+                           {:backward-pos backward-pos
+                            :check-fn     (fn [_ _ new-pos]
+                                            (reset! commands/*slash-caret-pos new-pos)
+                                            (commands/handle-step [:editor/search-page]))}))]
+        (state/set-editor-show-page-search! false)
+        (let [selection (get-selection-and-format)
+              {:keys [selection-start selection-end value]} selection]
+          (if (not= selection-start selection-end)
+            (do (delete-and-update selection-start selection-end)
+                (insert (util/format "[[%s]]" value)))
+            (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
+              (let [{:keys [raw-content start end]} embed-ref]
+                (delete-and-update input start end)
+                (if (= 5 (count raw-content))
+                  (page-ref-fn "[[]]" 2)
+                  (insert raw-content)))
+              (if-let [page-ref (thingatpt/page-ref-at-point input)]
+                (let [{:keys [start end link full-content raw-content]} page-ref]
+                  (delete-and-update input start end)
+                  (if (= raw-content "")
+                    (page-ref-fn "{{embed [[]]}}" 4)
+                    (insert (util/format "{{embed %s}}" full-content))))
+                (page-ref-fn "[[]]" 2)))))))))
+
+(defn toggle-block-reference-embed
+  [parent-id]
+  (let [{:keys [block]} (get-state)]
+    (when block
+      (let [input (state/get-input)
+            block-ref-fn (fn [bounds backward-pos]
+                           (commands/simple-insert!
+                            parent-id bounds
+                            {:backward-pos backward-pos
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-block]))}))]
+        (state/set-editor-show-block-search! false)
+        (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
+          (let [{:keys [raw-content start end]} embed-ref]
+            (delete-and-update input start end)
+            (if (= 5 (count raw-content))
+              (block-ref-fn "(())" 2)
+              (insert raw-content)))
+          (if-let [page-ref (thingatpt/block-ref-at-point input)]
+            (let [{:keys [start end full-content raw-content]} page-ref]
+              (delete-and-update input start end)
+              (if (= raw-content "")
+                (block-ref-fn "{{embed (())}}" 4)
+                (insert (util/format "{{embed %s}}" full-content))))
+            (block-ref-fn "(())" 2)))))))
 
 (defn- keydown-new-block
   [state]
@@ -3067,28 +3185,33 @@
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)
         input (state/get-input)]
+    (util/stop e)
     (cond
       (and
        (:copy/content copied-blocks)
        (not (string/blank? text))
        (= (string/replace (string/trim text) "\r" "")
           (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
-      (do
-        ;; copy from logseq internally
-        (paste-block-vec-tree-at-target copied-block-tree [] nil)
-        (util/stop e))
+      (paste-block-vec-tree-at-target copied-block-tree [] nil)
 
       (and (util/url? text)
            (not (string/blank? (util/get-selected-text))))
-      (do
-        (util/stop e)
-        (html-link-format! text))
+      (html-link-format! text)
 
+      (and (util/url? text)
+           (or (string/includes? text "youtube.com")
+               (string/includes? text "youtu.be"))
+           (mobile/is-native-platform?))
+      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
+      
+      (and (util/url? text)
+           (string/includes? text "twitter.com")
+           (mobile/is-native-platform?))
+      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
+      
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
-      (do
-        (util/stop e)
-        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
+      (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
 
       :else
       ;; from external
@@ -3097,38 +3220,43 @@
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-          [:markdown false _ _]
-          (do
-            (paste-text-parseable format text)
-            (util/stop e))
+               [:markdown false _ _]
+               (paste-text-parseable format text)
 
-          [:org _ false _]
-          (do
-            (paste-text-parseable format text)
-            (util/stop e))
+               [:org _ false _]
+               (paste-text-parseable format text)
 
-          [:markdown true _ false]
-          (do
-            (paste-segmented-text format text)
-            (util/stop e))
+               [:markdown true _ false]
+               (paste-segmented-text format text)
 
-          [:markdown true _ true]
-          nil
+               [:markdown true _ true]
+               nil
 
-          [:org _ true false]
-          (do
-            (paste-segmented-text format text)
-            (util/stop e))
-          [:org _ true true]
-          nil)))))
+               [:org _ true false]
+               (paste-segmented-text format text)
+               [:org _ true true]
+               nil)))))
+
+(defn paste-text-in-one-block-at-point
+  []
+  (utils/getClipText
+   (fn [clipboard-data]
+     (when-let [_ (state/get-input)]
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))
 
 (defn editor-on-paste!
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")]
+    (let [text (.getData (gobj/get e "clipboardData") "text")
+          input (state/get-input)]
       (if-not (string/blank? text)
-        (paste-text text e)
+        (if (thingatpt/org-admonition&src-at-point input)
+          (do (util/stop e)
+              (paste-text-in-one-block-at-point))
+          (paste-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
@@ -3334,37 +3462,52 @@
   [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [blocks (-> page
-                     (db/get-page-blocks-no-cache)
-                     (tree/blocks->vec-tree page))]
-      (cond->> blocks
-        root-block
-        (map (fn find [root]
-               (if (= root-block (:block/uuid root))
-                 root
-                 (first (filter find (:block/children root []))))))
+    (let [block? (util/uuid-string? page)
+          block-id (or root-block (and block? (uuid page)))
+          blocks (if block-id
+                   (db/get-block-and-children (state/get-current-repo) block-id)
+                   (db/get-page-blocks-no-cache page))
+          blocks (tree/blocks->vec-tree blocks (or block-id page))
+          root-block (or block-id root-block)]
+      (->>
+       (cond->> blocks
+         root-block
+         (map (fn find [root]
+                (if (= root-block (:block/uuid root))
+                  root
+                  (first (filter find (:block/children root []))))))
 
-        collapse?
-        (w/postwalk
-         (fn [b]
-           (if (and (map? b) (-> b :block/properties :collapsed))
-             (assoc b :block/children []) b)))
+         collapse?
+         (w/postwalk
+          (fn [b]
+            (if (and (map? b) (-> b :block/properties :collapsed))
+              (assoc b :block/children []) b)))
 
-        true
-        (mapcat (fn [x] (tree-seq map? :block/children x)))
+         true
+         (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-        expanded?
-        (filter (fn [b] (collapsable? (:block/uuid b))))
+         expanded?
+         (filter (fn [b] (collapsable? (:block/uuid b))))
 
-        true
-        (map (fn [x] (dissoc x :block/children)))))))
+         true
+         (map (fn [x] (dissoc x :block/children))))
+       (remove nil?)))))
+
+(defn- skip-collapsing-in-db?
+  []
+  (let [config (:config (state/get-editor-args))]
+    (or (:ref? config) (:block? config))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
-    (set-block-property! block-id :collapsed true)))
+    (when-not (skip-collapsing-in-db?)
+      (set-block-property! block-id :collapsed true))
+    (state/set-collapsed-block! block-id true)))
 
 (defn expand-block! [block-id]
-  (remove-block-property! block-id :collapsed))
+  (when-not (skip-collapsing-in-db?)
+    (remove-block-property! block-id :collapsed))
+  (state/set-collapsed-block! block-id false))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3516,16 +3659,6 @@
                                         block-content-without-prop
                                         (subs current-block-content end))]
                 (state/set-block-content-and-last-pos! input block-content* 1)))))))))
-
-
-(defn paste-text-in-one-block-at-point
-  []
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
-   (fn [error]
-     (js/console.error error))))
 
 (defn copy-current-ref
   [block-id]

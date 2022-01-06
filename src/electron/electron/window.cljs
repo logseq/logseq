@@ -2,8 +2,9 @@
   (:require ["electron-window-state" :as windowStateKeeper]
             [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
             [electron.configs :as cfgs]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session shell] :as electron]
             ["path" :as path]
+            ["url" :as URL]
             [electron.state :as state]
             [clojure.core.async :as async]
             [clojure.string :as string]))
@@ -70,6 +71,7 @@
   [^js win]
   (.on win "close" (fn [e]
                      (.preventDefault e)
+                     (state/close-window! win)
                      (let [web-contents (. win -webContents)]
                        (.send web-contents "persistent-dbs"))
                      (async/go
@@ -81,6 +83,20 @@
 (defn get-all-windows
   []
   (.getAllWindows BrowserWindow))
+
+(defn get-graph-all-windows
+  [graph-path]
+  (->> (group-by second (:window/graph @state/state))
+       (#(get % graph-path))
+       (map first)))
+
+(defn- open-default-app!
+  [url default-open]
+  (let [URL (.-URL URL)
+        parsed-url (URL. url)]
+    (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
+      (.openExternal shell url)
+      (when default-open (default-open url)))))
 
 (defn setup-window-listeners!
   [^js win]
@@ -120,8 +136,13 @@
                             (.join path (. app getAppPath) %))
                          ["index.html" "electron.html"])
                  (.info logger "pass-window" url)
-                 (open url)))
+                 (open-default-app! url open)))
              (.preventDefault e)))
+
+      (.on web-contents "will-navigate"
+           (fn [e url]
+             (.preventDefault e)
+             (open-default-app! url open)))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))

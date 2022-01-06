@@ -262,10 +262,8 @@
     (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
-    (if (mobile-util/native-ios?)
-      [:span full_text]
-      (when @src
-        (resizable-image config title @src metadata full_text true)))))
+    (when @src
+      (resizable-image config title @src metadata full_text true))))
 
 (defn ar-url->http-url
   [href]
@@ -471,7 +469,7 @@
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
-          page-name (string/lower-case page-name-in-block)
+          page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (or (and (= :org (state/get-preferred-format))
                                       (:org-mode/insert-file-link? (state/get-config))
@@ -1385,9 +1383,8 @@
        (map editor-handler/expand-block! block-ids)))))
 
 (rum/defc block-children < rum/reactive
-  [config children collapsed? *default-collapsed?]
+  [config children collapsed?]
   (let [ref? (:ref? config)
-        collapsed? (if ref? (rum/react *default-collapsed?) collapsed?)
         children (and (coll? children) (filter map? children))]
     (when (and (coll? children)
                (seq children)
@@ -1437,6 +1434,7 @@
                            has-children-blocks?)
                        (util/react *control-show?))
         ref? (:ref? config)
+        block? (:block? config)
         empty-content? (block-content-empty? block)]
     [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
@@ -1448,9 +1446,11 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (if collapsed?
-                       (editor-handler/expand-block! uuid)
-                       (editor-handler/collapse-block! uuid))))}
+                     (if (or ref? block?)
+                       (state/toggle-collapsed-block! uuid)
+                       (if collapsed?
+                         (editor-handler/expand-block! uuid)
+                         (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
@@ -2172,10 +2172,11 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
+             (state/set-collapsed-block! (:block/uuid block)
+                                         (editor-handler/block-default-collapsed? block config))
              (assoc state
                     ::init-collapsed? (get-in block [:block/properties :collapsed])
-                    ::control-show? (atom false)
-                    ::default-collapsed? (atom (editor-handler/block-default-collapsed? block config)))))
+                    ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
@@ -2199,11 +2200,11 @@
                  config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        *default-collapsed? (get state ::default-collapsed?)
-        collapsed? (if (not= init-collapsed? (:collapsed properties))
-                     (:collapsed properties)
-                     @*default-collapsed?)
         ref? (boolean (:ref? config))
+        block? (boolean (:block? config))
+        collapsed? (if (or ref? block?)
+                     (state/sub-collapsed uuid)
+                     (:collapsed properties))
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2270,7 +2271,7 @@
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
-     (block-children config children collapsed? *default-collapsed?)
+     (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
