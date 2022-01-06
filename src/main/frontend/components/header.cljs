@@ -1,25 +1,32 @@
 (ns frontend.components.header
-  (:require [frontend.components.export :as export]
+  (:require ["path" :as path]
+            [cljs-bean.core :as bean]
+            [frontend.components.export :as export]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
+            [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.fs.sync :as fs-sync]
             [frontend.handler :as handler]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.fs.sync :as fs-sync]))
+            [cljs.core.async :as a]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -33,8 +40,7 @@
 
 (rum/defc login < rum/reactive
   []
-  (let [_ (state/sub :auth/id-token)])
-  (rum/with-context [[t] i18n/*tongue-context*]
+  (let [_ (state/sub :auth/id-token)]
     (when-not config/publishing?
       (if (user-handler/logged?)
         [:span.text-sm.font-medium (user-handler/email)]
@@ -43,20 +49,49 @@
                                                           (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback"))}
          [:span (t :login)]]))))
 
-(rum/defc file-sync < rum/reactive
-  []
+(rum/defcs file-sync <
+  rum/reactive
+  (rum/local nil ::existed-graphs)
+  [state]
   (let [_ (state/sub :auth/id-token)
-        _ (state/sub :file-sync/sync-state)]
+        _ (state/sub :file-sync/sync-state)
+        ^fs-sync/SyncState sync-state (state/get-file-sync-state-manager)
+        not-syncing? (or (nil? sync-state) (.stopped? sync-state))
+        *existed-graphs (::existed-graphs state)
+        _ (rum/react file-sync-handler/refresh-file-sync-component)
+        graph-txid-exists? (file-sync-handler/graph-txid-exists?)]
     (when-not config/publishing?
       (when (user-handler/logged?)
-        (if (as-> (state/get-file-sync-state-manager) ^fs-sync/SyncState sync-state
-              (or (nil? sync-state) (.stopped? sync-state)))
-          [:a.button
-           {:on-click fs-sync/sync-start}
-           (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
-          [:a.button
-           {:on-click fs-sync/sync-stop}
-           (ui/icon "cloud" {:style {:fontSize ui/icon-size}})])))))
+        (when-not (file-sync-handler/graph-txid-exists?)
+          (a/go
+            (let [graphs (a/<! (file-sync-handler/list-graphs))]
+              (reset! *existed-graphs graphs))))
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           (if not-syncing?
+             [:a.button
+              {:on-click toggle-fn}
+              (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
+             [:a.button
+              {:on-click toggle-fn}
+              (ui/icon "cloud" {:style {:fontSize ui/icon-size}})]))
+         (cond-> []
+           (not graph-txid-exists?)
+           (concat (->> @*existed-graphs
+                        (filterv #(and (:GraphName %) (:GraphUUID %)))
+                        (mapv (fn [graph]
+                                {:title (:GraphName graph)
+                                 :options {:on-click #(file-sync-handler/switch-graph (:GraphUUID graph))}})))
+                   [{:hr true}
+                    {:title "create graph"
+                     :options {:on-click #(file-sync-handler/create-graph (path/basename (state/get-current-repo)))}}])
+           graph-txid-exists?
+           (conj {:title "toggle file sync"
+                  :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}))
+
+         (cond-> {}
+           (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
+                                                          "Switch to:"])))))))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
@@ -225,8 +260,7 @@
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
          (t :graph)])
 
-      (dropdown-menu {:me           me
-                      :t            t
+      (dropdown-menu {:t            t
                       :current-repo current-repo
                       :default-home default-home})
 
