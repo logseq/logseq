@@ -255,6 +255,21 @@
   margin-right: 4px;
 }
 
+html.is-native-android,
+html.is-native-iphone,
+html.is-native-iphone-without-notch {
+
+    .cp__settings-inner {
+        > article {
+            padding-bottom: 0px;
+        }
+
+        .panel-wrap {
+            padding-bottom: 0px;
+        }
+    }
+}
+
 svg.git {
     margin-left: -4px;
     transform: scale(0.9);
