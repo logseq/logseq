@@ -216,6 +216,10 @@ html.is-native-ipad {
 html.is-native-ipad {
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
+
+    #main-container {
+        padding-top: 40px;
+    }
     
     .cp__header {
       background-color: transparent !important;
@@ -257,13 +261,27 @@ html.is-native-ipad {
       }
     }
 
-    .cp__right-sidebar {
-      margin-top: 8px;
+    .cp__right-sidebar-settings {
+        margin-top: -4px;
+    }
+
+    .cp__right-sidebar-topbar {
+        padding-top: 37px;
     }
   }
 
 html.is-native-iphone {
     --ls-headbar-inner-top-padding: 36px;
+
+    .left-sidebar-inner {
+        > .wrap {
+            padding-top: 12px;
+        }
+
+        .new-page {
+            padding-bottom: 12px;
+        }
+    }
 
     #main-container {
         padding-top: 75px;
