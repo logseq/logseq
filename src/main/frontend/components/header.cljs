@@ -56,7 +56,7 @@
   (let [_ (state/sub :auth/id-token)
         _ (state/sub :file-sync/sync-state)
         ^fs-sync/SyncState sync-state (state/get-file-sync-state-manager)
-        not-syncing? (or (nil? sync-state) (.stopped? sync-state))
+        not-syncing? (or (nil? sync-state) (fs-sync/-stopped? sync-state))
         *existed-graphs (::existed-graphs state)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)]
