@@ -116,7 +116,11 @@
     ;; Too dangerious!!! We'll never implement this.
     nil)
   (read-file [this dir path _options]
-    (let [path (str dir path)]
+    (let [path (str dir path)
+          path (if (or (string/starts-with? path "file:")
+                       (string/starts-with? path "content:"))
+                 path
+                 (str "file:///" (string/replace path #"^/+" "")))]
       (->
        (p/let [content (.readFile Filesystem
                                   (clj->js
