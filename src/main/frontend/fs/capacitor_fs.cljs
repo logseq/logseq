@@ -48,8 +48,9 @@
                              files (->> files
                                         (remove (fn [file]
                                                   (or (string/starts-with? file ".")
-                                                      (string/includes? file "#")
-                                                      (string/includes? file "%")
+                                                      (and (mobile-util/native-android?)
+                                                           (or (string/includes? file "#")
+                                                               (string/includes? file "%")))
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
