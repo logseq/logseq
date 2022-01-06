@@ -12,11 +12,10 @@
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]))
+            [frontend.util.persist-var :as persist-var]
+            [rum.core :as rum]))
 
-;;; TODO: watch `user/*login-notify` to start/stop sync loop
 ;;; TODO: add some spec validate
-
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -527,13 +526,18 @@
   IRelativePath
   (-relative-path [_] (remove-dir-prefix dir path))
 
+  IEquiv
+  (-equiv [_ other]
+    (and (= dir (.-dir other))
+         (= type (.-type other))
+         (= path (.-path other))))
+
   IPrintWithWriter
   (-pr-writer [coll w opts]
     (write-all w (str {:type type :base-path dir :path path}))))
 
 (defn file-watch-handler
   [type {:keys [dir path _content stat] :as payload}]
-  (prn "file-watch-handler" type (:path payload) (get-in payload [:stat :mtime]))
   (go (>! local-changes-chan (->FileChangeEvent type dir path stat))))
 
 
@@ -543,6 +547,7 @@
 
 (defprotocol ILocal->RemoteSync
   (get-ignore-files [this] "ignored-files won't be synced to remote")
+  ;; TODO: get-monitored-dirs
   (ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
   (sync-local->remote! [this ^FileChangeEvent e])
@@ -567,7 +572,7 @@
                        (when-not (instance? ExceptionInfo apply-result)
                          (reset! *txid latest-txid)
                          ;; persist txid
-                         (.reset_value! graphs-txid [graph-uuid latest-txid] repo)
+                         (persist-var/-reset-value! graphs-txid [graph-uuid latest-txid] repo)
                          (persist-var/persist-save graphs-txid))
                        apply-result)))))]
         (if (instance? ExceptionInfo r)
@@ -606,13 +611,13 @@
     (let [c (.filtered-chan this 10000)]
       (go-loop [timeout-c (timeout rate)
                 tcoll (transient [])]
-        (let [{:keys [timeout e]}
+        (let [{:keys [timeout ^FileChangeEvent e]}
               (async/alt! timeout-c {:timeout true}
                           from-chan ([e] {:e e}))]
           (cond
             timeout
             (do
-              (<! (async/onto-chan! c (persistent! tcoll) false))
+              (<! (async/onto-chan! c (distinct (persistent! tcoll)) false))
               (recur (async/timeout rate) (transient [])))
 
             (some? e)
@@ -658,7 +663,7 @@
                     (do
                       (println "sync-local->remote! update txid" r*)
                       ;; persist txid
-                      (.reset_value! graphs-txid [graph-uuid r*] repo)
+                      (persist-var/-reset-value! graphs-txid [graph-uuid r*] repo)
                       (persist-var/persist-save graphs-txid)
                       (reset! *txid r*)
                       {:succ true})
@@ -838,7 +843,7 @@
         local->remote-syncer (->Local->RemoteSyncer graph-uuid
                                                     base-path
                                                     repo sync-state
-                                                    10000
+                                                    20000
                                                     *txid nil)
         remote->local-syncer (->Remote->LocalSyncer graph-uuid
                                                     base-path
@@ -885,6 +890,12 @@
 (def remote->local-sync-chan (chan))
 (def local->remote-sync-chan (chan))
 
+
+(defn sync-stop []
+  (when-let [sm (state/get-file-sync-manager)]
+    (println "stopping sync-manager")
+    (.stop sm)))
+
 (defn sync-start []
   (let [graph-uuid (first @graphs-txid)
         txid (second @graphs-txid)
@@ -899,10 +910,15 @@
 
     (.start sm)
     (state/set-file-sync-state-manager sync-state)
-    (state/set-file-sync-manager sm)))
+    (state/set-file-sync-manager sm)
 
-
-(defn sync-stop []
-  (when-let [sm (state/get-file-sync-manager)]
-    (println "stopping sync-manager")
-    (.stop sm)))
+    ;; watch :network/online?
+    (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+               (fn [k r o n]
+                 (when (false? n)
+                   (sync-stop))))
+    ;; watch :auth/id-token
+    (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+               (fn [k r o n]
+                 (when (nil? n)
+                   (sync-stop))))))

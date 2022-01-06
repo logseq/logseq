@@ -101,11 +101,6 @@
 
 ;;; userinfo, token, login/logout, ...
 
-(def *login-notify
-  "used to notify other parts that login/logout happened,
-  true when login, false when logout"
-  (atom false))
-
 (defn- parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
@@ -150,8 +145,7 @@
 (defn- clear-tokens []
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
-  (state/set-auth-refresh-token nil)
-  (reset! *login-notify false))
+  (state/set-auth-refresh-token nil))
 
 (defn- set-tokens!
   ([id-token access-token]
@@ -171,8 +165,7 @@
               (:body)
               (js/JSON.parse)
               (js->clj :keywordize-keys true)
-              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
-          (reset! *login-notify true))
+              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))))
         (debug/pprint "login-callback" resp)))))
 
 (defn refresh-id-token&access-token []
