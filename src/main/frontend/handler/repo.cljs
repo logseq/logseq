@@ -116,8 +116,8 @@
           path (str (config/get-journals-directory) "/" file-name "."
                     (config/get-file-extension format))
           file-path (str "/" path)
-          page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
-          empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
+          page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
+          empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))

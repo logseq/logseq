@@ -85,7 +85,7 @@
               (str (subs content 0 48) "...")
               content))
           "Page no longer exists!!")
-        (let [page (db/pull [:block/name (string/lower-case name)])]
+        (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
           (or (util/get-page-original-name page)
               "Logseq"))))
     :tag

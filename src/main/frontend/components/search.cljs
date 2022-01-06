@@ -159,7 +159,7 @@
                             (case type
                               :page
                               (let [data (or alias data)
-                                    page (when data (db/entity [:block/name (string/lower-case data)]))]
+                                    page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))]
                                 (when page
                                   (state/sidebar-add-block!
                                    (state/get-current-repo)
@@ -268,7 +268,7 @@
                               opts (if (= :page search-mode)
                                      (let [current-page (or (state/get-current-page)
                                                             (date/today))]
-                                       {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
+                                       {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
                                      {})]
                           (if (= :page search-mode)
                             (search-handler/search (state/get-current-repo) q opts)
@@ -280,7 +280,7 @@
                             :page
                             (let [page data]
                               (when (string? page)
-                                (when-let [page (db/pull [:block/name (string/lower-case page)])]
+                                (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page)])]
                                  (state/sidebar-add-block!
                                   (state/get-current-repo)
                                   (:db/id page)
@@ -345,7 +345,7 @@
                                        opts (if (= :page search-mode)
                                               (when-let [current-page (or (state/get-current-page)
                                                                           (date/today))]
-                                                {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
+                                                {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
                                               {})]
                                    (state/set-q! value)
                                    (reset! search-timeout

@@ -375,6 +375,7 @@
 (declare page-reference)
 
 (rum/defc page-inner
+  "all page-names are sanitized except page-name-in-block"
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
@@ -428,7 +429,8 @@
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
-  (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
+  (let [page-name (util/page-name-sanity-lc page-name)
+        redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
         html-template (fn []
@@ -466,6 +468,7 @@
       children)))
 
 (rum/defc page-cp
+  "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
@@ -589,7 +592,7 @@
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
-  (let [page-name (string/trim (string/lower-case page-name))
+  (let [page-name (string/trim (util/page-name-sanity-lc page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
@@ -985,7 +988,7 @@
                     config (assoc config :redirect-page-name redirect-page-name)
                     label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:block/name (util/page-name-sanity-lc (db/get-file-page (string/replace href "file:" "")))}
+                           {:block/name (db/get-file-page (string/replace href "file:" "") false)}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]

@@ -30,7 +30,7 @@
           (fs/write-file! repo repo-dir path data nil)
           (db/transact! repo
                         [{:file/path path
-                          :block/name file
+                          :block/name (util/page-name-sanity-lc file)
                           :block/file {:file/path path}
                           :block/journal? false}]))
          (p/catch (fn [error]
