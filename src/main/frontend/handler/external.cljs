@@ -50,7 +50,7 @@
                              (map
                               (fn [title]
                                 (let [day (date/journal-title->int title)
-                                      page-name (string/lower-case (date/int->journal-title day))]
+                                      page-name (util/page-name-sanity-lc (date/int->journal-title day))]
                                   {:block/name page-name
                                    :block/journal? true
                                    :block/journal-day day}))
@@ -79,7 +79,7 @@
           page-name (:title headers)]
       (when (not (page/page-exists? page-name))
         (page/create! page-name {:redirect? false}))
-      (let [page-block (db/entity [:block/name (string/lower-case page-name)])
+      (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)
             blocks (db/sort-by-left children page-block)
             last-block (last blocks)
