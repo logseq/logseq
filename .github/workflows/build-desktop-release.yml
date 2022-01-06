@@ -411,7 +411,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nightly
-          name: 'Desktop/Mobile APP Nightly Release $$'
+          name: 'Desktop/Android APP Nightly Release $$'
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: |
@@ -484,7 +484,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: Desktop/Android APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}

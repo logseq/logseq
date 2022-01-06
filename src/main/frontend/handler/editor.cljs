@@ -3237,13 +3237,26 @@
                [:org _ true true]
                nil)))))
 
+(defn paste-text-in-one-block-at-point
+  []
+  (utils/getClipText
+   (fn [clipboard-data]
+     (when-let [_ (state/get-input)]
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))
+
 (defn editor-on-paste!
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")]
+    (let [text (.getData (gobj/get e "clipboardData") "text")
+          input (state/get-input)]
       (if-not (string/blank? text)
-        (paste-text text e)
+        (if (thingatpt/org-admonition&src-at-point input)
+          (do (util/stop e)
+              (paste-text-in-one-block-at-point))
+          (paste-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
@@ -3449,37 +3462,52 @@
   [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [blocks (-> page
-                     (db/get-page-blocks-no-cache)
-                     (tree/blocks->vec-tree page))]
-      (cond->> blocks
-        root-block
-        (map (fn find [root]
-               (if (= root-block (:block/uuid root))
-                 root
-                 (first (filter find (:block/children root []))))))
+    (let [block? (util/uuid-string? page)
+          block-id (or root-block (and block? (uuid page)))
+          blocks (if block-id
+                   (db/get-block-and-children (state/get-current-repo) block-id)
+                   (db/get-page-blocks-no-cache page))
+          blocks (tree/blocks->vec-tree blocks (or block-id page))
+          root-block (or block-id root-block)]
+      (->>
+       (cond->> blocks
+         root-block
+         (map (fn find [root]
+                (if (= root-block (:block/uuid root))
+                  root
+                  (first (filter find (:block/children root []))))))
 
-        collapse?
-        (w/postwalk
-         (fn [b]
-           (if (and (map? b) (-> b :block/properties :collapsed))
-             (assoc b :block/children []) b)))
+         collapse?
+         (w/postwalk
+          (fn [b]
+            (if (and (map? b) (-> b :block/properties :collapsed))
+              (assoc b :block/children []) b)))
 
-        true
-        (mapcat (fn [x] (tree-seq map? :block/children x)))
+         true
+         (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-        expanded?
-        (filter (fn [b] (collapsable? (:block/uuid b))))
+         expanded?
+         (filter (fn [b] (collapsable? (:block/uuid b))))
 
-        true
-        (map (fn [x] (dissoc x :block/children)))))))
+         true
+         (map (fn [x] (dissoc x :block/children))))
+       (remove nil?)))))
+
+(defn- skip-collapsing-in-db?
+  []
+  (let [config (:config (state/get-editor-args))]
+    (or (:ref? config) (:block? config))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
-    (set-block-property! block-id :collapsed true)))
+    (when-not (skip-collapsing-in-db?)
+      (set-block-property! block-id :collapsed true))
+    (state/set-collapsed-block! block-id true)))
 
 (defn expand-block! [block-id]
-  (remove-block-property! block-id :collapsed))
+  (when-not (skip-collapsing-in-db?)
+    (remove-block-property! block-id :collapsed))
+  (state/set-collapsed-block! block-id false))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3631,16 +3659,6 @@
                                         block-content-without-prop
                                         (subs current-block-content end))]
                 (state/set-block-content-and-last-pos! input block-content* 1)))))))))
-
-
-(defn paste-text-in-one-block-at-point
-  []
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
-   (fn [error]
-     (js/console.error error))))
 
 (defn copy-current-ref
   [block-id]

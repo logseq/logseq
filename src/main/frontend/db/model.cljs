@@ -465,6 +465,7 @@
         nil)
       react))))
 
+;; FIXME: merge get-page-blocks and get-block-and-children to simplify the logic
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
@@ -1426,9 +1427,10 @@
       ffirst))
 
 (defn get-namespace-pages
+  "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
   (assert (string? namespace))
-  (let [namespace (string/lower-case namespace)]
+  (let [namespace (util/page-name-sanity-lc namespace)]
     (d/q
       '[:find [(pull ?c [:db/id :block/name :block/original-name
                          :block/namespace
@@ -1468,7 +1470,7 @@
   (assert (string? page))
   (when-let [db (conn/get-conn repo)]
     (when-not (string/blank? page)
-      (let [page (string/lower-case (string/trim page))
+      (let [page (util/page-name-sanity-lc (string/trim page))
             ids (->> (d/datoms db :aevt :block/name)
                      (filter (fn [datom]
                                (string/ends-with? (:v datom) (str "/" page))))
