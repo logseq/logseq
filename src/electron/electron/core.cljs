@@ -68,12 +68,10 @@
      (.unregisterProtocol protocol LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
-(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
+(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
           asset-filenames (js->clj asset-filenames)
-          result (. dialog showOpenDialog (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]}))
-          result (get (js->clj result) "filePaths")
-          root-dir (first result)]
+          root-dir (or output-path (handler/open-dir-dialog))]
     (when root-dir
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")

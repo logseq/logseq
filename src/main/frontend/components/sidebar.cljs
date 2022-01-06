@@ -308,8 +308,7 @@
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])
-        :style {:padding-top (ui/main-content-top-padding)}}
+       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
        ;; desktop left sidebar layout
        (left-sidebar {:left-sidebar-open? left-sidebar-open?
@@ -526,7 +525,6 @@
                                    :ls-right-sidebar-open sidebar-open?}])}
 
         [:div.#app-container
-         {:style {:padding-top (ui/main-content-top-padding)}}
          [:div#left-container
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
