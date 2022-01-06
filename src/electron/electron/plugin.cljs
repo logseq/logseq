@@ -185,6 +185,7 @@
   (let [id (string/replace id #"^[.\/]+" "")
         plugin-path (.join path (utils/get-ls-dotdir-root) "plugins" id)
         settings-path (.join path (utils/get-ls-dotdir-root) "settings" (str id ".json"))]
+    (debug "[Uninstall]" plugin-path)
     (when (fs/pathExistsSync plugin-path)
       (fs/removeSync plugin-path)
       (fs/removeSync settings-path))))
