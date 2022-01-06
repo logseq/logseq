@@ -9,7 +9,8 @@
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
             [frontend.mobile.util :as util]
             [promesa.core :as p]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.mobile.util :as mobile-util]))
 
 (when (util/native-ios?)
   (defn iOS-ensure-documents!
@@ -52,7 +53,11 @@
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
-                                               (futil/node-path.join d (futil/url-encode file)))))
+                                               (futil/node-path.join
+                                                d
+                                                (if (mobile-util/native-ios?)
+                                                  (futil/url-encode file)
+                                                  file)))))
                              files-with-stats (p/all
                                                (mapv
                                                 (fn [file]
