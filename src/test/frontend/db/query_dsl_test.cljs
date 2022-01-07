@@ -1,6 +1,5 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are async deftest testing use-fixtures]]
-            [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.config :refer [test-db] :as config]
             [frontend.db.query-dsl :as dsl]

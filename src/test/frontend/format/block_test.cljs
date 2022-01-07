@@ -1,6 +1,6 @@
 (ns frontend.format.block-test
   (:require [frontend.format.block :as block]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
+            [cljs.test :refer [deftest are]]))
 
 (deftest test-extract-properties
   (are [x y] (= (:properties (block/extract-properties x)) y)
