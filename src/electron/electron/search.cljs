@@ -178,7 +178,9 @@
                             (string/replace " or " " OR ")
                             (string/replace " | " " OR ")
                             (string/replace " not " " NOT "))
-            match-input (str "\"" match-input "\"")
+            match-input (if (not= q match-input)
+                          (string/replace match-input "," "")
+                          (str "\"" match-input "\""))
             non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             select "select rowid, uuid, content, page from blocks_fts where "

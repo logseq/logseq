@@ -237,7 +237,6 @@
                                               (editor-handler/edit-block! block :max block-id)))
                                              ;; TODO: return "handled" or false doesn't always prevent event bubbles
                                           (js/setTimeout #(reset! esc-pressed? false) 10))}})
-        _ (js/console.log (clj->js cm-options))
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor

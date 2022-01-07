@@ -214,7 +214,6 @@ html.is-native-ipad {
 }
 
 html.is-native-ipad {
-
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
     
@@ -254,7 +253,7 @@ html.is-native-ipad {
 
     .left-sidebar-inner  {
       > .wrap {
-        padding-top: 70px;
+        padding-top: 20px;
       }
     }
 

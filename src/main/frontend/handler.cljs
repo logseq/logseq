@@ -24,10 +24,8 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
-            [frontend.search.db :as search-db]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.pool :as pool]
             [cljs.reader :refer [read-string]]
@@ -103,6 +101,7 @@
                             (ui-handler/add-style-if-exists!)
 
                             ;; install after config is restored
+                            (shortcut/unlisten-all)
                             (shortcut/refresh!)
 
                             (cond

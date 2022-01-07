@@ -9,7 +9,8 @@
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
             [frontend.mobile.util :as util]
             [promesa.core :as p]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.mobile.util :as mobile-util]))
 
 (when (util/native-ios?)
   (defn iOS-ensure-documents!
@@ -47,12 +48,17 @@
                              files (->> files
                                         (remove (fn [file]
                                                   (or (string/starts-with? file ".")
-                                                      (string/includes? file "#")
-                                                      (string/includes? file "%")
+                                                      (and (mobile-util/native-android?)
+                                                           (or (string/includes? file "#")
+                                                               (string/includes? file "%")))
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
-                                               (futil/node-path.join d (futil/url-encode file)))))
+                                               (futil/node-path.join
+                                                d
+                                                (if (mobile-util/native-ios?)
+                                                  (futil/url-encode file)
+                                                  file)))))
                              files-with-stats (p/all
                                                (mapv
                                                 (fn [file]
@@ -116,7 +122,11 @@
     ;; Too dangerious!!! We'll never implement this.
     nil)
   (read-file [this dir path _options]
-    (let [path (str dir path)]
+    (let [path (str dir path)
+          path (if (or (string/starts-with? path "file:")
+                       (string/starts-with? path "content:"))
+                 path
+                 (str "file:///" (string/replace path #"^/+" "")))]
       (->
        (p/let [content (.readFile Filesystem
                                   (clj->js
@@ -186,6 +196,7 @@
                   (.pickFolder util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
+            _ (when (util/native-ios?) (.downloadFilesFromiCloud util/download-icloud-files))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
