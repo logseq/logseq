@@ -2524,8 +2524,7 @@
                           (commands/simple-insert!
                            parent-id bounds
                            {:backward-pos backward-pos
-                            :check-fn     (fn [_ _ new-pos]
-                                            (reset! commands/*slash-caret-pos new-pos)
+                            :check-fn     (fn []
                                             (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
@@ -2556,8 +2555,7 @@
                            (commands/simple-insert!
                             parent-id bounds
                             {:backward-pos backward-pos
-                             :check-fn     (fn [_ _ new-pos]
-                                             (reset! commands/*slash-caret-pos new-pos)
+                             :check-fn     (fn []
                                              (commands/handle-step [:editor/search-block]))}))]
         (state/set-editor-show-block-search! false)
         (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
