@@ -1522,7 +1522,8 @@
                                            (not (:block/journal? page))))
                                  page))))
                           pages)
-                        (remove false?))]
+                        (remove false?)
+                        (remove nil?))]
     orphaned-pages))
 
 (defn remove-orphaned-pages!
