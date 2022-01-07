@@ -102,7 +102,7 @@
        :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
         modal-content (modal-content-fn state)]
-    [:div.relative {:style {:z-index z-index}}
+    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -133,8 +133,8 @@
                                   (close-fn))})
               child (if hr
                       nil
-                      [:div
-                       {:style {:display "flex" :flex-direction "row"}}
+                      [:div.flex.items-center
+                       (when icon icon)
                        [:div {:style {:margin-right "8px"}} title]])]
           (if hr
             [:hr.my-1]
@@ -300,7 +300,7 @@
 
 (defn setup-patch-ios-visual-viewport-state!
   []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+  (if-let [^js vp (and (or (and (util/mobile?) (util/safari?))
                              (mobile-util/native-ios?))
                          js/window.visualViewport)]
     (let [raf-pending? (atom false)
@@ -518,7 +518,7 @@
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.absolute.top-0.right-0.pt-2.pr-2
-    (when close-btn?
+    (when-not (false? close-btn?)
       [:a.ui__modal-close.opacity-60.hover:opacity-100
        {:aria-label "Close"
         :type       "button"
@@ -556,13 +556,15 @@
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
         close-btn? (state/sub :modal/close-btn?)
-        show? (boolean modal-panel-content)
+        show? (state/sub :modal/show?)
+        label (state/sub :modal/label)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)}}
+     {:style {:z-index (if show? 999 -1)}
+      :label label}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -619,6 +621,30 @@
             {:type     "button"
              :on-click (comp on-cancel close-fn)}
             (t :cancel)]]]]))))
+
+(rum/defc sub-modal < rum/reactive
+  []
+  (when-let [modals (seq (state/sub :modal/subsets))]
+    (for [[idx modal] (medley/indexed modals)]
+      (let [id (:modal/id modal)
+            modal-panel-content (:modal/panel-content modal)
+            close-btn? (:modal/close-btn? modal)
+            show? (:modal/show? modal)
+            label (:modal/label modal)
+            close-fn (fn []
+                       (state/close-sub-modal! id))
+            modal-panel-content (or modal-panel-content (fn [close] [:div]))]
+        [:div.ui__modal.is-sub-modal
+         {:style {:z-index (if show? (+ 999 idx) -1)}
+          :label label}
+         (css-transition
+           {:in show? :timeout 0}
+           (fn [state]
+             (modal-overlay state close-fn)))
+         (css-transition
+           {:in show? :timeout 0}
+           (fn [state]
+             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
   [content]

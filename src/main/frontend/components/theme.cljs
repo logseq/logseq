@@ -5,13 +5,15 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.state :as state]
+            [frontend.components.settings :as settings]
             [frontend.rum :refer [use-mounted]]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
 (rum/defc container
   [{:keys [t route theme on-click current-repo nfs-granted? db-restoring?
-           sidebar-open? system-theme? sidebar-blocks-len edit?] :as props} child]
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len edit?] :as props} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -62,6 +64,13 @@
      #(when system-theme?
         (ui/setup-system-theme-effect!))
      [system-theme?])
+
+    (rum/use-effect!
+      #(state/set-modal!
+         (when settings-open?
+           (fn [] [:div.settings-modal (settings/settings)])))
+      [settings-open?])
+
     [:div
      {:class    (str theme "-theme")
       :on-click on-click}

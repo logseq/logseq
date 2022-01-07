@@ -351,6 +351,10 @@
         windows (filter #(.isVisible %) windows)]
     (> (count windows) 1)))
 
+(defmethod handle :reloadWindowPage [^js win]
+  (when-let [web-content (.-webContents win)]
+    (.reload web-content)))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
