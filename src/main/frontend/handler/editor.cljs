@@ -3185,33 +3185,43 @@
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)
         input (state/get-input)]
-    (util/stop e)
     (cond
       (and
        (:copy/content copied-blocks)
        (not (string/blank? text))
        (= (string/replace (string/trim text) "\r" "")
           (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
-      (paste-block-vec-tree-at-target copied-block-tree [] nil)
+      (do
+        ;; copy from logseq internally
+        (paste-block-vec-tree-at-target copied-block-tree [] nil)
+        (util/stop e))
 
       (and (util/url? text)
            (not (string/blank? (util/get-selected-text))))
-      (html-link-format! text)
+      (do
+        (util/stop e)
+        (html-link-format! text))
 
       (and (util/url? text)
            (or (string/includes? text "youtube.com")
                (string/includes? text "youtu.be"))
            (mobile/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-      
+      (do
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil))
+
       (and (util/url? text)
            (string/includes? text "twitter.com")
            (mobile/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
-      
+      (do
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil))
+
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
-      (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+      (do
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
       :else
       ;; from external
@@ -3220,22 +3230,31 @@
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-               [:markdown false _ _]
-               (paste-text-parseable format text)
+          [:markdown false _ _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-               [:org _ false _]
-               (paste-text-parseable format text)
+          [:org _ false _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-               [:markdown true _ false]
-               (paste-segmented-text format text)
+          [:markdown true _ false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
 
-               [:markdown true _ true]
-               nil
+          [:markdown true _ true]
+          nil
 
-               [:org _ true false]
-               (paste-segmented-text format text)
-               [:org _ true true]
-               nil)))))
+          [:org _ true false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
+          [:org _ true true]
+          nil)))))
+
 
 (defn paste-text-in-one-block-at-point
   []
