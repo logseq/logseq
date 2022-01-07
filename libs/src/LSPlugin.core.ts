@@ -152,6 +152,7 @@ type PluginLocalOptions = {
   settings?: PluginSettings
   logger?: PluginLogger
   effect?: boolean
+  theme?: boolean
 
   [key: string]: any
 }
@@ -488,7 +489,7 @@ class PluginLocal
 
       // Pick legal attrs
     ;['name', 'author', 'repository', 'version',
-      'description', 'repo', 'title', 'effect',
+      'description', 'repo', 'title', 'effect', 'sponsors'
     ].concat(!this.isInstalledInDotRoot ? ['devEntry'] : []).forEach(k => {
       this._options[k] = pkg[k]
     })
@@ -512,6 +513,7 @@ class PluginLocal
     this._options.title = title
     this._options.icon = icon &&
       this._resolveResourceFullUrl(icon)
+    this._options.theme = Boolean(logseq.theme || !!logseq.themes)
 
     // TODO: strategy for Logseq plugins center
     if (this.isInstalledInDotRoot) {

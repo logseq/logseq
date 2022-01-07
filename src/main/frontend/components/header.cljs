@@ -82,32 +82,34 @@
       [(when-not (state/publishing-enable-editing?)
          {:title (t :settings)
           :options {:on-click state/open-settings!}
-          :icon svg/settings-sm})
+          :icon (ui/icon "settings")})
 
-       (when (and developer-mode? (util/electron?))
+       (when plugin-handler/lsp-enabled?
          {:title (t :plugins)
-          :options {:href (rfe/href :plugins)}})
+          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
+          :icon (ui/icon "apps")})
 
-       (when developer-mode?
+       (when plugin-handler/lsp-enabled?
          {:title (t :themes)
-          :options {:on-click #(plugins/open-select-theme!)}})
+          :options {:on-click #(plugins/open-select-theme!)}
+          :icon (ui/icon "palette")})
 
        (when current-repo
          {:title (t :export-graph)
           :options {:on-click #(state/set-modal! export/export)}
-          :icon nil})
+          :icon (ui/icon "database-export")})
 
        (when current-repo
          {:title (t :import)
           :options {:href (rfe/href :import)}
-          :icon svg/import-sm})
+          :icon (ui/icon "file-upload")})
 
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :join-community)]]
         :options {:href "https://discord.gg/KpN4eHY"
                   :title (t :discord-title)
                   :target "_blank"}
-        :icon svg/discord}
+        :icon (ui/icon "brand-discord")}
        (when logged?
          {:title (t :sign-out)
           :options {:on-click user-handler/sign-out!}
