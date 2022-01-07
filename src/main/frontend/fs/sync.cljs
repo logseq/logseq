@@ -701,7 +701,8 @@
                 (or need-sync-remote unknown) r))))))))
 
 ;;; TODO: add synced-files history
-(deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files]
+(deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
+                    ^:mutable history]
   Object
   (update-state! [this v]
     (set! state v)
@@ -742,7 +743,7 @@
                       *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws]
   Object
   (schedule [this next-state & args]
-    (println "[SyncManager" graph-uuid "]" state "->" next-state)
+    (println "[SyncManager" graph-uuid "]" (and state (name state)) "->" (and next-state (name next-state)))
     (set! state next-state)
     (.update-state! sync-state next-state)
     (go
@@ -875,7 +876,7 @@
   (def local->remote-sync-chan (chan))
   (vswap! *graph-base-path-map assoc graph-uuid {:repo (state/get-current-repo)
                                                  :base-path (config/get-repo-dir (state/get-current-repo))})
-  (def sync-state (->SyncState nil #{} #{}))
+  (def sync-state (->SyncState nil #{} #{} '()))
   (def sm (sync-manager graph-uuid
                         (:base-path (@*graph-base-path-map graph-uuid)) (:repo (@*graph-base-path-map graph-uuid))
                         txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
@@ -906,7 +907,7 @@
 (defn sync-start []
   (let [graph-uuid (first @graphs-txid)
         txid (second @graphs-txid)
-        sync-state (->SyncState nil #{} #{})
+        sync-state (->SyncState nil #{} #{} '())
         sm (sync-manager graph-uuid
                          (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
                          txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
