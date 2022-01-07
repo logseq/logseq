@@ -271,8 +271,7 @@
        {:on-mouse-down (fn [e]
                          (util/stop e)
                          (viewport-fn)
-                         (commands/simple-insert! parent-id "\n"
-                                                  {:forward-pos 1}))}
+                         (commands/simple-insert! parent-id "\n" {}))}
        (ui/icon "arrow-back"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
@@ -313,9 +312,8 @@
                          (viewport-fn)
                          (commands/simple-insert!
                           parent-id "#"
-                          {:check-fn     (fn [_ _ new-pos]
-                                           (commands/handle-step [:editor/search-page-hashtag])
-                                           (reset! commands/*slash-caret-pos new-pos))}))}
+                          {:check-fn  (fn []
+                                        (commands/handle-step [:editor/search-page-hashtag]))}))}
        (ui/icon "tag"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
