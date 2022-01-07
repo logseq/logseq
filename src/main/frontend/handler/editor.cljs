@@ -3184,8 +3184,8 @@
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)
-        input (state/get-input)]
-    (util/stop e)
+        input (state/get-input)
+        *stop-event? (atom true)]
     (cond
       (and
        (:copy/content copied-blocks)
@@ -3203,12 +3203,12 @@
                (string/includes? text "youtu.be"))
            (mobile/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-      
+
       (and (util/url? text)
            (string/includes? text "twitter.com")
            (mobile/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
-      
+
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
@@ -3220,22 +3220,25 @@
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-               [:markdown false _ _]
-               (paste-text-parseable format text)
+          [:markdown false _ _]
+          (paste-text-parseable format text)
 
-               [:org _ false _]
-               (paste-text-parseable format text)
+          [:org _ false _]
+          (paste-text-parseable format text)
 
-               [:markdown true _ false]
-               (paste-segmented-text format text)
+          [:markdown true _ false]
+          (paste-segmented-text format text)
 
-               [:markdown true _ true]
-               nil
+          [:markdown true _ true]
+          (reset! *stop-event? false)
 
-               [:org _ true false]
-               (paste-segmented-text format text)
-               [:org _ true true]
-               nil)))))
+          [:org _ true false]
+          (paste-segmented-text format text)
+
+          [:org _ true true]
+          (reset! *stop-event? false))))
+    (when @*stop-event?
+      (util/stop e))))
 
 (defn paste-text-in-one-block-at-point
   []
