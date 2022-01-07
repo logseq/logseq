@@ -30,26 +30,26 @@ test('switch code editing mode', async ({ page }) => {
   await page.waitForSelector('.CodeMirror pre', { state: 'hidden' })
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('```clojure\n```')
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await page.press(':nth-match(textarea, 1)', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
 
   // NOTE: must wait here, await loading of CodeMirror editor
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(300)
   await page.click('.CodeMirror pre')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(300)
 
   await page.type('.CodeMirror textarea', '(+ 1 1')
   await page.press('.CodeMirror textarea', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'hidden' })
   expect(await page.inputValue('.block-editor textarea')).toBe('```clojure\n(+ 1 1)\n```')
 
-  await page.waitForTimeout(500) // editor unloading
+  await page.waitForTimeout(100) // editor unloading
   await page.press('.block-editor textarea', 'Escape')
-  await page.waitForTimeout(500) // editor loading
+  await page.waitForTimeout(300) // editor loading
   // click position is estimated to be at the begining of the first line
   await page.click('.CodeMirror pre', { position: { x: 1, y: 5 } })
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(300)
 
   await page.type('.CodeMirror textarea', ';; comment\n\n  \n')
 
@@ -82,7 +82,7 @@ test('convert from block content to code', async ({ page }) => {
 
   // reset block, code block with 1 line
   await page.fill('.block-editor textarea', '```\n\n```')
-  await page.waitForTimeout(500) // wait for fill
+  await page.waitForTimeout(100) // wait for fill
   await escapeToCodeEditor(page)
   expect(await page.locator('.CodeMirror-gutter-wrapper .CodeMirror-linenumber >> nth=-1').innerText()).toBe('1')
   await escapeToBlockEditor(page)
@@ -90,20 +90,20 @@ test('convert from block content to code', async ({ page }) => {
 
   // reset block, code block with 2 line
   await page.fill('.block-editor textarea', '```\n\n\n```')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
   expect(await page.locator('.CodeMirror-gutter-wrapper .CodeMirror-linenumber >> nth=-1').innerText()).toBe('2')
   await escapeToBlockEditor(page)
   expect(await page.inputValue('.block-editor textarea')).toBe('```\n\n\n```')
 
   await page.fill('.block-editor textarea', '```\n  indented\nsecond line\n\n```')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
   await escapeToBlockEditor(page)
   expect(await page.inputValue('.block-editor textarea')).toBe('```\n  indented\nsecond line\n\n```')
 
   await page.fill('.block-editor textarea', '```\n  indented\n  indented\n```')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
   await escapeToBlockEditor(page)
   expect(await page.inputValue('.block-editor textarea')).toBe('```\n  indented\n  indented\n```')
@@ -113,7 +113,7 @@ test('code block mixed input source', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill('.block-editor textarea', '```\n  ABC\n```')
-  await page.waitForTimeout(500) // wait for fill
+  await page.waitForTimeout(100) // wait for fill
   await escapeToCodeEditor(page)
   await page.type('.CodeMirror textarea', '  DEF\nGHI')
 
@@ -128,7 +128,7 @@ test('code block with text around', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill('.block-editor textarea', 'Heading\n```\n```\nFooter')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
   await page.type('.CodeMirror textarea', 'first\n  second')
 
@@ -143,7 +143,7 @@ test('multiple code block', async ({ page }) => {
 
   // NOTE: the two code blocks are of the same content
   await page.fill('.block-editor textarea', '中文 Heading\n```clojure\n```\nMiddle 🚀\n```clojure\n```\nFooter')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
 
   await page.press('.block-editor textarea', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
@@ -182,7 +182,7 @@ test('click outside to exit', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill('.block-editor textarea', 'Header ``Click``\n```\n  ABC\n```')
-  await page.waitForTimeout(500) // wait for fill
+  await page.waitForTimeout(100) // wait for fill
   await escapeToCodeEditor(page)
   await page.type('.CodeMirror textarea', '  DEF\nGHI')
 
@@ -200,7 +200,7 @@ test('click lanuage label to exit #3463', async ({ page }) => {
   await page.waitForTimeout(200)
 
   await page.fill('.block-editor textarea', '```cpp\n```')
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
   await page.type('.CodeMirror textarea', '#include<iostream>')
 
@@ -222,7 +222,7 @@ test('multi properties with code', async ({ page }) => {
     '}\n' +
     '```'
   )
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(100)
   await escapeToCodeEditor(page)
 
   // first character of code

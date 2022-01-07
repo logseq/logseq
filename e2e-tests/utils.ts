@@ -66,7 +66,7 @@ export async function lastBlock(page: Page): Promise<Locator> {
 
 /**
 * Create and locate a new block at the end of the inner editor
-* @param page The Playwright Page object 
+* @param page The Playwright Page object
 * @returns The locator of the last block
 */
 export async function newInnerBlock(page: Page): Promise<Locator> {
@@ -87,20 +87,20 @@ export async function escapeToCodeEditor(page: Page): Promise<void> {
     await page.press('.block-editor textarea', 'Escape')
     await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
 
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
     await page.click('.CodeMirror pre')
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
 
     await page.waitForSelector('.CodeMirror textarea', { state: 'visible' })
 }
 
 export async function escapeToBlockEditor(page: Page): Promise<void> {
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
     await page.click('.CodeMirror pre')
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
 
     await page.press('.CodeMirror textarea', 'Escape')
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(300)
 }
 
 export async function setMockedOpenDirPath(
