@@ -102,6 +102,13 @@
       }
     }
   }
+
+  .dropdown-wrapper {
+    .ti {
+      margin-right: 5px;
+      opacity: .9;
+    }
+  }
 }
 
 .is-electron.is-mac .cp__header {

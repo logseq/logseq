@@ -286,9 +286,9 @@
     [:div#left-sidebar.cp__sidebar-left-layout
      {:class (util/classnames [{:is-open left-sidebar-open?}])}
 
-     [ ;; sidebar contents
-      (sidebar-nav route-match close-fn)
-      [:span.shade-mask {:on-click close-fn}]]]))
+     ;; sidebar contents
+     (sidebar-nav route-match close-fn)
+     [:span.shade-mask {:on-click close-fn}]]))
 
 (rum/defc main <
   {:did-mount (fn [state]
@@ -303,8 +303,7 @@
                 state)}
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
 
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
-        mobile? (util/mobile?)]
+  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
        {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
@@ -461,17 +460,6 @@
                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
        "?"])))
 
-(rum/defc settings-modal < rum/reactive
-  []
-  (let [settings-open? (state/sub :ui/settings-open?)]
-    (if settings-open?
-      (do
-        (state/set-modal!
-         (fn [] [:div.settings-modal (settings/settings)]))
-        (util/lock-global-scroll settings-open?))
-      (state/set-modal! nil))
-    nil))
-
 (defn- hide-context-menu-and-clear-selection
   []
   (state/hide-custom-context-menu!)
@@ -494,9 +482,6 @@
                 state)}
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
-        close-fn (fn []
-                   (close-fn)
-                   (state/set-left-sidebar-open! false))
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
@@ -504,6 +489,7 @@
         system-theme? (state/sub :ui/system-theme?)
         white? (= "white" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
+        settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
@@ -525,6 +511,7 @@
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
+        :settings-open? settings-open?
         :sidebar-blocks-len (count right-sidebar-blocks)
         :system-theme? system-theme?
         :on-click      (fn [e]
@@ -566,7 +553,7 @@
 
         (ui/notification)
         (ui/modal)
-        (settings-modal)
+        (ui/sub-modal)
         (command-palette/command-palette-modal)
         (custom-context-menu)
         (plugins/custom-js-installer {:t t

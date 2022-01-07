@@ -127,6 +127,15 @@
     focus:outline-none focus:text-gray-500
     transition ease-in-out duration-150;
   }
+
+  &[label="ls-modal-align-center"] {
+    top: 0;
+
+    .ui__modal-panel {
+      top: 50vh;
+      transform: translateY(-60%);
+    }
+  }
 }
 
 html.is-native-andorid,
