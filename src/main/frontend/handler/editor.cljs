@@ -2520,12 +2520,14 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
+            new-pos (cursor/get-caret-pos input)
             page-ref-fn (fn [bounds backward-pos]
                           (commands/simple-insert!
                            parent-id bounds
                            {:backward-pos backward-pos
-                            :check-fn     (fn []
-                                            (commands/handle-step [:editor/search-page]))}))]
+                            :check-fn (fn [_ _ _]
+                                        (reset! commands/*slash-caret-pos new-pos)
+                                        (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
               {:keys [selection-start selection-end value]} selection]
@@ -2551,11 +2553,13 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
+            new-pos (cursor/get-caret-pos input)
             block-ref-fn (fn [bounds backward-pos]
                            (commands/simple-insert!
                             parent-id bounds
                             {:backward-pos backward-pos
-                             :check-fn     (fn []
+                             :check-fn     (fn [_ _ _]
+                                             (reset! commands/*slash-caret-pos new-pos)
                                              (commands/handle-step [:editor/search-block]))}))]
         (state/set-editor-show-block-search! false)
         (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
