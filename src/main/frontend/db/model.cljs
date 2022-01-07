@@ -769,7 +769,7 @@
 (defn get-page-original-name
   [page-name]
   (when (string? page-name)
-    (let [page (db-utils/pull [:block/name (string/lower-case page-name)])]
+    (let [page (db-utils/pull [:block/name (util/page-name-sanity-lc page-name)])]
       (or (:block/original-name page)
           (:block/name page)))))
 

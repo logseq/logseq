@@ -57,21 +57,21 @@
   [page-name]
   (when-let [page-name (or
                         page-name
-                        (and (state/get-current-page)
-                             (string/lower-case (state/get-current-page))))]
+                        (state/get-current-page))]
     (let [t i18n/t
+          page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
-          page (and page-name (db/entity repo [:block/name page-name]))
+          page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
           journal? (db/journal-page? page-name)
           block? (and page (util/uuid-string? page-name))
-          contents? (= (string/lower-case (str page-name)) "contents")
+          contents? (= page-name "contents")
           {:keys [title] :as properties} (:block/properties page)
           title (or title page-original-name page-name)
           public? (true? (:public properties))
           favorites (:favorites (state/sub-graph-config))
-          favorited? (contains? (set (map string/lower-case favorites))
-                                (string/lower-case page-name))
+          favorited? (contains? (set (map util/page-name-sanity-lc favorites))
+                                page-name)
           developer-mode? (state/sub [:ui/developer-mode?])]
       (when (and page (not block?))
         (->>
