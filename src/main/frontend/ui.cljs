@@ -374,11 +374,12 @@
       down?)))
 
 (defn on-scroll
-  [node on-load on-top-reached]
+  [node {:keys [on-load on-top-reached threhold]
+         :or {threhold 100}}]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 100)
+        bottom-reached? (<= (- full-height scroll-top client-height) threhold)
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
     (when (and down? bottom-reached? on-load)
@@ -389,20 +390,16 @@
 (defn attach-listeners
   "Attach scroll and resize listeners."
   [state]
-
   (let [list-element-id (first (:rum/args state))
         opts (-> state :rum/args (nth 2))
         node (js/document.getElementById list-element-id)
-        debounced-on-scroll (util/debounce 500 #(on-scroll
-                                                 node
-                                                 (:on-load opts) ; bottom reached
-                                                 (:on-top-reached opts)))]
+        debounced-on-scroll (util/debounce 500 #(on-scroll node opts))]
     (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load has-more on-top-reached]}]
+  [state list-element-id body {:keys [on-load has-more on-top-reached threhold]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      body
