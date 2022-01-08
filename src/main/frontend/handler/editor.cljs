@@ -2887,7 +2887,8 @@
       :else
       (do
         (util/stop e)
-        (delete-and-update input (dec current-pos) current-pos)))))
+        (delete-and-update
+          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
 
 (defn indent-outdent
   [indent?]
