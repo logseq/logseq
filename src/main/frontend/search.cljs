@@ -76,14 +76,14 @@
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (util/query-normalize query)]
+  (let [query (util/search-normalize query)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (.toLowerCase s))})))))
+                                     :score (score query (util/search-normalize s))})))))
          (map :data))))
 
 (defn block-search

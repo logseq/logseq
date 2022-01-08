@@ -426,9 +426,11 @@
 
          :else
          (let [original-name (util/get-page-original-name page-entity)
-               s (if (not= (util/page-name-sanity-lc original-name) page-name-in-block)
+               s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
-                   original-name)]
+                   original-name)
+               _ (when-not page-entity (js/console.error "page-inner's page-entity is nil, given page-name: " page-name
+                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
@@ -596,7 +598,7 @@
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
-  (let [page-name (string/trim (util/page-name-sanity-lc page-name))
+  (let [page-name (util/page-name-sanity-lc (string/trim page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
@@ -606,9 +608,9 @@
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
      (when (and
-            (not= (string/lower-case (or current-page ""))
+            (not= (util/page-name-sanity-lc (or current-page ""))
                   page-name)
-            (not= (string/lower-case (get config :id ""))
+            (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
        (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
          (blocks-container blocks (assoc config
