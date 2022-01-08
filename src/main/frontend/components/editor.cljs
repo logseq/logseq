@@ -474,7 +474,7 @@
         _ (rum/use-effect! (fn []
                              (when-let [^js/HTMLElement cnt
                                         (and right-sidebar? editing-key
-                                             (js/document.querySelector "#main-container"))]
+                                             (js/document.querySelector "#main-content-container"))]
                                (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
                                  (let [el  (rum/deref *el)
                                        ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
