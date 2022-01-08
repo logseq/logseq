@@ -22,29 +22,24 @@
   [node]
   (satisfies? INode node))
 
-(defn- get-children
-  [blocks parent]
-  (let [children (doall
-                  (-> (filter #(= (:block/parent %) {:db/id (:db/id parent)}) @blocks)
-                      (db/sort-by-left parent)))]
-    (reset! blocks (remove (set children) @blocks))
-    children))
-
-(defn- with-children
-  [block children]
-  (assoc block :block/children children))
-
 (defn- blocks->vec-tree-aux
-  ([blocks root]
-   (blocks->vec-tree-aux blocks root 1))
-  ([blocks root level]
-   (let [root {:db/id (:db/id root)}]
-     (some->>
-      (get-children blocks root)
-      (map (fn [block]
-             (let [block (assoc block :block/level level)
-                   children (blocks->vec-tree-aux blocks block (inc level))]
-               (with-children block children))))))))
+  [blocks root page?]
+  (let [*idx (atom (if page? 0 -1))
+        id-map (fn [m] {:db/id (:db/id m)})
+        root (id-map root)
+        parent-blocks (group-by :block/parent blocks)
+        sort-fn (fn [parent]
+                  (db/sort-by-left (get parent-blocks parent) parent))
+        block-children (fn block-children [parent level]
+                         (map (fn [m]
+                                (let [parent (id-map m)
+                                      children (-> (block-children parent (inc level))
+                                                   (db/sort-by-left parent))]
+                                  (assoc m
+                                         :block/level level
+                                         :block/children children)))
+                           (sort-fn parent)))]
+    (block-children root 1)))
 
 (defn- get-root-and-page
   [root-id]
@@ -57,21 +52,16 @@
 
 (defn blocks->vec-tree
   [blocks root-id]
-  (let [original-blocks blocks
-        blocks (atom blocks)
-        [page? root] (get-root-and-page (str root-id))
-        result (blocks->vec-tree-aux blocks root)]
-    (cond
-      (not root)                        ; custom query
-      original-blocks
-
-      page?
-      result
-
-      :else                             ; include root block
-      (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) @blocks)
-            root-block (with-children root-block result)]
-        [root-block]))))
+  (let [[page? root] (get-root-and-page (str root-id))]
+    (if-not root ; custom query
+      blocks
+      (let [result (blocks->vec-tree-aux blocks root page?)]
+        (if page?
+          result
+          ;; include root block
+          (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
+                root-block (assoc root-block :block/children result)]
+            [root-block]))))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]
