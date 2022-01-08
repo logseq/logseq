@@ -261,7 +261,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-container"))
+  (gdom/getElement "main-content-container"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -375,7 +375,7 @@
 
 (defn on-scroll
   [node {:keys [on-load on-top-reached threhold]
-         :or {threhold 100}}]
+         :or {threhold 500}}]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")

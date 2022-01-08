@@ -2933,10 +2933,10 @@
                          (reset! ignore-scroll? false))]
     [:div#lazy-blocks
      (ui/infinite-list
-      "main-container"
+      "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
-       :threhold 400})]))
+       :threhold 1000})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
