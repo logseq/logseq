@@ -96,8 +96,8 @@
                                           {:type :page
                                            :data page}
                                           (and alias
-                                               (not= (string/lower-case page)
-                                                     (string/lower-case alias)))
+                                               (not= (util/page-name-sanity-lc page)
+                                                     (util/page-name-sanity-lc alias)))
                                           (assoc :alias alias))))
                                  (remove nil? pages)))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
@@ -105,8 +105,8 @@
           search-mode (state/sub :search/mode)
           new-page (if (or
                         (and (seq pages)
-                             (= (util/safe-lower-case search-q)
-                                (util/safe-lower-case (:data (first pages)))))
+                             (= (util/safe-page-name-sanity-lc search-q)
+                                (util/safe-page-name-sanity-lc (:data (first pages)))))
                         (nil? result)
                         all?)
                      []
@@ -199,7 +199,9 @@
                                                   :page
                                                   [:span {:data-page-ref data}
                                                    (when alias
-                                                     [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " alias)])
+                                                     (let [target-entity (db/get-page alias)
+                                                           target-original-name (util/get-page-original-name target-entity)]
+                                                       [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
                                                    (search-result-item "Page" (highlight-exact-query data search-q))]
 
                                                   :file
