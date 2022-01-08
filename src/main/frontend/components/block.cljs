@@ -375,7 +375,11 @@
 (declare page-reference)
 
 (rum/defc page-inner
-  "all page-names are sanitized except page-name-in-block"
+  "The inner div of page reference component
+   
+   page-name-in-block is the overridable name of the page (legacy)
+
+   All page-names are sanitized except page-name-in-block"
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
@@ -421,10 +425,10 @@
          (->elem :span (map-inline config label))
 
          :else
-         (let [page-name (get page-entity :block/original-name page-name)
-               s (if (not= (string/lower-case page-name) page-name-in-block)
-                   page-name-in-block
-                   page-name)]
+         (let [original-name (util/get-page-original-name page-entity)
+               s (if (not= (util/page-name-sanity-lc original-name) page-name-in-block)
+                   page-name-in-block ;; page-name-in-block might be overrided (legacy)
+                   original-name)]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
