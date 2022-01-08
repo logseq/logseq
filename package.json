@@ -87,6 +87,7 @@
         "fs": "0.0.1-security",
         "fs-extra": "9.1.0",
         "fuse.js": "6.4.6",
+        "grapheme-splitter": "1.0.4",
         "graphology": "0.20.0",
         "gulp-cached": "1.1.1",
         "highlight.js": "10.4.1",
