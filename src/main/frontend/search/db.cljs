@@ -21,7 +21,7 @@
   (when-let [result (->> (text/remove-level-spaces content format)
                          (drawer/remove-logbook)
                          (property/remove-built-in-properties format)
-                         (util/normalize))]
+                         (util/search-normalize))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

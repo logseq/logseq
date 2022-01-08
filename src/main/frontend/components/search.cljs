@@ -35,8 +35,8 @@
     content
     (when (and content q)
       (let [q-words (string/split q #" ")
-            lc-content (string/lower-case content)
-            lc-q (string/lower-case q)]
+            lc-content (util/search-normalize content)
+            lc-q (util/search-normalize q)]
         (if (and (string/includes? lc-content lc-q)
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)

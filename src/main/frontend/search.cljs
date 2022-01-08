@@ -89,7 +89,7 @@
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (string/lower-case q)
+    (let [q (util/search-normalize q)
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
@@ -117,7 +117,7 @@
    (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
-     (let [q (string/lower-case q)
+     (let [q (util/search-normalize q)
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
