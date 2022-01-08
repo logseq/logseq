@@ -368,7 +368,7 @@
             journal?            (:block/journal? page)
             properties-block    (:data (outliner-tree/-get-down (outliner-core/block page)))
             properties-block-tx (when (and properties-block
-                                           (string/includes? (string/lower-case (:block/content properties-block))
+                                           (string/includes? (util/page-name-sanity-lc (:block/content properties-block))
                                                              old-page-name))
                                   (let [front-matter? (and (property/front-matter? (:block/content properties-block))
                                                            (= :markdown (:block/format properties-block)))]
@@ -447,7 +447,7 @@
              (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
-  "Accepts unsanitized names"
+  "Original names (unsanitized only)"
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)
         page (db/pull [:block/name (util/page-name-sanity-lc old-name)])

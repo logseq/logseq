@@ -1140,11 +1140,12 @@
 
 (defn normalize
   [s]
-  (.normalize s "NFKC"))
+  (.normalize s "NFC"))
 
-(defn query-normalize
+(defn search-normalize
+  "Normalize string for searching"
   [s]
-  (normalize (string/lower-case s))
+  (.normalize (string/lower-case s) "NFKD")
 )
 
 (defn page-name-sanity
