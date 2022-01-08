@@ -25,6 +25,8 @@
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
+ (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles")))
+(when (native-ios?)
   (defonce ios-file-container (registerPlugin "FileContainer")))
 
 (defn hide-splash []

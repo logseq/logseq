@@ -3,6 +3,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
+            [frontend.storage :as storage]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -515,11 +516,30 @@
           developer-mode?
           (fn []
             (let [mode (not developer-mode?)]
-              (state/set-developer-mode! mode)
-              (and mode (util/electron?)
-                   (when (js/confirm (t :developer-mode-alert))
-                     (js/logseq.api.relaunch)))))
+              (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
+
+(rum/defc plugin-enabled-switcher
+  [t]
+  (let [value (state/lsp-enabled?-or-theme)
+        [on? set-on?] (rum/use-state value)
+        on-toggle #(let [v (not on?)]
+                     (set-on? v)
+                     (storage/set :lsp-core-enabled v))]
+    [:div.flex.items-center
+     (ui/toggle on? on-toggle true)
+     (when (not= (boolean value) on?)
+       [:div.relative.opacity-70
+        [:span.absolute.whitespace-nowrap
+         {:style {:top -18 :left 10}}
+         (ui/button (t :plugin/restart)
+                    :on-click #(js/logseq.api.relaunch)
+                    :small? true :intent "logseq")]])]))
+
+(defn plugin-system-switcher-row [t]
+  (row-with-button-action
+    {:left-label "Plug-in system"
+     :action (plugin-enabled-switcher t)}))
 
 (rum/defcs settings
   < (rum/local :general ::active)
@@ -533,12 +553,12 @@
      state)}
   rum/reactive
   [state]
-  (let [preferred-format (state/get-preferred-format)
+  (let [current-repo (state/sub :git/current-repo)
+        preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
-        current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
@@ -579,7 +599,8 @@
 
             (when label
               [:li
-               {:class    (util/classnames [{:active (= label @*active)}])
+               {:key text
+                :class    (util/classnames [{:active (= label @*active)}])
                 :on-click #(reset! *active label)}
 
                [:a.flex.items-center
@@ -596,9 +617,8 @@
               (version-row t version))
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)
-            (when-let [current-repo (state/sub :git/current-repo)]
-              [(edit-config-edn)
-               (edit-custom-css)])
+            (when current-repo (edit-config-edn))
+            (when current-repo (edit-custom-css))
             (keyboard-shortcuts-row t)]
 
            :editor
@@ -644,6 +664,7 @@
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
             (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+            (when (util/electron?) (plugin-system-switcher-row t))
             (clear-cache-row t)
 
             (ui/admonition

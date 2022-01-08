@@ -44,7 +44,7 @@
             [:div
              (when-not (string/blank? before)
                [:span before])
-             [:mark {:class "p-0 rounded-none"} (subs content i (+ i (count q)))]
+             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
              (when-not (string/blank? after)
                [:span after])])
           (let [elements (loop [words q-words
@@ -60,7 +60,7 @@
                                         (vec
                                          (concat result
                                                  [[:span (subs content 0 i)]
-                                                  [:mark (subs content i (+ i (count word)))]])))
+                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
                                  (recur nil
                                         content
                                         result)))
@@ -84,59 +84,6 @@
                                                                      (clojure.core/uuid uuid)
                                                                      {:indent? false})])
          [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
-
-(rum/defc highlight-fuzzy
-  [content indexes]
-  (let [n (count content)
-        max-hightlighted-len 512
-        max-surrounding-len 512
-
-        first-index (first indexes)
-        last-index (nth indexes (dec (count indexes)))
-        last-index (min (+ first-index max-hightlighted-len -1) last-index)
-        last-index* (+ last-index max-surrounding-len)
-        indexes (take-while #(<= % last-index*) indexes)
-        content-begin (max 0 (- first-index max-surrounding-len))
-        content-end   (min n (+ last-index 1 max-surrounding-len)) ; exclusive
-
-        ; finds inconsecutive sections
-        sections (partition-between #(> (- %2 %) 1) indexes)
-        hl-ranges (for [sec sections
-                        :let [begin (first sec)
-                              end (-> sec last inc)]]
-                    [begin end]) ; `end` is exclusive
-        hl-ranges* (concat [[content-begin content-begin]]
-                           hl-ranges
-                           [[content-end content-end]])
-        normal-ranges (for [[[_ begin] [end _]] (partition 2 1 hl-ranges*)] [begin end])
-        normal-hl-pairs (partition-all 2 (medley/interleave-all normal-ranges hl-ranges))]
-    [:p
-     (mapcat
-      (fn [[normal highlighted]]
-        [(when-some [[begin end] normal]
-           [:span (subs content begin end)])
-         (when-some [[begin end] highlighted]
-           [:mark (subs content begin end)])])
-      normal-hl-pairs)]))
-
-(rum/defc highlight
-  [content q]
-  (let [q-pattern (->> q
-                       (search/escape-str)
-                       (str "(?i)")
-                       (re-pattern))
-        n (count content)
-        [before after] (string/split content q-pattern 2)
-        [before after] (if (>= n 64)
-                         [(when before (apply str (take-last 48 before)))
-                          (when after (apply str (take 48 after)))]
-                         [before after])]
-    [:p
-     (when-not (string/blank? before)
-       [:span before])
-     [:mark q]
-     (when-not (string/blank? after)
-       [:span after])]))
 
 (defonce search-timeout (atom nil))
 

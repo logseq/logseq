@@ -1,4 +1,5 @@
 (ns frontend.debug
+  (:require-macros [frontend.debug])
   (:refer-clojure :exclude [print])
   (:require [cljs.pprint :as pprint]
             [frontend.state :as state]

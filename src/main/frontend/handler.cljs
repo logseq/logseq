@@ -24,10 +24,8 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
-            [frontend.search.db :as search-db]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.pool :as pool]
             [cljs.reader :refer [read-string]]
@@ -103,6 +101,7 @@
                             (ui-handler/add-style-if-exists!)
 
                             ;; install after config is restored
+                            (shortcut/unlisten-all)
                             (shortcut/refresh!)
 
                             (cond
@@ -194,10 +193,15 @@
 
 (defn clear-cache!
   []
+  (notification/show! "Clearing..." :warning false)
   (p/let [_ (when (util/electron?)
               (ipc/ipc "clearCache"))
           _ (idb/clear-local-storage-and-idb!)]
-    (js/setTimeout #(js/window.location.reload %) 3000)))
+    (js/setTimeout
+      (fn [] (if (util/electron?)
+               (ipc/ipc :reloadWindowPage)
+               (js/window.location.reload)))
+      2000)))
 
 (defn- register-components-fns!
   []

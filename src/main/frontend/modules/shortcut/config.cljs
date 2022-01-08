@@ -414,9 +414,11 @@
                                      :binding "t i"
                                      :fn      plugin-handler/show-themes-modal!}
 
-   :ui/goto-plugins                 {:desc    "Go to plugins dashboard"
-                                     :binding "t p"
-                                     :fn      plugin-handler/goto-plugins-dashboard!}
+   :ui/goto-plugins                  (when plugin-handler/lsp-enabled?
+                                       {:desc    "Go to plugins dashboard"
+                                        :binding "t p"
+                                        :fn      plugin-handler/goto-plugins-dashboard!})
+
 
    :editor/toggle-open-blocks       {:desc    "Toggle open blocks (collapse or expand all blocks)"
                                      :binding "t o"

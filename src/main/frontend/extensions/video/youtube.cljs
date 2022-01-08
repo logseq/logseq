@@ -5,7 +5,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.handler.notification :as notification]))
 
 (defn- load-yt-script []
   (js/console.log "load yt script")
@@ -100,8 +102,16 @@
    (seconds->display seconds)])
 
 (defn gen-youtube-ts-macro []
-  (when-let [player (get-player (state/get-input))]
-    (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))))
+  (if-let [player (get-player (state/get-input))]
+    (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))
+    (when (mobile-util/is-native-platform?)
+      (notification/show!
+       "Please embed a YouTube video at first, then use this icon.
+Remember: You can paste a raw YouTube url as embedded video on mobile."
+       :warning
+       false)
+      nil)))
+
 
 (defn parse-timestamp [timestamp]
   (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"

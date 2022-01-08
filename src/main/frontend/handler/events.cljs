@@ -4,6 +4,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.components.diff :as diff]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
             [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
@@ -207,6 +208,9 @@
                     {:fullscreen? false
                      :close-btn?  false}))
 
+(defmethod handle :go/plugins [_]
+  (plugin/open-plugins-modal!))
+
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
 
@@ -230,6 +234,18 @@
 (defmethod handle :mobile/keyboard-did-show [[_]]
   (when-let [input (state/get-input)]
     (util/make-el-into-viewport input)))
+
+(defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
+  (when-let [coming (get-in @state/state [:plugin/updates-coming id])]
+    (notification/show!
+      (str "Checked: " (:title coming))
+      :success))
+
+  ;; try to start consume pending item
+  (when-let [n (second (first (:plugin/updates-pending @state/state)))]
+    (plugin-handler/check-or-update-marketplace-plugin
+      (assoc n :only-check true)
+      (fn [^js e] (js/console.error "[Check Err]" n e)))))
 
 (defn run!
   []

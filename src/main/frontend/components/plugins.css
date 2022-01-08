@@ -4,9 +4,28 @@
 
 .cp__plugins {
   &-page {
+    background-color: var(--ls-primary-background-color);
+    margin: -2rem;
+    padding: 1.5rem 2rem;
+    outline: none;
+
+    @screen xl {
+      width: 1260px;
+    }
+
     > h1 {
-      padding: 0 0 20px;
-      font-size: 38px;
+      margin: 0;
+      padding: 0;
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    .admonitionblock {
+      margin: 1rem 15px;
+
+      .text-lg {
+        font-size: 16px;
+      }
     }
 
     .tabs {
@@ -46,17 +65,85 @@
         }
       }
     }
+
+    .control-tabs {
+      .ti {
+        margin-right: 4px;
+      }
+
+      .ui__dropdown-trigger {
+        .ti-circle {
+          visibility: hidden;
+        }
+      }
+    }
+
+    .ui__button {
+      border: none;
+
+      &:active {
+        opacity: .8;
+      }
+
+      &.contribute {
+        position: absolute;
+        top: -46px;
+        right: 0;
+        background: transparent;
+        font-size: 12px;
+        opacity: .8;
+        display: none;
+
+        @screen md {
+          display: block;
+        }
+      }
+
+      &.load-unpacked {
+        opacity: .9;
+        background: transparent;
+      }
+
+      &.sort-by, &.more-do {
+        padding: 0 4px;
+      }
+    }
+
+    .search-ctls {
+      margin: 3px 13px;
+      display: flex;
+      align-items: center;
+      position: relative;
+
+      small.s1 {
+        left: 6px;
+        top: 6px;
+      }
+
+      small.s2 {
+        right: 4px;
+        top: 6px;
+        user-select: none;
+        cursor: pointer;
+        z-index: 1;
+      }
+
+      .form-input {
+        background-color: var(--ls-primary-background-color);
+        padding: 5px 7px 5px 22px;
+        opacity: .5;
+
+        &:focus {
+          background-color: var(--ls-secondary-background-color);
+          opacity: 1;
+        }
+      }
+    }
   }
 
   &-installed {
     min-height: 60vh;
     padding-top: 5px;
-
-    .secondary-tabs {
-      button {
-        background: var(--ls-secondary-background-color);
-      }
-    }
   }
 
   &-marketplace {
@@ -80,25 +167,34 @@
     @apply flex py-3 px-1 rounded-md;
 
     background-color: var(--ls-secondary-background-color);
-    height: 160px;
+    height: 150px;
 
     li {
       margin: 0;
     }
 
     .head {
-      max-height: 60px;
+      max-height: 50px;
       overflow: hidden;
+      line-height: 24px;
+      padding-right: 24px;
     }
 
     .desc {
       height: 60px;
       overflow: hidden;
+
+      > p {
+        @apply overflow-hidden overflow-ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
     }
 
     .flag {
       position: absolute;
-      bottom: 24px;
+      bottom: 16px;
       left: 0;
       width: 100%;
 
@@ -106,7 +202,7 @@
         color: var(--ls-primary-text-color);
         opacity: .8;
 
-        > small:last-child {
+        > small {
           cursor: pointer;
         }
       }
@@ -128,8 +224,8 @@
       padding: 8px;
 
       svg, .icon {
-        width: 70px;
-        height: 70px;
+        width: 60px;
+        height: 60px;
         opacity: .8;
 
         &:hover {
@@ -154,20 +250,25 @@
 
         .de {
           font-size: 10px;
-          padding: 5px 0;
-          padding-right: 10px;
+          padding: 5px 2px;
+          padding-right: 3px;
           border-radius: 2px;
+          margin-right: 5px;
           user-select: none;
           transition: none;
           opacity: .2;
           position: relative;
           z-index: var(--ls-z-index-level-1);
 
+          .ti {
+            font-size: 16px;
+          }
+
           .menu-list {
             @apply shadow-md rounded-sm absolute hidden list-none overflow-hidden m-0 p-0;
 
             background-color: var(--ls-primary-background-color);
-            top: 20px;
+            top: 22px;
             left: 0;
             min-width: 120px;
 
@@ -197,6 +298,23 @@
             padding: 5px;
           }
 
+          &.sponsors {
+            .menu-list {
+              min-width: auto;
+              white-space: nowrap;
+
+              > li {
+                &:hover {
+                  background-color: unset;
+                }
+              }
+
+              .ti {
+                font-size: 12px;
+              }
+            }
+          }
+
           svg {
             width: 15px;
             height: 15px;
@@ -213,7 +331,7 @@
 
         > .l {
           @apply flex items-center;
-          margin-left: -80px;
+          margin-left: -70px;
         }
 
         a.btn {
@@ -244,6 +362,8 @@
           &.disabled {
             pointer-events: none;
             cursor: default;
+            color: var(--ls-primary-text-color);
+            opacity: .3;
           }
 
           &.installing {
@@ -262,9 +382,29 @@
     }
 
     &.market {
+      &.installed {
+
+      }
+
       .ctl {
         padding-left: 12px;
         bottom: -5px;
+      }
+    }
+
+    .updates-actions {
+      opacity: 0;
+    }
+
+    &:hover {
+      .updates-actions {
+        opacity: 1;
+      }
+    }
+
+    &.has-new-version, &.updating {
+      .updates-actions {
+        opacity: 1;
       }
     }
   }
@@ -291,17 +431,18 @@
         line-height: 1.1em;
 
         > strong {
-          font-size: 14px;
-        }
-
-        > small {
-          font-size: 11px;
+          font-size: 13px;
+          font-weight: 600;
         }
       }
 
       &.is-active {
         background-color: var(--ls-tertiary-background-color);
         border: 1px solid var(--ls-quaternary-background-color);
+        opacity: 1;
+      }
+
+      &.is-selected {
         opacity: 1;
       }
 
