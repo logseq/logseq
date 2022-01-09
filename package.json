@@ -113,6 +113,7 @@
         "yargs-parser": "20.2.4"
     },
     "resolutions": {
+        "@playwright/test/colors": "1.4.0",
         "pixi-graph-fork/@pixi/app": "6.2.0",
         "pixi-graph-fork/@pixi/constants": "6.2.0",
         "pixi-graph-fork/@pixi/core": "6.2.0",
