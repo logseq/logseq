@@ -696,6 +696,22 @@
        (dec current-pos))))
 
 #?(:cljs
+   ;; for widen char
+   (defn safe-inc-current-pos-from-start
+     [input current-pos]
+     (if-let [len (and (string? input) (.-length input))]
+       (when-let [input (and (>= len 2) (<= current-pos len)
+                             (.substr input current-pos 20))]
+         (try
+           (let [^js splitter (GraphemeSplitter.)
+                 ^js input (.splitGraphemes splitter input)]
+             (+ current-pos (.-length (.shift input))))
+           (catch js/Error e
+             (js/console.error e)
+             (inc current-pos))))
+       (inc current-pos))))
+
+#?(:cljs
    (defn kill-line-before!
      [input]
      (let [val (.-value input)

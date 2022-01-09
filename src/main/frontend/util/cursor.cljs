@@ -70,7 +70,9 @@
   ([input n]
    (when input
      (let [{:keys [pos]} (get-caret-pos input)
-           pos (+ pos n)]
+           pos (if (= n 1)
+                 (util/safe-inc-current-pos-from-start (.-value input) pos)
+                 (+ pos n))]
        (move-cursor-to input pos)))))
 
 (defn move-cursor-backward
@@ -79,7 +81,9 @@
   ([input n]
    (when input
      (let [{:keys [pos]} (get-caret-pos input)
-           pos (- pos n)]
+           pos (if (= n 1)
+                 (util/safe-dec-current-pos-from-end (.-value input) pos)
+                 (- pos n))]
        (move-cursor-to input pos)))))
 
 (defn- get-input-content&pos
