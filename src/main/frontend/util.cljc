@@ -1143,13 +1143,18 @@
   (.normalize s "NFC"))
 
 (defn search-normalize
-  "Normalize string for searching"
+  "Normalize string for searching (loose)"
   [s]
   (.normalize (string/lower-case s) "NFKD")
 )
 
+(defn safe-search-normalize
+  [s]
+  (if (string? s)
+    (.normalize (string/lower-case s) "NFKD") s))
+
 (defn page-name-sanity
-  "Sanitize the page-name for file name"
+  "Sanitize the page-name for file name (strict)"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]

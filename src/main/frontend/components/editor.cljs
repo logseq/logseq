@@ -117,7 +117,7 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
+                              (contains? (set (map util/search-normalize matched-pages)) (util/search-normalize (string/trim q)))
                               matched-pages
 
                               (empty? matched-pages)

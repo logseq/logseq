@@ -100,6 +100,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn exact-matched?
+  "Check if two strings the same thing"
   [q match]
   (when (and (string? q) (string? match))
     (boolean
@@ -109,10 +110,11 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (string/lower-case match))
-      (seq (string/lower-case q))))))
+      (seq (util/search-normalize match))
+      (seq (util/search-normalize q))))))
 
 (defn page-search
+  "Return a list of page names that match the query"
   ([q]
    (page-search q 10))
   ([q limit]

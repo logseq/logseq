@@ -105,8 +105,8 @@
           search-mode (state/sub :search/mode)
           new-page (if (or
                         (and (seq pages)
-                             (= (util/safe-page-name-sanity-lc search-q)
-                                (util/safe-page-name-sanity-lc (:data (first pages)))))
+                             (= (util/safe-search-normalize search-q)
+                                (util/safe-search-normalize (:data (first pages)))))
                         (nil? result)
                         all?)
                      []
