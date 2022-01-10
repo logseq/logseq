@@ -3503,8 +3503,8 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-block-property! block-id :collapsed true))
-    (state/set-collapsed-block! block-id true)))
+      (set-block-property! block-id :collapsed true)))
+  (state/set-collapsed-block! block-id true))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
@@ -3595,7 +3595,6 @@
    (expand-all! nil))
   ([block-id]
    (->> (all-blocks-with-level {:root-block block-id})
-        (filter (fn [b] (-> b :block/properties :collapsed)))
         (map (comp expand-block! :block/uuid))
         dorun)))
 

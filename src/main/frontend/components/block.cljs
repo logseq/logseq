@@ -2172,8 +2172,9 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
-             (state/set-collapsed-block! (:block/uuid block)
-                                         (editor-handler/block-default-collapsed? block config))
+             (when-not (some? (state/sub-collapsed (:block/uuid block)))
+               (state/set-collapsed-block! (:block/uuid block)
+                                           (editor-handler/block-default-collapsed? block config)))
              (assoc state
                     ::init-collapsed? (get-in block [:block/properties :collapsed])
                     ::control-show? (atom false))))
