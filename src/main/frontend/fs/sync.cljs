@@ -142,12 +142,14 @@
   Object
   (rename-file [_ from to]
     (if-let [^FileTxn file (some-> (get to-path-file-map from) (as-> f (and (not (.deleted? f)) f)))]
-      (let [next-file (.rename file to)]
-        (-> to-path-file-map
-            (-dissoc (.-to-path file))
-            (-conj [to next-file])
-            (FileTxnSet. seq-id)))
-      (throw (->FileNotFoundErr :rename-file from))))
+      (if (.deleted? file)
+        (throw (->FileNotFoundErr :rename-file from))
+        (let [next-file (.rename file to)]
+          (-> to-path-file-map
+              (-dissoc (.-to-path file))
+              (-conj [to next-file])
+              (FileTxnSet. seq-id))))
+      (FileTxnSet. (assoc to-path-file-map to (->FileTxn from to false false seq-id)) (inc seq-id))))
 
   (update-file [_ to]
     (if-let [file (get to-path-file-map to)]
@@ -159,7 +161,7 @@
     (if-let [file (get to-path-file-map to)]
       (let [next-file (.delete file)]
         (FileTxnSet. (assoc to-path-file-map to next-file) seq-id))
-      (throw (->FileNotFoundErr :delete-file to))))
+      (FileTxnSet. (assoc to-path-file-map to (->FileTxn to to false true seq-id)) (inc seq-id))))
 
   (related-files [_]
     (->> (vals to-path-file-map)
@@ -461,7 +463,12 @@
     (update-local-files rsapi graph-uuid base-path [(.-to-path filetxn)])
 
     (.deleted? filetxn)
-    (delete-local-files rsapi graph-uuid base-path [(.-to-path filetxn)])))
+    (go
+      (let [r (<! (delete-local-files rsapi graph-uuid base-path [(.-to-path filetxn)]))]
+        (if (and (instance? ExceptionInfo r)
+                 (string/index-of (str (ex-cause r)) "No such file or directory"))
+          true
+          r)))))
 
 ;;; TODO: support stop from processing
 (defn- apply-filetxns [^SyncState sync-state graph-uuid base-path filetxns]
@@ -532,7 +539,6 @@
     (when (some-> (state/get-file-sync-state-manager)
                   -stopped?
                   not)
-      (prn "file-watch-handler" path)
       (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
 
 
@@ -542,7 +548,7 @@
 
 (defprotocol ILocal->RemoteSync
   (get-ignore-files [this] "ignored-files won't be synced to remote")
-  ;; TODO: get-monitored-dirs
+  (get-monitored-dirs [this])
   (stop-local->remote! [this])
   (ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
@@ -602,7 +608,7 @@
 
   ILocal->RemoteSync
   (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*"})
-
+  (get-monitored-dirs [_] #{"assets/" "journals/" "logseq/" "pages/"})
   (stop-local->remote! [_] (async/close! stop-chan))
 
   (ratelimit [this from-chan]
@@ -624,9 +630,11 @@
 
             (some? e)
             (do
-              (if (<! (file-changed? graph-uuid (-relative-path e) base-path))
+              (if (= "unlink" (.-type e))
                 (conj! tcoll e)
-                (prn "file unchanged" (-relative-path e)))
+                (if (<! (file-changed? graph-uuid (-relative-path e) base-path))
+                  (conj! tcoll e)
+                  (prn "file unchanged" (-relative-path e))))
               (recur timeout-c tcoll))
 
             (nil? e)
@@ -756,6 +764,8 @@
         (<! (.remote->local this nil args))
         ::full-sync
         (<! (.full-sync this))
+        ::remote->local=>local->remote
+        (<! (.remote->local this ::local-remote args))
         ::remote->local=>full-sync
         (<! (.remote->local this ::full-sync args))
         ::stop
@@ -829,7 +839,7 @@
           (.schedule this ::idle)
 
           need-sync-remote
-          (.schedule this ::remote->local nil)
+          (.schedule this ::remote->local=>local->remote nil)
 
           unknown
           (do
