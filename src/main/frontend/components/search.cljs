@@ -275,7 +275,8 @@
                             (search-handler/search (state/get-current-repo) q opts)
                             (search-handler/search (state/get-current-repo) q))))
 
-                      nil))
+                      nil)
+                    (state/close-modal!))
        :on-shift-chosen (fn [{:keys [type data]}]
                           (case type
                             :page
