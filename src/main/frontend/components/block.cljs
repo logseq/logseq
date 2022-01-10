@@ -88,7 +88,6 @@
 (def *move-to (atom nil))
 
 ;; TODO: dynamic
-(defonce max-blocks-per-page 200)
 (defonce max-depth-of-links 5)
 (defonce *blocks-container-id (atom 0))
 
@@ -2886,37 +2885,61 @@
         (str (:block/uuid item))))))
 
 (defonce ignore-scroll? (atom false))
+
+(defn- custom-query-or-ref?
+  [config]
+  (let [ref? (:ref? config)
+        custom-query? (:custom-query? config)]
+    (or custom-query? ref?)))
+
+
+;; TODO: virtual tree for better UX and memory usage reduce
+(def initial-blocks-length 200)
+(def step-loading-blocks 50)
+
+(defn- flat-blocks-tree
+  [vec-tree]
+  (->> (mapcat (fn [x] (tree-seq map? :block/children x)) vec-tree)
+       (map #(dissoc % :block/children))))
+
+(defn- get-segment
+  [config flat-blocks idx blocks->vec-tree]
+  (let [new-idx (if-not (zero? idx)
+                  (+ idx step-loading-blocks)
+                  initial-blocks-length)
+        max-idx (count flat-blocks)
+        idx (min max-idx new-idx)
+        blocks (util/safe-subvec flat-blocks 0 idx)]
+    [(blocks->vec-tree blocks)
+     idx]))
+
 (rum/defcs lazy-blocks <
-  (rum/local 1 ::page)
-  [state config blocks]
-  (let [*page (get state ::page)
-        segment (->> blocks
-                     (drop (* (dec @*page) max-blocks-per-page))
-                     (take max-blocks-per-page))
+  {:did-remount (fn [old-state new-state]
+                  ;; Loading more when pressing Enter or paste
+                  (let [args (:rum/args new-state)]
+                    ;; FIXME: what if users paste too many blocks?
+                    ;; or, a template with a lot of blocks?
+                    (swap! (::last-idx new-state) + 100))
+                  new-state)}
+  (rum/local 0 ::last-idx)
+  [state config flat-blocks blocks->vec-tree]
+  (let [*last-idx (::last-idx state)
+        [segment idx] (get-segment config
+                                   flat-blocks
+                                   @*last-idx
+                                   blocks->vec-tree)
         bottom-reached (fn []
-                         (when (and (= (count segment) max-blocks-per-page)
-                                    (> (count blocks) (* @*page max-blocks-per-page))
-                                    (not @ignore-scroll?))
-                           (swap! *page inc)
-                           (util/scroll-to-top))
+                         (reset! *last-idx idx)
                          (reset! ignore-scroll? false))
-        top-reached (fn []
-                      (when (> @*page 1)
-                        (swap! *page dec)
-                        (reset! ignore-scroll? true)
-                        (js/setTimeout #(util/scroll-to
-                                         (.-scrollHeight (js/document.getElementById "lazy-blocks"))) 100)))]
+        has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
-     (when (> @*page 1)
-       [:div.ml-4.mb-4 [:a#prev.opacity-60.opacity-100.text-sm.font-medium {:on-click top-reached}
-                        "Prev"]])
      (ui/infinite-list
-      "main-container"
+      "main-content-container"
       (block-list config segment)
-      {:on-load bottom-reached})
-     (when (> (count blocks) (* @*page max-blocks-per-page))
-       [:div.ml-4.mt-4 [:a#more.opacity-60.opacity-100.text-sm.font-medium {:on-click bottom-reached}
-                        "More"]])]))
+      {:on-load bottom-reached
+       :threhold 1000
+       :has-more has-more?
+       :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
@@ -2928,20 +2951,19 @@
                               (let [id' (swap! *blocks-container-id inc)]
                                 (reset! *init-blocks-container-id id')
                                 id'))
-        sidebar? (:sidebar? config)
-        ref? (:ref? config)
-        custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
-        blocks' (blocks->vec-tree blocks)
-        blocks (if (seq blocks') blocks' blocks)
         config (assoc config :blocks-container-id blocks-container-id)
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
-      [:div.blocks-container.flex-1
-       {:class (when doc-mode? "document-mode")
-        ;; :style {:margin-left (if sidebar? 0 -10)}
-        }
-       (lazy-blocks config blocks)])))
+      (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
+            blocks-tree (blocks->vec-tree blocks)
+            blocks-tree (if (seq blocks-tree) blocks-tree blocks)
+            flat-blocks (if (custom-query-or-ref? config)
+                          blocks-tree
+                          (flat-blocks-tree blocks-tree))
+            flat-blocks (vec flat-blocks)]
+        [:div.blocks-container.flex-1
+         {:class (when doc-mode? "document-mode")}
+         (lazy-blocks config flat-blocks blocks->vec-tree)]))))
 
 ;; headers to hiccup
 (defn ->hiccup

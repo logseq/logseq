@@ -28,7 +28,8 @@
             [rum.core :as rum]
             [clojure.string :as str]
             [frontend.db-mixins :as db-mixins]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [goog.functions :refer [debounce]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -261,7 +262,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-container"))
+  (gdom/getElement "main-content-container"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -308,12 +309,13 @@
           on-viewport-changed
           (fn []
             (let [update-vw-state
-                  (util/debounce 20
-                                 (fn []
-                                   (state/set-visual-viewport-state {:height     (.-height vp)
-                                                                     :page-top   (.-pageTop vp)
-                                                                     :offset-top (.-offsetTop vp)})
-                                   (state/set-state! :ui/visual-viewport-pending? false)))]
+                  (debounce
+                   (fn []
+                     (state/set-visual-viewport-state {:height     (.-height vp)
+                                                       :page-top   (.-pageTop vp)
+                                                       :offset-top (.-offsetTop vp)})
+                     (state/set-state! :ui/visual-viewport-pending? false))
+                   20)]
               (when-not @raf-pending?
                 (let [f (fn []
                           (set-raf-pending! false)
@@ -368,17 +370,18 @@
 
 (defn scroll-down?
   []
-  (let [scroll-top (get-scroll-top)]
-    (let [down? (> scroll-top @last-scroll-top)]
-      (reset! last-scroll-top scroll-top)
-      down?)))
+  (let [scroll-top (get-scroll-top)
+        down? (>= scroll-top @last-scroll-top)]
+    (reset! last-scroll-top scroll-top)
+    down?))
 
 (defn on-scroll
-  [node on-load on-top-reached]
+  [node {:keys [on-load on-top-reached threhold]
+         :or {threhold 500}}]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 100)
+        bottom-reached? (<= (- full-height scroll-top client-height) threhold)
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
     (when (and down? bottom-reached? on-load)
@@ -389,27 +392,27 @@
 (defn attach-listeners
   "Attach scroll and resize listeners."
   [state]
-
   (let [list-element-id (first (:rum/args state))
         opts (-> state :rum/args (nth 2))
         node (js/document.getElementById list-element-id)
-        debounced-on-scroll (util/debounce 500 #(on-scroll
-                                                 node
-                                                 (:on-load opts) ; bottom reached
-                                                 (:on-top-reached opts)))]
+        debounced-on-scroll (debounce #(on-scroll node opts) 500)]
     (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load has-more on-top-reached]}]
+  [state list-element-id body {:keys [on-load on-top-reached threhold
+                                      has-more more more-class]
+                               :or {more-class "text-sm"}}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      body
      (when has-more
-       [:a.fade-link.text-link.font-bold.text-4xl
-        {:on-click on-load}
-        (t :page/earlier)])]))
+       [:div.w-full.p-4
+        [:a.fade-link.text-link.font-bold
+         {:on-click on-load
+          :class more-class}
+         (or more (t :page/earlier))]])]))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)

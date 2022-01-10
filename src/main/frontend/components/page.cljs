@@ -47,9 +47,9 @@
     (get-in route-match [:parameters :path :name])))
 
 (defn- get-blocks
-  [repo page-name page-original-name block? block-id]
+  [repo page-name block-id]
   (when page-name
-    (if block?
+    (if block-id
       (db/get-block-and-children repo block-id)
       (db/get-page-blocks repo page-name))))
 
@@ -130,7 +130,7 @@
           page-e (if (and page-e (:db/id page-e))
                    {:db/id (:db/id page-e)}
                    page-e)
-          page-blocks (get-blocks repo page-name page-original-name block? block-id)]
+          page-blocks (get-blocks repo page-name block-id)]
       (if (empty? page-blocks)
         (dummy-block page-name)
         (let [document-mode? (state/sub :document/mode?)

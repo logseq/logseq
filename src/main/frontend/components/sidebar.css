@@ -30,20 +30,22 @@
 }
 
 #main-container {
-  position: relative;
-  height: 100%;
+    position: relative;
+    height: 100%;
+    transition: padding-left .3s;
+
+    &.is-left-sidebar-open {
+        padding-left: 0;
+
+        @screen sm {
+            padding-left: var(--ls-left-sidebar-width);
+        }
+    }
 }
 
 #main-content {
-  transition: padding-left .3s;
-
-  &.is-left-sidebar-open {
-    padding-left: 0;
-
-    @screen sm {
-      padding-left: var(--ls-left-sidebar-width);
-    }
-  }
+  position: relative;
+  height: calc(100vh - var(--ls-headbar-height));
 
   &-container {
     @apply p-4 sm:px-8;
