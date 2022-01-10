@@ -97,7 +97,7 @@
                        [:div.journal-item.content {:key journal-name}
                         (journal-cp [journal-name format])])
                      {:has-more (page-handler/has-more-journals?)
-                      :more-text-class "text-4xl"
+                      :more-class "text-4xl"
                       :on-top-reached page-handler/create-today-journal!
                       :on-load (fn []
                                  (page-handler/load-more-journals!))})])

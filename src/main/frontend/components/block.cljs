@@ -2939,7 +2939,7 @@
       {:on-load bottom-reached
        :threhold 1000
        :has-more has-more?
-       :more-text "More"})]))
+       :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
