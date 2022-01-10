@@ -5,6 +5,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.text :as text]
+            [cljs.reader :as reader]
             [goog.object :as gobj]))
 
 (defn thing-at-point
@@ -83,7 +84,7 @@
               (let [key (first (string/split line "::"))
                     line-beginning-pos (cursor/line-beginning-pos input)
                     pos-in-line (- (cursor/pos input) line-beginning-pos)]
-                (if (<= 0 pos-in-line (+ (count key) (count "::")))
+                (when (<= 0 pos-in-line (+ (count key) (count "::")))
                   {:full-content (str key "::")
                    :raw-content key
                    :start line-beginning-pos
@@ -99,7 +100,7 @@
   (when-let [line (line-at-point input)]
     (when-let [[_ indent bullet checkbox]
                (get-list-item-indent&bullet (:raw-content line))]
-      (let [bullet (cljs.reader/read-string bullet)]
+      (let [bullet (reader/read-string bullet)]
         (assoc line
                :type "list-item"
                :indent indent

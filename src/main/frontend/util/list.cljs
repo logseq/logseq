@@ -1,9 +1,6 @@
 (ns frontend.util.list
   (:require [frontend.util.thingatpt :as thingatpt]
-            [frontend.util.cursor :as cursor]
-            [clojure.string :as string]
-            [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.util.cursor :as cursor]))
 
 (defn get-prev-item [& [input]]
   (when-not (cursor/textarea-cursor-first-row? input)
