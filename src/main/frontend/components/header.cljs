@@ -38,6 +38,8 @@
                    (route-handler/go-to-journals!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
+(def hiding-login&file-sync true)
+
 (rum/defc login < rum/reactive
   []
   (let [_ (state/sub :auth/id-token)]
