@@ -335,8 +335,8 @@
                       (when-not (string/blank? format)
                         (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
-                         [:div "You need to re-index your graph to make the change works"]
-                         :success)
+                         [:div "You must re-index your graph for this change to take effect"]
+                         :warning false)
                         (state/close-modal!)
                         (route-handler/redirect! {:to :repos}))))}
       (for [format (sort (date/journal-title-formatters))]
