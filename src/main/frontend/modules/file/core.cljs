@@ -15,29 +15,14 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- allowed-block-as-title?
-  "Allowed to be in the first line of a block (a.k.a block title)"
-  [title body properties]
-  (and (not (seq title))
-       (or
-        (seq properties)
-        (contains?
-         #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example" "Horizontal_Rule"}
-         (ffirst body)))))
-
 (defn transform-content
-  [{:block/keys [uuid format properties pre-block? unordered content heading-level left page parent]}
-   level
-   {:keys [heading-to-list?]}]
-  (let [{:block/keys [title body]} (block/parse-title-and-body uuid format pre-block? content)
-        content (or content "")
-        heading-with-title? (seq title)
-        allowed-block-as-title? (allowed-block-as-title? title body properties)
+  [{:block/keys [uuid format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
+  (let [content (or content "")
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
         markdown? (= format :markdown)
         content (cond
-                  (and first-block? pre-block?)
+                  pre-block?
                   (let [content (string/trim content)]
                     (str content "\n"))
 
@@ -71,18 +56,10 @@
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
-                        sep (cond
-                              markdown-top-heading?
+                        sep (if (or markdown-top-heading?
+                                    (string/blank? new-content))
                               ""
-
-                              (or heading-with-title? allowed-block-as-title?)
-                              " "
-
-                              (string/blank? new-content)
-                              ""
-
-                              :else
-                              (str "\n" spaces-tabs))]
+                              " ")]
                     (str prefix sep new-content)))]
     content))
 

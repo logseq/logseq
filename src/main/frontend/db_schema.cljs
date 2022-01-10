@@ -24,7 +24,8 @@
 
    :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
-   :block/parent {:db/valueType :db.type/ref}
+   :block/parent {:db/valueType :db.type/ref
+                  :db/index true}
    :block/left {:db/valueType :db.type/ref}
 
    ;; :markdown, :org
