@@ -2921,13 +2921,16 @@
                                    blocks->vec-tree)
         bottom-reached (fn []
                          (reset! *last-idx idx)
-                         (reset! ignore-scroll? false))]
+                         (reset! ignore-scroll? false))
+        has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
-       :threhold 1000})]))
+       :threhold 1000
+       :has-more has-more?
+       :more-text "More"})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
