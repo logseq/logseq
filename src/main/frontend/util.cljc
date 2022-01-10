@@ -4,6 +4,7 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            ["grapheme-splitter" :as GraphemeSplitter]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -677,6 +678,38 @@
         (.setRangeText input text start end select-mode)
         (catch js/Error _e
           nil)))))
+
+#?(:cljs
+   ;; for widen char
+   (defn safe-dec-current-pos-from-end
+     [input current-pos]
+     (if-let [len (and (string? input) (.-length input))]
+       (when-let [input (and (>= len 2) (<= current-pos len)
+                             (.substring input (max (- current-pos 20) 0) current-pos))]
+         (try
+           (let [^js splitter (GraphemeSplitter.)
+                 ^js input (.splitGraphemes splitter input)]
+             (- current-pos (.-length (.pop input))))
+           (catch js/Error e
+             (js/console.error e)
+             (dec current-pos))))
+       (dec current-pos))))
+
+#?(:cljs
+   ;; for widen char
+   (defn safe-inc-current-pos-from-start
+     [input current-pos]
+     (if-let [len (and (string? input) (.-length input))]
+       (when-let [input (and (>= len 2) (<= current-pos len)
+                             (.substr input current-pos 20))]
+         (try
+           (let [^js splitter (GraphemeSplitter.)
+                 ^js input (.splitGraphemes splitter input)]
+             (+ current-pos (.-length (.shift input))))
+           (catch js/Error e
+             (js/console.error e)
+             (inc current-pos))))
+       (inc current-pos))))
 
 #?(:cljs
    (defn kill-line-before!
