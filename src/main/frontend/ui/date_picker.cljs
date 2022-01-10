@@ -1,5 +1,5 @@
 (ns frontend.ui.date-picker
-  (:require [cljs-time.core       :refer [after? before? day day-of-week days first-day-of-the-month minus month months plus weeks year]]
+  (:require [cljs-time.core       :refer [after? before? day day-of-week days first-day-of-the-month minus month months plus year]]
             [cljs-time.format     :refer [formatter formatters parse unparse]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -31,8 +31,6 @@
 (defn- inc-month [date] (plus date (months 1)))
 
 (defn- inc-date [date n] (plus date (days n)))
-
-(defn- inc-week [date n] (plus date (weeks n)))
 
 (defn previous
   "If date fails pred, subtract period until true, otherwise answer date"
@@ -181,9 +179,9 @@
            (reset! *internal-model (first (:rum/args state)))
            state)}
   (shortcut/mixin :shortcut.handler/date-picker)
-  [model {:keys [on-change on-switch disabled? start-of-week class style attr]
-          :or   {start-of-week (state/get-start-of-week)} ;; Default to Sunday
-          :as   args}]
+  [_model {:keys [on-change disabled? start-of-week class style attr]
+           :or   {start-of-week (state/get-start-of-week)} ;; Default to Sunday
+           :as   args}]
   (let [internal-model (util/react *internal-model)
         display-month (first-day-of-the-month (or internal-model (now->utc)))
         props-with-defaults (merge args {:start-of-week start-of-week})

@@ -124,12 +124,12 @@
     (contains? (set (util/remove-first #{key} (get-property-keys format content))) key)))
 
 (defn goto-properties-beginning
-  [format input]
+  [_format input]
   (cursor/move-cursor-to-thing input properties-start 0)
   (cursor/move-cursor-forward input (count properties-start)))
 
 (defn goto-properties-end
-  [format input]
+  [_format input]
   (cursor/move-cursor-to-thing input properties-start 0)
   (let [from (cursor/pos input)]
     (cursor/move-cursor-to-thing input properties-end from)))
