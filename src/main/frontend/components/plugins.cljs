@@ -164,7 +164,7 @@
   (let [disabled (:disabled settings)
         name (or title name "Untitled")
         unpacked? (not iir)
-        new-version (and coming-update (:latest-version coming-update))]
+        new-version (state/coming-update-new-version? coming-update)]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
@@ -375,7 +375,15 @@
 
             [{:title   (t :plugin/enabled)
               :options {:on-click #(reset! *sort-by :enabled)}
-              :icon    (ui/icon (aim-icon :enabled))}]))
+              :icon    (ui/icon (aim-icon :enabled))}
+
+             {:title   (t :plugin/disabled)
+              :options {:on-click #(reset! *sort-by :disabled)}
+              :icon    (ui/icon (aim-icon :disabled))}
+
+             {:title   (t :plugin/update-available)
+              :options {:on-click #(reset! *sort-by :update-available)}
+              :icon    (ui/icon (aim-icon :update-available))}]))
         {})
 
       ;; more - updater
@@ -512,7 +520,7 @@
 (rum/defcs installed-plugins
   < rum/static rum/reactive
     (rum/local "" ::search-key)
-    (rum/local :enabled ::sort-by)                          ;; enabled / letters / updates
+    (rum/local :enabled ::sort-by)                          ;; enabled / disabled / letters / update-available
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
@@ -538,9 +546,13 @@
                                :extract-fn :name))
                            filtered-plugins)
         sorted-plugins (->> filtered-plugins
-                            (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
+                            (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)
+                                           k (if (= @*sort-by :disabled) (if (zero? k) 1 0) k)]
                                        (update %1 k conj %2)) [[] []])
-                            (#(update % 0 (fn [it] (sort-by :iir it))))
+                            (#(update % 0 (fn [coll]
+                                            (if (= @*sort-by :update-available)
+                                              (sort-by (fn [it] (if (state/plugin-update-available? (:id it)) -1 1)) coll)
+                                              (sort-by :iir coll)))))
                             (flatten))]
     (rum/with-context
       [[t] i18n/*tongue-context*]
