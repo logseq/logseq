@@ -167,7 +167,7 @@
    (let [pages (->> (db/sub-key-value :recent/pages)
                     (remove string/blank?)
                     (filter string?)
-                    (map (fn [page] {:lowercase (string/lower-case page)
+                    (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
                                     :page page}))
                     (util/distinct-by :lowercase)
                     (map :page))]
@@ -305,14 +305,14 @@
 
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#main-content.cp__sidebar-main-layout.flex-1.flex
+      [:div#main-container.cp__sidebar-main-layout.flex-1.flex
        {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
        ;; desktop left sidebar layout
        (left-sidebar {:left-sidebar-open? left-sidebar-open?
                       :route-match route-match})
 
-       [:div#main-content-container.w-full.flex.justify-center
+       [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
         [:div.cp__sidebar-main-content
          {:data-is-global-graph-pages global-graph-pages?
           :data-is-full-width         (or global-graph-pages?
@@ -535,16 +535,15 @@
                           :default-home   default-home
                           :new-block-mode new-block-mode})
 
-          [:div#main-container.scrollbar-spacing
-           (main {:route-match         route-match
-                  :global-graph-pages? global-graph-pages?
-                  :logged?             logged?
-                  :home?               home?
-                  :route-name          route-name
-                  :indexeddb-support?  indexeddb-support?
-                  :white?              white?
-                  :db-restoring?       db-restoring?
-                  :main-content        main-content})]
+          (main {:route-match         route-match
+                 :global-graph-pages? global-graph-pages?
+                 :logged?             logged?
+                 :home?               home?
+                 :route-name          route-name
+                 :indexeddb-support?  indexeddb-support?
+                 :white?              white?
+                 :db-restoring?       db-restoring?
+                 :main-content        main-content})
 
           (footer)]
          (right-sidebar/sidebar)

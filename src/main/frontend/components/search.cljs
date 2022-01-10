@@ -105,8 +105,8 @@
           search-mode (state/sub :search/mode)
           new-page (if (or
                         (and (seq pages)
-                             (= (util/safe-page-name-sanity-lc search-q)
-                                (util/safe-page-name-sanity-lc (:data (first pages)))))
+                             (= (util/safe-search-normalize search-q)
+                                (util/safe-search-normalize (:data (first pages)))))
                         (nil? result)
                         all?)
                      []
@@ -199,8 +199,7 @@
                                                   :page
                                                   [:span {:data-page-ref data}
                                                    (when alias
-                                                     (let [target-entity (db/get-page alias)
-                                                           target-original-name (util/get-page-original-name target-entity)]
+                                                     (let [target-original-name (model/get-page-original-name alias)]
                                                        [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
                                                    (search-result-item "Page" (highlight-exact-query data search-q))]
 
@@ -276,7 +275,8 @@
                             (search-handler/search (state/get-current-repo) q opts)
                             (search-handler/search (state/get-current-repo) q))))
 
-                      nil))
+                      nil)
+                    (state/close-modal!))
        :on-shift-chosen (fn [{:keys [type data]}]
                           (case type
                             :page
@@ -295,7 +295,8 @@
                         :search [:div.flex-row.flex.search-item.font-medium
                                  svg/search
                                  [:span.ml-2 data]]
-                        :page (search-result-item "Page" data)
+                        :page (let [original-name (model/get-page-original-name data)]
+                                (search-result-item "Page" original-name))
                         nil))}))])
 
 (rum/defcs search-modal < rum/reactive

@@ -117,7 +117,7 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
+                              (contains? (set (map util/search-normalize matched-pages)) (util/search-normalize (string/trim q)))
                               matched-pages
 
                               (empty? matched-pages)
@@ -472,7 +472,7 @@
         _ (rum/use-effect! (fn []
                              (when-let [^js/HTMLElement cnt
                                         (and right-sidebar? editing-key
-                                             (js/document.querySelector "#main-container"))]
+                                             (js/document.querySelector "#main-content-container"))]
                                (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
                                  (let [el  (rum/deref *el)
                                        ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]

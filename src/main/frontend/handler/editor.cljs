@@ -1785,6 +1785,7 @@
         (text/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
+  "Return matched page names"
   [q]
   (let [block (state/get-edit-block)
         editing-page (and block
@@ -1793,7 +1794,7 @@
         pages (search/page-search q 20)]
     (if editing-page
       ;; To prevent self references
-      (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
+      (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
       pages)))
 
 (defn get-matched-blocks

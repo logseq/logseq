@@ -216,6 +216,10 @@ html.is-native-ipad {
 html.is-native-ipad {
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
+
+    #main-container {
+        padding-top: 40px;
+    }
     
     .cp__header {
       background-color: transparent !important;
@@ -257,16 +261,34 @@ html.is-native-ipad {
       }
     }
 
-    .cp__right-sidebar {
-      margin-top: 8px;
+    .cp__right-sidebar-settings {
+        margin-top: -4px;
+    }
+
+    .cp__right-sidebar-topbar {
+        padding-top: 37px;
+    }
+
+    .ui__modal {
+        top: 20vh;
     }
   }
 
 html.is-native-iphone {
     --ls-headbar-inner-top-padding: 36px;
 
+    .left-sidebar-inner {
+        > .wrap {
+            padding-top: 12px;
+        }
+
+        .new-page {
+            padding-bottom: 12px;
+        }
+    }
+
     #main-container {
-        padding-top: 75px;
+        padding-top: 83px;
     }
 
     @media (orientation: landscape) {
@@ -278,11 +300,7 @@ html.is-native-iphone {
         }
 
         #main-container {
-            padding-top: 20px;
-        }
-        
-        #main-content{
-            padding-top: 0px;
+            padding-top: 45px;
         }
     }
 }
@@ -291,6 +309,10 @@ html.is-native-iphone-without-notch {
     
     --ls-headbar-inner-top-padding: 15px;
     --ls-headbar-height: 2.5rem;
+
+    #main-container {
+        padding-top: 55px;
+    }
 
     @media (orientation: landscape) {
 
@@ -302,7 +324,7 @@ html.is-native-iphone-without-notch {
         }
 
         #main-container {
-            padding-top: 20px;
+            padding-top: 40px;
         }
     }
 }

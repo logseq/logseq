@@ -92,11 +92,12 @@
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list "main-container"
+   (ui/infinite-list "main-content-container"
                      (for [[journal-name format] latest-journals]
                        [:div.journal-item.content {:key journal-name}
                         (journal-cp [journal-name format])])
                      {:has-more (page-handler/has-more-journals?)
+                      :more-class "text-4xl"
                       :on-top-reached page-handler/create-today-journal!
                       :on-load (fn []
                                  (page-handler/load-more-journals!))})])

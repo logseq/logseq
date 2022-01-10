@@ -139,10 +139,11 @@
 }
 
 html.is-native-andorid,
-html.is-native-iphone
+html.is-native-iphone,
+html.is-native-iphone-without-notch
 {
     .ui__modal {
-        top: 22vh;
+        top: 10vh;
     }
 
     .references .foldable-title {
