@@ -28,7 +28,7 @@
 (defn get-ls-default-plugins
   []
   (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
-        _ (if-not (fs/existsSync plugins-root)
+        _ (when-not (fs/existsSync plugins-root)
             (fs/mkdirSync plugins-root))
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
