@@ -73,28 +73,28 @@
   [state]
   (let [path (get-path state)
         format (format/get-format path)
-        page (db/get-file-page path)
+        original-name (db/get-file-page path)
         random-id (str (dc/squuid))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-edit-wrapper-" random-id)}
        [:h1.title
         [:bdi (js/decodeURI path)]]
-       (when page
+       (when original-name
          [:div.text-sm.mb-4.ml-1 "Page: "
           [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                  :href (rfe/href :page {:name page})
+                                  :href (rfe/href :page {:name original-name})
                                   :on-click (fn [e]
                                               (when (gobj/get e "shiftKey")
-                                                (when-let [page (db/entity [:block/name (string/lower-case page)])]
+                                                (when-let [page (db/entity [:block/name (util/page-name-sanity-lc original-name)])]
                                                   (state/sidebar-add-block!
                                                    (state/get-current-repo)
                                                    (:db/id page)
                                                    :page
                                                    {:page page}))
                                                 (util/stop e)))}
-           page]])
+           original-name]])
 
-       (when (and page (not (string/starts-with? page "logseq/")))
+       (when (and original-name (not (string/starts-with? original-name "logseq/")))
          [:p.text-sm.ml-1.mb-4
           (svg/warning {:style {:width "1em"
                                 :display "inline-block"}})

@@ -59,7 +59,7 @@
   (try
     (let [now (tc/to-long (t/now))
           page (get-page-name file ast)
-          [page page-name journal-day] (block/convert-page-if-journal page)
+          [original-page-name page-name journal-day] (block/convert-page-if-journal page)
           blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
@@ -78,12 +78,11 @@
                                      :block/refs block-ref-pages
                                      :block/path-refs block-path-ref-pages))))
                    blocks)
-          page-entity (let [page-file? (= page (string/lower-case file))
-                            alias (:alias properties)
+          page-entity (let [alias (:alias properties)
                             alias (if (string? alias) [alias] alias)
-                            aliases (and alias (seq (remove #(= page %) alias)))
-                            page-list (when-let [list-content (:list properties)]
-                                        (extract-page-list list-content))]
+                            aliases (and alias
+                                         (seq (remove #(= page-name (util/page-name-sanity-lc %))
+                                                      alias)))] 
                         (cond->
                           (util/remove-nils
                            (assoc
@@ -96,8 +95,7 @@
                           (assoc :block/alias
                                  (map
                                    (fn [alias]
-                                     (let [alias (util/page-name-sanity alias)
-                                           page-name (string/lower-case alias)
+                                     (let [page-name (util/page-name-sanity-lc alias)
                                            aliases (distinct
                                                     (conj
                                                      (remove #{alias} aliases)
@@ -105,7 +103,7 @@
                                            aliases (when (seq aliases)
                                                      (map
                                                        (fn [alias]
-                                                         {:block/name (string/lower-case alias)})
+                                                         {:block/name (util/page-name-sanity-lc alias)})
                                                        aliases))]
                                        (if (seq aliases)
                                          {:block/name page-name

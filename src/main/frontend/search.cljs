@@ -76,20 +76,20 @@
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (string/lower-case query)]
+  (let [query (util/search-normalize query)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (.toLowerCase s))})))))
+                                     :score (score query (util/search-normalize s))})))))
          (map :data))))
 
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (string/lower-case q)
+    (let [q (util/search-normalize q)
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
@@ -100,6 +100,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn exact-matched?
+  "Check if two strings the same thing"
   [q match]
   (when (and (string? q) (string? match))
     (boolean
@@ -109,15 +110,16 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (string/lower-case match))
-      (seq (string/lower-case q))))))
+      (seq (util/search-normalize match))
+      (seq (util/search-normalize q))))))
 
 (defn page-search
+  "Return a list of page names that match the query"
   ([q]
    (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
-     (let [q (string/lower-case q)
+     (let [q (util/search-normalize q)
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])

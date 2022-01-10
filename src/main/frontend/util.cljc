@@ -1173,10 +1173,21 @@
 
 (defn normalize
   [s]
-  (.normalize s "NFKC"))
+  (.normalize s "NFC"))
+
+(defn search-normalize
+  "Normalize string for searching (loose)"
+  [s]
+  (.normalize (string/lower-case s) "NFKD")
+)
+
+(defn safe-search-normalize
+  [s]
+  (if (string? s)
+    (.normalize (string/lower-case s) "NFKD") s))
 
 (defn page-name-sanity
-  "Sanitize the page-name for file name"
+  "Sanitize the page-name for file name (strict)"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]
@@ -1192,9 +1203,14 @@
        page))))
 
 (defn page-name-sanity-lc
-  "Sanitize the query string for a page"
+  "Sanitize the query string for a page name (mandate for :block/name)"
   [s]
   (page-name-sanity (string/lower-case s)))
+
+(defn safe-page-name-sanity-lc
+  [s]
+  (if (string? s)
+    (page-name-sanity-lc s) s))
 
 (defn get-page-original-name
   [page]

@@ -683,7 +683,7 @@
     (let [before? (if page false before?)
           sibling? (if before? true (if page false sibling?))
           block (if page
-                  (db/entity [:block/name (string/lower-case page)])
+                  (db/entity [:block/name (util/page-name-sanity-lc page)])
                   (db/entity [:block/uuid block-uuid]))]
       (when block
         (let [last-block (when (not sibling?)
@@ -742,7 +742,7 @@
 (defn insert-first-page-block-if-not-exists!
   [page-name]
   (when (string? page-name)
-    (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (api-insert-new-block! "" {:page page-name})))))
 
@@ -783,7 +783,7 @@
 (defn add-default-title-property-if-needed!
   [page-name]
   (when (string? page-name)
-    (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (let [title (or (:block/original-name page)
                         (:block/name page))
@@ -1785,6 +1785,7 @@
         (text/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
+  "Return matched page names"
   [q]
   (let [block (state/get-edit-block)
         editing-page (and block
@@ -1793,7 +1794,7 @@
         pages (search/page-search q 20)]
     (if editing-page
       ;; To prevent self references
-      (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
+      (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
       pages)))
 
 (defn get-matched-blocks
@@ -2369,7 +2370,7 @@
   (when id
     (when-let [entity (if (util/uuid-string? (str id))
                         (db/entity [:block/uuid (uuid id)])
-                        (db/entity [:block/name (string/lower-case id)]))]
+                        (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
 (defn- insert
@@ -2520,13 +2521,14 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
+            new-pos (cursor/get-caret-pos input)
             page-ref-fn (fn [bounds backward-pos]
                           (commands/simple-insert!
                            parent-id bounds
                            {:backward-pos backward-pos
-                            :check-fn     (fn [_ _ new-pos]
-                                            (reset! commands/*slash-caret-pos new-pos)
-                                            (commands/handle-step [:editor/search-page]))}))]
+                            :check-fn (fn [_ _ _]
+                                        (reset! commands/*slash-caret-pos new-pos)
+                                        (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
               {:keys [selection-start selection-end value]} selection]
@@ -2552,11 +2554,12 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
+            new-pos (cursor/get-caret-pos input)
             block-ref-fn (fn [bounds backward-pos]
                            (commands/simple-insert!
                             parent-id bounds
                             {:backward-pos backward-pos
-                             :check-fn     (fn [_ _ new-pos]
+                             :check-fn     (fn [_ _ _]
                                              (reset! commands/*slash-caret-pos new-pos)
                                              (commands/handle-step [:editor/search-block]))}))]
         (state/set-editor-show-block-search! false)
@@ -3504,8 +3507,8 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-block-property! block-id :collapsed true))
-    (state/set-collapsed-block! block-id true)))
+      (set-block-property! block-id :collapsed true)))
+  (state/set-collapsed-block! block-id true))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
@@ -3596,7 +3599,6 @@
    (expand-all! nil))
   ([block-id]
    (->> (all-blocks-with-level {:root-block block-id})
-        (filter (fn [b] (-> b :block/properties :collapsed)))
         (map (comp expand-block! :block/uuid))
         dorun)))
 

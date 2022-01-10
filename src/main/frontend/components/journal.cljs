@@ -24,7 +24,7 @@
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page format]
-  (when-let [page-e (db/pull [:block/name (string/lower-case page)])]
+  (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
 (rum/defc journal-cp < rum/reactive
@@ -38,7 +38,7 @@
                     (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)
-        page-entity (db/pull [:block/name (string/lower-case title)])
+        page-entity (db/pull [:block/name (util/page-name-sanity-lc title)])
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]

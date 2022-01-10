@@ -168,6 +168,6 @@
                              (interpose [:span ", "] vals))
                            (if (not (string? value))
                              value
-                             (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                             (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
                                (page-cp {} page)
                                (inline-text format value)))))))]))]))]]])))

@@ -160,7 +160,7 @@
 
        page-ref?
        (let [page-name (-> (text/page-ref-un-brackets! e)
-                           (string/lower-case))]
+                           (util/page-name-sanity-lc))]
          [['?b :block/path-refs [:block/name page-name]]])
 
        (string? e)                      ; block content full-text search, could be slow
@@ -330,14 +330,14 @@
            nil))
 
        (= 'page fe)
-       (let [page-name (string/lower-case (str (first (rest e))))
-             page-name (text/page-ref-un-brackets! page-name)]
+       (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+             page-name (util/page-name-sanity-lc page-name)]
          [['?b :block/page [:block/name page-name]]])
 
        (and (= 'namespace fe)
             (= 2 (count e)))
-       (let [page-name (string/lower-case (str (first (rest e))))
-             page (text/page-ref-un-brackets! page-name)]
+       (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+             page (util/page-name-sanity-lc page-name)]
          (when-not (string/blank? page)
            [['?p :block/namespace '?parent]
             ['?parent :block/name page]]))

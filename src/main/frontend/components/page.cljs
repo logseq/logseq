@@ -210,7 +210,8 @@
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
-                       (let [merge? (and (not= (string/lower-case page-name) (string/lower-case @*title-value))
+                       (let [merge? (and (not= (util/page-name-sanity-lc page-name) 
+                                               (util/page-name-sanity-lc @*title-value))
                                          (page-handler/page-exists? page-name)
                                          (page-handler/page-exists? @*title-value))]
                          (ui/make-confirm-modal
@@ -779,7 +780,7 @@
 
                  ;; search key
                  pages (if-not (string/blank? @*search-key)
-                         (search/fuzzy-search pages @*search-key
+                         (search/fuzzy-search pages (util/page-name-sanity-lc @*search-key)
                                               :limit 20
                                               :extract-fn :block/name)
                          pages)

@@ -80,7 +80,7 @@
   [name icon]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
-                     (let [name (util/safe-lower-case name)]
+                     (let [name (util/safe-page-name-sanity-lc name)]
                        (if (gobj/get e "shiftKey")
                          (when-let [page-entity (db/entity [:block/name name])]
                            (state/sidebar-add-block!
@@ -149,7 +149,7 @@
        [:ul.favorites.text-sm
         (for [name favorites]
           (when-not (string/blank? name)
-            (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
+            (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
               (let [icon (get-page-icon entity)]
                 (favorite-item t name icon)))))]))))
 
@@ -167,13 +167,13 @@
    (let [pages (->> (db/sub-key-value :recent/pages)
                     (remove string/blank?)
                     (filter string?)
-                    (map (fn [page] {:lowercase (string/lower-case page)
+                    (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
                                     :page page}))
                     (util/distinct-by :lowercase)
                     (map :page))]
      [:ul.text-sm
       (for [name pages]
-        (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
+        (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
           [:li.recent-item {:key name}
            (page-name name (get-page-icon entity))]))])))
 
@@ -200,7 +200,7 @@
     (let [page (:page default-home)
           page (when (and (string? page)
                           (not (string/blank? page)))
-                 (db/entity [:block/name (util/safe-lower-case page)]))]
+                 (db/entity [:block/name (util/safe-page-name-sanity-lc page)]))]
       (if page
         default-home
         (dissoc default-home :page)))))

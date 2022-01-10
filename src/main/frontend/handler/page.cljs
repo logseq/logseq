@@ -55,7 +55,7 @@
   ([] (get-page-file-path (state/get-current-page)))
   ([page-name]
    (when page-name
-     (let [page-name (string/lower-case page-name)]
+     (let [page-name (util/page-name-sanity-lc page-name)]
        (when-let [page (db/entity [:block/name page-name])]
         (:file/path (:block/file page)))))))
 
@@ -95,10 +95,9 @@
                   split-namespace?    true}}]
    (let [title (string/trim title)
          title (util/remove-boundary-slashes title)
-         page (string/lower-case title)]
-     (when-not (db/entity [:block/name page])
-       (let [title    (string/trim title)
-             pages    (if split-namespace?
+         page-name (util/page-name-sanity-lc title)]
+     (when-not (db/entity [:block/name page-name])
+       (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
@@ -118,14 +117,14 @@
          (db/transact! txs)
 
          (when create-first-block?
-           (editor-handler/insert-first-page-block-if-not-exists! page))
+           (editor-handler/insert-first-page-block-if-not-exists! page-name))
 
-         (when-let [page (db/entity [:block/name page])]
+         (when-let [page (db/entity [:block/name page-name])]
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect-to-page! page))
-         page)))))
+           (route-handler/redirect-to-page! page-name))
+         page-name)))))
 
 (defn delete-file!
   [repo page-name]
@@ -291,7 +290,7 @@
                            :or {delete-file? true}}]
   (when page-name
     (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)
+      (let [page-name (util/page-name-sanity-lc page-name)
             blocks (db/get-page-blocks-no-cache page-name)
             tx-data (mapv
                      (fn [block]
@@ -369,7 +368,7 @@
             journal?            (:block/journal? page)
             properties-block    (:data (outliner-tree/-get-down (outliner-core/block page)))
             properties-block-tx (when (and properties-block
-                                           (string/includes? (string/lower-case (:block/content properties-block))
+                                           (string/includes? (util/page-name-sanity-lc (:block/content properties-block))
                                                              old-page-name))
                                   (let [front-matter? (and (property/front-matter? (:block/content properties-block))
                                                            (= :markdown (:block/format properties-block)))]
@@ -448,7 +447,7 @@
              (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
-  "Only accepts unsanitized names"
+  "Original names (unsanitized only)"
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)
         page (db/pull [:block/name (util/page-name-sanity-lc old-name)])
@@ -513,6 +512,7 @@
                               :path-params {:name to-page-name}})))
 
 (defn rename!
+  "Accepts unsanitized page names"
   [old-name new-name]
   (let [repo          (state/get-current-repo)
         old-name      (string/trim old-name)
@@ -713,7 +713,7 @@
                 (config/local-db? repo)
                 (and (= "local" repo) (not (mobile/is-native-platform?))))
         (let [title (date/today)
-              today-page (string/lower-case title)
+              today-page (util/page-name-sanity-lc title)
               template (state/get-default-journal-template)
               format (state/get-preferred-format repo)
               file-name (date/journal-title->default title)
@@ -745,7 +745,7 @@
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/entity [:block/name (string/lower-case (date/today))])]
+  (when-let [page (db/entity [:block/name (util/page-name-sanity-lc (date/today))])]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)

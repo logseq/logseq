@@ -375,6 +375,11 @@
 (declare page-reference)
 
 (rum/defc page-inner
+  "The inner div of page reference component
+   
+   page-name-in-block is the overridable name of the page (legacy)
+
+   All page-names are sanitized except page-name-in-block"
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
@@ -420,15 +425,18 @@
          (->elem :span (map-inline config label))
 
          :else
-         (let [page-name (get page-entity :block/original-name page-name)
-               s (if (not= (string/lower-case page-name) page-name-in-block)
-                   page-name-in-block
-                   page-name)]
+         (let [original-name (util/get-page-original-name page-entity)
+               s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
+                   page-name-in-block ;; page-name-in-block might be overrided (legacy)
+                   original-name)
+               _ (when-not page-entity (js/console.error "page-inner's page-entity is nil, given page-name: " page-name
+                                                         " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
-  (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
+  (let [page-name (util/page-name-sanity-lc page-name)
+        redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
         html-template (fn []
@@ -451,7 +459,7 @@
                                                       [:span
                                                        [:span.text-sm.mr-2 "Alias:"]
                                                        page-original-name])])
-                           (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                           (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                              (when-let [f (state/get-page-blocks-cp)]
                                (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
@@ -466,6 +474,7 @@
       children)))
 
 (rum/defc page-cp
+  "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
@@ -589,7 +598,7 @@
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
-  (let [page-name (string/trim (string/lower-case page-name))
+  (let [page-name (util/page-name-sanity-lc (string/trim page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
@@ -599,9 +608,9 @@
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
      (when (and
-            (not= (string/lower-case (or current-page ""))
+            (not= (util/page-name-sanity-lc (or current-page ""))
                   page-name)
-            (not= (string/lower-case (get config :id ""))
+            (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
        (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
          (blocks-container blocks (assoc config
@@ -620,7 +629,7 @@
 (defn- get-page
   [label]
   (when-let [label-text (get-label-text label)]
-    (db/entity [:block/name (string/lower-case label-text)])))
+    (db/entity [:block/name (util/page-name-sanity-lc label-text)])))
 
 (defn- macro->text
   [name arguments]
@@ -985,7 +994,7 @@
                     config (assoc config :redirect-page-name redirect-page-name)
                     label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:block/name (db/get-file-page (string/replace href "file:" ""))}
+                           {:block/name (db/get-file-page (string/replace href "file:" "") false)}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
@@ -1451,7 +1460,7 @@
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid)))))}
-      [:span {:class (if control-show? "control-show" "control-hide")}
+      [:span {:class (if control-show? "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
                                    (bullet-on-click event block uuid))}
@@ -2004,7 +2013,7 @@
   [config block label]
   (if (= block :page)                   ; page
     (when label
-      (let [page (db/entity [:block/name (string/lower-case label)])]
+      (let [page (db/entity [:block/name (util/page-name-sanity-lc label)])]
         (page-cp config page)))
     [:a {:on-mouse-down
          (fn [e]
@@ -2172,8 +2181,9 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
-             (state/set-collapsed-block! (:block/uuid block)
-                                         (editor-handler/block-default-collapsed? block config))
+             (when-not (some? (state/sub-collapsed (:block/uuid block)))
+               (state/set-collapsed-block! (:block/uuid block)
+                                           (editor-handler/block-default-collapsed? block config)))
              (assoc state
                     ::init-collapsed? (get-in block [:block/properties :collapsed])
                     ::control-show? (atom false))))
