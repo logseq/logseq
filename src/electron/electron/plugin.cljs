@@ -128,7 +128,8 @@
 (defn install-or-update!
   [{:keys [version repo only-check] :as item}]
   (when repo
-    (let [updating? (and version (. semver valid version))]
+    (let [coerced-version (and version (. semver coerce version))
+          updating? (and version (. semver valid coerced-version))]
 
       (debug (if updating? "Updating:" "Installing:") repo)
 
@@ -141,12 +142,13 @@
                           _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
 
                           ;; compare latest version
-                          _ (when (and updating? latest-version
-                                       (. semver valid latest-version))
+                          _ (when-let [coerced-latest-version
+                                       (and updating? latest-version
+                                            (. semver coerce latest-version))]
 
                               (debug "[Updating Latest?] " version " > " latest-version)
 
-                              (if (. semver lt version latest-version)
+                              (if (. semver lt coerced-version coerced-latest-version)
                                 (debug "[Updating Latest] " latest-version)
                                 (throw (js/Error. :no-new-version))))
 
@@ -154,6 +156,7 @@
                                    (:browser_download_url asset) asset)
 
                           _ (when-not dl-url
+                              (debug "[Download URL Error]" asset)
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
