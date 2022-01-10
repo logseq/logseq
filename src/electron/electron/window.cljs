@@ -1,8 +1,8 @@
 (ns electron.window
   (:require ["electron-window-state" :as windowStateKeeper]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
+            [electron.utils :refer [mac? win32? linux? dev? logger open]]
             [electron.configs :as cfgs]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session shell] :as electron]
+            ["electron" :refer [BrowserWindow app Menu MenuItem session shell] :as electron]
             ["path" :as path]
             ["url" :as URL]
             [electron.state :as state]
