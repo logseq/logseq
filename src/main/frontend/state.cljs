@@ -1711,6 +1711,15 @@
         (swap! state update :plugin/updates-coming assoc id payload))
       (pub-event! [:plugin/consume-updates id pending? updated?]))))
 
+(defn coming-update-new-version?
+  [pkg]
+  (and pkg (:latest-version pkg)))
+
+(defn plugin-update-available?
+  [id]
+  (when-let [pkg (and id (get (:plugin/updates-coming @state) (keyword id)))]
+    (coming-update-new-version? pkg)))
+
 (defn sub-right-sidebar-blocks
   []
   (when-let [current-repo (get-current-repo)]
