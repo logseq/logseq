@@ -402,16 +402,17 @@
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
   [state list-element-id body {:keys [on-load on-top-reached threhold
-                                      has-more more-text more-text-class]
-                               :or {more-text-class "text-sm"}}]
+                                      has-more more more-class]
+                               :or {more-class "text-sm"}}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      body
      (when has-more
-       [:a.fade-link.text-link.font-bold
-        {:on-click on-load
-         :class more-text-class}
-        (or more-text (t :page/earlier))])]))
+       [:div.w-full.p-4
+        [:a.fade-link.text-link.font-bold
+         {:on-click on-load
+          :class more-class}
+         (or more (t :page/earlier))]])]))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
