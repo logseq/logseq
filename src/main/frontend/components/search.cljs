@@ -199,8 +199,7 @@
                                                   :page
                                                   [:span {:data-page-ref data}
                                                    (when alias
-                                                     (let [target-entity (db/get-page alias)
-                                                           target-original-name (util/get-page-original-name target-entity)]
+                                                     (let [target-original-name (model/get-page-original-name alias)]
                                                        [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
                                                    (search-result-item "Page" (highlight-exact-query data search-q))]
 
@@ -295,7 +294,8 @@
                         :search [:div.flex-row.flex.search-item.font-medium
                                  svg/search
                                  [:span.ml-2 data]]
-                        :page (search-result-item "Page" data)
+                        :page (let [original-name (model/get-page-original-name data)]
+                                (search-result-item "Page" original-name))
                         nil))}))])
 
 (rum/defcs search-modal < rum/reactive
