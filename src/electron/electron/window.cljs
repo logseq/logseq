@@ -115,7 +115,7 @@
                                          :click
                                          (fn [] (. web-contents replaceMisspelling suggestion))}))))
 
-               (when-let [misspelled-word (.-misspelledWord ^js params)]
+               (when-let [misspelled-word (not-empty (.-misspelledWord ^js params))]
                  (. menu append
                     (MenuItem. (clj->js {:label
                                          "Add to dictionary"
