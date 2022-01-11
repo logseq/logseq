@@ -365,7 +365,7 @@
   (let [pending? (seq (:plugin/updates-pending @state/state))]
     (when-let [plugins (and (not pending?)
                             ;; TODO: too many requests may be limited by Github api
-                            (seq (take 16 (state/get-enabled-installed-plugins theme?))))]
+                            (seq (take 32 (state/get-enabled-installed-plugins theme?))))]
       (state/set-state! :plugin/updates-pending
         (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))
