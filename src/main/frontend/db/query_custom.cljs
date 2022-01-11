@@ -5,7 +5,22 @@
             [cljs.reader :as reader]
             [frontend.db.query-react :as react]
             [frontend.template :as template]
-            [frontend.db.query-dsl :as dsl]))
+            [frontend.db.query-dsl :as dsl]
+            [frontend.db.model :as model]
+            [clojure.walk :as walk]))
+
+;; FIXME: what if users want to query other attributes than block-attrs?
+(defn- replace-star-with-block-attrs!
+  [l]
+  (walk/postwalk
+   (fn [f]
+     (if (and (list? f)
+                (= 'pull (first f))
+                (= '?b (second f))
+                (= '[*] (nth f 2)))
+       `(~'pull ~'?b ~model/block-attrs)
+       f))
+   l))
 
 (defn custom-query
   ([query]
@@ -22,7 +37,8 @@
 
                        :else
                        nil)]
-     (let [repo (state/get-current-repo)]
+     (let [repo (state/get-current-repo)
+           query' (replace-star-with-block-attrs! query)]
        (if (or (list? (:query query'))
                (not= :find (first (:query query')))) ; dsl query
          (dsl/custom-query repo query' query-opts )
