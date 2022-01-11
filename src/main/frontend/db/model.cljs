@@ -1062,9 +1062,9 @@
                db-utils/group-by-page))))))
 
 (defn- pattern [name]
-  (re-pattern (str "(?i)(?!#)(?!\\[\\[)"
+  (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
                    (util/regex-escape name)
-                   "(?!\\]\\])")))
+                   "($|[^0-9a-zA-Z])")))
 
 (defn get-page-unlinked-references
   [page]
