@@ -31,7 +31,6 @@
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.components.widgets :as widgets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]))
 
