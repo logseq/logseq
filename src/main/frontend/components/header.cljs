@@ -61,7 +61,9 @@
         not-syncing? (or (nil? sync-state) (fs-sync/-stopped? sync-state))
         *existed-graphs (::existed-graphs state)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
-        graph-txid-exists? (file-sync-handler/graph-txid-exists?)]
+        graph-txid-exists? (file-sync-handler/graph-txid-exists?)
+        uploading-files (state/sub :file-sync/sync-uploading-files)
+        downloading-files (state/sub :file-sync/sync-downloading-files)]
     (when-not config/publishing?
       (when (user-handler/logged?)
         (when-not (file-sync-handler/graph-txid-exists?)
@@ -88,8 +90,18 @@
                     {:title "create graph"
                      :options {:on-click #(file-sync-handler/create-graph (path/basename (state/get-current-repo)))}}])
            graph-txid-exists?
-           (conj {:title "toggle file sync"
-                  :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}))
+           (concat
+            [{:title "toggle file sync"
+              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))} }]
+            [{:hr true}]
+            (map (fn [f] {:title f
+                          :icon (ui/icon "arrow-narrow-up")}) uploading-files)
+            (map (fn [f] {:title f
+                          :icon (ui/icon "arrow-narrow-down")}) downloading-files)
+            (when sync-state
+              (map (fn [f] (:time f)
+                     {:title [:div [:div (:path f)] [:div (util/time-ago (:time f))]]})
+                   (take 10 (.-history sync-state))))))
 
          (cond-> {}
            (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
