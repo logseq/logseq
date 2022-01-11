@@ -1,6 +1,7 @@
 (ns frontend.fs.sync
   (:require ["path" :as path]
             [cljs-http.client :as http]
+            [cljs-time.core :as t]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.set :as set]
@@ -712,6 +713,13 @@
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
                     ^:mutable history]
   Object
+  (add-to-history [_ fs]
+    (let [now (t/now)]
+      (->> fs
+           (map (fn [p] {:path p :time now}))
+           (apply conj history)
+           (set! history))))
+
   (update-state! [this v]
     (set! state v)
     (state/set-file-sync-state v))
@@ -723,9 +731,11 @@
     (state/set-file-sync-downloading-files current-remote->local-files))
   (remove-current-local->remote-files! [this fs]
     (set! current-local->remote-files (set/difference current-local->remote-files (set fs)))
+    (.add-to-history this fs)
     (state/set-file-sync-uploading-files current-local->remote-files))
   (remove-current-remote->local-files! [this fs]
     (set! current-remote->local-files (set/difference current-remote->local-files (set fs)))
+    (.add-to-history this fs)
     (state/set-file-sync-downloading-files current-remote->local-files))
   (reset-current-local->remote-files! [this]
     (set! current-local->remote-files #{})
