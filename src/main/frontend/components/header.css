@@ -217,7 +217,10 @@ html.is-native-ipad {
     --ls-headbar-height: 4rem;
 
     #main-container {
-        padding-top: 40px;
+        padding-top: 0px;
+
+    #main-container-content {
+        padding-top: 0px;
     }
     
     .cp__header {
@@ -225,7 +228,7 @@ html.is-native-ipad {
       display: flex;
 
       > .l {
-        /* background-color: var(--ls-primary-background-color); */
+        background-color: var(--ls-primary-background-color);
         padding-top: 20px;
       }
 
