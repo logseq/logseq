@@ -425,6 +425,27 @@
 
   &-details {
   }
+
+  &-waiting-updates {
+    margin: -15px;
+
+    > ul {
+      li {
+        user-select: none;
+        justify-content: space-between;
+        opacity: .9;
+
+        sup {
+          padding-left: 8px;
+          font-weight: 400;
+        }
+
+        &:hover, &.checked {
+          opacity: 1;
+        }
+      }
+    }
+  }
 }
 
 .cp__themes {

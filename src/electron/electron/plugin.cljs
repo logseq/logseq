@@ -40,7 +40,8 @@
            zipball
            (api "zipball"))
          asset)
-       version])
+       version
+       (:body res)])
 
     (fn [^js e]
       (emit :lsp-installed {:status :error :payload e})
@@ -137,7 +138,7 @@
             (fn [resolve reject]
               ;;(reset! *installing-or-updating item)
               ;; get releases
-              (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
+              (-> (p/let [[asset latest-version notes] (fetch-latest-release-asset item)
 
                           _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
 
@@ -167,7 +168,7 @@
                           {:status     :completed
                            :only-check only-check
                            :payload    (if only-check
-                                         (assoc item :latest-version latest-version)
+                                         (assoc item :latest-version latest-version :latest-notes notes)
                                          (assoc item :zip dl-url :dst dest))})
 
                     (resolve nil))

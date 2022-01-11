@@ -576,6 +576,69 @@
                 (and updating (= (keyword (:id updating)) pid))
                 true nil (get coming-updates pid))) (:id item)))]])))
 
+(rum/defcs waiting-coming-updates
+  < rum/reactive
+    {:will-mount (fn [s] (state/reset-unchecked-update) s)}
+  [_s]
+  (let [_ (state/sub :plugin/updates-coming)
+        downloading? (state/sub :plugin/updates-downloading?)
+        unchecked (state/sub :plugin/updates-unchecked)
+        updates (state/all-available-coming-updates)]
+
+    [:div.cp__plugins-waiting-updates
+     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (util/safe-parse-int (count updates)))]
+
+     (if (seq updates)
+       ;; lists
+       [:ul
+        {:class (when downloading? "downloading")}
+        (for [it updates
+              :let [k (str "lsp-it-" (:id it))
+                    c? (not (contains? unchecked (:id it)))
+                    notes (util/trim-safe (:latest-notes it))]]
+          [:li.flex.items-center
+           {:key   k
+            :class (when c? "checked")}
+
+           [:label.flex-1
+            {:for k}
+            (ui/checkbox {:id        k
+                          :checked   c?
+                          :on-change (fn [^js e]
+                                       (when-not downloading?
+                                         (state/set-unchecked-update (:id it) (not (util/echecked? e)))))})
+            [:strong.px-3 (:title it)
+             [:sup (str (:version it) " 👉 " (:latest-version it))]]]
+
+           [:div.px-4
+            (when-not (string/blank? notes)
+              (ui/tippy
+                {:html [:p notes]}
+                [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")]))]])]
+
+       ;; all done
+       [:div.py-4 [:strong.text-4xl "\uD83C\uDF89 All updated!"]])
+
+     ;; actions
+     (when (seq updates)
+       [:div.pt-5
+        (ui/button
+          (if downloading?
+            [:span (ui/loading " Downloading...")]
+            [:span "Update all of selected"])
+
+          :on-click
+          #(when-not downloading?
+             (state/set-state! :plugin/updates-downloading? true)
+             (plugin-handler/check-or-update-marketplace-plugin
+               (assoc (state/get-next-selected-coming-update) :only-check false)
+               (fn [^js e] (notification/show! e :error))))
+
+          :disabled
+          (or downloading?
+              (and (not (empty? unchecked))
+                   (= (count unchecked) (count updates)))))])]))
+
 (defn open-select-theme!
   []
   (state/set-sub-modal! installed-themes))
@@ -677,5 +740,12 @@
 (defn open-plugins-modal!
   []
   (state/set-modal!
-    (fn [close!]
+    (fn [_close!]
       (plugins-page))))
+
+(defn open-waiting-updates-modal!
+  []
+  (state/set-sub-modal!
+    (fn [_close!]
+      (waiting-coming-updates))
+    {:center? true}))

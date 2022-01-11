@@ -159,6 +159,8 @@
 
                          (if (and only-check updates-pending?)
                            (state/consume-updates-coming-plugin payload false)
+
+                           ;; TODO: consume failed download updates?
                            (notifications/show!
                              (str
                                (if (= :error type) "[Install Error]" "")
