@@ -210,6 +210,8 @@ export type ExternalCommandType =
   'logseq.go/search' |
   'logseq.go/search-in-page' |
   'logseq.go/tomorrow' |
+  'logseq.go/backward' |
+  'logseq.go/forward' |
   'logseq.search/re-index' |
   'logseq.sidebar/clear' |
   'logseq.sidebar/open-today-page' |
