@@ -10,10 +10,11 @@ test('create page and blocks (diacritics)', async ({ page }) => {
     hotkeyOpenLink = 'Meta+o'
     hotkeyBack = 'Meta+['
   }
+  
+  const rand = randomString(20)
 
   // diacritic opening test
   await createRandomPage(page)
-  const rand = randomString(20)
 
   await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1')
   await page.keyboard.press(hotkeyOpenLink)
