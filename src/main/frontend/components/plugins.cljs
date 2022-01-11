@@ -361,15 +361,15 @@
             :intent "link"))
         (let [aim-icon #(if (= sort-by %) "check" "circle")]
           (if market?
-            [{:title   "Downloads (Desc)"
+            [{:title   (t :plugin/downloads)
               :options {:on-click #(reset! *sort-by :downloads)}
               :icon    (ui/icon (aim-icon :downloads))}
 
-             {:title   "Stars (Desc)"
+             {:title   (t :plugin/stars)
               :options {:on-click #(reset! *sort-by :stars)}
               :icon    (ui/icon (aim-icon :stars))}
 
-             {:title   "Title (A - Z)"
+             {:title   (str (t :plugin/title) " (A - Z)")
               :options {:on-click #(reset! *sort-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}]
 
@@ -474,7 +474,7 @@
         sorted-pkgs (apply sort-by
                            (conj
                              (case @*sort-by
-                               :letters [:title #(compare %1 %2)]
+                               :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
                                [@*sort-by #(compare %2 %1)])
                              filtered-pkgs))]
 
