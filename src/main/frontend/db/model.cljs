@@ -438,8 +438,7 @@
 (defn flatten-blocks-sort-by-left
   [blocks parent]
   (let [ids->blocks (zipmap (map (fn [b] [(:db/id (:block/parent b))
-                                         (:db/id (:block/left b))]) blocks) blocks)
-        top-block (get ids->blocks [(:db/id parent) (:db/id parent)])]
+                                         (:db/id (:block/left b))]) blocks) blocks)]
     (loop [node parent
            next-siblings '()
            result []]
@@ -461,7 +460,7 @@
     (when block-id
       (some->
       (react/q repo-url [:block/refs-count block-id]
-        {:query-fn (fn [db]
+        {:query-fn (fn [_db]
                      (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
         nil)
       react))))
@@ -479,8 +478,7 @@
      (let [page (util/page-name-sanity-lc (string/trim page))
            page-entity (or (db-utils/entity repo-url [:block/name page])
                            (db-utils/entity repo-url [:block/original-name page]))
-           page-id (:db/id page-entity)
-           db (conn/get-conn repo-url)]
+           page-id (:db/id page-entity)]
        (when page-id
          (some->
           (react/q repo-url [:page/blocks page-id]
@@ -603,7 +601,7 @@
                               ids))))))
 
 (defn block-and-children-transform
-  [result repo-url block-uuid]
+  [result repo-url _block-uuid]
   (some->> result
            db-utils/seq-flatten
            (db-utils/with-repo repo-url)))
@@ -741,12 +739,6 @@
   (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
-
-(defn- heading-block?
-  [block]
-  (and
-   (vector? block)
-   (= "Heading" (first block))))
 
 (defn get-redirect-page-name
   "Accepts both sanitized or unsanitized"
@@ -897,7 +889,7 @@
                                db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-(defn- remove-children!
+(defn remove-children!
   [blocks]
   (let [parents (->> (mapcat :block/parent blocks)
                      (map :db/id)
@@ -1135,7 +1127,7 @@
 (defn get-matched-blocks
   [match-fn limit]
   (when-let [repo (state/get-current-repo)]
-    (let [pred (fn [db content]
+    (let [pred (fn [_db content]
                  (match-fn content))]
       (->> (d/q
             '[:find ?block
@@ -1231,7 +1223,7 @@
 
 (defn get-all-templates
   []
-  (let [pred (fn [db properties]
+  (let [pred (fn [_db properties]
                (some? (:template properties)))]
     (->> (d/q
           '[:find ?b ?p
@@ -1315,7 +1307,7 @@
         non-public-datoms (get-public-false-block-ids db)
         non-public-datom-ids (set (concat non-public-pages non-public-datoms))
         filtered-db (d/filter db
-                              (fn [db datom]
+                              (fn [_db datom]
                                 (let [ns (namespace (:a datom))]
                                   (and (not (remove? ns))
                                        (not (contains? #{:block/file} (:a datom)))
@@ -1347,7 +1339,7 @@
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
 (defn delete-blocks
-  [repo-url files delete-page?]
+  [repo-url files _delete-page?]
   (when (seq files)
     (let [blocks (get-files-blocks repo-url files)]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
@@ -1535,7 +1527,7 @@
   ([repo] (remove-orphaned-pages! repo (get-orphaned-pages {})))
   ([repo orphaned-pages]
    (let [transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
-     (db-utils/transact! transaction))))
+     (db-utils/transact! repo transaction))))
 
 (defn get-block-last-direct-child
   [db-id]

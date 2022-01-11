@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.extensions.slide :as slide]
             [medley.core :as medley]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as format-block]))
 
 ;; Consider generate a db index so that search can still works
 
@@ -17,19 +17,18 @@
 
 (defn- build-block
   [config block]
-  (let [block (block/parse-title-and-body block)
+  (let [block (format-block/parse-title-and-body block)
         body (:block/body block)
         block (block/build-block-title config block)]
     [:div.block
      block
      (when (seq body)
        (for [child body]
-         (do
-           (block/markup-element-cp config child))))]))
+         (block/markup-element-cp config child)))]))
 
 (defn export-page
   [page-name blocks show-notification!]
-  (let [{:keys [slide] :as properties} (db/get-page-properties page-name)
+  (let [{:keys [slide]} (db/get-page-properties page-name)
         slide? slide
         blocks (if (:block/pre-block? (first blocks))
                  (rest blocks)

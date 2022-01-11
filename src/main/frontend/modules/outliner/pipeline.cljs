@@ -2,12 +2,12 @@
   (:require [frontend.modules.datascript-report.core :as ds-report]
             [frontend.modules.outliner.file :as file]
             [frontend.db :as db]
-            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.debug :as debug]))
 
+;; TODO: Do something or remove
 (defn updated-block-hook
-  [block])
+  [_block])
 
 (defn updated-page-hook
   [page]

@@ -7,19 +7,19 @@
 
 (defrecord Node [repo]
   protocol/Engine
-  (query [this q opts]
+  (query [_this q opts]
     (p/let [result (ipc/ipc "search-blocks" repo q opts)
             result (bean/->clj result)]
-      (map (fn [{:keys [content id uuid page]}]
+      (map (fn [{:keys [content uuid page]}]
              {:block/uuid uuid
               :block/content content
               :block/page page}) result)))
-  (rebuild-blocks-indice! [this]
+  (rebuild-blocks-indice! [_this]
     (let [indice (search-db/build-blocks-indice repo)]
       (ipc/ipc "rebuild-blocks-indice" repo indice)))
-  (transact-blocks! [this data]
+  (transact-blocks! [_this data]
     (ipc/ipc "transact-blocks" repo (bean/->js data)))
-  (truncate-blocks! [this]
+  (truncate-blocks! [_this]
     (ipc/ipc "truncate-blocks" repo))
-  (remove-db! [this]
+  (remove-db! [_this]
     (ipc/ipc "remove-db" repo)))

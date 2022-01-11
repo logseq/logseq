@@ -1,6 +1,5 @@
 (ns frontend.db.persist
   (:require [frontend.util :as util]
-            [frontend.mobile.util :as mobile]
             [frontend.idb :as idb]
             [frontend.config :as config]
             [electron.ipc :as ipc]

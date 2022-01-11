@@ -27,8 +27,9 @@
      :page page
      :content result}))
 
+;; TODO: Do we want to pass repo here?
 (defn build-blocks-indice
-  [repo]
+  [_repo]
   (->> (db/get-all-block-contents)
        (map block->index)
        (remove nil?)

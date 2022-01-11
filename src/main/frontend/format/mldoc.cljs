@@ -162,11 +162,10 @@
                    (->>
                     (map
                      (fn [[_ v]]
-                       (do
-                         (let [[k v] (util/split-first " " v)]
-                          (mapv
-                           string/trim
-                           [k v]))))
+                       (let [[k v] (util/split-first " " v)]
+                         (mapv
+                          string/trim
+                          [k v])))
                      macro-properties)
                     (into {}))
                    {})
@@ -200,7 +199,7 @@
                          (update :roam_alias ->vec)
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
+          properties (medley/filter-kv (fn [_k v] (seq v)) properties)
           properties (medley/map-vals util/unquote-string-if-wrapped properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
@@ -292,17 +291,17 @@
 
 (defrecord MldocMode []
   protocol/Format
-  (toEdn [this content config]
+  (toEdn [_this content config]
     (->edn content config))
-  (toHtml [this content config references]
+  (toHtml [_this content config references]
     (export "html" content config references))
-  (loaded? [this]
+  (loaded? [_this]
     true)
-  (lazyLoad [this ok-handler]
+  (lazyLoad [_this _ok-handler]
     true)
-  (exportMarkdown [this content config references]
+  (exportMarkdown [_this content config references]
     (parse-export-markdown content config references))
-  (exportOPML [this content config title references]
+  (exportOPML [_this content config title references]
     (parse-export-opml content config title references)))
 
 (defn plain->text

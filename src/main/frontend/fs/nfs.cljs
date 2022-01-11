@@ -65,7 +65,7 @@
 
 (defrecord Nfs []
   protocol/Fs
-  (mkdir! [this dir]
+  (mkdir! [_this dir]
     (let [parts (->> (string/split dir "/")
                      (remove string/blank?))
           root (->> (butlast parts)
@@ -87,7 +87,7 @@
                   (js/console.debug "mkdir error: " error ", dir: " dir)
                   (throw error))))))
 
-  (readdir [this dir]
+  (readdir [_this dir]
     (let [prefix (str "handle/" dir)
           cached-files (keys @nfs-file-handles-cache)]
       (p/resolved
@@ -95,7 +95,7 @@
             (map (fn [path]
                    (string/replace path prefix "")))))))
 
-  (unlink! [this repo path opts]
+  (unlink! [this repo path _opts]
     (let [[dir basename] (util/get-dir-and-basename path)
           handle-path (str "handle" path)]
       (->
@@ -121,19 +121,18 @@
                   (log/error :unlink/path {:path path
                                            :error error}))))))
 
-  (rmdir! [this dir]
+  (rmdir! [_this _dir]
     ;; TOO dangerious, we should never implement this
     nil)
 
-  (read-file [this dir path options]
+  (read-file [_this dir path _options]
     (let [handle-path (str "handle" dir "/" path)]
       (p/let [handle (idb/get-item handle-path)
               local-file (and handle (.getFile handle))]
         (and local-file (.text local-file)))))
 
-  (write-file! [this repo dir path content opts]
-    (let [last-modified-at (db/get-file-last-modified-at repo path)
-          parts (string/split path "/")
+  (write-file! [_this repo dir path content opts]
+    (let [parts (string/split path "/")
           basename (last parts)
           sub-dir (->> (butlast parts)
                        (remove string/blank?)
@@ -212,9 +211,7 @@
                         (js/console.error error)))))))))
 
   (rename! [this repo old-path new-path]
-    (p/let [[dir basename] (util/get-dir-and-basename old-path)
-            [_ new-basename] (util/get-dir-and-basename new-path)
-            parts (->> (string/split new-path "/")
+    (p/let [parts (->> (string/split new-path "/")
                        (remove string/blank?))
             dir (str "/" (first parts))
             new-path (->> (rest parts)
@@ -224,7 +221,7 @@
             content (.text file)
             _ (protocol/write-file! this repo dir new-path content nil)]
       (protocol/unlink! this repo old-path nil)))
-  (stat [this dir path]
+  (stat [_this dir path]
     (if-let [file (get-nfs-file-handle (str "handle/"
                                             (string/replace-first dir "/" "")
                                             path))]
@@ -234,12 +231,12 @@
            :file/size (get-attr "size")
            :file/type (get-attr "type")}))
       (p/rejected "File not exists")))
-  (open-dir [this ok-handler]
+  (open-dir [_this ok-handler]
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
-  (get-files [this path-or-handle ok-handler]
+  (get-files [_this path-or-handle ok-handler]
     (utils/getFiles path-or-handle true ok-handler))
 
   ;; TODO:
-  (watch-dir! [this dir]
+  (watch-dir! [_this _dir]
     nil))

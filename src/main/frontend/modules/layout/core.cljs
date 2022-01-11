@@ -5,7 +5,7 @@
 (defonce *movable-containers (atom {}))
 
 (defn- calc-layout-data
-  [^js cnt ^js evt]
+  [^js cnt ^js _evt]
   (.toJSON (.getBoundingClientRect cnt)))
 
 (defn ^:export move-container-to-top

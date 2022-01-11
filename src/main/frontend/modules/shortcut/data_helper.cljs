@@ -149,10 +149,10 @@
             new-result (rewrite/update
                         result
                         :shortcuts
-                        #(dissoc (rewrite/sexpr %) k))]
-        (let [new-content (str new-result)]
-          (common-handler/reset-config! repo new-content)
-          (file/set-file-content! repo path new-content))))))
+                        #(dissoc (rewrite/sexpr %) k))
+            new-content (str new-result)]
+        (common-handler/reset-config! repo new-content)
+        (file/set-file-content! repo path new-content)))))
 
 (defn get-group
   "Given shortcut key, return handler group
