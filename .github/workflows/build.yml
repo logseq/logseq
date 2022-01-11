@@ -55,6 +55,11 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
+      - uses: actions/checkout@v2
+      - uses: DeLaGuardo/setup-clj-kondo@master
+        with:
+          version: '2021.12.19'
+
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
@@ -72,6 +77,9 @@ jobs:
             ${{ runner.os }}-yarn-
       - name: Fetch yarn deps
         run: yarn cache clean && yarn install
+
+      - name: Run clj-kondo lint
+        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,external,context}
 
       - name: Run ClojureScript test
         run: |
