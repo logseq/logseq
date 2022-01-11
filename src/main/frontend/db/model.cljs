@@ -395,8 +395,8 @@
 ;; FIXME: alert
 (defn sort-by-left
   ([blocks parent]
-   (sort-by-left blocks parent true))
-  ([blocks parent check?]
+   (sort-by-left blocks parent {:check? true}))
+  ([blocks parent {:keys [check?]}]
    (when check?
      (when (not= (count blocks) (count (set (map :block/left blocks))))
        (let [duplicates (->> (map (comp :db/id :block/left) blocks)
@@ -432,24 +432,59 @@
                      f))
                  form))
 
-(defn flatten-blocks-sort-by-left
-  [blocks parent]
-  (let [ids->blocks (zipmap (map (fn [b] [(:db/id (:block/parent b))
-                                         (:db/id (:block/left b))]) blocks) blocks)]
+
+;; TODO: both zipmap and map lookup are slow in cljs
+;; zipmap 20k blocks takes 30ms on my M1 Air.
+(defn sort-blocks
+  [blocks parent limit]
+  (let [ids->blocks (zipmap (map
+                              (fn [b]
+                                [(:db/id (:block/parent b))
+                                 (:db/id (:block/left b))])
+                              blocks)
+                            blocks)]
     (loop [node parent
            next-siblings '()
            result []]
-      (let [id (:db/id node)
-            child-block (get ids->blocks [id id])
-            next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
-            next-siblings (if (and next-sibling child-block)
-                            (cons next-sibling next-siblings)
-                            next-siblings)]
-        (if-let [node (or child-block next-sibling)]
-          (recur node next-siblings (conj result node))
-          (if-let [sibling (first next-siblings)]
-            (recur sibling (rest next-siblings) (conj result sibling))
-            result))))))
+      (if (and limit (= (count result) limit))
+        result
+        (let [id (:db/id node)
+              child-block (get ids->blocks [id id])
+              next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
+              next-siblings (if (and next-sibling child-block)
+                              (cons next-sibling next-siblings)
+                              next-siblings)]
+          (if-let [node (or child-block next-sibling)]
+            (recur node next-siblings (conj result node))
+            (if-let [sibling (first next-siblings)]
+              (recur sibling (rest next-siblings) (conj result sibling))
+              result)))))))
+
+;; (defn- sort-blocks-v2
+;;   [blocks parent limit]
+;;   (let [parent->blocks (group-by (comp :db/id :block/parent) blocks)
+;;         block-children (fn block-children [parent]
+;;                          (map (fn [m]
+;;                                 (let [parent {:db/id (:db/id m)}]
+;;                                   (assoc m :block/children
+;;                                          (sort-by-left (block-children parent) parent))))
+;;                            (sort-by-left (get parent->blocks (:db/id parent)) parent)))
+;;         blocks (->> (block-children parent)
+;;                     (mapcat (fn [b] (tree-seq map? :block/children b)))
+;;                     (map #(dissoc % :block/children)))]
+;;     (if limit
+;;       (take limit blocks)
+;;       blocks)))
+
+(comment
+  (let [page "Scripture (NASB 1995)"
+        page-entity (db-utils/pull [:block/name (string/lower-case page)])
+        blocks (->> (get-page-blocks (state/get-current-repo) (string/lower-case page) {:use-cache? false})
+                    (map (fn [b] (assoc b :block/content (:block/content (db-utils/entity (:db/id b)))))))]
+    (def page-entity page-entity)
+    (def blocks blocks)
+    (time (prn (count (sort-blocks blocks page-entity 1)))))
+  )
 
 (defn get-block-refs-count
   [block-id]
@@ -468,7 +503,7 @@
    (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
    (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys]
+  ([repo-url page {:keys [use-cache? pull-keys limit]
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (when page
@@ -504,10 +539,70 @@
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
                                result (db-utils/pull-many repo-url pull-keys block-eids)]
-                           (map (fn [b] (assoc b :block/page bare-page-map)) result)))}
+                           (-> (map (fn [b] (assoc b :block/page bare-page-map)) result)
+                               (sort-blocks page-entity limit))))}
             nil)
-          react
-          (flatten-blocks-sort-by-left page-entity)))))))
+          react))))))
+
+;; Use datoms index and provide limit support
+;; (defn get-page-blocks-v2
+;;   ([page]
+;;    (get-page-blocks-v2 (state/get-current-repo) page nil))
+;;   ([repo-url page]
+;;    (get-page-blocks-v2 repo-url page nil))
+;;   ([repo-url page {:keys [use-cache? pull-keys limit]
+;;                    :or {use-cache? true}}]
+;;    (when page
+;;      (let [page (util/page-name-sanity-lc (string/trim page))
+;;            page-entity (db-utils/entity repo-url [:block/name page])
+;;            page-id (:db/id page-entity)
+;;            db (conn/get-conn repo-url)
+;;            pull-keys (or pull-keys
+;;                          [:db/id
+;;                           :block/left
+;;                           :block/parent
+;;                           :block/uuid
+;;                           :block/format
+;;                           :block/refs
+;;                           :block/path-refs
+;;                           :block/tags
+;;                           :block/content
+;;                           :block/marker
+;;                           :block/priority
+;;                           :block/properties
+;;                           :block/pre-block?
+;;                           :block/scheduled
+;;                           :block/deadline
+;;                           :block/repeated?])
+;;            bare-page-map {:db/id page-id
+;;                           :block/name (:block/name page-entity)
+;;                           :block/original-name (:block/original-name page-entity)
+;;                           :block/journal-day (:block/journal-day page-entity)}]
+;;        (when page-id
+;;          (some->
+;;           (react/q repo-url [:page/blocks page-id]
+;;             {:use-cache? use-cache?
+;;              :query-fn (fn [db]
+;;                          (util/profile
+;;                           "datoms index query"
+;;                           (let [datoms (d/datoms db :avet :block/page page-id)
+;;                                 block-eids (map :e datoms)
+;;                                 lefts (d/datoms db :avet :block/left)
+;;                                 lefts (zipmap (map :e lefts) lefts)
+;;                                 parents (d/datoms db :avet :block/parent)
+;;                                 parents (zipmap (map :e parents) parents)
+;;                                 blocks (map (fn [id]
+;;                                               {:db/id id
+;;                                                :block/left {:db/id (:v (get lefts id))}
+;;                                                :block/parent {:db/id (:v (get parents id))}})
+;;                                          block-eids)
+;;                                 blocks (sort-blocks blocks page-entity limit)
+;;                                 block-eids (map :db/id blocks)
+;;                                 blocks (db-utils/pull-many repo-url pull-keys
+;;                                                            block-eids)]
+;;                             (map (fn [b] (assoc b :block/page bare-page-map)) blocks))))}
+;;             nil)
+;;           react))))))
 
 (defn get-page-blocks-no-cache
   ([page]
