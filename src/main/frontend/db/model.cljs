@@ -26,7 +26,6 @@
 (def block-attrs
   '[:db/id
     :block/uuid
-    :block/type
     :block/left
     :block/format
     :block/refs
@@ -475,15 +474,37 @@
    (when page
      (let [page (util/page-name-sanity-lc (string/trim page))
            page-entity (db-utils/entity repo-url [:block/name page])
-           page-id (:db/id page-entity)]
+           page-id (:db/id page-entity)
+           db (conn/get-conn repo-url)
+           pull-keys [:db/id
+                      :block/uuid
+                      :block/left
+                      :block/format
+                      :block/refs
+                      :block/path-refs
+                      :block/tags
+                      :block/content
+                      :block/marker
+                      :block/priority
+                      :block/properties
+                      :block/pre-block?
+                      :block/scheduled
+                      :block/deadline
+                      :block/repeated?
+                      :block/parent]
+           bare-page-map {:db/id page-id
+                          :block/name (:block/name page-entity)
+                          :block/original-name (:block/original-name page-entity)
+                          :block/journal-day (:block/journal-day page-entity)}]
        (when page-id
          (some->
           (react/q repo-url [:page/blocks page-id]
             {:use-cache? use-cache?
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
-                               block-eids (mapv :e datoms)]
-                           (db-utils/pull-many repo-url pull-keys block-eids)))}
+                               block-eids (mapv :e datoms)
+                               result (db-utils/pull-many repo-url pull-keys block-eids)]
+                           (map (fn [b] (assoc b :block/page bare-page-map)) result)))}
             nil)
           react
           (flatten-blocks-sort-by-left page-entity)))))))
