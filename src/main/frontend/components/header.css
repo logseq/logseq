@@ -191,7 +191,6 @@ a.button {
 html.is-ios.is-safari {
     
   .cp__header {
-    position: fixed !important;
     background-color: var(--ls-primary-background-color);
   }
 
@@ -224,7 +223,6 @@ html.is-native-ipad {
     .cp__header {
       background-color: transparent !important;
       display: flex;
-      width: 100%;
 
       > .l {
         background-color: var(--ls-primary-background-color);
@@ -248,13 +246,7 @@ html.is-native-ipad {
         }
       }
     }
-
-    .ls-right-sidebar-open {
-     .cp__header {
-       width: calc(100% - var(--ls-right-sidebar-width));
-     }
-    }
-
+    
     .left-sidebar-inner  {
       > .wrap {
         padding-top: 20px;
