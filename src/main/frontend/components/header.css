@@ -225,7 +225,7 @@ html.is-native-ipad {
       display: flex;
 
       > .l {
-        background-color: var(--ls-primary-background-color);
+        /* background-color: var(--ls-primary-background-color); */
         padding-top: 20px;
       }
 
