@@ -359,7 +359,9 @@ html[data-theme='dark'] {
   }
 
   &.open {
-    width: var(--ls-right-sidebar-width);
+      width: var(--ls-right-sidebar-width);
+      min-width: 260px;
+      max-width: 60vw;
   }
 
   &-scollable {
