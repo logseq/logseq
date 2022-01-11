@@ -355,8 +355,8 @@
       (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
           (ui/button
-            [:span (ui/icon "arrows-sort") ""]
-            :class "sort-by"
+            [:span (ui/icon "arrows-sort")]
+            :class (str (when-not (contains? #{:enabled :downloads} sort-by) "picked ") "sort-by")
             :on-click toggle-fn
             :intent "link"))
         (let [aim-icon #(if (= sort-by %) "check" "circle")]
