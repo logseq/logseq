@@ -38,8 +38,6 @@
                    (route-handler/go-to-journals!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
-(def hiding-login&file-sync true)
-
 (rum/defc login < rum/reactive
   []
   (let [_ (state/sub :auth/id-token)]
@@ -100,7 +98,7 @@
                           :icon (ui/icon "arrow-narrow-down")}) downloading-files)
             (when sync-state
               (map (fn [f] (:time f)
-                     {:title [:div [:div (:path f)] [:div (util/time-ago (:time f))]]})
+                     {:title [:div [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
                    (take 10 (.-history sync-state))))))
 
          (cond-> {}
