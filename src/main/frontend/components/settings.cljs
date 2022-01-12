@@ -588,7 +588,7 @@
 
        [:div.cp__settings-inner.md:flex
 
-        [:aside.md:w-64
+        [:aside.md:w-64 {:style {:min-width "10rem"}}
          [:ul
           (for [[label text icon]
                 [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
