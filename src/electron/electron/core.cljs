@@ -2,8 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open get-win-from-sender]]
-            [electron.configs :as cfgs]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -11,11 +10,12 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
             [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
+            [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
@@ -123,7 +123,9 @@
         call-app-channel "call-application"
         call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
-        quit-dirty-state "set-quit-dirty-state"]
+        quit-dirty-state "set-quit-dirty-state"
+        clear-win-effects! (win/setup-window-listeners! win)]
+
     (doto ipcMain
       (.handle quit-dirty-state
                (fn [_ dirty?]
@@ -157,9 +159,8 @@
                      (catch js/Error e
                        (js/console.error e)))))))
 
-    (win/setup-window-listeners! win)
-
-    #(do (.removeHandler ipcMain toggle-win-channel)
+    #(do (clear-win-effects!)
+         (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
          (.removeHandler ipcMain call-app-channel)
@@ -215,10 +216,11 @@
                         (fn []
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
-                                tt (handler/set-ipc-handler! win)]
+                                t3 (handler/set-ipc-handler! win)
+                                tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
 
                ;; setup effects
@@ -246,7 +248,7 @@
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 
-               (.on app "activate" #(if @*win (.show win)))))))))
+               (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
   (js/console.log "Main - start")

@@ -4,9 +4,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
-            [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
-            [frontend.util.property :as property]
             [frontend.util :as util]))
 
 (defn insert-property
@@ -62,7 +60,6 @@
         (let [properties (:block/properties pre-block)
               new-properties (assoc properties key value)
               content (:block/content pre-block)
-              front-matter? (property/front-matter? content)
               new-content (insert-property format content key value)
               block {:db/id (:db/id pre-block)
                      :block/properties new-properties

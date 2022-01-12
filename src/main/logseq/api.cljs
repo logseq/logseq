@@ -14,7 +14,6 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
-            [frontend.handler :as handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
@@ -119,7 +118,9 @@
           _ (when-not exist? (fs/mkdir-recur! path))
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (when-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
+          _ (when-not sub-dir?
+              (log/info :debug user-path)
+              (throw "write file denied"))
           user-path-root (util/node-path.dirname user-path)
           exist? (fs/file-exists? user-path-root "")
           _ (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -128,8 +129,7 @@
 
 (defn ^:private read_dotdir_file
   [file sub-root]
-  (p/let [repo ""
-          path (plugin-handler/get-ls-dotdir-root)
+  (p/let [path (plugin-handler/get-ls-dotdir-root)
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
@@ -258,7 +258,7 @@
         ;; handle keybinding commands
         (when-let [shortcut-args (and palette-cmd keybinding
                                       (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
-          (let [dispatch-cmd (fn [_ e] (palette-handler/invoke-command palette-cmd))
+          (let [dispatch-cmd (fn [_ _e] (palette-handler/invoke-command palette-cmd))
                 [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
             (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
@@ -469,16 +469,15 @@
           nil)))))
 
 (def ^:export remove_block
-  (fn [block-uuid ^js opts]
+  (fn [block-uuid ^js _opts]
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
         {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
 
 (def ^:export update_block
-  (fn [block-uuid content ^js opts]
-    (let [opts (and opts (bean/->clj opts))
-          repo (state/get-current-repo)
+  (fn [block-uuid content ^js _opts]
+    (let [repo (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing? (and edit-input (string/ends-with? edit-input block-uuid))]
       (if editing?
@@ -586,9 +585,8 @@
 (defn ^:export q
   [query-string]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (db/get-conn repo)]
-      (when-let [result (query-dsl/query repo query-string)]
-        (bean/->js (normalize-keyword-for-json (flatten @result)))))))
+    (when-let [result (query-dsl/query repo query-string)]
+      (bean/->js (normalize-keyword-for-json (flatten @result))))))
 
 (defn ^:export datascript_query
   [query & inputs]

@@ -43,7 +43,7 @@
   (try
     (let [p (.join path (state/get-graph-path) ".git")]
       (.isDirectory (fs/statSync p)))
-    (catch js/Error e
+    (catch js/Error _e
       nil)))
 
 (defn remove-dot-git-file!
@@ -148,8 +148,6 @@
   (let [args (if (string? args)
                (split-args args)
                args)
-        ok-handler (fn [result]
-                     (p/resolved result))
         error-handler (fn [error]
                         ;; TODO: why this happen?
                         (when-not (string/blank? error)

@@ -1,5 +1,5 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod? open fetch logger *win]]
+  (:require [electron.utils :refer [mac? prod? open fetch logger *win]]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -38,7 +38,7 @@
              status (.-status res)
              text (.text res)]
        (if (.-ok res)
-         (let [info (if-not (string/blank? text) (js/JSON.parse text))]
+         (let [info (when-not (string/blank? text) (js/JSON.parse text))]
            (bean/->clj info))
          (throw (js/Error. (str "[" status "] " text)))))
      (fn [e]
@@ -59,15 +59,15 @@
             [artifact (get-latest-artifact-info repo)
 
              artifact (when-let [remote-version (and artifact (re-find #"\d+\.\d+\.\d+" (:url artifact)))]
-                        (if (and (. semver valid remote-version)
-                                 (. semver lt electron-version remote-version)) artifact))
-
+                        (when (and (. semver valid remote-version)
+                                   (. semver lt electron-version remote-version)) artifact))
+             
              url (if-not artifact (do (emit "update-not-available" nil) (throw nil)) (:url artifact))
              _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
                ;; start download FIXME: user's preference about auto download
              _ (when-not auto-download (throw nil))
              ^js dl-res (fetch url)
-             _ (if-not (.-ok dl-res) (throw (js/Error. "download resource not available")))
+             _ (when-not (.-ok dl-res) (throw (js/Error. "download resource not available")))
              dest-info (p/create
                         (fn [resolve1 reject1]
                           (let [headers (. dl-res -headers)
@@ -91,7 +91,7 @@
                                               (reset! *downloaded downloaded))))
                               (.on "error" (fn [e]
                                              (reject1 e)))
-                              (.on "end" (fn [e]
+                              (.on "end" (fn [_e]
                                            (.close dest-file)
                                            (let [dest-file (string/replace tmp-dest-file ".pending" "")]
                                              (fs/renameSync tmp-dest-file dest-file)
@@ -137,17 +137,17 @@
           (debug "Skip remote version [ahead of pre-release]" remote-version))))))
 
 (defn init-updater
-  [{:keys [repo logger ^js win] :as opts}]
+  [{:keys [repo _logger ^js _win] :as opts}]
   (and prod? (not= false (cfgs/get-item :auto-update)) (init-auto-updater repo))
   (let [check-channel "check-for-updates"
         install-channel "install-updates"
-        check-listener (fn [e & args]
+        check-listener (fn [_e & args]
                          (when-not @*update-pending
                            (reset! *update-pending true)
                            (p/finally
                              (check-for-updates (merge opts {:args args}))
                              #(reset! *update-pending nil))))
-        install-listener (fn [e quit-app?]
+        install-listener (fn [_e quit-app?]
                            (when-let [dest-file (:dest-file @*update-ready-to-install)]
                              (open dest-file)
                              (and quit-app? (js/setTimeout #(.quit app) 1000))))]

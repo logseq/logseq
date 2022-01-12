@@ -9,7 +9,6 @@
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
-            [goog.object :as gobj]
             [clojure.string :as string]
             [electron.utils :as utils]
             [electron.state :as state]
@@ -47,8 +46,7 @@
   (readdir dir))
 
 (defmethod handle :unlink [_window [_ repo path]]
-  (let [basename (path/basename path)
-        file-name (-> (string/replace path (str repo "/") "")
+  (let [file-name (-> (string/replace path (str repo "/") "")
                       (string/replace "/" "_")
                       (string/replace "\\" "_"))
         recycle-dir (str repo "/logseq/.recycle")
@@ -58,8 +56,7 @@
 
 (defn backup-file
   [repo path content]
-  (let [basename (path/basename path)
-        file-name (-> (string/replace path (str repo "/") "")
+  (let [file-name (-> (string/replace path (str repo "/") "")
                       (string/replace "/" "_")
                       (string/replace "\\" "_"))
         bak-dir (str repo "/logseq/bak")
@@ -105,9 +102,9 @@
                                                                 " failed, "
                                                                 e
                                                                 (when backup-path
-                                                                  " A backup file was saved to "
-                                                                  backup-path
-                                                                  "."))}))))))
+                                                                  (str ". A backup file was saved to "
+                                                                       backup-path
+                                                                       ".")))}))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
@@ -145,13 +142,13 @@
           result (get (js->clj result) "filePaths")]
     (p/resolved (first result))))
 
-(defmethod handle :openDir [^js window _messages]
+(defmethod handle :openDir [^js _window _messages]
   (p/let [path (open-dir-dialog)]
     (if path
       (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
 
-(defmethod handle :getFiles [window [_ path]]
+(defmethod handle :getFiles [_window [_ path]]
   (get-files path))
 
 (defn- sanitize-graph-name
@@ -183,7 +180,7 @@
          (map #(path/basename % ".transit"))
          (map graph-name->path))))
 
-(defmethod handle :getGraphs [window [_]]
+(defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
 (defn- get-graph-path
@@ -200,40 +197,40 @@
       (when (fs/existsSync file-path)
         (utils/read-file file-path)))))
 
-(defmethod handle :getSerializedGraph [window [_ graph-name]]
+(defmethod handle :getSerializedGraph [_window [_ graph-name]]
   (get-serialized-graph graph-name))
 
-(defmethod handle :saveGraph [window [_ graph-name value-str]]
+(defmethod handle :saveGraph [_window [_ graph-name value-str]]
   (when (and graph-name value-str)
     (when-let [file-path (get-graph-path graph-name)]
       (fs/writeFileSync file-path value-str))))
 
-(defmethod handle :deleteGraph [window [_ graph-name]]
+(defmethod handle :deleteGraph [_window [_ graph-name]]
   (when graph-name
     (when-let [file-path (get-graph-path graph-name)]
       (when (fs/existsSync file-path)
         (fs-extra/removeSync file-path)))))
 
-(defmethod handle :openNewWindow [window [_]]
+(defmethod handle :openNewWindow [_window [_]]
   (let [win (win/create-main-window)]
     (win/on-close-save! win)
     (win/setup-window-listeners! win)
     nil))
 
-(defmethod handle :persistent-dbs-saved [window _]
+(defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)
   true)
 
-(defmethod handle :search-blocks [window [_ repo q opts]]
+(defmethod handle :search-blocks [_window [_ repo q opts]]
   (search/search-blocks repo q opts))
 
-(defmethod handle :rebuild-blocks-indice [window [_ repo data]]
+(defmethod handle :rebuild-blocks-indice [_window [_ repo data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
   [])
 
-(defmethod handle :transact-blocks [window [_ repo data]]
+(defmethod handle :transact-blocks [_window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
     (when (seq blocks-to-remove-set)
       (search/delete-blocks! repo blocks-to-remove-set))
@@ -241,10 +238,10 @@
       ;; unneeded serialization
       (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
-(defmethod handle :truncate-blocks [window [_ repo]]
+(defmethod handle :truncate-blocks [_window [_ repo]]
   (search/truncate-blocks-table! repo))
 
-(defmethod handle :remove-db [window [_ repo]]
+(defmethod handle :remove-db [_window [_ repo]]
   (search/delete-db! repo))
 
 (defn clear-cache!
@@ -271,7 +268,7 @@
   (when dir
     (watcher/watch-dir! window dir)))
 
-(defmethod handle :openDialog [^js window messages]
+(defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
 (defmethod handle :getLogseqDotDirRoot []
@@ -297,7 +294,7 @@
 (defmethod handle :getDirname [_]
   js/__dirname)
 
-(defmethod handle :getAppBaseInfo [^js win [_ opts]]
+(defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)})
 
 (defmethod handle :setCurrentGraph [^js win [_ path]]
@@ -325,11 +322,11 @@
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
 
-(defmethod handle :graphUnlinked [^js win [_ repo]]
+(defmethod handle :graphUnlinked [^js _win [_ repo]]
   (doseq [window (win/get-all-windows)]
     (utils/send-to-renderer window "graphUnlinked" (bean/->clj repo))))
 
-(defmethod handle :dbsync [^js win [_ graph tx-data]]
+(defmethod handle :dbsync [^js _win [_ graph tx-data]]
   (let [dir (utils/get-graph-dir graph)]
     (doseq [window (win/get-graph-all-windows dir)]
       (utils/send-to-renderer window "dbsync"
