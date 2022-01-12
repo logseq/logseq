@@ -2,11 +2,8 @@
   (:require [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["chokidar" :as watcher]
-            [promesa.core :as p]
-            [clojure.string :as string]
             [electron.utils :as utils]
-            ["electron" :refer [app]]
-            [electron.window :as win]))
+            ["electron" :refer [app]]))
 
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw

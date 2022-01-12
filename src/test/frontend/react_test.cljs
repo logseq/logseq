@@ -2,7 +2,7 @@
   ;; namespace local config for r/defc tests
   {:clj-kondo/config {:linters {:inline-def {:level :off}}}}
   (:require [frontend.react :as r]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
+            [cljs.test :refer [deftest is use-fixtures]]
             [frontend.fixtures :as fixtures]))
 
 (use-fixtures :each

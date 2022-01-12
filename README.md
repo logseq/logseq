@@ -82,7 +82,7 @@ We also have [a dedicated page](https://github.com/logseq/logseq/blob/master/COD
 
 ### 1. Requirements
 
-- [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
+- [Node.js](https://nodejs.org/en/download/) (See [build.yml](.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
 - [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
 
 ### 2. Compile to JavaScript

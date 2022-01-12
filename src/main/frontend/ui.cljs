@@ -376,12 +376,12 @@
     down?))
 
 (defn on-scroll
-  [node {:keys [on-load on-top-reached threhold]
-         :or {threhold 500}}]
+  [node {:keys [on-load on-top-reached threshold]
+         :or {threshold 500}}]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) threhold)
+        bottom-reached? (<= (- full-height scroll-top client-height) threshold)
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
     (when (and down? bottom-reached? on-load)
@@ -401,7 +401,7 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load on-top-reached threhold
+  [state list-element-id body {:keys [on-load on-top-reached threshold
                                       has-more more more-class]
                                :or {more-class "text-sm"}}]
   (rum/with-context [[t] i18n/*tongue-context*]

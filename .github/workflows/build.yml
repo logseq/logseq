@@ -44,6 +44,7 @@ jobs:
         with:
           java-version: 1.8
 
+      # This is the latest node version of we can run
       - name: Set up Node
         uses: actions/setup-node@v2
         with:

@@ -6,10 +6,9 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             [clojure.string :as string]
-            [electron.utils :refer [logger]]
+            [electron.utils :refer [logger fetch extract-zip] :as utils]
             [electron.configs :as cfgs]
-            [electron.window :refer [get-all-windows]]
-            [electron.utils :refer [*win fetch extract-zip] :as utils]))
+            [electron.window :refer [get-all-windows]]))
 
 ;; update & install
 ;;(def *installing-or-updating (atom nil))
@@ -46,20 +45,14 @@
       (emit :lsp-installed {:status :error :payload e})
       (throw (js/Error. :release-network-issue)))))
 
-(defn fetch-tag-release-asset
-  [repo tag])
-
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
     (p/let [^js res (fetch dl-url #js {:timeout 30000})
-            _ (if-not (.-ok res) (throw (js/Error. :download-network-issue)))
+            _ (when-not (.-ok res) (throw (js/Error. :download-network-issue)))
             frm-zip (p/create
                       (fn [resolve1 reject1]
-                        (let [headers (. res -headers)
-                              body (.-body res)
-                              total-size (js/parseInt (.get headers "content-length"))
-                              start-at (.now js/Date)
+                        (let [body (.-body res)
                               *downloaded (atom 0)
                               dest-basename (path/basename dl-url)
                               dest-basename (if-not (string/ends-with? dest-basename ".zip")
@@ -73,7 +66,7 @@
                                             (reset! *downloaded downloaded))))
                             (.on "error" (fn [^js e]
                                            (reject1 e)))
-                            (.on "end" (fn [^js e]
+                            (.on "end" (fn [^js _e]
                                          (.close dest-file)
                                          (let [dest-file (string/replace tmp-dest-file ".pending" "")]
                                            (fs/renameSync tmp-dest-file dest-file)
@@ -93,7 +86,7 @@
                                    "."
                                    (last (take-while #(pkg? (.join path zip-extracted-path %)) dirs))))
 
-            _ (if-not tmp-extracted-root
+            _ (when-not tmp-extracted-root
                 (throw (js/Error. :invalid-plugin-package)))
 
             tmp-extracted-root (.join path zip-extracted-path tmp-extracted-root)
@@ -133,7 +126,7 @@
       (debug (if updating? "Updating:" "Installing:") repo)
 
       (-> (p/create
-            (fn [resolve reject]
+            (fn [resolve _reject]
               ;;(reset! *installing-or-updating item)
               ;; get releases
               (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
@@ -157,7 +150,7 @@
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (if-not only-check (download-asset-zip item dl-url latest-version dest))
+                          _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
                           _ (debug "[" (if only-check "Checked" "Updated") "DONE] " latest-version)]
 
                     (emit :lsp-installed
