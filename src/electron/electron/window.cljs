@@ -101,49 +101,63 @@
 (defn setup-window-listeners!
   [^js win]
   (when win
-    (let [web-contents (. win -webContents)]
-      (.on web-contents "context-menu"
-           (fn
-             [_event params]
-             (let [menu (Menu.)
-                   suggestions (.-dictionarySuggestions ^js params)]
+    (let [web-contents (. win -webContents)
+          context-menu-handler
+          (fn [_event params]
+            (let [menu (Menu.)
+                  suggestions (.-dictionarySuggestions ^js params)]
 
-               (doseq [suggestion suggestions]
-                 (. menu append
-                    (MenuItem. (clj->js {:label
-                                         suggestion
-                                         :click
-                                         (fn [] (. web-contents replaceMisspelling suggestion))}))))
+              (doseq [suggestion suggestions]
+                (. menu append
+                   (MenuItem. (clj->js {:label
+                                        suggestion
+                                        :click
+                                        (fn [] (. web-contents replaceMisspelling suggestion))}))))
 
-               (when-let [misspelled-word (not-empty (.-misspelledWord ^js params))]
-                 (. menu append
-                    (MenuItem. (clj->js {:label
-                                         "Add to dictionary"
-                                         :click
-                                         (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
+              (when-let [misspelled-word (not-empty (.-misspelledWord ^js params))]
+                (. menu append
+                   (MenuItem. (clj->js {:label
+                                        "Add to dictionary"
+                                        :click
+                                        (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
 
-               (. menu popup))))
+              (. menu popup)))
 
+          new-win-handler
+          (fn [e url]
+            (let [url (if (string/starts-with? url "file:")
+                        (js/decodeURIComponent url) url)
+                  url (if-not win32? (string/replace url "file://" "") url)]
+              (.. logger (info "new-window" url))
+              (if (some #(string/includes?
+                           (.normalize path url)
+                           (.join path (. app getAppPath) %))
+                        ["index.html" "electron.html"])
+                (.info logger "pass-window" url)
+                (open-default-app! url open)))
+            (.preventDefault e))
 
-      (.on web-contents "new-window"
-           (fn [e url]
-             (let [url (if (string/starts-with? url "file:")
-                         (js/decodeURIComponent url) url)
-                   url (if-not win32? (string/replace url "file://" "") url)]
-               (.. logger (info "new-window" url))
-               (if (some #(string/includes?
-                            (.normalize path url)
-                            (.join path (. app getAppPath) %))
-                         ["index.html" "electron.html"])
-                 (.info logger "pass-window" url)
-                 (open-default-app! url open)))
-             (.preventDefault e)))
+          will-navigate-handler
+          (fn [e url]
+            (.preventDefault e)
+            (open-default-app! url open))]
 
-      (.on web-contents "will-navigate"
-           (fn [e url]
-             (.preventDefault e)
-             (open-default-app! url open)))
+      (doto web-contents
+        (.on "context-menu" context-menu-handler)
+        (.on "new-window" new-win-handler)
+        (.on "will-navigate" will-navigate-handler))
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))))))
+        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+
+      ;; clear
+      (fn []
+        (doto web-contents
+          (.off "context-menu" context-menu-handler)
+          (.off "new-window" new-win-handler)
+          (.off "will-navigate" will-navigate-handler))
+
+        (.off win "enter-full-screen")
+        (.off win "leave-full-screen")))
+    #()))
