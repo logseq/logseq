@@ -1469,7 +1469,9 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (:ui/show-empty-bullets? (state/get-config)) (not doc-mode?))
+         (and (or (mobile-util/is-native-platform?)
+                  (:ui/show-empty-bullets? (state/get-config)))
+              (not doc-mode?))
          bullet
 
          (or
