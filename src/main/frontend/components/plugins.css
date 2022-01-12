@@ -105,7 +105,7 @@
         background: transparent;
       }
 
-      &.sort-by, &.more-do {
+      &.sort-or-filter-by, &.more-do {
         padding: 0 4px;
       }
 

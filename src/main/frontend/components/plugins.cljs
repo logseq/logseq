@@ -183,7 +183,7 @@
           svg/folder)
 
         (when (and (not market?) unpacked?)
-          [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
+          [:span.flex.justify-center.text-xs.text-red-500.pt-2 (t :plugin/unpacked)])]
 
        [:div.r
         [:h3.head.text-xl.font-bold.pt-1.5
@@ -299,7 +299,7 @@
 (rum/defc panel-control-tabs
   < rum/static
   [t search-key *search-key category *category
-   sort-by *sort-by selected-unpacked-pkg
+   sort-or-filter-by *sort-or-filter-by selected-unpacked-pkg
    market? develop-mode? reload-market-fn]
 
   (let [*search-ref (rum/create-ref)]
@@ -351,38 +351,46 @@
          :value       (or search-key "")}]]
 
 
-      ;; sorter
+      ;; sorter & filter
       (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
           (ui/button
-            [:span (ui/icon "arrows-sort")]
-            :class (str (when-not (contains? #{:enabled :downloads} sort-by) "picked ") "sort-by")
+            [:span (ui/icon (if market? "arrows-sort" "filter"))]
+            :class (str (when-not (contains? #{:default :downloads} sort-or-filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
-        (let [aim-icon #(if (= sort-by %) "check" "circle")]
+        (let [aim-icon #(if (= sort-or-filter-by %) "check" "circle")]
           (if market?
             [{:title   (t :plugin/downloads)
-              :options {:on-click #(reset! *sort-by :downloads)}
+              :options {:on-click #(reset! *sort-or-filter-by :downloads)}
               :icon    (ui/icon (aim-icon :downloads))}
 
              {:title   (t :plugin/stars)
-              :options {:on-click #(reset! *sort-by :stars)}
+              :options {:on-click #(reset! *sort-or-filter-by :stars)}
               :icon    (ui/icon (aim-icon :stars))}
 
              {:title   (str (t :plugin/title) " (A - Z)")
-              :options {:on-click #(reset! *sort-by :letters)}
+              :options {:on-click #(reset! *sort-or-filter-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}]
 
-            [{:title   (t :plugin/enabled)
-              :options {:on-click #(reset! *sort-by :enabled)}
+            [{:title   (t :plugin/all)
+              :options {:on-click #(reset! *sort-or-filter-by :default)}
+              :icon    (ui/icon (aim-icon :default))}
+
+             {:title   (t :plugin/enabled)
+              :options {:on-click #(reset! *sort-or-filter-by :enabled)}
               :icon    (ui/icon (aim-icon :enabled))}
 
              {:title   (t :plugin/disabled)
-              :options {:on-click #(reset! *sort-by :disabled)}
+              :options {:on-click #(reset! *sort-or-filter-by :disabled)}
               :icon    (ui/icon (aim-icon :disabled))}
 
+             {:title   (t :plugin/unpacked)
+              :options {:on-click #(reset! *sort-or-filter-by :unpacked)}
+              :icon    (ui/icon (aim-icon :unpacked))}
+
              {:title   (t :plugin/update-available)
-              :options {:on-click #(reset! *sort-by :update-available)}
+              :options {:on-click #(reset! *sort-or-filter-by :update-available)}
               :icon    (ui/icon (aim-icon :update-available))}]))
         {})
 
@@ -520,7 +528,7 @@
 (rum/defcs installed-plugins
   < rum/static rum/reactive
     (rum/local "" ::search-key)
-    (rum/local :enabled ::sort-by)                          ;; enabled / disabled / letters / update-available
+    (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
@@ -529,13 +537,24 @@
         develop-mode? (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
-        *sort-by (::sort-by state)
+        *filter-by (::filter-by state)
         *search-key (::search-key state)
         *category (::category state)
+        default-filter-by? (= :default @*filter-by)
         filtered-plugins (when (seq installed-plugins)
                            (if (= @*category :themes)
                              (filter #(:theme %) installed-plugins)
                              (filter #(not (:theme %)) installed-plugins)))
+        filtered-plugins (if-not default-filter-by?
+                           (filter (fn [it]
+                                     (let [disabled (get-in it [:settings :disabled])]
+                                       (case @*filter-by
+                                         :enabled (not disabled)
+                                         :disabled disabled
+                                         :unpacked (not (:iir it))
+                                         :update-available (state/plugin-update-available? (:id it))
+                                         true))) filtered-plugins)
+                           filtered-plugins)
         filtered-plugins (if-not (string/blank? @*search-key)
                            (if-let [author (and (string/starts-with? @*search-key "@")
                                                 (subs @*search-key 1))]
@@ -545,15 +564,13 @@
                                :limit 30
                                :extract-fn :name))
                            filtered-plugins)
-        sorted-plugins (->> filtered-plugins
-                            (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)
-                                           k (if (= @*sort-by :disabled) (if (zero? k) 1 0) k)]
-                                       (update %1 k conj %2)) [[] []])
-                            (#(update % 0 (fn [coll]
-                                            (if (= @*sort-by :update-available)
-                                              (sort-by (fn [it] (if (state/plugin-update-available? (:id it)) -1 1)) coll)
-                                              (sort-by :iir coll)))))
-                            (flatten))]
+        sorted-plugins (if default-filter-by?
+                         (->> filtered-plugins
+                              (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
+                                         (update %1 k conj %2)) [[] []])
+                              (#(update % 0 (fn [coll] (sort-by :iir coll))))
+                              (flatten))
+                         filtered-plugins)]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
@@ -563,7 +580,7 @@
          t
          @*search-key *search-key
          @*category *category
-         @*sort-by *sort-by
+         @*filter-by *filter-by
          selected-unpacked-pkg
          false develop-mode? nil)
 
