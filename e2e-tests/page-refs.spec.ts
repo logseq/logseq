@@ -105,9 +105,9 @@ async function alias_test (page, page_name: string){
   // TODO: search clicking (alias property)
 }
 
-test('page alias', async ({ page }) => {
-  await alias_test(page, "p")
-})
+// test('page alias', async ({ page }) => {
+//   await alias_test(page, "p")
+// })
 
 
 test('page diacritic alias', async ({ page }) => {
