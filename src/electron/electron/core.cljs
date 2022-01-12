@@ -2,8 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open get-win-from-sender]]
-            [electron.configs :as cfgs]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -11,7 +10,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
             [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
@@ -246,7 +245,7 @@
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 
-               (.on app "activate" #(if @*win (.show win)))))))))
+               (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
   (js/console.log "Main - start")

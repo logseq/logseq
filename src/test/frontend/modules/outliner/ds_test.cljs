@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.ds-test
-  (:require [cljs-run-test :refer [run-test]]
-            [cljs.test :refer [deftest is use-fixtures] :as test]
+  (:require [cljs.test :refer [deftest is use-fixtures] :as test]
             [frontend.fixtures :as fixtures]
             [frontend.modules.outliner.datascript :as ds]))
 

@@ -1,8 +1,8 @@
 (ns electron.window
   (:require ["electron-window-state" :as windowStateKeeper]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
+            [electron.utils :refer [mac? win32? linux? dev? logger open]]
             [electron.configs :as cfgs]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session shell] :as electron]
+            ["electron" :refer [BrowserWindow app Menu MenuItem session shell] :as electron]
             ["path" :as path]
             ["url" :as URL]
             [electron.state :as state]
@@ -93,7 +93,7 @@
 (defn- open-default-app!
   [url default-open]
   (let [URL (.-URL URL)
-        parsed-url (URL. url)]
+        parsed-url (try (URL. url) (catch js/Error _ nil))]
     (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
       (.openExternal shell url)
       (when default-open (default-open url)))))
@@ -115,7 +115,7 @@
                                          :click
                                          (fn [] (. web-contents replaceMisspelling suggestion))}))))
 
-               (when-let [misspelled-word (.-misspelledWord ^js params)]
+               (when-let [misspelled-word (not-empty (.-misspelledWord ^js params))]
                  (. menu append
                     (MenuItem. (clj->js {:label
                                          "Add to dictionary"

@@ -1,13 +1,11 @@
 (ns frontend.handler.export-test
   ;; namespace local config for private function tests
   {:clj-kondo/config {:linters {:private-call {:level :off}}}}
-  (:require [cljs.test :refer [async deftest is testing use-fixtures are]]
+  (:require [cljs.test :refer [async deftest use-fixtures are]]
             [frontend.handler.export :as export]
-            [frontend.db.config :refer [test-db] :as config]
+            [frontend.db.config :as config]
             [frontend.handler.repo :as repo-handler]
-            [frontend.fixtures :as fixtures]
             [frontend.state :as state]
-            [clojure.string :as string]
             [promesa.core :as p]))
 
 (def test-files

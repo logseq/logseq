@@ -21,7 +21,7 @@
          (p/then
           (extract x)
           (fn [v]
-            (is (= y))
+            (is (= y v))
             (done)))))
 
 (deftest test-extract-blocks-pages

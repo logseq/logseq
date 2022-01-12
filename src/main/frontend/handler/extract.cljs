@@ -82,7 +82,7 @@
                             alias (if (string? alias) [alias] alias)
                             aliases (and alias
                                          (seq (remove #(= page-name (util/page-name-sanity-lc %))
-                                                      alias)))] 
+                                                      alias)))]
                         (cond->
                           (util/remove-nils
                            (assoc
@@ -146,7 +146,7 @@
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body :block/level))))]
+                      (map (fn [b] (dissoc b :block/title :block/body))))]
       [pages blocks])
     (catch js/Error e
       (log/error :exception e))))
