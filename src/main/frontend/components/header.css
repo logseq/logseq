@@ -218,6 +218,7 @@ html.is-native-ipad {
 
     #main-container {
         padding-top: 0px;
+    }
 
     #main-container-content {
         padding-top: 0px;
@@ -226,9 +227,9 @@ html.is-native-ipad {
     .cp__header {
       background-color: transparent !important;
       display: flex;
-
+      
       > .l {
-        background-color: var(--ls-primary-background-color);
+        /* background-color: var(--ls-primary-background-color); */
         padding-top: 20px;
       }
 
@@ -245,7 +246,7 @@ html.is-native-ipad {
     .ls-left-sidebar-open {
       .cp__header {
         > .l {
-          background-color: transparent;
+            /* background-color: transparent; */
         }
       }
     }
