@@ -261,7 +261,8 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (route/redirect-to-page! data)
+                      (do (route/redirect-to-page! data)
+                          (state/close-modal!))
                       :search
                       (let [q data]
                         (state/set-q! q)
@@ -275,8 +276,7 @@
                             (search-handler/search (state/get-current-repo) q opts)
                             (search-handler/search (state/get-current-repo) q))))
 
-                      nil)
-                    (state/close-modal!))
+                      nil))
        :on-shift-chosen (fn [{:keys [type data]}]
                           (case type
                             :page
@@ -295,7 +295,7 @@
                         :search [:div.flex-row.flex.search-item.font-medium
                                  svg/search
                                  [:span.ml-2 data]]
-                        :page (let [original-name (model/get-page-original-name data)]
+                        :page (when-let [original-name (model/get-page-original-name data)] ;; might be block reference
                                 (search-result-item "Page" original-name))
                         nil))}))])
 
