@@ -183,8 +183,7 @@
             (file-handler/alter-file (state/get-current-repo)
                                      path
                                      (str (string/trim value) "\n")
-                                     {:re-render-root? true})
-            (notification/show! "Saved file!" :success)))
+                                     {:re-render-root? true})))
 
         :else
         nil))))
