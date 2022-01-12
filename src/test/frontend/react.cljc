@@ -22,14 +22,14 @@
           (let [new-component (update component :watches conj react-ref)]
             (swap! react-components assoc comp-key new-component)
             (add-watch react-ref comp-key
-              (fn [_key _atom old-state new-state]
-                (when-not (= old-state new-state)
-                  (let [root-info (get-in @react-components [comp-key :root-info])]
-                    (let [{:keys [f comp-key]} root-info]
-                      (binding [*with-key* comp-key
-                                *root-info* root-info]
-                        (let [component (get @react-components comp-key)]
-                          (reset! (:result component) (f)))))))))))
+                       (fn [_key _atom old-state new-state]
+                         (when-not (= old-state new-state)
+                           (let [root-info (get-in @react-components [comp-key :root-info])
+                                 {:keys [f comp-key]} root-info]
+                             (binding [*with-key* comp-key
+                                       *root-info* root-info]
+                               (let [component (get @react-components comp-key)]
+                                 (reset! (:result component) (f))))))))))
         @react-ref)
 
       ;; Sometime react is not used in component by accident, return the val.
@@ -74,5 +74,3 @@
                (let [result# ~@body]
                  (reset! react-components {})
                  result#))))
-
-

@@ -1062,14 +1062,14 @@
                db-utils/group-by-page))))))
 
 (defn- pattern [name]
-  (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)"
+  (re-pattern (str "(?i)(^|[^\\[#0-9a-zA-Z]|((^|[^\\[])\\[))"
                    (util/regex-escape name)
-                   "(?!\\]\\])")))
+                   "($|[^0-9a-zA-Z])")))
 
 (defn get-page-unlinked-references
   [page]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (conn/get-conn repo)]
+    (when (conn/get-conn repo)
       (let [page (util/safe-page-name-sanity-lc page)
             page-id     (:db/id (db-utils/entity [:block/name page]))
             alias-names (get-page-alias-names repo page)
@@ -1085,7 +1085,7 @@
                                               (map :e))
                                          result (d/pull-many db block-attrs ids)]
                                      (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
-               nil)
+                      nil)
              react
              (sort-by-left-recursive)
              db-utils/group-by-page)))))

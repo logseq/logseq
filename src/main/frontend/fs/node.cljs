@@ -35,7 +35,7 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
+  [this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?] :as opts} stat]
   (if skip-compare?
     (p/catch
         (p/let [result (ipc/ipc "writeFile" repo path content)]
@@ -55,7 +55,7 @@
             ext (string/lower-case (util/get-file-ext path))
             file-page (db/get-file-page-id path)
             page-empty? (and file-page (db/page-empty? repo file-page))
-            db-content (or (db/get-file repo path) "")
+            db-content (or old-content (db/get-file repo path) "")
             contents-matched? (contents-matched? disk-content db-content)
             pending-writes (state/get-write-chan-length)]
       (cond

@@ -375,7 +375,7 @@
 
 (rum/defc page-inner
   "The inner div of page reference component
-   
+
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
@@ -2937,7 +2937,7 @@
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
-       :threhold 1000
+       :threshold 1000
        :has-more has-more?
        :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
 
