@@ -56,7 +56,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]))
+            [frontend.util.keycode :as keycode]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2955,6 +2956,16 @@
 
         (or ctrlKey metaKey)
         nil
+
+        ;; FIXME: On iOS, a backspace click to call keydown-backspace-handler
+        ;; does not work sometimes in an empty block, hence the empty block
+        ;; can't be deleted. Need to figure out why and find a better solution.
+        (and (mobile-util/native-ios?)
+             (= key "Backspace")
+             (= value ""))
+        (do
+          (util/stop e)
+          (delete-block! (state/get-current-repo) false))
 
         (and (= key "#")
              (and
