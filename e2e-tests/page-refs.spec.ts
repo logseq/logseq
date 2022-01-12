@@ -61,6 +61,7 @@ async function alias_test (page, page_name: string){
   await page.keyboard.press(hotkeyBack)
 
   // clicking opening test
+  await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
