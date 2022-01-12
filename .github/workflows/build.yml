@@ -79,7 +79,7 @@ jobs:
         run: yarn cache clean && yarn install
 
       - name: Run clj-kondo lint
-        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,external,db,context,components}
+        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar,logseq} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,fs,format,external,extensions,db,context,components}
 
       - name: Run ClojureScript test
         run: |

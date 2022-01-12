@@ -64,8 +64,7 @@
   ([item]
    (create-zotero-page item {}))
   ([item {:keys [block-dom-id insert-command? notification?]
-          :or {insert-command? true notification? true}
-          :as opt}]
+          :or {insert-command? true notification? true}}]
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
 

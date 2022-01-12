@@ -654,7 +654,7 @@
 
           :disabled
           (or downloading?
-              (and (not (empty? unchecked))
+              (and (seq unchecked)
                    (= (count unchecked) (count updates)))))])]))
 
 (defn open-select-theme!

@@ -1,6 +1,6 @@
 (ns frontend.extensions.video.youtube
   (:require [rum.core :as rum]
-            [cljs.core.async :refer [<! >! chan go go-loop] :as a]
+            [cljs.core.async :refer [<! chan go] :as a]
             [frontend.components.svg :as svg]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -32,7 +32,7 @@
                 (rum/dom-node state)
                 (clj->js
                  {:events
-                  {"onReady" (fn [e] (js/console.log id " ready"))}}))]
+                  {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
     (state/update-state! [:youtube/players]
                          (fn [players]
                            (assoc players id player)))))

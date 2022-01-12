@@ -46,7 +46,7 @@
                 (js/setTimeout #(load-and-render! state) 0)
                 state)
    :did-update load-and-render!}
-  [id s block? display?]
+  [id s block? _display?]
   (let [loading? (rum/react *loading?)]
     (when loading?
       (ui/loading "Loading"))
@@ -58,7 +58,7 @@
        s])))
 
 (defn html-export
-  [s block? display?]
+  [s block? _display?]
   (let [element (if block?
                   :div.latex
                   :span.latex-inline)]
@@ -66,9 +66,12 @@
                block?
                (util/format "$$%s$$" s)
 
+               ;; TODO: We never get to :else b/c this branch always evaluates as true
+               #_:clj-kondo/ignore
                :display?
                (util/format "$$%s$$" s)
 
+               #_:clj-kondo/ignore
                :else
                ;; inline
                (util/format "$%s$" s))]))

@@ -20,22 +20,21 @@
 (def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
 
 (rum/defc zotero-search-item [{:keys [data] :as item} id]
-  (let [[is-creating-page set-is-creating-page!] (rum/use-state false)]
-    (let [title (:title data)
-          type (:item-type data)
-          abstract (str (subs (:abstract-note data) 0 200) "...")]
+  (let [[is-creating-page set-is-creating-page!] (rum/use-state false)
+        title (:title data)
+        type (:item-type data)
+        abstract (str (subs (:abstract-note data) 0 200) "...")]
+    [:div.zotero-search-item.px-2.py-4.border-b.cursor-pointer.border-solid.last:border-none.relative
+     {:on-click (fn [] (go
+                        (set-is-creating-page! true)
+                        (<!
+                         (zotero-handler/create-zotero-page item {:block-dom-id id}))
+                        (set-is-creating-page! false)))}
+     [[:div [[:span.font-bold.mb-1.mr-1 title]
+             [:span.zotero-search-item-type.text-xs.p-1.rounded type]]]
+      [:div.text-sm abstract]]
 
-      [:div.zotero-search-item.px-2.py-4.border-b.cursor-pointer.border-solid.last:border-none.relative
-       {:on-click (fn [] (go
-                           (set-is-creating-page! true)
-                           (<!
-                            (zotero-handler/create-zotero-page item {:block-dom-id id}))
-                           (set-is-creating-page! false)))}
-       [[:div [[:span.font-bold.mb-1.mr-1 title]
-               [:span.zotero-search-item-type.text-xs.p-1.rounded type]]]
-        [:div.text-sm abstract]]
-
-       (when is-creating-page [:div.zotero-search-item-loading-indicator [:span.animate-spin-reverse  svg/refresh]])])))
+     (when is-creating-page [:div.zotero-search-item-loading-indicator [:span.animate-spin-reverse  svg/refresh]])]))
 
 (rum/defc zotero-search
   [id]
@@ -446,7 +445,7 @@
   (rum/local (setting/profile) ::profile)
   rum/reactive
   {:should-update
-   (fn [old-state new-state]
+   (fn [old-state _new-state]
      (let [all-profiles (setting/all-profiles)]
        (not= all-profiles @(::all-profiles old-state))))}
   [state]

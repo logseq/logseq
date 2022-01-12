@@ -90,6 +90,8 @@
                      (or references default-references)))
 
 ;; Org-roam
+;; TODO: recur is in wrong place. Unclear what the intent is but likely a bug
+#_:clj-kondo/ignore
 (defn get-tags-from-definition
   [ast]
   (loop [ast ast]

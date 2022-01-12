@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -137,8 +136,7 @@
                           (pdf-utils/clear-all-selection))
 
                         "link"
-                        (do
-                          (pdf-assets/goto-block-ref! highlight))
+                        (pdf-assets/goto-block-ref! highlight)
 
                         "del"
                         (do
@@ -158,8 +156,7 @@
                               (pdf-assets/copy-hl-ref! highlight))
 
                             ;; update highlight
-                            (do
-                              (upd-hl! (assoc highlight :properties properties)))))))
+                            (upd-hl! (assoc highlight :properties properties))))))
 
                     (clear-ctx-tip!))}
 
@@ -181,8 +178,7 @@
   [^js viewer vw-hl hl
    {:keys [show-ctx-tip!]}]
 
-  (let [id (:id hl)
-        {:keys [rects]} (:position vw-hl)
+  (let [{:keys [rects]} (:position vw-hl)
         {:keys [color]} (:properties hl)
         open-tip! (fn [^js/MouseEvent e]
                     (.preventDefault e)
@@ -225,7 +221,7 @@
                          (.resizable
                            (bean/->js
                              {:edges     {:left true :right true :top true :bottom true}
-                              :listeners {:start (fn [^js/MouseEvent e]
+                              :listeners {:start (fn [^js/MouseEvent _e]
                                                    (rum/set-ref! *dirty true))
 
                                           :end   (fn [^js/MouseEvent e]
@@ -319,7 +315,7 @@
        ))])
 
 (rum/defc pdf-highlight-area-selection
-  [^js viewer {:keys [clear-ctx-tip! show-ctx-tip!] :as ops}]
+  [^js viewer {:keys [show-ctx-tip!]}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
         *el (rum/use-ref nil)
@@ -633,7 +629,7 @@
         })]))
 
 (rum/defc pdf-settings
-  [^js viewer theme {:keys [hide-settings! select-theme! t]}]
+  [^js _viewer theme {:keys [hide-settings! select-theme! t]}]
 
   (let [*el-popup (rum/use-ref nil)
         [area-dashed? set-area-dashed?] (use-atom *area-dashed?)]
@@ -678,7 +674,7 @@
 
 (rum/defc pdf-outline-item
   [^js viewer
-   {:keys [title items href parent dest expanded] :as node}
+   {:keys [title items parent dest expanded]}
    {:keys [upt-outline-node!] :as ops}]
   (let [has-child? (seq items)
         expanded? (boolean expanded)]
@@ -727,12 +723,13 @@
       (rum/use-effect!
         (fn []
           (p/catch
-            (p/let [^js data (.getOutline pdf-doc)]
-              (when-let [data (and data (.map data (fn [^js it]
-                                                     (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
-                                                     (set! (.-expanded it) false)
-                                                     it)))])
-              (set-outline-data! (bean/->clj data)))
+           (p/let [^js data (.getOutline pdf-doc)]
+                  #_:clj-kondo/ignore
+                  (when-let [data (and data (.map data (fn [^js it]
+                                                         (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
+                                                         (set! (.-expanded it) false)
+                                                         it)))])
+                  (set-outline-data! (bean/->clj data)))
 
             (fn [e]
               (js/console.error "[Load outline Error]" e))))
@@ -784,7 +781,7 @@
                :on-click
                (fn []
                  (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
-                       text (string/replace-all text #"[\n\t]+" "\n")]
+                       text (string/replace text #"[\n\t]+" "\n")]
                    (front-utils/copy-to-clipboard! text)
                    (notification/show! "Copied!" :success)
                    (close-fn!))))]])
@@ -921,7 +918,6 @@
   ;;(dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
-        [area-dashed?, set-area-dashed?] (use-atom *area-dashed?)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
         [page-ready?, set-page-ready!] (rum/use-state false)]
@@ -959,9 +955,7 @@
     (rum/use-effect!
       (fn []
         (when-let [^js viewer (:viewer state)]
-          (let [^js el (rum/deref *el-ref)
-
-                fn-textlayer-ready
+          (let [fn-textlayer-ready
                 (fn [^js p]
                   (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))
 
@@ -1005,8 +999,6 @@
   (let [*doc-ref (rum/use-ref nil)
         [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil})
-        repo-cur (state/get-current-repo)
-        repo-dir (config/get-repo-dir repo-cur)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! {:initial-hls [] :latest-hls latest-hls}))]
 
@@ -1044,7 +1036,6 @@
     (rum/use-effect!
       (fn []
         (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
-              own-doc (rum/deref *doc-ref)
               opts {:url           url
                     :ownerDocument js/document
                     :cMapUrl       "./js/pdfjs/cmaps/"

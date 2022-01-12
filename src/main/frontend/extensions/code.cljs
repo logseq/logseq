@@ -132,7 +132,6 @@
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
-            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]

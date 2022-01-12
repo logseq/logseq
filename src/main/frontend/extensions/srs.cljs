@@ -11,7 +11,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
-            [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.date :as date]
             [frontend.commands :as commands]
@@ -123,11 +122,6 @@
     (contains? refs card-entity)))
 
 (declare get-root-block)
-(defn- card-group-by-repeat [cards]
-  (let [groups (group-by
-                #(get (get-block-card-properties (get-root-block %)) card-repeats-property)
-                cards)]
-    groups))
 
 ;;; ================================================================
 ;;; sr algorithm (sm-5)
@@ -169,10 +163,9 @@
 
 (defn next-interval
   "return [next-interval repeats next-ef of-matrix]"
-  [last-interval repeats ef quality of-matrix]
+  [_last-interval repeats ef quality of-matrix]
   (assert (and (<= quality 5) (>= quality 0)))
   (let [ef (or ef 2.5)
-        last-interval (if (or (nil? last-interval) (<= last-interval 0)) 1 last-interval)
         next-ef (next-ef ef quality)
         next-of-matrix (next-of-matrix of-matrix repeats quality (learning-fraction) ef)
         next-interval (interval repeats next-ef next-of-matrix)]
@@ -215,9 +208,9 @@
 
 (deftype Sided-Cloze-Card [block]
   ICard
-  (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
+  (get-root-block [_this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
-  (show-cycle [this phase]
+  (show-cycle [_this phase]
     (let [blocks (-> (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
@@ -230,7 +223,7 @@
         3
         {:value blocks :next-phase 1})))
 
-  (show-cycle-config [this phase]
+  (show-cycle-config [_this phase]
     (case phase
       1
       {}
@@ -254,28 +247,28 @@
   ([repo query-string {:keys [disable-reactive? use-cache?]
                        :or {use-cache? true}}]
    (when (string? query-string)
-     (let [query-string (template/resolve-dynamic-template! query-string)]
-       (let [{:keys [query sort-by] :as result} (query-dsl/parse repo query-string)]
-         (let [query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
-                              (if (coll? (first query))
-                                query
-                                [query]))]
-           (when-let [query (query-dsl/query-wrapper query* true)]
-             (let [result (react/react-query repo
-                                             {:query query}
-                                             (merge
-                                              {:use-cache? use-cache?}
-                                              (cond->
-                                                (when sort-by
-                                                  {:transform-fn sort-by})
-                                                disable-reactive?
-                                                (assoc :disable-reactive? true))))]
-               (when result
-                 (flatten (util/react result)))))))))))
+     (let [query-string (template/resolve-dynamic-template! query-string)
+           {:keys [query sort-by]} (query-dsl/parse repo query-string)
+           query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
+                          (if (coll? (first query))
+                            query
+                            [query]))]
+       (when-let [query (query-dsl/query-wrapper query* true)]
+         (let [result (react/react-query repo
+                                         {:query query}
+                                         (merge
+                                          {:use-cache? use-cache?}
+                                          (cond->
+                                           (when sort-by
+                                             {:transform-fn sort-by})
+                                           disable-reactive?
+                                           (assoc :disable-reactive? true))))]
+           (when result
+             (flatten (util/react result)))))))))
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
-  [repo blocks time]
+  [_repo blocks time]
   (let [filtered-result (filterv (fn [b]
                                    (let [props (:block/properties b)
                                          next-sched (get props card-next-schedule-property)
@@ -303,19 +296,19 @@
         props (get-block-card-properties block)
         last-interval (or (util/safe-parse-float (get props card-last-interval-property)) 0)
         repeats (or (util/safe-parse-int (get props card-repeats-property)) 0)
-        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)]
-    (let [[next-interval next-repeats next-ef of-matrix*]
-          (next-interval last-interval repeats last-ef score @of-matrix)
-          next-interval* (if (< next-interval 0) 0 next-interval)
-          next-schedule (tc/to-string (t/plus (tl/local-now) (t/hours (* 24 next-interval*))))
-          now (tc/to-string (tl/local-now))]
-      {:next-of-matrix of-matrix*
-       card-last-interval-property next-interval
-       card-repeats-property next-repeats
-       card-last-easiness-factor-property next-ef
-       card-next-schedule-property next-schedule
-       card-last-reviewed-property now
-       card-last-score-property score})))
+        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)
+        [next-interval next-repeats next-ef of-matrix*]
+        (next-interval last-interval repeats last-ef score @of-matrix)
+        next-interval* (if (< next-interval 0) 0 next-interval)
+        next-schedule (tc/to-string (t/plus (tl/local-now) (t/hours (* 24 next-interval*))))
+        now (tc/to-string (tl/local-now))]
+    {:next-of-matrix of-matrix*
+     card-last-interval-property next-interval
+     card-repeats-property next-repeats
+     card-last-easiness-factor-property next-ef
+     card-next-schedule-property next-schedule
+     card-last-reviewed-property now
+     card-last-score-property score}))
 
 (defn- operation-score!
   [card score]
@@ -346,12 +339,7 @@
     (let [review-count (count (flatten (vals review-records)))
           review-cards-count (count review-cards)
           score-5-count (count (get review-records 5))
-          score-4-count (count (get review-records 4))
-          score-3-count (count (get review-records 3))
-          score-2-count (count (get review-records 2))
-          score-1-count (count (get review-records 1))
-          score-0-count (count (get review-records 0))
-          skip-count (count (get review-records "skip"))]
+          score-1-count (count (get review-records 1))]
       (editor-handler/paste-block-tree-after-target
        (:db/id card-query-block) false
        [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
@@ -364,25 +352,6 @@
 
 ;;; ================================================================
 ;;; UI
-
-(defn- score-help-info [days-3 days-4 days-5]
-  (ui/tippy {:html [:div
-                    [:p.text-sm "0-2: you have forgotten this card."]
-                    [:p.text-sm "3-5: you remember this card."]
-                    [:p.text-sm "0: completely forgot."]
-                    [:p.text-sm "1: it still takes a while to recall even after seeing the answer."]
-                    [:p.text-sm "2: immediately recall after seeing the answer."]
-                    [:p.text-sm
-                     (util/format "3: it takes a while to recall. (will reappear after %d days)" days-3)]
-                    [:p.text-sm
-                     (util/format "4: you recall this after a little thought. (will reappear after %d days)"
-                                  days-4)]
-                    [:p.text-sm
-                     (util/format "5: you remember it easily. (will reappear after %d days)" days-5)]]
-             :class "tippy-hover"
-             :interactive true
-             :disabled false}
-            (svg/info)))
 
 (defn- dec-cards-due-count!
   []
@@ -397,9 +366,8 @@
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
   (if (>= (inc @*card-index) (count cards))
     (when cb
-      (do
-        (swap! *card-index inc)
-        (cb @*review-records)))
+      (swap! *card-index inc)
+      (cb @*review-records))
     (do
       (swap! *card-index inc)
       (reset! *phase 1)))
@@ -438,7 +406,6 @@
                    state)}
   [state blocks {preview? :preview?
                  modal? :modal?
-                 global? :global?
                  cb :callback}
    card-index]
   (let [cards (map ->card blocks)
@@ -482,29 +449,26 @@
                  :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
-               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
-                     interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
-                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                 [:div.flex.flex-row.justify-between
-                  (btn-with-shortcut {:btn-text   "Forgotten"
-                                      :shortcut   "f"
-                                      :id         "card-forgotten"
-                                      :background "red"
-                                      :on-click   (fn []
-                                                    (score-and-next-card 1 card card-index cards phase review-records cb)
-                                                    (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                      (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+               [:div.flex.flex-row.justify-between
+                (btn-with-shortcut {:btn-text   "Forgotten"
+                                    :shortcut   "f"
+                                    :id         "card-forgotten"
+                                    :background "red"
+                                    :on-click   (fn []
+                                                  (score-and-next-card 1 card card-index cards phase review-records cb)
+                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                                    (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-                  (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
-                                      :shortcut "t"
-                                      :id       "card-recall"
-                                      :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
+                (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+                                    :shortcut "t"
+                                    :id       "card-recall"
+                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
 
-                  (btn-with-shortcut {:btn-text   "Remembered"
-                                      :shortcut   "r"
-                                      :id         "card-remembered"
-                                      :background "green"
-                                      :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})]))]
+                (btn-with-shortcut {:btn-text   "Remembered"
+                                    :shortcut   "r"
+                                    :id         "card-remembered"
+                                    :background "green"
+                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})])]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
@@ -569,7 +533,7 @@
 (rum/defcs cards
   < rum/reactive
   {:will-mount (fn [state]
-                 (let [[config options] (:rum/args state)
+                 (let [[_config options] (:rum/args state)
                        repo (state/get-current-repo)
                        query-string (string/join ", " (:arguments options))
                        blocks (query repo query-string)]
@@ -577,7 +541,7 @@
                           :query-string query-string
                           :query-result blocks)))}
   (rum/local 0 ::card-index)
-  [state config options]
+  [state config _options]
   (let [repo (state/get-current-repo)
         query-string (:query-string state)
         card-index (::card-index state)
