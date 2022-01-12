@@ -413,11 +413,11 @@
                    {:title   [:span (ui/icon "file-code") "Open Preferences"]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath (str root "/preferences.json")))}}
+                                      (js/apis.openPath (str root "/preferences.json")))}}
                    {:title   [:span (ui/icon "bug") "Open " [:code " ~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath root))}}]))
+                                      (js/apis.openPath root))}}]))
         {})
 
       ;; developer
@@ -646,10 +646,12 @@
 
           :on-click
           #(when-not downloading?
-             (state/set-state! :plugin/updates-downloading? true)
-             (plugin-handler/check-or-update-marketplace-plugin
-               (assoc (state/get-next-selected-coming-update) :only-check false)
-               (fn [^js e] (notification/show! e :error))))
+             (plugin-handler/open-updates-downloading)
+             (if-let [n (state/get-next-selected-coming-update)]
+               (plugin-handler/check-or-update-marketplace-plugin
+                 (assoc n :only-check false)
+                 (fn [^js e] (notification/show! e :error)))
+               (plugin-handler/close-updates-downloading)))
 
           :disabled
           (or downloading?

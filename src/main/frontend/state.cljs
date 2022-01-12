@@ -1015,7 +1015,7 @@
                   (ipc/ipc "userAppCfgs")
                   (:electron/user-cfgs @state))
            cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
-     (set-state! :electron/user-cfgs cfgs))))
+          (set-state! :electron/user-cfgs cfgs))))
 
 (defn setup-electron-updater!
   []
@@ -1694,10 +1694,10 @@
 (defn get-enabled-installed-plugins
   [theme?]
   (filterv
-   #(and (:iir %)
-         (not (get-in % [:settings :disabled]))
-         (= (boolean theme?) (:theme %)))
-   (vals (:plugin/installed-plugins @state))))
+    #(and (:iir %)
+          (not (get-in % [:settings :disabled]))
+          (= (boolean theme?) (:theme %)))
+    (vals (:plugin/installed-plugins @state))))
 
 (defn lsp-enabled?-or-theme
   []
@@ -1709,7 +1709,9 @@
     (let [pending? (boolean (seq (:plugin/updates-pending @state)))]
       (swap! state update :plugin/updates-pending dissoc id)
       (if updated?
-        (swap! state update :plugin/updates-coming dissoc id)
+        (if-let [error (:error-code payload)]
+          (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
+          (swap! state update :plugin/updates-coming dissoc id))
         (swap! state update :plugin/updates-coming assoc id payload))
       (pub-event! [:plugin/consume-updates id pending? updated?]))))
 
@@ -1731,10 +1733,8 @@
   []
   (when-let [updates (all-available-coming-updates)]
     (let [unchecked (:plugin/updates-unchecked @state)]
-      (first
-       (if (seq unchecked)
-         (filter #(not (contains? unchecked (:id %))) updates)
-         updates)))))
+      (first (filter #(and (not (and (seq unchecked) (contains? unchecked (:id %))))
+                           (not (:error-code %))) updates)))))
 
 (defn set-unchecked-update
   [id unchecked?]
@@ -1743,6 +1743,13 @@
 (defn reset-unchecked-update
   []
   (swap! state assoc :plugin/updates-unchecked #{}))
+
+(defn reset-all-updates-state
+  []
+  (swap! state assoc
+         :plugin/updates-pending                {}
+         :plugin/updates-coming                 {}
+         :plugin/updates-downloading?           false))
 
 (defn sub-right-sidebar-blocks
   []
