@@ -31,7 +31,10 @@
   (ui/with-shortcut :go/home "left"
     [:a.button
      {:href     (rfe/href :home)
-      :on-click route-handler/go-to-journals!}
+      :on-click #(do
+                   (when (mobile-util/native-iphone?)
+                     (state/set-left-sidebar-open! false))
+                   (route-handler/go-to-journals!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login
