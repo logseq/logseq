@@ -260,10 +260,6 @@ html.is-native-ipad {
     .cp__right-sidebar-topbar {
         padding-top: 37px;
     }
-
-    .ui__modal {
-        top: 20vh;
-    }
   }
 
 html.is-native-iphone {
