@@ -59,7 +59,7 @@
 
                 (when-not mobile?
                   [:td [:a.text-sm
-                       {:on-click (fn [e]
+                       {:on-click (fn [_e]
                                     (export-handler/download-file! file))}
                        [:span (tongue :download)]]])]))]]))]))
 

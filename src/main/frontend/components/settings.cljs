@@ -466,7 +466,7 @@
                      (route-handler/redirect! {:to :shortcut-setting}))
     :-for         "customize_shortcuts"}))
 
-(defn zotero-settings-row [t]
+(defn zotero-settings-row [_t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "zotero_settings"}
@@ -482,7 +482,7 @@
         (state/close-settings!)
         (route-handler/redirect! {:to :zotero-setting})))]]])
 
-(defn auto-push-row [t current-repo enable-git-auto-push?]
+(defn auto-push-row [_t current-repo enable-git-auto-push?]
   (when (and current-repo (string/starts-with? current-repo "https://"))
     (toggle "enable_git_auto_push"
             "Enable Git auto push"
@@ -569,7 +569,6 @@
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
-        github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
         developer-mode? (state/sub [:ui/developer-mode?])
@@ -663,7 +662,7 @@
            [:div.panel-wrap.is-advanced
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
-            (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+            (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
             (when (util/electron?) (plugin-system-switcher-row t))
             (clear-cache-row t)
 

@@ -1,6 +1,5 @@
 (ns frontend.components.command-palette
-  (:require [clojure.string :as str]
-            [frontend.handler.command-palette :as cp]
+  (:require [frontend.handler.command-palette :as cp]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.context.i18n :as i18n]
@@ -14,7 +13,7 @@
 (defn translate [t {:keys [id desc]}]
   (when id
     (let [desc-i18n (t (shortcut-helper/decorate-namespace id))]
-      (if (str/starts-with? desc-i18n "{Missing key")
+      (if (string/starts-with? desc-i18n "{Missing key")
         desc
         desc-i18n))))
 
@@ -23,7 +22,7 @@
 
 (rum/defc render-command
   [{:keys [id shortcut] :as cmd} chosen?]
-  (let [first-shortcut (first (str/split shortcut #" \| "))]
+  (let [first-shortcut (first (string/split shortcut #" \| "))]
     (rum/with-context [[t] i18n/*tongue-context*]
                       (let [desc (translate t cmd)]
                         [:div.inline-grid.grid-cols-4.gap-x-4.w-full
@@ -56,7 +55,7 @@
 
        [:div.command-results-wrap
         (ui/auto-complete
-         (if (str/blank? @input)
+         (if (string/blank? @input)
            (cp/top-commands limit)
            (get-matched-commands commands @input limit t))
          {:item-render render-command

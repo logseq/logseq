@@ -3,7 +3,6 @@
             [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
-            [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model-db]
@@ -17,7 +16,7 @@
             [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
-  [filters-atom close-fn references page-name]
+  [filters-atom _close-fn references page-name]
   [:div.filters
    [:div.sm:flex.sm:items-start
     [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -74,7 +73,7 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name marker?]
+  [state page-name _marker?]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
@@ -179,7 +178,7 @@
                         (first (:rum/args state)))]
                    (count rfs))))
        (render-fn state)))}
-  [state page-name n-ref]
+  [state page-name _n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)]
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks

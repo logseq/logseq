@@ -27,9 +27,10 @@
      :page page
      :content result}))
 
-;; TODO: Do we want to pass repo here?
 (defn build-blocks-indice
-  [_repo]
+  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
+  #_:clj-kondo/ignore
+  [repo]
   (->> (db/get-all-block-contents)
        (map block->index)
        (remove nil?)

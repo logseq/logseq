@@ -1,5 +1,7 @@
 (ns frontend.db.model
   "Core db functions."
+  ;; TODO: Remove this config once how repos are passed to this ns are standardized
+  {:clj-kondo/config {:linters {:unused-binding {:level :off}}}}
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]

@@ -244,7 +244,7 @@
         (gobj/set textarea-ref codemirror-ref-name editor))
       (let [element (.getWrapperElement editor)]
         (when (= mode "calc")
-          (.on editor "change" (fn [_cm e]
+          (.on editor "change" (fn [_cm _e]
                                  (let [new-code (.getValue editor)]
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [_cm e]
@@ -290,7 +290,7 @@
    :did-update (fn [state]
                  (load-and-render! state)
                  state)}
-  [state config id attr code theme options]
+  [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")

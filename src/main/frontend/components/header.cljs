@@ -2,11 +2,8 @@
   (:require [frontend.components.export :as export]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.page :as page]
-            [clojure.string :as str]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
-            [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
@@ -23,9 +20,7 @@
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.components.widgets :as widgets]
-            [frontend.handler.web.nfs :as nfs-handler]))
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -66,10 +61,8 @@
      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
-  [{:keys [me current-repo t default-home]}]
-  (let [projects (state/sub [:me :projects])
-        developer-mode? (state/sub [:ui/developer-mode?])
-        logged? (state/logged?)
+  [{:keys [current-repo t]}]
+  (let [logged? (state/logged?)
         page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
@@ -177,7 +170,7 @@
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
-                                        (or (.. target -classList (contains "cp__header"))))
+                                        (.. target -classList (contains "cp__header")))
                                (js/window.apis.toggleMaxOrMinActiveWindow))))
         :style           {:fontSize  50
                           :transform (str "translateY(" (or (:offset-top vw-state) 0) "px)")}}
@@ -225,7 +218,7 @@
                   "Yes"
                   :on-click (fn []
                               (state/close-modal!)
-                              (nfs-handler/refresh! (state/get-current-repo) repo/refresh-cb)))]]))}
+                              (nfs/refresh! (state/get-current-repo) repo/refresh-cb)))]]))}
            (if refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh]

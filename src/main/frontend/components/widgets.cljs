@@ -1,7 +1,5 @@
 (ns frontend.components.widgets
   (:require [clojure.string :as string]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile]
             [frontend.context.i18n :as i18n]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -88,7 +86,7 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
      [:h1.title (t :on-boarding/add-graph)]
-     (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
+     (let [nfs-supported? (or (nfs/supported?) (mobile-util/is-native-platform?))]
        (if (mobile-util/is-native-platform?)
          [:div.text-sm
           (ui/button "Open a local directory"
@@ -142,7 +140,7 @@
 (rum/defc android-permission-alert
   []
   (when (mobile-util/native-android?)
-    (rum/with-context [[t] i18n/*tongue-context*]
+    (rum/with-context [[_t] i18n/*tongue-context*]
       [:div.flex.flex-col
        [:h1.title "Storage access permission"]
        [:div.text-sm
@@ -163,8 +161,7 @@
 
 (rum/defcs add-graph <
   [state & {:keys [graph-types]
-            :or {graph-types [:local :github]}
-            :as opts}]
+            :or {graph-types [:local :github]}}]
   (let [github-authed? (state/github-authed?)
         generate-f (fn [x]
                      (case x
@@ -184,7 +181,7 @@
                              (keep generate-f)
                              (vec)
                              (interpose [:b.mt-10.mb-5.opacity-50 "OR"]))]
-    (rum/with-context [[t] i18n/*tongue-context*]
+    (rum/with-context [[_t] i18n/*tongue-context*]
       [:div.p-8.flex.flex-col available-graph])))
 
 (rum/defc demo-graph-alert

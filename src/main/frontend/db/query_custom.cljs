@@ -25,10 +25,11 @@
   ([query]
    (custom-query query {}))
   ([query query-opts]
-   (when-let [_query' (cond
+   #_:clj-kondo/ignore
+   (when-let [query' (cond
                        (and (string? query)
                             (not (string/blank? query)))
-                        (reader/read-string query)
+                       (reader/read-string query)
 
                        (map? query)
                        query

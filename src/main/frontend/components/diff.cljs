@@ -167,7 +167,7 @@
               repo
               path
               remote-latest-commit
-              (fn [{:keys [repo-url path ref content]}]
+              (fn [{:keys [repo-url path content]}]
                 (p/let [content (encrypt/decrypt content)]
                   (swap! state/state
                          assoc-in [:github/contents repo-url remote-latest-commit path] content)))
@@ -278,7 +278,7 @@
         :on-click
         (fn []
           (when-let [value @disk-value]
-            (file/alter-file repo path @disk-value
+            (file/alter-file repo path value
                             {:re-render-root? true
                              :skip-compare? true}))
           (state/close-modal!)))]

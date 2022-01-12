@@ -1,6 +1,5 @@
 (ns frontend.components.onboarding
-  (:require [frontend.components.shortcut :as shortcut]
-            [frontend.components.svg :as svg]
+  (:require [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
