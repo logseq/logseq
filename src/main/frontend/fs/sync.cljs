@@ -16,6 +16,18 @@
             [frontend.util.persist-var :as persist-var]
             [rum.core :as rum]))
 
+;;; Commentary
+;;; file-sync related local files/dirs:
+;;; - logseq/graphs-txid.edn
+;;;   this file contains graph-uuid & transaction-id
+;;;   graph-uuid: the unique identifier of the graph on the server
+;;;   transaction-id: sync progress of local files
+;;; - logseq/version-files
+;;;   downloaded version-files
+;;; files included by `get-ignore-files` will not be synchronized, see also `get-ignore-files`
+;;; files in these `get-monitored-dirs` dirs will be synchronized.
+
+
 ;;; TODO: add some spec validate
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
@@ -252,6 +264,7 @@
   (get-remote-all-files-meta [this graph-uuid] "get all remote files' metadata")
   (get-remote-files-meta [this graph-uuid filepaths] "get remote files' metadata")
   (get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
+  (get-remote-file-versions [this graph-uuid filepath] "get file's version list")
   (list-remote-graphs [this] "list all remote graphs")
   (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid]")
   (create-graph [this graph-name] "create graph"))
@@ -406,6 +419,8 @@
                                  (assoc :GraphName graph-name-opt)
                                  (seq graph-uuid-opt)
                                  (assoc :GraphUUID graph-uuid-opt))))
+  (get-remote-file-versions [this graph-uuid filepath]
+    (.request this "get_file_version_list" {:GraphUUID graph-uuid :File filepath}))
   (list-remote-graphs [this]
     (.request this "list_graphs"))
 
@@ -440,6 +455,7 @@
 (defn- update-txn [^FileTxnSet filetxnset txn]
   (let [{:keys [TXType TXContent]} txn]
     (let [files (->> (string/split-lines TXContent)
+                     (remove empty?)
                      (mapv #(remove-user-graph-uuid-prefix %)))]
       (case TXType
         "update_files"
@@ -608,7 +624,7 @@
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
   ILocal->RemoteSync
-  (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*"})
+  (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"logseq/version-files/.*"})
   (get-monitored-dirs [_] #{"assets/" "journals/" "logseq/" "pages/"})
   (stop-local->remote! [_] (async/close! stop-chan))
 
@@ -709,7 +725,6 @@
 
                 (or need-sync-remote unknown) r))))))))
 
-;;; TODO: add synced-files history
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
                     ^:mutable history]
   Object
