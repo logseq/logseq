@@ -75,7 +75,6 @@ async function alias_test (page, page_name: string){
 
   const results = await page.$$('#ui__ac-inner .block')
   expect(results.length).toEqual(3) // page + block + alias property
-  await page.pause()
 
   // test search results
   expect(await results[0].innerText()).toContain("Alias -> " + target_name)
@@ -86,20 +85,23 @@ async function alias_test (page, page_name: string){
   expect(await results[2].innerText()).toContain("alias:: [[" + alias_name + "]]")
 
   // test search entering (page)
-  await page.keyboard.press("Enter")
+  page.keyboard.press("Enter")
+  await page.waitForNavigation()
   await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
-  await page.keyboard.press(hotkeyBack)
 
   // test search clicking (block)
   await page.click('#search-button')
   await page.waitForSelector('[placeholder="Search or create page"]')
   await page.fill('[placeholder="Search or create page"]', alias_name)
   await page.waitForTimeout(500)
-  await page.click(":nth-match(.menu-link, 1)")
+  page.click(":nth-match(.menu-link, 2)")
+  await page.waitForNavigation()
   await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
   await page.keyboard.press(hotkeyBack)
+
+  // TODO: search clicking (alias property)
 }
 
 test('page alias', async ({ page }) => {
