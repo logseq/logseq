@@ -43,8 +43,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (string/lower-case word)
-                                   lc-content (string/lower-case content)]
+                                   lc-word (util/search-normalize word)
+                                   lc-content (util/search-normalize content)]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))
