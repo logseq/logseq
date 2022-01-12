@@ -211,6 +211,10 @@
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
 
+(defmethod handle :go/plugins-waiting-lists [_]
+  (plugin/open-waiting-updates-modal!))
+
+
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
 
@@ -236,16 +240,32 @@
     (util/make-el-into-viewport input)))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
-  (when-let [coming (get-in @state/state [:plugin/updates-coming id])]
-    (notification/show!
-      (str "Checked: " (:title coming))
-      :success))
+  (let [downloading? (:plugin/updates-downloading? @state/state)]
 
-  ;; try to start consume pending item
-  (when-let [n (second (first (:plugin/updates-pending @state/state)))]
-    (plugin-handler/check-or-update-marketplace-plugin
-      (assoc n :only-check true)
-      (fn [^js e] (js/console.error "[Check Err]" n e)))))
+    (when-let [coming (and (not downloading?)
+                           (get-in @state/state [:plugin/updates-coming id]))]
+      (notification/show!
+        (str "Checked: " (:title coming))
+        :success))
+
+    (if (and updated? downloading?)
+      ;; try to start consume downloading item
+      (if-let [n (state/get-next-selected-coming-update)]
+        (plugin-handler/check-or-update-marketplace-plugin
+          (assoc n :only-check false :error-code nil)
+          (fn [^js e] (js/console.error "[Download Err]" n e)))
+        (plugin-handler/close-updates-downloading))
+
+      ;; try to start consume pending item
+      (if-let [n (second (first (:plugin/updates-pending @state/state)))]
+        (plugin-handler/check-or-update-marketplace-plugin
+          (assoc n :only-check true :error-code nil)
+          (fn [^js e]
+            (notification/show! (.toString e) :error)
+            (js/console.error "[Check Err]" n e)))
+        ;; try to open waiting updates list
+        (when (and pending? (seq (state/all-available-coming-updates)))
+          (plugin/open-waiting-updates-modal!))))))
 
 (defn run!
   []

@@ -96,12 +96,16 @@
     (p/catch
       (p/then
         (do (state/set-state! :plugin/installing pkg)
-            (load-marketplace-plugins false))
+            (p/catch
+              (load-marketplace-plugins false)
+              (fn [^js e]
+                (state/reset-all-updates-state)
+                (throw e))))
         (fn [mfts]
           (if-let [mft (some #(if (= (:id %) id) %) mfts)]
             (do
               (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft)))
-            (throw (js/Error. (str ":central-not-matched " id))))
+            (throw (js/Error. (str ":not-found-in-marketplace" id))))
           true))
 
       (fn [^js e]
@@ -115,6 +119,23 @@
     (js/LSPluginCore.ensurePlugin id)
     (catch js/Error e
       nil)))
+
+(defn open-updates-downloading
+  []
+  (when (and (not (:plugin/updates-downloading? @state/state))
+             (seq (state/all-available-coming-updates)))
+    (->> (:plugin/updates-coming @state/state)
+         (map #(if (state/coming-update-new-version? (second %1))
+                 (update % 1 dissoc :error-code) %1))
+         (into {})
+         (state/set-state! :plugin/updates-coming))
+    (state/set-state! :plugin/updates-downloading? true)))
+
+(defn close-updates-downloading
+  []
+  (when (:plugin/updates-downloading? @state/state)
+    (state/set-state! :plugin/updates-downloading? false)))
+
 
 (defn setup-install-listener!
   [t]
@@ -140,7 +161,7 @@
                                       (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
                                     (state/consume-updates-coming-plugin payload true))))
 
-                             (do                            ;; register new
+                             (do    ;; register new
                                (p/then
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                  (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
@@ -155,14 +176,18 @@
                                           [(str (t :plugin/up-to-date) " :)") :success]
 
                                           [error-code :error])
-                             updates-pending? (seq (:plugin/updates-pending @state/state))]
+                             pending? (seq (:plugin/updates-pending @state/state))]
 
-                         (if (and only-check updates-pending?)
+                         (if (and only-check pending?)
                            (state/consume-updates-coming-plugin payload false)
-                           (notifications/show!
-                             (str
-                               (if (= :error type) "[Install Error]" "")
-                               msg) type))
+
+                           (do
+                             ;; consume failed download updates
+                             (state/consume-updates-coming-plugin payload true)
+                             (notifications/show!
+                               (str
+                                 (if (= :error type) "[Install Error]" "")
+                                 msg) type)))
 
                          (js/console.error payload))
 
@@ -299,9 +324,9 @@
       ;; local
       (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
                   content (parse-user-md-content content item)]
-            (and (string/blank? (string/trim content)) (throw nil))
-            (state/set-state! :plugin/active-readme [content item])
-            (state/set-sub-modal! (fn [_] (display))))
+                 (and (string/blank? (string/trim content)) (throw nil))
+                 (state/set-state! :plugin/active-readme [content item])
+                 (state/set-sub-modal! (fn [_] (display))))
           (p/catch #(do (js/console.warn %)
                         (notifications/show! "No README content." :warn))))
       ;; market
@@ -311,8 +336,8 @@
   []
   (when util/electron?
     (p/let [path (ipc/ipc "openDialog")]
-      (when-not (:plugin/selected-unpacked-pkg @state/state)
-        (state/set-state! :plugin/selected-unpacked-pkg path)))))
+           (when-not (:plugin/selected-unpacked-pkg @state/state)
+             (state/set-state! :plugin/selected-unpacked-pkg path)))))
 
 (defn reset-unpacked-state
   []
@@ -354,7 +379,7 @@
   (p/catch
     (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
             files (js->clj files)]
-      (map #(hash-map :url %) files))
+           (map #(hash-map :url %) files))
     (fn [e]
       (js/console.error e))))
 
@@ -363,9 +388,9 @@
   (let [pending? (seq (:plugin/updates-pending @state/state))]
     (when-let [plugins (and (not pending?)
                             ;; TODO: too many requests may be limited by Github api
-                            (seq (take 16 (state/get-enabled-installed-plugins theme?))))]
+                            (seq (take 32 (state/get-enabled-installed-plugins theme?))))]
       (state/set-state! :plugin/updates-pending
-        (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
+                        (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))
 
 ;; components

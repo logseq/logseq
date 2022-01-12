@@ -287,7 +287,7 @@
 
 (rum/defc main <
   {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "main-content")]
+                (when-let [element (gdom/getElement "main-content-container")]
                   (dnd/subscribe!
                    element
                    :upload-files

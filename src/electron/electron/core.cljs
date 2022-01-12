@@ -15,6 +15,7 @@
             [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
+            [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
@@ -122,7 +123,9 @@
         call-app-channel "call-application"
         call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
-        quit-dirty-state "set-quit-dirty-state"]
+        quit-dirty-state "set-quit-dirty-state"
+        clear-win-effects! (win/setup-window-listeners! win)]
+
     (doto ipcMain
       (.handle quit-dirty-state
                (fn [_ dirty?]
@@ -156,9 +159,8 @@
                      (catch js/Error e
                        (js/console.error e)))))))
 
-    (win/setup-window-listeners! win)
-
-    #(do (.removeHandler ipcMain toggle-win-channel)
+    #(do (clear-win-effects!)
+         (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
          (.removeHandler ipcMain call-app-channel)
@@ -214,10 +216,11 @@
                         (fn []
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
-                                tt (handler/set-ipc-handler! win)]
+                                t3 (handler/set-ipc-handler! win)
+                                tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
 
                ;; setup effects
