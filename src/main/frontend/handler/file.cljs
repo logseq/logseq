@@ -155,11 +155,14 @@
                :else
                file)
         new? (nil? (db/entity [:file/path file]))]
+    ;; TODO: refactor with reset-file!
+    ;; TODO: missing text/scheduled-deadline-dash->star
     (db/set-file-content! repo-url file content)
     (let [format (format/get-format file)
           utf8-content (utf8/encode content)
           file-content [{:file/path file}]]
       (p/let [tx (if (contains? config/mldoc-support-formats format)
+                   ;; TODO: compare the logic with extract-all-blocks-pages
                    (p/let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
                            first-page (first pages)
                            delete-blocks (->
@@ -174,12 +177,19 @@
                                                       {:content error
                                                        :status :error
                                                        :clear? false}]))))
+                           ;; TODO: merge with the validation logic in extract-all-blocks-pages
                            blocks (remove-non-exists-refs! blocks)
                            block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-                           pages (extract-handler/with-ref-pages pages blocks)]
-                     (concat file-content delete-blocks pages block-ids blocks))
+                           pages (extract-handler/with-ref-pages pages blocks)
+                           ;; To prevent "unique constraint" on datascript
+                           pages-index (map #(select-keys % [:block/name]) pages)
+                           block-ids-set (set (map (fn [uuid] [:block/uuid uuid]) block-ids))
+                           blocks (map #(extract-handler/remove-illegal-refs % block-ids-set true) blocks) ;; refresh should be true or false?
+                           block-ids (map (fn [uuid] {:block/uuid uuid}) block-ids)]
+                     ;; does order matter?
+                     (concat file-content pages-index delete-blocks pages block-ids blocks))
                    file-content)]
-        (let [tx (concat tx [(let [t (tc/to-long (t/now))]
+        (let [tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
                                (cond->
                                  {:file/path file}
                                  new?

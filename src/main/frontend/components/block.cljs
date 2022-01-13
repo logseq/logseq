@@ -425,7 +425,7 @@
                s (if (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
                    original-name)
-               _ (when-not page-entity (js/console.error "page-inner's page-entity is nil, given page-name: " page-name
+               _ (when-not page-entity (js/console.warning "page-inner's page-entity is nil, given page-name: " page-name
                                                          " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
