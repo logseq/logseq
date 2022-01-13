@@ -68,7 +68,7 @@
            state)
    :did-mount  open-first-block!
    :did-update open-first-block!}
-  [page-name _page-blocks hiccup sidebar? _preview? _block-uuid]
+  [page-name hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
      (content/content page-name
@@ -135,7 +135,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? preview? block-id)
+           (page-blocks-inner page-name hiccup sidebar? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}

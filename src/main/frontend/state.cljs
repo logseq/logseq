@@ -208,7 +208,8 @@
 
       :srs/mode?                             false
 
-      :srs/cards-due-count                   nil})))
+      :srs/cards-due-count                   nil
+      })))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))

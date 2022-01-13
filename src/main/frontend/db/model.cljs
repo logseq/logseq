@@ -512,30 +512,15 @@
   ([repo-url page]
    (get-page-blocks repo-url page nil))
   ([repo-url page {:keys [use-cache? pull-keys limit]
-                   :or {use-cache? true}}]
+                   :or {use-cache? true
+                        pull-keys '[*]}}]
    (when page
-     (let [page (util/page-name-sanity-lc (string/trim page))
-           page-entity (db-utils/entity repo-url [:block/name page])
+     (let [page-entity (if (integer? page)
+                         (db-utils/entity repo-url page)
+                         (let [page (util/page-name-sanity-lc (string/trim page))]
+                           (db-utils/entity repo-url [:block/name page])))
            page-id (:db/id page-entity)
            db (conn/get-conn repo-url)
-           pull-keys (or pull-keys
-                         [:db/id
-                          :block/left
-                          :block/parent
-                          :block/collapsed?
-                          :block/uuid
-                          :block/format
-                          :block/refs
-                          :block/path-refs
-                          :block/tags
-                          :block/content
-                          :block/marker
-                          :block/priority
-                          :block/properties
-                          :block/pre-block?
-                          :block/scheduled
-                          :block/deadline
-                          :block/repeated?])
            bare-page-map {:db/id page-id
                           :block/name (:block/name page-entity)
                           :block/original-name (:block/original-name page-entity)
@@ -547,7 +532,7 @@
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               block-eids (if (> (count datoms) 1000) ; TODO: needs benchmark
+                               block-eids (if (and limit (> (count datoms) 1000)) ; TODO: needs benchmark
                                             (get-limited-blocks db page-entity block-eids limit)
                                             block-eids)
                                blocks (db-utils/pull-many repo-url pull-keys block-eids)]
@@ -694,8 +679,8 @@
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
 (defn get-blocks-by-page
-  [id-or-lookup-ref]
-  (when-let [conn (conn/get-conn)]
+  [repo id-or-lookup-ref]
+  (when-let [conn (conn/get-conn repo)]
     (->
      (d/q
       '[:find (pull ?block [*])
