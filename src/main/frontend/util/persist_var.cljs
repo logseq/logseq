@@ -53,13 +53,14 @@
     (get-in @*value [(state/get-current-repo) :value]))
 
   IReset
-  (-reset!            ;    Deprecated - use (.reset-value! o) instead.
-    [o new-value]
-    (swap! *value (fn [o] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
+  (-reset!
+    ;; "Deprecated - use (.reset-value! o) instead."
+    [_ new-value]
+    (swap! *value (fn [_] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
 
 
   IPrintWithWriter
-  (-pr-writer [o w opts]
+  (-pr-writer [_ w _opts]
     (write-all w (str "#PersistVar[" @*value ", loc: " location "]"))))
 
 
