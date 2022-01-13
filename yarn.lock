@@ -3726,6 +3726,11 @@ graceful-fs@^4.0.0, graceful-fs@^4.1.11, graceful-fs@^4.1.2, graceful-fs@^4.1.6,
   resolved "https://registry.yarnpkg.com/graceful-fs/-/graceful-fs-4.2.9.tgz#041b05df45755e587a24942279b9d113146e1c96"
   integrity sha512-NtNxqUcXgpW2iMrfqSfR73Glt39K+BLwWsPs94yR63v45T0Wbej7eRmL5cWfwEgqXnmjQp3zaJTshdRW/qC2ZQ==
 
+grapheme-splitter@1.0.4:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/grapheme-splitter/-/grapheme-splitter-1.0.4.tgz#9cf3a665c6247479896834af35cf1dbb4400767e"
+  integrity sha512-bzh50DW9kTPM00T8y4o8vQg89Di9oLJVLW/KaOGIXJWP/iqCN6WKYkbNOF04vFLJhwcpYUh9ydh/+5vpOqV4YQ==
+
 graphology@0.20.0:
   version "0.20.0"
   resolved "https://registry.yarnpkg.com/graphology/-/graphology-0.20.0.tgz#e29f7a1448852dfc7195646241f336b10127997a"
@@ -6766,10 +6771,10 @@ react-transition-group@4.3.0:
     loose-envify "^1.4.0"
     prop-types "^15.6.2"
 
-react-tweet-embed@1.2.2:
-  version "1.2.2"
-  resolved "https://registry.yarnpkg.com/react-tweet-embed/-/react-tweet-embed-1.2.2.tgz#b518510a6e6ef17609f9c9b16bc4775624730d8a"
-  integrity sha512-Y932BlSaJsDUsKDucC2opzzd+uhc0YNhrlTa/4Beb2be1od+AjLGo6Fhuo2wPT0D+fF4VTXOyoZyA8Yc88RdYA==
+react-tweet-embed@1.3.1:
+  version "1.3.1"
+  resolved "https://registry.yarnpkg.com/react-tweet-embed/-/react-tweet-embed-1.3.1.tgz#066d45dd3fc4c72c6ea61a85857c9044d408235f"
+  integrity sha512-qVAlb3/d3YhYHHB6Y3J/8OCY+a5KOzCnY/qUaBnK8qtEKXK9qWePlpGevDQgryWuKxggwxW1UHPLZ3VpPc7XUQ==
 
 react@17.0.2:
   version "17.0.2"
