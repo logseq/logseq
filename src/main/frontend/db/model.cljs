@@ -532,6 +532,27 @@
 ;;             nil)
 ;;           react))))))
 
+;; TODO: native sort and limit support in DB
+(defn- get-limited-blocks
+  [db page block-eids limit]
+  (let [lefts (d/datoms db :avet :block/left)
+        lefts (zipmap (map :e lefts) lefts)
+        collapsed (d/datoms db :avet :block/collapsed?)
+        collapsed (zipmap (map :e collapsed) collapsed)
+        parents (d/datoms db :avet :block/parent)
+        parents (zipmap (map :e parents) parents)
+        blocks (map (fn [id]
+                      (let [collapsed? (:v (get collapsed id))]
+                        (cond->
+                          {:db/id id
+                           :block/left {:db/id (:v (get lefts id))}
+                           :block/parent {:db/id (:v (get parents id))}}
+                          collapsed?
+                          (assoc :block/collapsed? true))))
+                 block-eids)
+        blocks (sort-blocks blocks page limit)]
+    (map :db/id blocks)))
+
 ;; Use datoms index and provide limit support
 (defn get-page-blocks
   ([page]
@@ -572,30 +593,13 @@
           (react/q repo-url [:page/blocks page-id]
             {:use-cache? use-cache?
              :query-fn (fn [db]
-                         (util/profile
-                          "datoms index query"
-                          (let [datoms (d/datoms db :avet :block/page page-id)
-                                block-eids (map :e datoms)
-                                lefts (d/datoms db :avet :block/left)
-                                lefts (zipmap (map :e lefts) lefts)
-                                collapsed (d/datoms db :avet :block/collapsed?)
-                                collapsed (zipmap (map :e collapsed) collapsed)
-                                parents (d/datoms db :avet :block/parent)
-                                parents (zipmap (map :e parents) parents)
-                                blocks (map (fn [id]
-                                              (let [collapsed? (:v (get collapsed id))]
-                                                (cond->
-                                                  {:db/id id
-                                                   :block/left {:db/id (:v (get lefts id))}
-                                                   :block/parent {:db/id (:v (get parents id))}}
-                                                  collapsed?
-                                                  (assoc :block/collapsed? true))))
-                                         block-eids)
-                                blocks (sort-blocks blocks page-entity limit)
-                                block-eids (map :db/id blocks)
-                                blocks (db-utils/pull-many repo-url pull-keys
-                                                           block-eids)]
-                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks))))}
+                         (let [datoms (d/datoms db :avet :block/page page-id)
+                               block-eids (mapv :e datoms)
+                               block-eids (if (> (count datoms) 1000) ; TODO: needs benchmark
+                                            (get-limited-blocks db page-entity block-eids limit)
+                                            block-eids)
+                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
+                           (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
 
