@@ -14,7 +14,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [cljs.spec.alpha :as s]))
 
 ;;; Commentary
 ;;; file-sync related local files/dirs:
@@ -245,6 +246,9 @@
     (and (= size (.-size other))
          (= (.get-normalized-path o) (.get-normalized-path other))
          (= etag (.-etag other))))
+
+  IHash
+  (-hash [o] (hash {:size size :etag etag :path path}))
 
   IPrintWithWriter
   (-pr-writer [coll w opts]
@@ -570,7 +574,7 @@
   (ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
   (sync-local->remote! [this ^FileChangeEvent e])
-  (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync if not equal.
+  (sync-local->remote-all-files! [this stop-chan] "compare all local files to remote ones, sync if not equal.
   ensure local-txid = remote-txid before calling this func"))
 
 (deftype Remote->LocalSyncer [graph-uuid base-path repo *txid ^SyncState sync-state ^:mutable local->remote-syncer]
@@ -598,9 +602,7 @@
           {:unknown r}
           {:succ true}))))
 
-  (sync-remote->local-all-files! [this]
-    ;; TODO
-    ))
+  (sync-remote->local-all-files! [this] nil))
 
 
 (defn- file-changed?
@@ -617,19 +619,27 @@
 (deftype Local->RemoteSyncer [graph-uuid base-path repo ^SyncState sync-state
                               ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan]
   Object
-  (filtered-chan [_ n]
+  (filter-file-change-events-fn [this]
+    (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
+                                  (string/starts-with? (.-dir e) base-path)
+                                  (not (contains-path? (get-ignore-files this) (-relative-path e)))
+                                  (contains-path? (get-monitored-dirs this) (-relative-path e)))))
+
+  (filtered-chan [this n]
     "check base-path"
-    (chan n (filter (fn [^FileChangeEvent e] (string/starts-with? (.-dir e) base-path)))))
+    (chan n (filter (.filter-file-change-events-fn this))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
   ILocal->RemoteSync
-  (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"logseq/version-files/.*"})
-  (get-monitored-dirs [_] #{"assets/" "journals/" "logseq/" "pages/"})
+  (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"version-files/.*" #"logseq/\.recycle/.*"
+                          #"\.DS_Store$"})
+  (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
   (stop-local->remote! [_] (async/close! stop-chan))
 
   (ratelimit [this from-chan]
-    (let [c (.filtered-chan this 10000)]
+    (let [c (.filtered-chan this 10000)
+          filter-e-fn (.filter-file-change-events-fn this)]
       (go-loop [timeout-c (timeout rate)
                 tcoll (transient [])]
         (let [{:keys [timeout ^FileChangeEvent e stop]}
@@ -647,11 +657,12 @@
 
             (some? e)
             (do
-              (if (= "unlink" (.-type e))
-                (conj! tcoll e)
-                (if (<! (file-changed? graph-uuid (-relative-path e) base-path))
+              (when (filter-e-fn e)
+                (if (= "unlink" (.-type e))
                   (conj! tcoll e)
-                  (prn "file unchanged" (-relative-path e))))
+                  (if (<! (file-changed? graph-uuid (-relative-path e) base-path))
+                    (conj! tcoll e)
+                    (prn "file unchanged" (-relative-path e)))))
               (recur timeout-c tcoll))
 
             (nil? e)
@@ -700,8 +711,7 @@
                       (println "sync-local->remote unknown:" r*)
                       {:unknown r*}))))))))))
 
-  ;; TODO: support stopping in the middle of processing
-  (sync-local->remote-all-files! [this]
+  (sync-local->remote-all-files! [this stop-chan]
     (go
       (let [remote-all-files-meta-c (get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c (get-local-all-files-meta rsapi graph-uuid base-path)
@@ -709,21 +719,26 @@
             local-all-files-meta (<! local-all-files-meta-c)
             diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
             ignore-files (get-ignore-files this)
+            monitored-dirs (get-monitored-dirs this)
             change-events (->> diff-local-files
                                (mapv
                                 #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
-                               (filterv (complement
-                                         #(contains-path? ignore-files (-relative-path %)))))]
+                               (filterv #(let [relative-path (-relative-path %)]
+                                           (and (not (contains-path? ignore-files relative-path))
+                                                (contains-path? monitored-dirs relative-path)))))]
+        (println "[full-sync]" (count change-events) "files need to sync to remote")
         (loop [es change-events]
-          (if-not es
+          (if (empty? es)
             {:succ true}
-            (let [e (first es)
-                  {:keys [succ need-sync-remote unknown] :as r} (<! (sync-local->remote! this e))]
-              (cond
-                succ
-                (recur (next es))
+            (if (async/poll! stop-chan)
+              {:stop true}
+              (let [e (first es)
+                    {:keys [succ need-sync-remote unknown] :as r} (<! (sync-local->remote! this e))]
+                (cond
+                  succ
+                  (recur (next es))
 
-                (or need-sync-remote unknown) r))))))))
+                  (or need-sync-remote unknown) r)))))))))
 
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
                     ^:mutable history]
@@ -770,7 +785,8 @@
       (-pr-writer pr-map w opts))))
 
 
-(deftype SyncManager [graph-uuid base-path ^SyncState sync-state local->remote-syncer remote->local-syncer
+(deftype SyncManager [graph-uuid base-path ^SyncState sync-state
+                      ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
                       full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                       local-changes-chan ^:mutable ratelimit-local-changes-chan
                       *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws]
@@ -802,11 +818,9 @@
     (set! ratelimit-local-changes-chan (ratelimit local->remote-syncer local-changes-chan))
     (.schedule this ::idle))
 
-
-
   (idle [this]
     (go
-      (let [{:keys [stop full-sync trigger-remote trigger-local remote local]}
+      (let [{:keys [stop full-sync trigger-remote trigger-local remote local trigger-full-sync]}
             (async/alt!
               stop-sync-chan {:stop true}
               full-sync-chan {:full-sync true}
@@ -814,11 +828,12 @@
               local->remote-sync-chan {:trigger-local true}
               _remote-change-chan ([v] (println "remote changes:" v) {:remote v})
               ratelimit-local-changes-chan ([v] (println "local changes:" v) {:local v})
+              (timeout (* 20 60 1000)) {:trigger-full-sync true}
               :priority true)]
         (cond
           stop
           (<! (.schedule this ::stop))
-          full-sync
+          (or full-sync trigger-full-sync)
           (<! (.schedule this ::full-sync))
           remote
           (<! (.schedule this ::remote->local remote))
@@ -827,13 +842,15 @@
 
   (full-sync [this]
     (go
-      (let [{:keys [succ need-sync-remote unknown]}
-            (<! (sync-local->remote-all-files! local->remote-syncer))]
+      (let [{:keys [succ need-sync-remote unknown stop]}
+            (<! (sync-local->remote-all-files! local->remote-syncer stop-sync-chan))]
         (cond
           succ
           (.schedule this ::idle)
           need-sync-remote
           (.schedule this ::remote->local=>full-sync)
+          stop
+          (.schedule this ::stop)
           unknown
           (do
             (debug/pprint "full-sync" unknown)
@@ -873,6 +890,7 @@
   IStoppable
   (-stop! [this]
     (ws-stop! _*ws)
+    (offer! stop-sync-chan true)
     (stop-local->remote! local->remote-syncer)
     (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
     (.update-state! sync-state ::stop)
@@ -928,7 +946,7 @@
 
   )
 
-(def full-sync-chan (chan))
+(def full-sync-chan (chan 1))
 (def stop-sync-chan (chan 1))
 (def remote->local-sync-chan (chan))
 (def local->remote-sync-chan (chan))
@@ -950,10 +968,13 @@
     ;; drain `local-changes-chan`
     (->> (repeatedly #(poll! local-changes-chan))
          (take-while identity))
+    (poll! stop-sync-chan)
 
     (.start sm)
     (state/set-file-sync-state-manager sync-state)
     (state/set-file-sync-manager sm)
+
+    (offer! full-sync-chan true)
 
     ;; watch :network/online?
     (add-watch (rum/cursor state/state :network/online?) "sync-manage"
