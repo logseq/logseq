@@ -188,7 +188,7 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
-(defn- remove-illegal-refs
+(defn remove-illegal-refs
   [block block-ids-set refresh?]
   (let [aux-fn (fn [refs]
                  (let [block-refs (if refresh? (set refs)
@@ -200,6 +200,7 @@
         (update :block/refs aux-fn)
         (update :block/path-refs aux-fn))))
 
+;; TODO: refactor with reset-file!
 (defn extract-all-blocks-pages
   [repo-url files metadata refresh?]
   (when (seq files)
