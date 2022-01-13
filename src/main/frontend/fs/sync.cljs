@@ -267,6 +267,7 @@
   (update-local-files [this graph-uuid base-path filepaths] "remote -> local")
   (delete-local-files [this graph-uuid base-path filepaths])
   (update-remote-file [this graph-uuid base-path filepath local-txid] "local -> remote, return err or txid")
+  (update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
   (delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid"))
 
 (defprotocol IRemoteAPI
@@ -356,6 +357,12 @@
       (let [token (<! (get-token this))]
         (<! (retry-rsapi
              #(p->c (ipc/ipc "update-remote-file" graph-uuid base-path filepath local-txid token)))))))
+
+  (update-remote-files [this graph-uuid base-path filepaths local-txid]
+    (go
+      (let [token (<! (get-token this))]
+        (<! (retry-rsapi
+             #(p->c (ipc/ipc "update-remote-files" graph-uuid base-path filepaths local-txid token)))))))
 
   (delete-remote-files [this graph-uuid base-path filepaths local-txid]
     (go

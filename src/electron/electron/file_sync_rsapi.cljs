@@ -21,3 +21,6 @@
 
 (defn update-remote-file [graph-uuid base-path file-path txid token]
   (rsapi/updateRemoteFile graph-uuid base-path file-path txid token))
+
+(defn update-remote-files [graph-uuid base-path file-paths txid token]
+  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
