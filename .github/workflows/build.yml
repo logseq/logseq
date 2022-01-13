@@ -21,8 +21,12 @@ env:
 
 jobs:
 
-  cljs-test:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest]
+
+    runs-on: ${{ matrix.operating-system }}
 
     steps:
       - name: Checkout
