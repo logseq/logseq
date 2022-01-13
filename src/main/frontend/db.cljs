@@ -48,7 +48,7 @@
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
-  journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set pull-block
+  journal-page? mark-repo-as-cloned! page-alias-set pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 

@@ -480,7 +480,7 @@
                    (boolean? sibling?)
                    sibling?
 
-                   (:collapsed (:block/properties current-block))
+                   (util/collapsed? current-block)
                    true
 
                    :else
@@ -1178,7 +1178,7 @@
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         blocks* (flatten
-                 (mapv (fn [b] (if (:collapsed (:block/properties b))
+                 (mapv (fn [b] (if (util/collapsed? b)
                                  (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
                                  [b])) blocks))
         block-ids* (mapv :block/uuid blocks*)
@@ -1271,7 +1271,7 @@
                ;; filter out blocks not belong to page with 'page-id'
                (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))))
                ;; expand collapsed blocks
-               (mapv (fn [b] (if (:collapsed (:block/properties b))
+               (mapv (fn [b] (if (util/collapsed? b)
                                (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
                                [b])))
                (flatten))
@@ -2150,7 +2150,7 @@
           block-self? (block-self-alone-when-insert? config block-id)
           has-children? (db/has-children? (state/get-current-repo)
                                           (:block/uuid editing-block))
-          collapsed? (:collapsed (:block/properties editing-block))]
+          collapsed? (util/collapsed? editing-block)]
       (conj (match (mapv boolean [(seq fst-block-text) (seq snd-block-text)
                                   block-self? has-children? (= parent left) collapsed?])
               ;; when zoom at editing-block
@@ -2771,7 +2771,7 @@
         repo (state/get-current-repo)
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? repo (:block/uuid current-block))
-        collapsed? (:collapsed (:block/properties current-block))
+        collapsed? (util/collapsed? current-block)
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
                      (:data right)
@@ -3443,7 +3443,7 @@
     (if-let [block (db-model/query-block-by-uuid block-id)]
       (let [block (block/parse-title-and-body block)]
         (and
-         (nil? (-> block :block/properties :collapsed))
+         (not (util/collapsed? block))
          (or (not-empty (:block/body block))
              (db-model/has-children? block-id))))
       false)))
@@ -3485,7 +3485,7 @@
          collapse?
          (w/postwalk
           (fn [b]
-            (if (and (map? b) (-> b :block/properties :collapsed))
+            (if (and (map? b) (util/collapsed? b))
               (assoc b :block/children []) b)))
 
          true
@@ -3503,15 +3503,44 @@
   (let [config (:config (state/get-editor-args))]
     (or (:ref? config) (:block? config))))
 
+(defn- set-blocks-collapsed!
+  [block-ids value]
+  (let [block-ids (map (fn [block-id] (if (string? block-id) (uuid block-id) block-id)) block-ids)
+        repo (state/get-current-repo)
+        value (boolean value)]
+    (when repo
+      (ds/auto-transact!
+       [txs-state (ds/new-outliner-txs-state)]
+       {:outliner-op :collapse-expand-blocks
+        :skip-transact? false}
+       (doseq [block-id block-ids]
+         (when-let [block (db/entity [:block/uuid block-id])]
+          (let [current-value (boolean (util/collapsed? block))]
+            (when-not (= current-value value)
+              (let [block (outliner-core/block {:block/uuid block-id
+                                                :block/collapsed? value})]
+                (outliner-core/save-node block {:txs-state txs-state})))))))
+      (let [block-id (first block-ids)
+            input-pos (or (state/get-edit-pos) :max)]
+        (db/refresh! (state/get-current-repo)
+                    {:key :block/change
+                     :data [(db/pull [:block/uuid block-id])]})
+        ;; update editing input content
+        (when-let [editing-block (state/get-edit-block)]
+          (when (= (:block/uuid editing-block) block-id)
+            (edit-block! editing-block
+                         input-pos
+                         (state/get-edit-input-id))))))))
+
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-block-property! block-id :collapsed true)))
+      (set-blocks-collapsed! [block-id] true)))
   (state/set-collapsed-block! block-id true))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (remove-block-property! block-id :collapsed))
+    (set-blocks-collapsed! [block-id] false))
   (state/set-collapsed-block! block-id false))
 
 (defn expand!
@@ -3542,8 +3571,7 @@
            nil
            (let [blocks-to-expand (->> blocks-with-level
                                        (filter (fn [b] (= (:block/level b) level)))
-                                       (filter (fn [{:block/keys [properties]}]
-                                                 (contains? properties :collapsed))))]
+                                       (filter util/collapsed?))]
              (if (empty? blocks-to-expand)
                (recur (inc level))
                (doseq [{:block/keys [uuid]} blocks-to-expand]
@@ -3589,17 +3617,15 @@
   ([]
    (collapse-all! nil))
   ([block-id]
-   (let [blocks-to-collapse (all-blocks-with-level {:expanded? true :root-block block-id})]
-     (doseq [{:block/keys [uuid]} blocks-to-collapse]
-       (collapse-block! uuid)))))
+   (let [blocks (all-blocks-with-level {:expanded? true :root-block block-id})]
+     (set-blocks-collapsed! (map :block/uuid blocks) true))))
 
 (defn expand-all!
   ([]
    (expand-all! nil))
   ([block-id]
-   (->> (all-blocks-with-level {:root-block block-id})
-        (map (comp expand-block! :block/uuid))
-        dorun)))
+   (let [blocks (all-blocks-with-level {:root-block block-id})]
+     (set-blocks-collapsed! (map :block/uuid blocks) false))))
 
 (defn- get-block-with-its-children
   [block-uuid]
@@ -3611,7 +3637,7 @@
 (defn expand-all?
   [block-uuid]
   (let [blocks (get-block-with-its-children block-uuid)]
-    (some #(get-in % [:block/properties :collapsed]) blocks)))
+    (some util/collapsed? blocks)))
 
 (defn collapse-all?
   [block-uuid]
@@ -3717,7 +3743,7 @@
                      false
 
                      (and (:block? config)
-                          (get-in block [:block/properties :collapsed]))
+                          (util/collapsed? block))
                      true
 
                      :else
@@ -3730,4 +3756,4 @@
                                     (state/get-ref-open-blocks-level)))))))]
     (if (or (:ref? config) (:block? config))
       collapsed?
-      (get-in block [:block/properties :collapsed]))))
+      (util/collapsed? block))))

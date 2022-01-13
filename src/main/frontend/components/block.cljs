@@ -1430,11 +1430,7 @@
                     (not (:pre-block? block))
                     (or has-children-blocks?
                         (and (seq (:block/title block)) (seq body))))
-        control-show? (and
-                       (or (and (seq (:block/title block))
-                                (seq body))
-                           has-children-blocks?)
-                       (util/react *control-show?))
+        control-show? (util/react *control-show?)
         ref? (:ref? config)
         block? (:block? config)
         empty-content? (block-content-empty? block)]
@@ -1860,7 +1856,7 @@
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
-        collapsed? (get properties :collapsed)
+        collapsed? (util/collapsed? block)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
         block-type (or (:ls-type properties) :default)
@@ -2117,9 +2113,12 @@
   (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
-  [e *control-show? block-id doc-mode?]
+  [uuid e *control-show? block-id doc-mode?]
   (util/stop e)
-  (reset! *control-show? true)
+  (when (or
+         (model/block-collapsed? uuid)
+         (editor-handler/collapsable? uuid))
+    (reset! *control-show? true))
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
@@ -2179,7 +2178,7 @@
                                            (editor-handler/block-default-collapsed? block config)))
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/children
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
                                         :block/properties
                                         :block/_refs]
                           config-compare-keys [:show-cloze?]
@@ -2192,7 +2191,7 @@
                                         (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
   [state config {:block/keys [uuid children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [repo (state/get-current-repo)
+    (let [repo (state/get-current-repo)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
@@ -2207,7 +2206,7 @@
         block? (boolean (:block? config))
         collapsed? (if (or ref? block?)
                      (state/sub-collapsed uuid)
-                     (:collapsed properties))
+                     (util/collapsed? block))
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2266,7 +2265,7 @@
      [:div.flex.flex-row.pr-2
       {:class (if heading? "items-baseline" "")
        :on-mouse-over (fn [e]
-                        (block-mouse-over e *control-show? block-id doc-mode?))
+                        (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)

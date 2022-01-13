@@ -20,7 +20,8 @@
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [rum.core :as rum]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [medley.core :as medley]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -200,7 +201,10 @@
 (defn- clear-collapsed-property
   "Clear block's collapsed property if exists"
   [blocks]
-  (let [result (map (fn [block] (assoc-in block [:block/properties :collapsed] false)) blocks)]
+  (let [result (map (fn [block]
+                      (-> block
+                          (dissoc :block/collapsed?)
+                          (medley/dissoc-in [:block/properties :collapsed]))) blocks)]
     result))
 
 ;;; ================================================================

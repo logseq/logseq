@@ -657,3 +657,7 @@
 (defn auto-push!
   []
   (git-commit-and-push! "Logseq auto save"))
+
+(defn file-graph?
+  []
+  )

@@ -1638,3 +1638,9 @@
        (if (and (not route?) (electron?))
          (js/window.apis.openExternal url)
          (set! (.-href js/window.location) url)))))
+
+(defn collapsed?
+  [block]
+  (or (:block/collapsed? block)
+      ;; for backward compatiblity
+      (get-in block [:properties :collapsed])))
