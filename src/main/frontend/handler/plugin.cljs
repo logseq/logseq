@@ -183,7 +183,10 @@
 
                            (do
                              ;; consume failed download updates
-                             (state/consume-updates-coming-plugin payload true)
+                             (when (and (not only-check) (not pending?))
+                               (state/consume-updates-coming-plugin payload true))
+
+                             ;; notify human tips
                              (notifications/show!
                                (str
                                  (if (= :error type) "[Install Error]" "")
