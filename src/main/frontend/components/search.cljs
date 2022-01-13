@@ -43,8 +43,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (string/lower-case word)
-                                   lc-content (string/lower-case content)]
+                                   lc-word (util/search-normalize word)
+                                   lc-content (util/search-normalize content)]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))
@@ -252,7 +252,8 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (route/redirect-to-page! data)
+                      (do (route/redirect-to-page! data)
+                          (state/close-modal!))
                       :search
                       (let [q data]
                         (state/set-q! q)
@@ -266,8 +267,7 @@
                             (search-handler/search (state/get-current-repo) q opts)
                             (search-handler/search (state/get-current-repo) q))))
 
-                      nil)
-                    (state/close-modal!))
+                      nil))
        :on-shift-chosen (fn [{:keys [type data]}]
                           (case type
                             :page
@@ -286,7 +286,7 @@
                         :search [:div.flex-row.flex.search-item.font-medium
                                  svg/search
                                  [:span.ml-2 data]]
-                        :page (let [original-name (model/get-page-original-name data)]
+                        :page (when-let [original-name (model/get-page-original-name data)] ;; might be block reference
                                 (search-result-item "Page" original-name))
                         nil))}))])
 

@@ -1175,6 +1175,12 @@
   [s]
   (.normalize s "NFC"))
 
+(defn search-normalize-content
+  "Normalize string for searching (loose, without lowercasing)
+   Case-sensitivity is ensured by the search engine"
+  [s]
+  (.normalize s "NFKD"))
+
 (defn search-normalize
   "Normalize string for searching (loose)"
   [s]

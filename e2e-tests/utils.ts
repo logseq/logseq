@@ -46,10 +46,10 @@ export async function lastInnerBlock(page: Page): Promise<Locator> {
     // discard any popups
     await page.keyboard.press('Escape')
     // click last block
+    await page.waitForSelector('.page-blocks-inner .ls-block >> nth=-1')
     await page.click('.page-blocks-inner .ls-block >> nth=-1')
     // wait for textarea
     await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
-
     return page.locator(':nth-match(textarea, 1)')
 }
 
