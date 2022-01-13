@@ -23,8 +23,15 @@
 ;;;   transaction-id: sync progress of local files
 ;;; - logseq/version-files
 ;;;   downloaded version-files
-;;; files included by `get-ignore-files` will not be synchronized, see also `get-ignore-files`
+;;; files included by `get-ignore-files` will not be synchronized.
 ;;; files in these `get-monitored-dirs` dirs will be synchronized.
+;;;
+;;; sync strategy:
+;;; - when toggle file-sync on, trigger a full-sync first,
+;;;   full-sync will compare local-files with remote-files (by md5 & size),
+;;;   and upload new-added-files to remote server.
+;;; - full-sync will be triggered after 20min of idle
+;;; - every 20s will flush local changes, and sync to remote
 
 
 ;;; TODO: add some spec validate
