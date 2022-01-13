@@ -58,7 +58,7 @@
        s])))
 
 (defn html-export
-  [s block? _display?]
+  [s block? display?]
   (let [element (if block?
                   :div.latex
                   :span.latex-inline)]
