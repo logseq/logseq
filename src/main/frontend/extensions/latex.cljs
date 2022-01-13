@@ -62,13 +62,8 @@
   (let [element (if block?
                   :div.latex
                   :span.latex-inline)]
-    [element (cond
-               block?
+    [element (if (or block? display?)
                (util/format "$$%s$$" s)
 
-               :display?
-               (util/format "$$%s$$" s)
-
-               :else
                ;; inline
                (util/format "$%s$" s))]))
