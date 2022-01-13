@@ -484,54 +484,6 @@
         nil)
       react))))
 
-;; FIXME: merge get-page-blocks and get-block-and-children to simplify the logic
-;; (defn get-page-blocks
-;;   ([page]
-;;    (get-page-blocks (state/get-current-repo) page nil))
-;;   ([repo-url page]
-;;    (get-page-blocks repo-url page nil))
-;;   ([repo-url page {:keys [use-cache? pull-keys limit]
-;;                    :or {use-cache? true
-;;                         pull-keys '[*]}}]
-;;    (when page
-;;      (let [page (util/page-name-sanity-lc (string/trim page))
-;;            page-entity (db-utils/entity repo-url [:block/name page])
-;;            page-id (:db/id page-entity)
-;;            db (conn/get-conn repo-url)
-;;            pull-keys [:db/id
-;;                       :block/uuid
-;;                       :block/left
-;;                       :block/collapsed?
-;;                       :block/format
-;;                       :block/refs
-;;                       :block/path-refs
-;;                       :block/tags
-;;                       :block/content
-;;                       :block/marker
-;;                       :block/priority
-;;                       :block/properties
-;;                       :block/pre-block?
-;;                       :block/scheduled
-;;                       :block/deadline
-;;                       :block/repeated?
-;;                       :block/parent]
-;;            bare-page-map {:db/id page-id
-;;                           :block/name (:block/name page-entity)
-;;                           :block/original-name (:block/original-name page-entity)
-;;                           :block/journal-day (:block/journal-day page-entity)}]
-;;        (when page-id
-;;          (some->
-;;           (react/q repo-url [:page/blocks page-id]
-;;             {:use-cache? use-cache?
-;;              :query-fn (fn [db]
-;;                          (let [datoms (d/datoms db :avet :block/page page-id)
-;;                                block-eids (mapv :e datoms)
-;;                                result (db-utils/pull-many repo-url pull-keys block-eids)]
-;;                            (-> (map (fn [b] (assoc b :block/page bare-page-map)) result)
-;;                                (sort-blocks page-entity limit))))}
-;;             nil)
-;;           react))))))
-
 ;; TODO: native sort and limit support in DB
 (defn- get-limited-blocks
   [db page block-eids limit]

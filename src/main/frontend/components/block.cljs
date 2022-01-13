@@ -2172,7 +2172,8 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
-             (when-not (some? (state/sub-collapsed (:block/uuid block)))
+             (when (and (not (some? (state/sub-collapsed (:block/uuid block))))
+                        (or (:ref? config) (:block? config)))
                (state/set-collapsed-block! (:block/uuid block)
                                            (editor-handler/block-default-collapsed? block config)))
              (assoc state ::control-show? (atom false))))
@@ -2905,7 +2906,7 @@
     [(blocks->vec-tree blocks)
      idx]))
 
-(rum/defcs lazy-blocks <
+(rum/defcs lazy-blocks < rum/reactive
   {:did-remount (fn [old-state new-state]
                   ;; Loading more when pressing Enter or paste
                   (let [args (:rum/args new-state)
@@ -2926,14 +2927,16 @@
                          (reset! ignore-scroll? false))
         has-more? (and (>= (count flat-blocks) (inc idx))
                        (not (and (:block? config)
-                                 (model/block-collapsed? (uuid (:id config))))))]
+                                 (state/sub-collapsed (uuid (:id config))))))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
        :has-more has-more?
-       :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
+       :more (if (or (:preview? config) (:sidebar? config))
+               "More"
+               (ui/loading "Loading"))})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]

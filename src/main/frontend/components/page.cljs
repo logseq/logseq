@@ -62,7 +62,11 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:did-mount  open-first-block!
+  {:init (fn [state]
+           (when-let [block-id (last (:rum/args state))]
+             (state/set-collapsed-block! block-id false))
+           state)
+   :did-mount  open-first-block!
    :did-update open-first-block!}
   [page-name _page-blocks hiccup sidebar? _preview? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
