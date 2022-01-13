@@ -62,16 +62,7 @@
   (let [element (if block?
                   :div.latex
                   :span.latex-inline)]
-    [element (cond
-               block?
+    [element (if (or block? display?)
                (util/format "$$%s$$" s)
-
-               ;; TODO: We never get to :else b/c this branch always evaluates as true
-               #_:clj-kondo/ignore
-               :display?
-               (util/format "$$%s$$" s)
-
-               #_:clj-kondo/ignore
-               :else
                ;; inline
                (util/format "$%s$" s))]))
