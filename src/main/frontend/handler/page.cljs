@@ -34,7 +34,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile]
             [frontend.mobile.util :as mobile-util]))
 
 (defn- get-directory
@@ -656,10 +655,9 @@
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
 (defn on-chosen-handler
-  [input id q pos format]
+  [input id _q pos format]
   (let [current-pos (cursor/pos input)
         edit-content (state/sub [:editor/content id])
-        edit-block (state/sub :editor/block)
         q (or
            @editor-handler/*selected-text
            (when (state/sub :editor/show-page-search-hashtag?)
@@ -711,7 +709,7 @@
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (config/local-db? repo)
-                (and (= "local" repo) (not (mobile/is-native-platform?))))
+                (and (= "local" repo) (not (mobile-util/is-native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               template (state/get-default-journal-template)

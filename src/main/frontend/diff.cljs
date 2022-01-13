@@ -67,9 +67,9 @@
                       (recur r1 t2 (inc i1) i2))))
             current-line (text/get-current-line-by-pos markup pos)]
         (cond
-          (and (= (util/nth-safe markup pos)
-                  (util/nth-safe markup (inc pos))
-                  "]"))
+          (= (util/nth-safe markup pos)
+             (util/nth-safe markup (inc pos))
+             "]")
           (+ pos 2)
 
           (contains? inline-special-chars (util/nth-safe markup pos))

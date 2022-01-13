@@ -1,8 +1,6 @@
 (ns frontend.handler.extract
   "Extract helper."
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.config :as config]
@@ -18,15 +16,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]))
-
-(defn- extract-page-list
-  [content]
-  (when-not (string/blank? content)
-    (->> (re-seq #"\[\[([^\]]+)]]" content)
-         (map last)
-         (remove nil?)
-         (map string/lower-case)
-         (distinct))))
 
 (defn get-page-name
   [file ast]
@@ -55,11 +44,11 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [repo-url format ast properties file content utf8-content journal?]
+  #_:clj-kondo/ignore
+  [repo-url format ast properties file content _utf8-content _journal?]
   (try
-    (let [now (tc/to-long (t/now))
-          page (get-page-name file ast)
-          [original-page-name page-name journal-day] (block/convert-page-if-journal page)
+    (let [page (get-page-name file ast)
+          [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
           blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
@@ -77,48 +66,48 @@
                                      :block/page [:block/name page-name]
                                      :block/refs block-ref-pages
                                      :block/path-refs block-path-ref-pages))))
-                   blocks)
+                      blocks)
           page-entity (let [alias (:alias properties)
                             alias (if (string? alias) [alias] alias)
                             aliases (and alias
                                          (seq (remove #(= page-name (util/page-name-sanity-lc %))
                                                       alias)))]
                         (cond->
-                          (util/remove-nils
-                           (assoc
-                            (block/page-name->map page false)
-                            :block/file {:file/path file}))
-                          (seq properties)
-                          (assoc :block/properties properties)
+                         (util/remove-nils
+                          (assoc
+                           (block/page-name->map page false)
+                           :block/file {:file/path file}))
+                         (seq properties)
+                         (assoc :block/properties properties)
 
-                          aliases
-                          (assoc :block/alias
-                                 (map
-                                   (fn [alias]
-                                     (let [page-name (util/page-name-sanity-lc alias)
-                                           aliases (distinct
-                                                    (conj
-                                                     (remove #{alias} aliases)
-                                                     page))
-                                           aliases (when (seq aliases)
-                                                     (map
-                                                       (fn [alias]
-                                                         {:block/name (util/page-name-sanity-lc alias)})
-                                                       aliases))]
-                                       (if (seq aliases)
-                                         {:block/name page-name
-                                          :block/alias aliases}
-                                         {:block/name page-name})))
-                                   aliases))
+                         aliases
+                         (assoc :block/alias
+                                (map
+                                 (fn [alias]
+                                   (let [page-name (util/page-name-sanity-lc alias)
+                                         aliases (distinct
+                                                  (conj
+                                                   (remove #{alias} aliases)
+                                                   page))
+                                         aliases (when (seq aliases)
+                                                   (map
+                                                    (fn [alias]
+                                                      {:block/name (util/page-name-sanity-lc alias)})
+                                                    aliases))]
+                                     (if (seq aliases)
+                                       {:block/name page-name
+                                        :block/alias aliases}
+                                       {:block/name page-name})))
+                                 aliases))
 
-                          (:tags properties)
-                          (assoc :block/tags (let [tags (:tags properties)
-                                                   tags (if (string? tags) [tags] tags)
-                                                   tags (remove string/blank? tags)]
-                                               (swap! ref-tags set/union (set tags))
-                                               (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
+                         (:tags properties)
+                         (assoc :block/tags (let [tags (:tags properties)
+                                                  tags (if (string? tags) [tags] tags)
+                                                  tags (remove string/blank? tags)]
+                                              (swap! ref-tags set/union (set tags))
+                                              (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
-                                                 tags)))))
+                                                   tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
                               (->> (util/split-namespace-pages page)
@@ -129,20 +118,15 @@
                       [page-entity]
                       @ref-pages
                       (map
-                        (fn [page]
-                          {:block/original-name page
-                           :block/name (util/page-name-sanity-lc page)})
-                        @ref-tags)
+                       (fn [page]
+                         {:block/original-name page
+                          :block/name (util/page-name-sanity-lc page)})
+                       @ref-tags)
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
                      (remove nil?))
           pages (util/distinct-by :block/name pages)
-          block-ids (->>
-                     (mapv (fn [block]
-                             {:block/uuid (:block/uuid block)})
-                           (remove nil? blocks))
-                     (remove nil?))
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
           blocks (->> (remove nil? blocks)
@@ -232,7 +216,7 @@
         (p/then (fn [result]
                   (let [result (remove empty? result)]
                     (when (seq result)
-                      (let [result (util/distinct-by (fn [[pages blocks]]
+                      (let [result (util/distinct-by (fn [[pages _blocks]]
                                                        (let [page (first pages)]
                                                          (:block/name page))) result)
                             [pages blocks] (apply map concat result)

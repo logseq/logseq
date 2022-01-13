@@ -5,8 +5,6 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
             [promesa.core :as p]))
 
 (defn add-search-to-recent!

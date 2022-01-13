@@ -14,6 +14,7 @@
   (get-in @state/state [:me :name]))
 
 (defn get-cors-proxy
+  #_:clj-kondo/ignore
   [repo-url]
   (or
    (when-not (string/blank? (:cors_proxy (state/get-me)))

@@ -13,10 +13,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile]
             [frontend.mobile.util :as mobile-util]
             [cljs.cache :as cache]))
 
@@ -71,7 +69,7 @@
       :ui/settings-open?                     false
       :ui/sidebar-open?                      false
       :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-      :ui/theme                              (or (storage/get :ui/theme) (if (mobile/is-native-platform?) "light" "dark"))
+      :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
       :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode?                         false
       ;; :show-all, :hide-block-body, :hide-block-children
@@ -284,7 +282,7 @@
 (defn get-current-repo
   []
   (or (:git/current-repo @state)
-      (when-not (mobile/is-native-platform?)
+      (when-not (mobile-util/is-native-platform?)
         "local")))
 
 (defn get-config
@@ -682,7 +680,7 @@
 (defn set-edit-input-id!
   [input-id]
   (swap! state update :editor/editing?
-         (fn [m]
+         (fn [_m]
            (and input-id {input-id true}))))
 
 (defn get-edit-pos
@@ -989,10 +987,6 @@
   (let [theme (:ui/theme @state)
         theme' (if (= theme "dark") "white" "dark")]
     (use-theme-mode! theme')))
-
-(defn- file-content-key
-  [repo path]
-  (str "ls_file_content_" repo path))
 
 (defn update-sync-status!
   [status]
@@ -1445,11 +1439,11 @@
       (not (get-edit-input-id)))))
 
 (defn set-last-persist-transact-id!
-  [repo files? id]
+  [_repo files? id]
   (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
 
 (defn get-last-persist-transact-id
-  [repo files?]
+  [_repo files?]
   (get-in @state [:db/last-persist-transact-ids :repo files?]))
 
 (defn persist-transaction!

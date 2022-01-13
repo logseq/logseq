@@ -26,7 +26,6 @@
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
-            [clojure.string :as str]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
             [goog.functions :refer [debounce]]))
@@ -99,9 +98,8 @@
 (rum/defcs dropdown < (mixins/modal :open?)
   [state content-fn modal-content-fn
    & [{:keys [modal-class z-index]
-       :or   {z-index 999}
-       :as   opts}]]
-  (let [{:keys [open? toggle-fn]} state
+       :or   {z-index 999}}]]
+  (let [{:keys [open?]} state
         modal-content (modal-content-fn state)]
     [:div.relative.ui__dropdown-trigger {:style {:z-index z-index}}
      (content-fn state)
@@ -118,10 +116,10 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header links-footer z-index] :as opts}]
+  [content-fn links {:keys [links-header links-footer] :as opts}]
   (dropdown
    content-fn
-   (fn [{:keys [close-fn] :as state}]
+   (fn [{:keys [close-fn]}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
       (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
@@ -301,7 +299,7 @@
 
 (defn setup-patch-ios-visual-viewport-state!
   []
-  (if-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
                              (mobile-util/native-ios?))
                          js/window.visualViewport)]
     (let [raf-pending? (atom false)
@@ -351,7 +349,7 @@
                                         keystroke e.key]
                                     (swap! active-keystroke handler keystroke))
                                   (when (contains? heads (keyword (util/safe-lower-case e.key)))
-                                    (set-global-active-keystroke (str/join "+" @active-keystroke))))
+                                    (set-global-active-keystroke (string/join "+" @active-keystroke))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")
@@ -401,8 +399,7 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load on-top-reached threshold
-                                      has-more more more-class]
+  [state _list-element-id body {:keys [on-load has-more more more-class]
                                :or {more-class "text-sm"}}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
@@ -475,9 +472,9 @@
 (defn render-keyboard-shortcut [sequence]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
-                       (str/trim)
-                       (str/lower-case)
-                       (str/split  #" |\+"))
+                       (string/trim)
+                       (string/lower-case)
+                       (string/split  #" |\+"))
                    sequence)]
     [:span.keyboard-shortcut
      (map-indexed (fn [i key]
@@ -551,7 +548,7 @@
      (mixins/on-key-down
       state
       {;; enter
-       13 (fn [state e]
+       13 (fn [state _e]
             (some->
              (.querySelector (rum/dom-node state) "button.ui__modal-enter")
              (.click)))})))
@@ -564,7 +561,7 @@
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
-        modal-panel-content (or modal-panel-content (fn [close] [:div]))]
+        modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
     [:div.ui__modal
      {:style {:z-index (if show? 999 -1)}
       :label label}
@@ -579,8 +576,7 @@
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
-    :or {on-cancel #()}
-    :as opts}]
+    :or {on-cancel #()}}]
   (fn [close-fn]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [*sub-checkbox-selected (and sub-checkbox? (atom []))]
@@ -636,7 +632,7 @@
             label (:modal/label modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
-            modal-panel-content (or modal-panel-content (fn [close] [:div]))]
+            modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
         [:div.ui__modal.is-sub-modal
          {:style {:z-index (if show? (+ 999 idx) -1)}
           :label label}
@@ -669,7 +665,7 @@
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
                  state)}
-  [state header content {:keys [default-collapsed? title-trigger?]}]
+  [state header content {:keys [title-trigger?]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
@@ -722,7 +718,7 @@
 
 (rum/defcs catch-error
   < {:did-catch
-     (fn [state error info]
+     (fn [state error _info]
        (js/console.dir error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]

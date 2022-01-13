@@ -244,21 +244,21 @@
                    :or {re-render? true}}]
   (state/set-loading-files! repo-url false)
   (when-not refresh? (state/set-importing-to-db! true))
-  (let [file-paths (map :file/path files)]
-    (let [metadata-file (config/get-metadata-path)
-          metadata-content (some #(when (= (:file/path %) metadata-file)
-                                    (:file/content %)) files)
-          metadata (when metadata-content
-                     (common-handler/read-metadata! repo-url metadata-content))
-          db-encrypted? (:db/encrypted? metadata)
-          db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
-      (if db-encrypted?
-        (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
-          (state/set-state! :encryption/graph-parsing? true)
-          (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
-                             db-encrypted-secret
-                             close-fn]))
-        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))))
+  (let [file-paths (map :file/path files)
+        metadata-file (config/get-metadata-path)
+        metadata-content (some #(when (= (:file/path %) metadata-file)
+                                  (:file/content %)) files)
+        metadata (when metadata-content
+                   (common-handler/read-metadata! metadata-content))
+        db-encrypted? (:db/encrypted? metadata)
+        db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
+    (if db-encrypted?
+      (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
+        (state/set-state! :encryption/graph-parsing? true)
+        (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                           db-encrypted-secret
+                           close-fn]))
+      (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files refresh?]}]

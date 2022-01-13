@@ -10,7 +10,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -67,7 +66,7 @@
 (defn restore-config!
   ([repo-url project-changed-check?]
    (restore-config! repo-url nil project-changed-check?))
-  ([repo-url config-content project-changed-check?]
+  ([repo-url config-content _project-changed-check?]
    (let [config-content (if config-content config-content
                             (common-handler/get-config repo-url))]
      (when config-content
@@ -148,7 +147,7 @@
 
                (and (mobile/native-android?) (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
-               
+
                (and (mobile/native-ios?) (not= "/" (first file)))
                file
 
@@ -188,15 +187,12 @@
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? add-history? update-status? from-disk? skip-compare?]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare?]
                       :or {reset? true
                            re-render-root? false
-                           add-history? true
-                           update-status? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [edit-block (state/get-edit-block)
-        original-content (db/get-file-no-sub repo path)
+  (let [original-content (db/get-file-no-sub repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
@@ -239,10 +235,8 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? finish-handler reset? update-db? chan chan-callback resolved-handler]
-               :or {add-history? true
-                    update-status? true
-                    reset? false
+  [repo files {:keys [reset? update-db?]
+               :or {reset? false
                     update-db? true}
                :as opts}]
   ;; old file content
@@ -379,9 +373,9 @@
                        (js/console.dir e)
                        {}))
             ks (if (vector? k) k [k])
-            new-result (rewrite/assoc-in result ks v)]
-        (let [new-content (str new-result)]
-          (set-file-content! repo path new-content))))))
+            new-result (rewrite/assoc-in result ks v)
+            new-content (str new-result)]
+        (set-file-content! repo path new-content)))))
 
 ;; TODO:
 ;; (defn compare-latest-pages

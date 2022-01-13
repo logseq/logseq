@@ -186,11 +186,11 @@
       "")))
 
 (defn get-subscript
-  [format]
+  [_format]
   "_")
 
 (defn get-superscript
-  [format]
+  [_format]
   "^")
 
 (defn get-empty-link-and-forward-pos

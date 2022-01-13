@@ -163,7 +163,7 @@
      (util/p-handle
       (stat dir nil)
       (fn [_stat])
-      (fn [error]
+      (fn [_error]
         (mkdir! dir))))
    (p/catch (fn [error] (js/console.error error)))))
 
@@ -176,7 +176,7 @@
                     path
                     (str "/" path)))]
      (->
-      (p/let [stat (stat dir path)]
+      (p/let [_stat (stat dir path)]
         true)
       (p/catch
           (fn [_error]

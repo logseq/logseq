@@ -8,7 +8,7 @@
 
 (defn did-mount!
   [state]
-  (let [[{:keys [format block-parent-id]} id] (:rum/args state)
+  (let [[{:keys [block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
@@ -33,8 +33,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [id value format block repo config]} (get-state)
-        file? (:file? config)]
+  (let [{:keys [value]} (get-state)]
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
     (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))
