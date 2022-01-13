@@ -3,7 +3,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.components.sidebar :as sidebar]
-            [frontend.handler.plugin :refer [lsp-enabled?] :as plugin-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc route-view
@@ -34,7 +34,7 @@
   (when-let [route-match (state/sub :route-match)]
     (i18n/tongue-provider
      (let [route-name (get-in route-match [:data :name])]
-       (if-let [view (:view (:data route-match))]
+       (when-let [view (:view (:data route-match))]
          (if (= :draw route-name)
            (view route-match)
            (sidebar/sidebar

@@ -26,12 +26,6 @@
    (outliner-tree/blocks->vec-tree
     (db/get-page-blocks-no-cache repo page) page) {:init-level 1}))
 
-(defn- get-page-content-debug
-  [repo page]
-  (outliner-file/tree->file-content
-   (outliner-tree/blocks->vec-tree
-    (db/get-page-blocks-no-cache repo page) page) {:init-level 1
-                                              :heading-to-list? true}))
 (defn- get-file-content
   [repo file-path]
   (if-let [page-name
@@ -81,12 +75,12 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [content (get-file-content repo file-path)]
       (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
-                           (clj->js {:type "text/plain;charset=utf-8,"}))]
-        (let [anchor (gdom/getElement "download")
-              url (js/window.URL.createObjectURL data)]
-          (.setAttribute anchor "href" url)
-          (.setAttribute anchor "download" file-path)
-          (.click anchor))))))
+                           (clj->js {:type "text/plain;charset=utf-8,"}))
+            anchor (gdom/getElement "download")
+            url (js/window.URL.createObjectURL data)]
+        (.setAttribute anchor "href" url)
+        (.setAttribute anchor "download" file-path)
+        (.click anchor)))))
 
 (defn export-repo-as-html!
   [repo]
@@ -163,6 +157,7 @@
 
 (defn get-md-file-contents
   [repo]
+  #_:clj-kondo/ignore
   (let [conn (db/get-conn repo)]
     (filter (fn [[path _]]
               (let [path (string/lower-case path)]
@@ -397,7 +392,7 @@
                                     (js/JSON.stringify (clj->js %3)))))
 
 (defn- convert-md-files-unordered-list-or-heading
-  [repo files heading-to-list?]
+  [files heading-to-list?]
   (->> files
        (mapv (fn [{:keys [path content names format]}]
                (when (first names)
@@ -443,28 +438,29 @@
         (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files
-                  (export-files-as-markdown repo files (state/export-heading-to-list?))]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "export-page-as-markdown")
-                      url (js/window.URL.createObjectURL data)]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" path)
-                  (.click anchor))))))))))
+                files [{:path path :content content :names names :format format}]
+                files
+                (export-files-as-markdown repo files (state/export-heading-to-list?))
+                data (js/Blob. [(second (first files))]
+                               (clj->js {:type "text/plain;charset=utf-8,"}))
+                anchor (gdom/getElement "export-page-as-markdown")
+                url (js/window.URL.createObjectURL data)]
+            (.setAttribute anchor "href" url)
+            (.setAttribute anchor "download" path)
+            (.click anchor)))))))
 
 (defn export-repo-as-opml!
+  #_:clj-kondo/ignore
   [repo]
   (when-let [repo (state/get-current-repo)]
     (when-let [files (get-file-contents-with-suffix repo)]
       (let [files (export-files-as-opml repo files)
             zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-          (when-let [anchor (gdom/getElement "export-as-opml")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
+               (when-let [anchor (gdom/getElement "export-as-opml")]
+                 (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+                 (.setAttribute anchor "download" (.-name zipfile))
+                 (.click anchor)))))))
 
 (defn export-page-as-opml!
   [page-name]
@@ -474,16 +470,16 @@
         (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files (export-files-as-opml repo files)]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "export-page-as-opml")
-                      url (js/window.URL.createObjectURL data)
-                      opml-path (string/replace (string/lower-case path) #"(.+)\.(md|org|markdown)$" "$1.opml")]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" opml-path)
-                  (.click anchor))))))))))
+                files [{:path path :content content :names names :format format}]
+                files (export-files-as-opml repo files)
+                data (js/Blob. [(second (first files))]
+                               (clj->js {:type "text/plain;charset=utf-8,"}))
+                anchor (gdom/getElement "export-page-as-opml")
+                url (js/window.URL.createObjectURL data)
+                opml-path (string/replace (string/lower-case path) #"(.+)\.(md|org|markdown)$" "$1.opml")]
+            (.setAttribute anchor "href" url)
+            (.setAttribute anchor "download" opml-path)
+            (.click anchor)))))))
 
 (defn convert-page-markdown-unordered-list-or-heading!
   [page-name]
@@ -493,15 +489,15 @@
         (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files (convert-md-files-unordered-list-or-heading repo files (state/export-heading-to-list?))]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")
-                      url (js/window.URL.createObjectURL data)]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" path)
-                  (.click anchor))))))))))
+                files [{:path path :content content :names names :format format}]
+                files (convert-md-files-unordered-list-or-heading files (state/export-heading-to-list?))
+                data (js/Blob. [(second (first files))]
+                               (clj->js {:type "text/plain;charset=utf-8,"}))
+                anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")
+                url (js/window.URL.createObjectURL data)]
+            (.setAttribute anchor "href" url)
+            (.setAttribute anchor "download" path)
+            (.click anchor)))))))
 
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)

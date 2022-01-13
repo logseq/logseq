@@ -122,7 +122,7 @@
   (when-let [markup (get-markup-at-point input)]
     (assoc markup :type "markup")))
 
-(defn- org-admonition&src-at-point [& [input]]
+(defn org-admonition&src-at-point [& [input]]
   (when-let [admonition&src (thing-at-point ["#+BEGIN_" "#+END_"] input)]
     (let [params (string/split
                   (first (string/split-lines (:full-content admonition&src)))

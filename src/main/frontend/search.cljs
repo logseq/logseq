@@ -61,7 +61,7 @@
                       (str-len-distance query str)
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
-        :default (if (= (first q) (first s))
+        :else (if (= (first q) (first s))
                    (recur (rest q)
                           (rest s)
                           (inc mult) ;; increase the multiplier as more query chars are matched
@@ -155,11 +155,11 @@
   ([q]
    (template-search q 10))
   ([q limit]
-   (let [q (clean-str q)]
-     (let [templates (db/get-all-templates)]
-       (when (seq templates)
-         (let [result (fuzzy-search (keys templates) q :limit limit)]
-           (vec (select-keys templates result))))))))
+   (let [q (clean-str q)
+         templates (db/get-all-templates)]
+     (when (seq templates)
+       (let [result (fuzzy-search (keys templates) q :limit limit)]
+         (vec (select-keys templates result)))))))
 
 (defn sync-search-indice!
   [datoms]

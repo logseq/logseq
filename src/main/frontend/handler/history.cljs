@@ -7,18 +7,11 @@
             [frontend.util :as util]
             [goog.dom :as gdom]))
 
-(defn- default-undo
-  []
-  (js/document.execCommand "undo" false nil))
-
-(defn- default-redo
-  []
-  (js/document.execCommand "redo" false nil))
-
 (defn restore-cursor!
-  [{:keys [last-edit-block container pos] :as state}]
+  [{:keys [last-edit-block container pos]}]
   (ui-handler/re-render-root!)
   (when (and container last-edit-block)
+    #_:clj-kondo/ignore
     (when-let [container (gdom/getElement container)]
       (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]

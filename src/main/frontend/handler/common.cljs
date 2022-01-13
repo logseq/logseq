@@ -140,7 +140,7 @@
       config)))
 
 (defn read-metadata!
-  [repo-url content]
+  [content]
   (try
    (reader/read-string content)
    (catch js/Error e
@@ -213,7 +213,7 @@
 
 (defn fix-pages-timestamps
   [pages]
-  (map (fn [{:block/keys [name created-at updated-at journal-day] :as p}]
+  (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]
          (cond->
            p
 

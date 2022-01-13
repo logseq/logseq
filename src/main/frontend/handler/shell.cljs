@@ -79,8 +79,8 @@
 
 (defn set-git-username-and-email
   [username email]
-  (p/let [r1 (run-git-command! ["config" "--global" "user.name" username])
-          r2 (run-git-command! ["config" "--global" "user.email" email])]
+  (p/let [_r1 (run-git-command! ["config" "--global" "user.name" username])
+          _r2 (run-git-command! ["config" "--global" "user.email" email])]
     (state/close-modal!)
     (notification/show!
      [:div "git config successfully!"]

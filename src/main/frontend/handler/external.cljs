@@ -71,11 +71,12 @@
 ;;; import OPML files
 (defn import-from-opml!
   [data finished-ok-handler]
+  #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
-                          (block/extract-blocks parsed-blocks "" true :markdown)
-                          (mapv editor/wrap-parse-block))
+                         (block/extract-blocks parsed-blocks "" true :markdown)
+                         (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (page/page-exists? page-name))
         (page/create! page-name {:redirect? false}))

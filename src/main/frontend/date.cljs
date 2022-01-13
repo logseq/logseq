@@ -74,7 +74,7 @@
     (->> (tf/parse (tf/formatters :date-time-no-ms) s)
         (t/to-default-time-zone)
         (tf/unparse (tf/formatter "MMM do, yyyy")))
-    (catch js/Error e
+    (catch js/Error _e
       nil)))
 
 (defn ISO-string
@@ -128,7 +128,7 @@
 (defn journal-name-s [s]
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
-    (catch js/Error e
+    (catch js/Error _e
       (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
                                      :date-str s})
       nil)))

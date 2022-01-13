@@ -73,14 +73,14 @@
           (listen state js/window "visibilitychange"
                   (fn [e]
                     (on-hide state e :visibilitychange))))))
-    (catch js/Error e
+    (catch js/Error _e
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
 
 (defn resize-layout
   [state ref]
   (listen state js/window "resize"
-          (fn [e]
+          (fn [_e]
             (reset! ref [js/window.innerWidth js/window.innerHeight]))))
 
 (defn on-enter
@@ -95,28 +95,26 @@
 
 (defn on-key-up
   [state keycode-map all-handler]
-  (let [node (rum/dom-node state)]
-    (listen state js/window "keyup"
-            (fn [e]
-              (let [key-code (.-keyCode e)]
-                (when-let [f (get keycode-map key-code)]
-                  (f state e))
-                (when all-handler (all-handler e key-code)))))))
+  (listen state js/window "keyup"
+          (fn [e]
+            (let [key-code (.-keyCode e)]
+              (when-let [f (get keycode-map key-code)]
+                (f state e))
+              (when all-handler (all-handler e key-code))))))
 
 (defn on-key-down
   ([state keycode-map]
    (on-key-down state keycode-map {}))
   ([state keycode-map {:keys [not-matched-handler all-handler target]}]
-   (let [node (rum/dom-node state)]
-     (listen state (or target js/window) "keydown"
-             (fn [e]
-               (let [key-code (.-keyCode e)]
-                 (if-let [f (get keycode-map key-code)]
-                   (f state e)
-                   (when (and not-matched-handler (fn? not-matched-handler))
-                     (not-matched-handler e key-code)))
-                 (when (and all-handler (fn? all-handler))
-                   (all-handler e key-code))))))))
+   (listen state (or target js/window) "keydown"
+           (fn [e]
+             (let [key-code (.-keyCode e)]
+               (if-let [f (get keycode-map key-code)]
+                 (f state e)
+                 (when (and not-matched-handler (fn? not-matched-handler))
+                   (not-matched-handler e key-code)))
+               (when (and all-handler (fn? all-handler))
+                 (all-handler e key-code)))))))
 
 (defn event-mixin
   ([attach-listeners]
@@ -124,7 +122,7 @@
   ([attach-listeners init-callback]
    (merge
     event-handler-mixin
-    {:init (fn [state props]
+    {:init (fn [state _props]
              (init-callback state))
      :did-mount (fn [state]
                   (attach-listeners state)
@@ -176,8 +174,8 @@
      state)})
 
 (defn perf-measure-mixin
-  [desc]
   "Does performance measurements in development."
+  [desc]
   {:wrap-render
    (fn wrap-render [render-fn]
      (fn [state]

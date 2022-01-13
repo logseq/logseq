@@ -13,21 +13,21 @@
   (let [[width height]
         (if (reverse? exif-orientation)
           [height width]
-          [width height])]
-    (let [ratio (/ width height)
-          to-width (if (> width max-width) max-width width)
-          to-height (if (> height max-height) max-height height)
-          new-ratio (/ to-width to-height)]
-      (let [[w h] (cond
-                    (> new-ratio ratio)
-                    [(* ratio to-height) to-height]
+          [width height])
+        ratio (/ width height)
+        to-width (if (> width max-width) max-width width)
+        to-height (if (> height max-height) max-height height)
+        new-ratio (/ to-width to-height)
+        [w h] (cond
+                (> new-ratio ratio)
+                [(* ratio to-height) to-height]
 
-                    (< new-ratio ratio)
-                    [to-width (/ to-width ratio)]
+                (< new-ratio ratio)
+                [to-width (/ to-width ratio)]
 
-                    :else
-                    [to-width to-height])]
-        [(int w) (int h)]))))
+                :else
+                [to-width to-height])]
+    [(int w) (int h)]))
 
 (defn fix-orientation
   "Given image and exif orientation, ensure the photo is displayed
@@ -76,10 +76,8 @@
 ;;     ))
 
 (defn upload
-  [files file-handler & {:keys [max-width max-height files-limit]
-                         :or {max-width 1920
-                              max-height 1080
-                              files-limit 1}}]
+  [files file-handler & {:keys [files-limit]
+                         :or {files-limit 1}}]
   (doseq [file (take files-limit (array-seq files))]
     (let [file-type (gobj/get file "type")
           ymd (->> (vals (date/year-month-day-padded))

@@ -13,13 +13,6 @@
           :target to})
        links))
 
-(defn- get-connections
-  [page links]
-  (count (filter (fn [{:keys [source target]}]
-                   (or (= source page)
-                       (= target page)))
-                 links)))
-
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
   (let [parents (set (map last namespaces))
@@ -88,7 +81,7 @@
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages?] :as settings}]
+  [theme {:keys [journal? orphan-pages? builtin-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -128,7 +121,6 @@
     (when-let [repo (state/get-current-repo)]
       (let [page (util/page-name-sanity-lc page)
             page-entity (db/entity [:block/name page])
-            original-page-name (:block/original-name page-entity)
             tags (:tags (:block/properties page-entity))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
@@ -136,9 +128,9 @@
             namespaces (db/get-all-namespace-relation repo)
             links (concat
                    namespaces
-                   (map (fn [[p aliases]]
+                   (map (fn [[p _aliases]]
                           [page p]) ref-pages)
-                   (map (fn [[p aliases]]
+                   (map (fn [[p _aliases]]
                           [p page]) mentioned-pages)
                    (map (fn [tag]
                           [page tag])
@@ -189,7 +181,7 @@
       (let [ref-blocks (db/get-block-referenced-blocks block)
             namespaces (db/get-all-namespace-relation repo)
             links (concat
-                   (map (fn [[p aliases]]
+                   (map (fn [[p _aliases]]
                           [block p]) ref-blocks)
                    namespaces)
             other-blocks (->> (concat (map first ref-blocks))
