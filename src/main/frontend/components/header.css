@@ -209,7 +209,7 @@ html.is-native-ipad {
 
     #main-content-container {
         padding-top: 0px;
-        height: calc(100vh - var(--ls-headbar-height));
+        height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
     }
     
     .cp__header > .r {
