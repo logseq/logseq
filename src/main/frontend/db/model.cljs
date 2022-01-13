@@ -532,10 +532,14 @@
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               block-eids (if (and limit (> (count datoms) 1000)) ; TODO: needs benchmark
+                               ;; TODO: needs benchmark
+                               long-page? (> (count datoms) 1000)
+                               block-eids (if long-page?
                                             (get-limited-blocks db page-entity block-eids limit)
                                             block-eids)
-                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
+                               blocks (db-utils/pull-many repo-url pull-keys block-eids)
+                               blocks (if long-page? blocks
+                                          (sort-blocks blocks page-entity nil))]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
