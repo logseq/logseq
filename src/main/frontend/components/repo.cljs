@@ -145,7 +145,7 @@
             :style {:border-radius "50%"
                     :margin-top 2}
             :on-mouse-over
-            (fn [e]
+            (fn [_e]
               (toggle-fn)
               (js/setTimeout common-handler/check-changed-files-status 0))}])
         (fn [{:keys [toggle-fn]}]
@@ -166,7 +166,7 @@
                        [:a {:href (rfe/href :file {:path file})}
                         file]
                        [:a.ml-4.text-sm.mt-1
-                        {:on-click (fn [e]
+                        {:on-click (fn [_e]
                                      (export-handler/download-file! file))}
                         [:span (t :download)]]]])]]
                  :else
@@ -220,7 +220,7 @@
                                      (= current-repo (:url repo)))
                                    repos)
               repo-links (mapv
-                          (fn [{:keys [id url]}]
+                          (fn [{:keys [url]}]
                             (let [repo-path (get-repo-name url)
                                   short-repo-name (text/get-graph-name-from-path repo-path)]
                               {:title short-repo-name

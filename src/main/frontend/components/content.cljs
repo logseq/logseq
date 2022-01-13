@@ -37,7 +37,7 @@
       (when-not (protocol/loaded? record)
         (set-format-js-loading! format true)
         (protocol/lazyLoad record
-                           (fn [result]
+                           (fn [_result]
                              (set-format-js-loading! format false)))))))
 
 (defn lazy-load-js
@@ -147,7 +147,7 @@
        "Make template"))))
 
 (rum/defc block-context-menu-content
-  [target block-id]
+  [_target block-id]
 
   (let [*el-ref (rum/use-ref nil)]
 
@@ -323,7 +323,7 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "mouseup"
-                    (fn [e]
+                    (fn [_e]
                       (when-not (state/in-selection-mode?)
                         (when-let [blocks (seq (util/get-selected-nodes "ls-block"))]
                           (let [blocks (remove nil? blocks)
@@ -371,7 +371,7 @@
 
                           :else
                           nil))))))
-  [id {:keys [hiccup] :as option}]
+  [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
      hiccup

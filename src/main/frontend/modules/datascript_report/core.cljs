@@ -21,7 +21,7 @@
       r)))
 
 (defn get-blocks-and-pages
-  [{:keys [db-before db-after tx-data tx-meta] :as tx-report}]
+  [{:keys [db-before db-after tx-data tx-meta]}]
   (let [updated-db-ids (-> (mapv first tx-data) (set))
         result (reduce
                 (fn [acc x]

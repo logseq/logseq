@@ -8,12 +8,11 @@
             [frontend.state :as state]
             [frontend.components.settings :as settings]
             [frontend.rum :refer [use-mounted]]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [rum.core :as rum]))
 
 (rum/defc container
   [{:keys [t route theme on-click current-repo nfs-granted? db-restoring?
-           settings-open? sidebar-open? system-theme? sidebar-blocks-len edit?] :as props} child]
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -35,7 +34,7 @@
      [sidebar-open? restored-sidebar? sidebar-blocks-len])
 
     (rum/use-effect!
-     #(if lsp-enabled?
+     #(when lsp-enabled?
         (plugin-handler/setup-install-listener! t))
      [t])
 

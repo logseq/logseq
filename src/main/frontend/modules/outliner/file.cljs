@@ -7,11 +7,9 @@
             [frontend.handler.notification :as notification]
             [frontend.modules.file.core :as file]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
-            [frontend.debug :as debug]))
+            [lambdaisland.glogi :as log]))
 
 (def write-chan (async/chan))
 

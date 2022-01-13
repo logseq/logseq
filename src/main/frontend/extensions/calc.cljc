@@ -100,5 +100,5 @@
           [:div.extensions__code-calc-output-line {:key i}
            [:span (cond
                     (nil? line)           ""
-                    (or  (failure? line)) "?"
+                    (failure? line) "?"
                     :else                 line)]])])))

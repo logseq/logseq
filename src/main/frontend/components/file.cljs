@@ -3,7 +3,6 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [datascript.core :as dc]
-            [frontend.components.content :as content]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -59,7 +58,7 @@
 
                 (when-not mobile?
                   [:td [:a.text-sm
-                       {:on-click (fn [e]
+                       {:on-click (fn [_e]
                                     (export-handler/download-file! file))}
                        [:span (tongue :download)]]])]))]]))]))
 

@@ -23,9 +23,8 @@
   (satisfies? INode node))
 
 (defn- blocks->vec-tree-aux
-  [blocks root page?]
-  (let [*idx (atom (if page? 0 -1))
-        id-map (fn [m] {:db/id (:db/id m)})
+  [blocks root]
+  (let [id-map (fn [m] {:db/id (:db/id m)})
         root (id-map root)
         parent-blocks (group-by :block/parent blocks)
         sort-fn (fn [parent]
@@ -55,7 +54,7 @@
   (let [[page? root] (get-root-and-page (str root-id))]
     (if-not root ; custom query
       blocks
-      (let [result (blocks->vec-tree-aux blocks root page?)]
+      (let [result (blocks->vec-tree-aux blocks root)]
         (if page?
           result
           ;; include root block

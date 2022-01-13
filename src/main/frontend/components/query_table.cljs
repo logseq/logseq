@@ -1,6 +1,5 @@
 (ns frontend.components.query-table
-  (:require [clojure.string :as string]
-            [frontend.components.svg :as svg]
+  (:require [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.common :as common-handler]
@@ -74,7 +73,6 @@
                   p-desc?
                   :else
                   true)
-          editor-box (get config :editor-box)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
           result (if page? result (attach-clock-property result))
@@ -119,9 +117,7 @@
               (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))]]
         [:tbody
          (for [item result]
-           (let [format (:block/format item)
-                 edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
-                 heading-level (:block/heading-level item)]
+           (let [format (:block/format item)]
              [:tr.cursor
               (for [key keys]
                 (let [value (case key

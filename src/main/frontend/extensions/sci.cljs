@@ -5,7 +5,6 @@
 (def sum (partial apply +))
 
 (defn average [coll]
-  (def coll coll)
   (/ (reduce + coll) (count coll)))
 
 (defn eval-string

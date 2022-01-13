@@ -261,8 +261,7 @@
         (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh?]
-             :as opts}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh?]}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
@@ -380,9 +379,9 @@
                          result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
-                         (p/then (fn [result]
+                         (p/then (fn [_result]
                                    (-> (git/checkout repo-url)
-                                       (p/then (fn [result]
+                                       (p/then (fn [_result]
                                                  (git-handler/set-git-status! repo-url nil)
                                                  (git-handler/set-git-last-pulled-at! repo-url)
                                                  (when (and local-latest-commit fetchHead
@@ -503,7 +502,7 @@
        (do
          (state/set-cloning! true)
          (git/clone repo-url token))
-       (fn [result]
+       (fn [_result]
          (state/set-current-repo! repo-url)
          (db/start-db-conn! (state/get-me) repo-url)
          (db/mark-repo-as-cloned! repo-url))
@@ -603,7 +602,7 @@
   (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
     (do
-      (doseq [{:keys [id url]} (:repos me)]
+      (doseq [{:keys [url]} (:repos me)]
         (let [repo url]
           (if (db/cloned? repo)
             (p/do!

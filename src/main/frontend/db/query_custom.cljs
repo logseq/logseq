@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [cljs.reader :as reader]
             [frontend.db.query-react :as react]
-            [frontend.template :as template]
             [frontend.db.query-dsl :as dsl]
             [frontend.db.model :as model]
             [clojure.walk :as walk]))
@@ -26,11 +25,11 @@
   ([query]
    (custom-query query {}))
   ([query query-opts]
+   #_:clj-kondo/ignore
    (when-let [query' (cond
                        (and (string? query)
                             (not (string/blank? query)))
-                       (let [query-string (template/resolve-dynamic-template! query)]
-                         (reader/read-string query))
+                       (reader/read-string query)
 
                        (map? query)
                        query

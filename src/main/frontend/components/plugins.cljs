@@ -8,7 +8,6 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
@@ -28,12 +27,12 @@
           (.focus target)
           (mixins/on-key-down
             state {38                                       ;; up
-                   (fn [^js e]
+                   (fn [^js _e]
                      (reset! *cursor
                              (if (zero? @*cursor)
                                (dec @*total) (dec @*cursor))))
                    40                                       ;; down
-                   (fn [^js e]
+                   (fn [^js _e]
                      (reset! *cursor
                              (if (= @*cursor (dec @*total))
                                0 (inc @*cursor))))
@@ -63,7 +62,7 @@
                  plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
              [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
               {:key      (str idx (:url opt))
-               :title    (if current-selected "Cancel selected theme")
+               :title    (when current-selected "Cancel selected theme")
                :class    (util/classnames
                            [{:is-selected current-selected
                              :is-active   (= idx @*cursor)}])
@@ -74,7 +73,7 @@
                 [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
                 (:name opt)]]
               [:small.flex-shrink-0.flex.items-center.opacity-10
-               (if current-selected (ui/icon "check"))]]))
+               (when current-selected (ui/icon "check"))]]))
          themes)])))
 
 (rum/defc unpacked-plugin-loader
@@ -141,7 +140,7 @@
        :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc remote-readme-display
-  [repo content]
+  [repo _content]
 
   (let [src (str "lsp://logseq.com/marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
@@ -189,7 +188,7 @@
         [:h3.head.text-xl.font-bold.pt-1.5
 
          [:span name]
-         (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+         (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
         [:div.desc.text-xs.opacity-70
          [:p description]
@@ -209,7 +208,7 @@
 
         ;; Github repo
         [:div.flag.is-top.opacity-50
-         (if repo
+         (when repo
            [:a.flex {:target "_blank"
                      :href   (plugin-handler/gh-repo-url repo)}
             (svg/github {:width 16 :height 16})])]
@@ -224,7 +223,7 @@
 
             ;; downloads
             (when-let [downloads (and stat (:total_downloads stat))]
-              (if (and downloads (> downloads 0))
+              (when (and downloads (> downloads 0))
                 [:li.flex.text-sm.items-center.pr-3
                  (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
@@ -247,7 +246,7 @@
             [:div.de
              [:strong (ui/icon "settings")]
              [:ul.menu-list
-              [:li {:on-click #(if usf (js/apis.openPath usf))} (t :plugin/open-settings)]
+              [:li {:on-click #(when usf (js/apis.openPath usf))} (t :plugin/open-settings)]
               [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
               [:li {:on-click
                     #(let [confirm-fn
@@ -269,7 +268,7 @@
             ]
 
            [:div.r.flex.items-center
-            (if (and unpacked? (not disabled))
+            (when (and unpacked? (not disabled))
               [:a.btn
                {:on-click #(js-invoke js/LSPluginCore "reload" id)}
                (t :plugin/reload)])
@@ -277,8 +276,8 @@
             (when (not unpacked?)
               [:div.updates-actions
                [:a.btn
-                {:class    (util/classnames [{:disabled (or installing-or-updating?)}])
-                 :on-click #(if-not has-other-pending?
+                {:class    (util/classnames [{:disabled installing-or-updating?}])
+                 :on-click #(when-not has-other-pending?
                               (plugin-handler/check-or-update-marketplace-plugin
                                 (assoc item :only-check (not new-version))
                                 (fn [e] (notification/show! e :error))))}
@@ -342,7 +341,7 @@
         {:placeholder "Search plugins"
          :ref         *search-ref
          :on-key-down (fn [^js e]
-                        (if (= 27 (.-keyCode e))
+                        (when (= 27 (.-keyCode e))
                           (when-not (string/blank? search-key)
                             (util/stop e)
                             (reset! *search-key nil))))
@@ -655,7 +654,7 @@
 
           :disabled
           (or downloading?
-              (and (not (empty? unchecked))
+              (and (seq unchecked)
                    (= (count unchecked) (count updates)))))])]))
 
 (defn open-select-theme!
@@ -706,7 +705,7 @@
       (when (seq items)
         [:div {:class     (str "ui-items-container")
                :data-type (name type)}
-         (for [[_ {:keys [key template] :as opts} pid] items]
+         (for [[_ {:keys [key] :as opts} pid] items]
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
 
 (rum/defc plugins-page
@@ -747,7 +746,7 @@
           (installed-plugins))]])))
 
 (rum/defc custom-js-installer
-  [{:keys [t current-repo db-restoring? nfs-granted?] :as props}]
+  [{:keys [t current-repo db-restoring? nfs-granted?]}]
   (rum/use-effect!
     (fn []
       (when (and (not db-restoring?)

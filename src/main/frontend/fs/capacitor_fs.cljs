@@ -1,21 +1,18 @@
 (ns frontend.fs.capacitor-fs
   (:require [frontend.fs.protocol :as protocol]
             [lambdaisland.glogi :as log]
-            [cljs.core.async :as a]
-            [cljs.core.async.interop :refer [<p!]]
             [frontend.util :as futil]
             [frontend.config :as config]
             [cljs-bean.core :as bean]
-            ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
-            [frontend.mobile.util :as util]
+            ["@capacitor/filesystem" :refer [Filesystem Encoding]]
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.mobile.util :as mobile-util]))
 
-(when (util/native-ios?)
+(when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
     []
-    (.ensureDocuments util/ios-file-container)))
+    (.ensureDocuments mobile-util/ios-file-container)))
 
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
@@ -98,7 +95,7 @@
 
 (defrecord Capacitorfs []
   protocol/Fs
-  (mkdir! [this dir]
+  (mkdir! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
                             {:path dir
@@ -106,7 +103,7 @@
                              }))]
       (js/console.log result)
       result))
-  (mkdir-recur! [this dir]
+  (mkdir-recur! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
                             {:path dir
@@ -114,14 +111,14 @@
                              :recursive true}))]
       (js/console.log result)
       result))
-  (readdir [this dir]                   ; recursive
+  (readdir [_this dir]                   ; recursive
     (readdir dir))
-  (unlink! [this repo path _opts]
+  (unlink! [_this _repo _path _opts]
     nil)
-  (rmdir! [this dir]
+  (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
-  (read-file [this dir path _options]
+  (read-file [_this dir path _options]
     (let [path (str dir path)
           path (if (or (string/starts-with? path "file:")
                        (string/starts-with? path "content:"))
@@ -136,9 +133,9 @@
          content)
        (p/catch (fn [error]
                   (js/alert error))))))
-  (delete-file! [this repo dir path {:keys [ok-handler error-handler] :as opts}]
+  (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
     (let [path (cond
-                 (= (util/platform) "ios")
+                 (= (mobile-util/platform) "ios")
                  (js/encodeURI (js/decodeURI path))
 
                  (string/starts-with? path (config/get-repo-dir repo))
@@ -157,9 +154,9 @@
          (if error-handler
            (error-handler error)
            (log/error :delete-file-failed error))))))
-  (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
+  (write-file! [_this repo dir path content {:keys [ok-handler error-handler]}]
     (let [path (cond
-                 (= (util/platform) "ios")
+                 (= (mobile-util/platform) "ios")
                  (js/encodeURI (js/decodeURI path))
 
                  (string/starts-with? path (config/get-repo-dir repo))
@@ -181,28 +178,28 @@
             (if error-handler
               (error-handler error)
               (log/error :write-file-failed error))))))
-  (rename! [this repo old-path new-path]
+  (rename! [_this _repo _old-path _new-path]
     nil)
-  (stat [this dir path]
+  (stat [_this dir path]
     (let [path (str dir path)]
       (p/let [result (.stat Filesystem (clj->js
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
                                          }))]
         result)))
-  (open-dir [this ok-handler]
-    (p/let [_    (when (= (util/platform) "android") (check-permission-android))
+  (open-dir [_this _ok-handler]
+    (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
             path (p/chain
-                  (.pickFolder util/folder-picker)
+                  (.pickFolder mobile-util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
-            _ (when (util/native-ios?) (.downloadFilesFromiCloud util/download-icloud-files))
+            _ (when (mobile-util/native-ios?) (.downloadFilesFromiCloud mobile-util/download-icloud-files))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
-  (get-files [this path-or-handle _ok-handler]
+  (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
-  (watch-dir! [this dir]
+  (watch-dir! [_this _dir]
     nil))
 
 

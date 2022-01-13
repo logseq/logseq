@@ -61,29 +61,29 @@
   (try
     (let [repo (state/get-current-repo)
           result (db-utils/seq-flatten query-result)
-          block? (:block/uuid (first result))]
-      (let [result (if block?
-                     (let [result (if (seq remove-blocks)
-                                    (let [remove-blocks (set remove-blocks)]
-                                      (remove (fn [h]
-                                                (contains? remove-blocks (:block/uuid h)))
-                                              result))
-                                    result)]
-                       (some->> result
-                                remove-nested-children-blocks
-                                (model/sort-by-left-recursive)
-                                (db-utils/with-repo repo)
-                                (model/with-pages)))
-                     result)]
-        (if-let [result-transform (:result-transform q)]
-          (if-let [f (sci/eval-string (pr-str result-transform))]
-            (try
-              (sci/call-fn f result)
-              (catch js/Error e
-                (log/error :sci/call-error e)
-                result))
-            result)
-          result)))
+          block? (:block/uuid (first result))
+          result (if block?
+                   (let [result (if (seq remove-blocks)
+                                  (let [remove-blocks (set remove-blocks)]
+                                    (remove (fn [h]
+                                              (contains? remove-blocks (:block/uuid h)))
+                                            result))
+                                  result)]
+                     (some->> result
+                              remove-nested-children-blocks
+                              (model/sort-by-left-recursive)
+                              (db-utils/with-repo repo)
+                              (model/with-pages)))
+                   result)]
+      (if-let [result-transform (:result-transform q)]
+        (if-let [f (sci/eval-string (pr-str result-transform))]
+          (try
+            (sci/call-fn f result)
+            (catch js/Error e
+              (log/error :sci/call-error e)
+              result))
+          result)
+        result))
     (catch js/Error e
       (log/error :query/failed e))))
 

@@ -14,7 +14,6 @@
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db.react :as db-react]
             [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
@@ -31,12 +30,11 @@
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.components.widgets :as widgets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]))
 
 (defn nav-item
-  [title href svg-d active? close-modal-fn]
+  [title href svg-d _active? close-modal-fn]
   [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
    {:href href
     :on-click close-modal-fn}
@@ -50,7 +48,7 @@
    title])
 
 (rum/defc nav-content-item
-  [name {:keys [edit-fn class] :as opts} child]
+  [name {:keys [class]} child]
 
   [:div.nav-content-item.is-expand
    {:class class}
@@ -102,7 +100,7 @@
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
   (rum/local nil ::dragging-over)
-  [state t name icon]
+  [state _t name icon]
   (let [up? (get state ::up?)
         dragging-over (get state ::dragging-over)
         target (state/sub :favorites/dragging)]
@@ -112,14 +110,14 @@
                "dragging-target"
                "")
       :draggable true
-      :on-drag-start (fn [event]
+      :on-drag-start (fn [_event]
                        (state/set-state! :favorites/dragging name))
       :on-drag-over (fn [e]
                       (util/stop e)
                       (reset! dragging-over name)
                       (when-not (= name (get @state/state :favorites/dragging))
                         (reset! up? (move-up? e))))
-      :on-drag-leave (fn [e]
+      :on-drag-leave (fn [_e]
                        (reset! dragging-over nil))
       :on-drop (fn [e]
                  (page-handler/reorder-favorites! {:to name
@@ -220,12 +218,9 @@
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
-  [route-match close-modal-fn]
+  [_route-match close-modal-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [active? (fn [route] (= route (get-in route-match [:data :name])))
-          page-active? (fn [page]
-                         (= page (get-in route-match [:parameters :path :name])))
-          default-home (get-default-home-if-valid)]
+    (let [default-home (get-default-home-if-valid)]
 
       [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
        {:on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
@@ -296,12 +291,12 @@
                   (dnd/subscribe!
                    element
                    :upload-files
-                   {:drop (fn [e files]
+                   {:drop (fn [_e files]
                             (when-let [id (state/get-edit-input-id)]
                               (let [format (:block/format (state/get-edit-block))]
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
-  [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
+  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
 
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -363,8 +358,7 @@
                  (reset! sidebar-inited? true))))
            state)}
   []
-  (let [today (state/sub :today)
-        cloning? (state/sub :repo/cloning?)
+  (let [cloning? (state/sub :repo/cloning?)
         default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
         current-repo (state/sub :git/current-repo)
@@ -481,7 +475,7 @@
                 (swipe/setup-listeners!)
                 state)}
   [state route-match main-content]
-  (let [{:keys [open? close-fn open-fn]} state
+  (let [{:keys [open-fn]} state
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])

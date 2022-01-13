@@ -35,8 +35,9 @@
                       :node (gdom/getElement "commit-message")
                       :on-enter (fn []
                                   (commit-and-push!)))))
-  [state close-fn]
+  [state _close-fn]
   (let [electron? (util/electron?)]
+    #_:clj-kondo/ignore
     (when-let [repo (state/sub :git/current-repo)]
       [:div.w-full.mx-auto.sm:max-w-lg.sm:w-96 {:style {:padding "48px 0"}}
        [:div.sm:flex.sm:items-start
@@ -63,6 +64,7 @@
          (not (gobj/get e "ctrlKey"))
          (not (gobj/get e "altKey"))
          (not (gobj/get e "metaKey")))
+    #_:clj-kondo/ignore
     (when-let [repo-url (state/get-current-repo)]
       (when-not (state/get-edit-input-id)
         (util/stop e)

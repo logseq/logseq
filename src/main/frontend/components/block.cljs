@@ -8,7 +8,6 @@
             [clojure.walk :as walk]
             [datascript.core :as dc]
             [dommy.core :as d]
-            [frontend.mobile.util :as mobile]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -48,7 +47,7 @@
             [frontend.template :as template]
             [frontend.text :as text]
             [frontend.ui :as ui]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
@@ -258,7 +257,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?) (mobile/is-native-platform?))
+    (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
@@ -280,9 +279,7 @@
      (if (and (config/local-asset? href)
               (config/local-db? (state/get-current-repo)))
        (asset-link config title href metadata full_text)
-       (let [protocol (and (= "Complex" (first url))
-                           (:protocol (second url)))
-             href (cond
+       (let [href (cond
                     (util/starts-with? href "http")
                     href
 
@@ -1353,10 +1350,6 @@
   [uuid]
   (= (:block/uuid @*dragging-block) uuid))
 
-(defn- get-data-transfer-attr
-  [event attr]
-  (.getData (gobj/get event "dataTransfer") attr))
-
 (defn- bullet-drag-start
   [event block uuid block-id]
   (editor-handler/highlight-block! uuid)
@@ -1383,7 +1376,7 @@
     (route-handler/redirect-to-page! uuid)))
 
 (defn- toggle-block-children
-  [e children]
+  [_e children]
   (let [block-ids (map :block/uuid children)]
     (dorun
      (if (some editor-handler/collapsable? block-ids)
@@ -1522,7 +1515,7 @@
                     :checked checked?
                     :on-mouse-down (fn [e]
                                      (util/stop-propagation e))
-                    :on-change (fn [e]
+                    :on-change (fn [_e]
                                  (if checked?
                                    (editor-handler/uncheck block)
                                    (editor-handler/check block)))}))))
@@ -1777,7 +1770,7 @@
           (datetime-comp/date-picker nil nil ts)]))]))
 
 (defn- block-content-on-mouse-down
-  [e block block-id content edit-input-id]
+  [e block block-id _content edit-input-id]
   (.stopPropagation e)
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")]
@@ -1966,7 +1959,7 @@
      [:pre.m-0.text-sm content]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid body format] :as block} edit-input-id block-id heading-level edit?]
+  [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)]
@@ -2115,7 +2108,7 @@
   (editor-handler/unhighlight-blocks!))
 
 (defn- block-drag-end
-  [event *move-to]
+  [_event *move-to]
   (reset! *dragging? false)
   (reset! *dragging-block nil)
   (reset! *drag-to-block nil)
@@ -2198,8 +2191,7 @@
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [init-collapsed? (::init-collapsed? state)
-        block (merge block (block/parse-title-and-body uuid format pre-block? content))
+  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2412,7 +2404,8 @@
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
         clocks (reverse (sort-by str clocks))
         ;; TODO: diplay states change log
-        states (filter #(not (string/starts-with? % "CLOCK:")) log)]
+        ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
+        ]
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
@@ -2903,7 +2896,7 @@
        (map #(dissoc % :block/children))))
 
 (defn- get-segment
-  [config flat-blocks idx blocks->vec-tree]
+  [_config flat-blocks idx blocks->vec-tree]
   (let [new-idx (if-not (zero? idx)
                   (+ idx step-loading-blocks)
                   initial-blocks-length)
@@ -2914,12 +2907,11 @@
      idx]))
 
 (rum/defcs lazy-blocks <
-  {:did-remount (fn [old-state new-state]
+  {:did-remount (fn [_old-state new-state]
                   ;; Loading more when pressing Enter or paste
-                  (let [args (:rum/args new-state)]
-                    ;; FIXME: what if users paste too many blocks?
-                    ;; or, a template with a lot of blocks?
-                    (swap! (::last-idx new-state) + 100))
+                  ;; FIXME: what if users paste too many blocks?
+                  ;; or, a template with a lot of blocks?
+                  (swap! (::last-idx new-state) + 100)
                   new-state)}
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]

@@ -85,7 +85,7 @@
   (and hl (not (nil? (get-in hl [:content :image])))))
 
 (defn persist-hl-area-image$
-  [^js viewer current new-hl old-hl {:keys [top left width height] :as vw-bounding}]
+  [^js viewer current new-hl old-hl {:keys [top left width height]}]
   (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page new-hl)))))]
     (let [^js doc (.-ownerDocument canvas)
           ^js canvas' (.createElement doc "canvas")
@@ -138,7 +138,7 @@
       (:block/uuid block) :hl-stamp (get-in highlight [:content :image]))))
 
 (defn unlink-hl-area-image$
-  [^js viewer current hl]
+  [^js _viewer current hl]
   (when-let [fkey (and (area-highlight? hl) (:key current))]
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
@@ -201,6 +201,7 @@
 
 (defn del-ref-block!
   [{:keys [id]}]
+  #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
     (when-let [block (db-model/get-block-by-uuid id)]
       (editor-handler/delete-block-aux! block true))))

@@ -1,8 +1,6 @@
 (ns frontend.components.page-menu
   (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.editor :as editor]
             [frontend.components.export :as export]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -63,11 +61,9 @@
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          journal? (db/journal-page? page-name)
           block? (and page (util/uuid-string? page-name))
           contents? (= page-name "contents")
-          {:keys [title] :as properties} (:block/properties page)
-          title (or title page-original-name page-name)
+          properties (:block/properties page)
           public? (true? (:public properties))
           favorites (:favorites (state/sub-graph-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
@@ -129,7 +125,7 @@
                          (shell/get-file-latest-git-log page 100))}})
 
           (when plugin-handler/lsp-enabled?
-            (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+            (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
               {:title label
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page (state/get-current-page)) action)}}))

@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [dommy.core :as d]
             [frontend.commands :as commands
              :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
             [frontend.components.block :as block]
@@ -10,7 +9,6 @@
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
-            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -20,7 +18,6 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
@@ -157,7 +154,7 @@
                                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
                      (reset! result matched-blocks)))
                  state)}
-  [state edit-block input id q format]
+  [state _edit-block input id q format]
   (let [result (rum/react (get state ::result))
         chosen-handler (editor-handler/block-on-chosen-handler input id q format)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
@@ -167,7 +164,7 @@
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
         :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-        :item-render (fn [{:block/keys [content page uuid] :as item}]
+        :item-render (fn [{:block/keys [content page uuid]}]
                        (let [page (or (:block/original-name page)
                                       (:block/name page))
                              repo (state/sub :git/current-repo)
@@ -181,7 +178,7 @@
                    (reset! editor-handler/*selected-text nil)
                    (state/clear-search-result!)
                    state)}
-  [state id format]
+  [state id _format]
   (when (state/sub :editor/show-block-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)
@@ -198,7 +195,7 @@
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
-  [id format]
+  [id _format]
   (when (state/sub :editor/show-template-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)]
@@ -222,7 +219,7 @@
             :class       "black"}))))))
 
 (rum/defc mobile-bar < rum/reactive
-  [parent-state parent-id]
+  [_parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)
         ;; TODO: should we add this focus step to `simple-insert!`?
@@ -230,7 +227,7 @@
                              (util/make-el-into-center-viewport input)
                              (.focus input)))]
     [:div#mobile-editor-toolbar.bg-base-2
-     {:style {:bottom (if (and vw-state)
+     {:style {:bottom (if vw-state
                         (- (.-clientHeight js/document.documentElement)
                            (:height vw-state)
                            (:offset-top vw-state))
@@ -423,7 +420,7 @@
                       command (:command (first input-option))]
                   (on-submit command @input-value pos))
                 (reset! input-value nil))))})))
-  [state id on-submit]
+  [state _id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
     (let [{:keys [pos]} (util/react *slash-caret-pos)
           input-value (get state ::input-value)]
@@ -522,6 +519,7 @@
                   (let [files (.-files (.-target e))]
                     (editor-handler/upload-asset id files format editor-handler/*asset-uploading? false)))
      :hidden    true}]
+   #_:clj-kondo/ignore
    (when-let [uploading? (util/react editor-handler/*asset-uploading?)]
      (let [processing (util/react editor-handler/*asset-uploading-process)]
        (transition-cp
@@ -532,7 +530,7 @@
         *slash-caret-pos)))])
 
 (defn- set-up-key-down!
-  [repo state format]
+  [state format]
   (mixins/on-key-down
    state
    {}
@@ -549,11 +547,10 @@
 
 (defn- setup-key-listener!
   [state]
-  (let [{:keys [id format block]} (get-state)
+  (let [{:keys [id format]} (get-state)
         input-id id
-        input (gdom/getElement input-id)
-        repo (:block/repo block)]
-    (set-up-key-down! repo state format)
+        input (gdom/getElement input-id)]
+    (set-up-key-down! state format)
     (set-up-key-up! state input input-id search-timeout)))
 
 (def starts-with? clojure.string/starts-with?)
@@ -674,7 +671,7 @@
 
      (state/sub :editor/show-input)
      (animated-modal "input" (input id
-                                    (fn [command m pos]
+                                    (fn [command m _pos]
                                       (editor-handler/handle-command-input command id format m)))
                      true (util/react *slash-caret-pos))
 
@@ -693,8 +690,7 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [on-hide node format block block-parent-id heading-level]
-          :as   option} id config]
+  [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}

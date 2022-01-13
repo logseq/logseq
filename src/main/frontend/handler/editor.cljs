@@ -1550,7 +1550,7 @@
                                      true)]
       (commands/restore-state restore-slash-caret-pos?))))
 
-(defn- get-asset-file-link
+(defn get-asset-file-link
   [format url file-name image?]
   (let [pdf? (and url (string/ends-with? url ".pdf"))]
     (case (keyword format)

@@ -1,9 +1,18 @@
-{:linters {:unresolved-symbol {:exclude [goog.DEBUG 
-                                         goog.string.unescapeEntities]}}
+{:linters
+ {:unresolved-symbol {:exclude [goog.DEBUG
+                                goog.string.unescapeEntities
+                                ;; TODO:lint: Fix when fixing all type hints
+                                object]}
+  ;; TODO:lint: Remove node-path excludes once we have a cleaner api
+  :unresolved-var {:exclude [frontend.util/node-path.basename
+                             frontend.util/node-path.dirname
+                             frontend.util/node-path.join]}}
+
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                        rum.core/defcs hooks.rum/defcs}}
+                         rum.core/defcs hooks.rum/defcs}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
+           promesa.core/recur clojure.core/recur
            garden.def/defstyles clojure.core/def
            garden.def/defkeyframes clojure.core/def
            rum.core/defcc rum.core/defc
