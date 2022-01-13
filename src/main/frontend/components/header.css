@@ -253,14 +253,13 @@ html.is-native-ipad {
         padding-top: 20px;
       }
     }
-    
-    .cp__right-sidebar-topbar {
-        height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
-        padding-top: 20px;
-    }
 
     .cp__right-sidebar-settings {
         margin-top: -4px;
+    }
+
+    .cp__right-sidebar-topbar {
+        padding-top: 37px;
     }
   }
 
