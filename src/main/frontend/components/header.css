@@ -209,6 +209,7 @@ html.is-native-ipad {
 
     #main-content-container {
         padding-top: 0px;
+        height: calc(100vh - var(--ls-headbar-height));
     }
     
     .cp__header > .r {
@@ -290,10 +291,6 @@ html.is-native-iphone-without-notch {
     --ls-headbar-inner-top-padding: 15px;
     --ls-headbar-height: 2.5rem;
 
-    #main-container {
-        padding-top: 55px;
-    }
-
     @media (orientation: landscape) {
 
         --ls-headbar-inner-top-padding: 0px;
@@ -301,10 +298,6 @@ html.is-native-iphone-without-notch {
      
         .cp__header {
             @apply shadow z-10;
-        }
-
-        #main-container {
-            padding-top: 40px;
         }
     }
 }
