@@ -3441,11 +3441,9 @@
 (defn collapsable? [block-id]
   (when block-id
     (if-let [block (db-model/query-block-by-uuid block-id)]
-      (let [block (block/parse-title-and-body block)]
-        (and
-         (not (util/collapsed? block))
-         (or (not-empty (:block/body block))
-             (db-model/has-children? block-id))))
+      (and
+       (not (util/collapsed? block))
+       (db-model/has-children? block-id))
       false)))
 
 (defn all-blocks-with-level

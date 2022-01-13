@@ -1423,13 +1423,12 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *control-show? edit?]
+  [state config block uuid block-id children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
-                    (or has-children-blocks?
-                        (and (seq (:block/title block)) (seq body))))
+                    has-children-blocks?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         block? (:block? config)
@@ -2191,9 +2190,8 @@
                                         (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
   [state config {:block/keys [uuid children pre-block? top? properties refs heading-level level type format content] :as block}]
-    (let [repo (state/get-current-repo)
+  (let [repo (state/get-current-repo)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
-        body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
         ;; Each block might have multiple queries, but we store only the first query's result
@@ -2217,8 +2215,8 @@
         has-child? (boolean
                     (and
                      (not pre-block?)
-                     (or (and (coll? children) (seq children))
-                         (seq body))))
+                     (coll? children)
+                     (seq children)))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2269,7 +2267,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id children collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
@@ -2926,7 +2924,9 @@
         bottom-reached (fn []
                          (reset! *last-idx idx)
                          (reset! ignore-scroll? false))
-        has-more? (>= (count flat-blocks) (inc idx))]
+        has-more? (and (>= (count flat-blocks) (inc idx))
+                       (not (and (:block? config)
+                                 (model/block-collapsed? (uuid (:id config))))))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
