@@ -27,4 +27,5 @@
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.react/defc clojure.core/defn}
- :skip-comments true}
+ :skip-comments true
+ :output {:progress true}}
