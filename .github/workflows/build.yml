@@ -65,7 +65,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Run clj-kondo lint
-        run: clj -M:clj-kondo --lint src
+        run: clojure -M:clj-kondo --lint src
 
       - name: Fetch yarn deps
         run: yarn install
