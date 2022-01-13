@@ -29,7 +29,7 @@
  [frontend.db.utils
   date->int db->json db->edn-str db->string get-max-tx-id get-tx-id
   group-by-page seq-flatten sort-by-pos
-  string->db with-repo
+  string->db
 
   entity pull pull-many transact! get-key-value]
 
@@ -48,7 +48,7 @@
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
-  journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
+  journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 

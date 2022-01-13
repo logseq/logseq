@@ -19,6 +19,7 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
+            [frontend.mixins :as mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.extensions.highlight :as highlight]
@@ -2176,22 +2177,23 @@
              (when-not (some? (state/sub-collapsed (:block/uuid block)))
                (state/set-collapsed-block! (:block/uuid block)
                                            (editor-handler/block-default-collapsed? block config)))
-             (assoc state
-                    ::init-collapsed? (get-in block [:block/properties :collapsed])
-                    ::control-show? (atom false))))
+             (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/properties
-                                        :block/parent :block/left
-                                        :block/children :block/content
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/children
+                                        :block/properties
                                         :block/_refs]
-                          config-compare-keys [:show-cloze?]]
-                      (or
-                       (not= (select-keys (second (:rum/args old-state)) compare-keys)
-                             (select-keys (second (:rum/args new-state)) compare-keys))
-                       (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                             (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
-  [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
+                          config-compare-keys [:show-cloze?]
+                          b1 (second (:rum/args old-state))
+                          b2 (second (:rum/args new-state))
+                          result (or
+                                  (not= (select-keys b1 compare-keys)
+                                        (select-keys b2 compare-keys))
+                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                      (boolean result)))}
+  [state config {:block/keys [uuid children pre-block? top? properties refs heading-level level type format content] :as block}]
+  (let [repo (state/get-current-repo)
+        block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2907,12 +2909,6 @@
      idx]))
 
 (rum/defcs lazy-blocks <
-  {:did-remount (fn [_old-state new-state]
-                  ;; Loading more when pressing Enter or paste
-                  ;; FIXME: what if users paste too many blocks?
-                  ;; or, a template with a lot of blocks?
-                  (swap! (::last-idx new-state) + 100)
-                  new-state)}
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
@@ -2929,7 +2925,6 @@
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
-       :threshold 1000
        :has-more has-more?
        :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
 
@@ -2947,12 +2942,7 @@
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
       (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
-            blocks-tree (blocks->vec-tree blocks)
-            blocks-tree (if (seq blocks-tree) blocks-tree blocks)
-            flat-blocks (if (custom-query-or-ref? config)
-                          blocks-tree
-                          (flat-blocks-tree blocks-tree))
-            flat-blocks (vec flat-blocks)]
+            flat-blocks (vec blocks)]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config flat-blocks blocks->vec-tree)]))))

@@ -2059,8 +2059,7 @@
 (defn edit-box-on-change!
   [e block id]
   (let [value (util/evalue e)
-        repo (or (:block/repo block)
-                 (state/get-current-repo))]
+        repo (state/get-current-repo)]
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))

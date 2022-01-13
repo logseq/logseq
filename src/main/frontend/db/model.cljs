@@ -374,10 +374,6 @@
              (map (fn [m]
                     (or (:block/original-name m) (:block/name m)))))))))
 
-(defn page-blocks-transform
-  [repo-url result]
-  (db-utils/with-repo repo-url result))
-
 (defn with-pages
   [blocks]
   (let [pages-ids (->> (map (comp :db/id :block/page) blocks)
@@ -478,14 +474,12 @@
                         pull-keys '[*]}}]
    (when page
      (let [page (util/page-name-sanity-lc (string/trim page))
-           page-entity (or (db-utils/entity repo-url [:block/name page])
-                           (db-utils/entity repo-url [:block/original-name page]))
+           page-entity (db-utils/entity repo-url [:block/name page])
            page-id (:db/id page-entity)]
        (when page-id
          (some->
           (react/q repo-url [:page/blocks page-id]
             {:use-cache? use-cache?
-             :transform-fn #(page-blocks-transform repo-url %)
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)]
@@ -509,8 +503,7 @@
        (when page-id
          (let [datoms (d/datoms db :avet :block/page page-id)
                block-eids (mapv :e datoms)]
-           (some->> (db-utils/pull-many repo-url pull-keys block-eids)
-                    (page-blocks-transform repo-url))))))))
+           (db-utils/pull-many repo-url pull-keys block-eids)))))))
 
 (defn get-page-blocks-count
   [repo page-id]
@@ -603,10 +596,8 @@
                               ids))))))
 
 (defn block-and-children-transform
-  [result repo-url _block-uuid]
-  (some->> result
-           db-utils/seq-flatten
-           (db-utils/with-repo repo-url)))
+  [result _repo-url _block-uuid]
+  (db-utils/seq-flatten result))
 
 (defn get-block-children-ids
   [repo block-uuid]
