@@ -62,6 +62,7 @@
      (page/page-graph)]
 
     :block-ref
+    #_:clj-kondo/ignore
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
       [(t :right-side-bar/block-ref)
        (let [block (:block block-data)
@@ -74,6 +75,7 @@
            (block-cp repo idx block)]])])
 
     :block
+    #_:clj-kondo/ignore
     (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
@@ -89,9 +91,9 @@
                       (:block/name (db/entity db-id))
                       page-name)]
       [[:a.page-title {:href     (rfe/href :page {:name page-name})
-            :on-click (fn [e]
-                        (when (gobj/get e "shiftKey")
-                          (.preventDefault e)))}
+                       :on-click (fn [e]
+                                   (when (gobj/get e "shiftKey")
+                                     (.preventDefault e)))}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
@@ -167,8 +169,7 @@
 
 (defn get-current-page
   []
-  (let [match (:route-match @state/state)
-        theme (:ui/theme @state/state)]
+  (let [match (:route-match @state/state)]
     (get-page match)))
 
 (rum/defc sidebar-resizer
@@ -215,7 +216,7 @@
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
        [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
         [:div.ml-4.text-sm
-         [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
+         [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "contents" :contents nil))}
           (t :right-side-bar/contents)]]
 
@@ -254,8 +255,7 @@
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
-        repo (state/sub :git/current-repo)
-        t (i18n/use-tongue)]
+        repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#right-sidebar.cp__right-sidebar.h-screen
        {:class (if sidebar-open? "open" "closed")}

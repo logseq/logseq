@@ -14,7 +14,6 @@
   (rum/local false ::reveal-secret-phrase?)
   [state repo-url close-fn]
   (let [reveal-secret-phrase? (get state ::reveal-secret-phrase?)
-        secret-phrase (e/get-key-pair repo-url)
         public-key (e/get-public-key repo-url)
         private-key (e/get-secret-key repo-url)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -54,7 +53,7 @@
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
   [state repo-url close-fn]
-  (rum/with-context [[t] i18n/*tongue-context*]
+  (rum/with-context [[_t] i18n/*tongue-context*]
     (let [password (get state ::password)
           password-confirm (get state ::password-confirm)]
       [:div
@@ -137,8 +136,8 @@
 (rum/defcs encryption-input-secret-inner <
   (rum/local "" ::secret)
   (rum/local false ::loading)
-  [state repo-url db-encrypted-secret close-fn]
-  (rum/with-context [[t] i18n/*tongue-context*]
+  [state _repo-url db-encrypted-secret close-fn]
+  (rum/with-context [[_t] i18n/*tongue-context*]
     (let [secret (::secret state)
           loading (::loading state)]
       [:div

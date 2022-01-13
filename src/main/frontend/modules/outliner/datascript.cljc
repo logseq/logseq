@@ -7,8 +7,7 @@
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
                      [frontend.config :as config]
-                     [lambdaisland.glogi :as log]
-                     [frontend.util :as util])))
+                     [lambdaisland.glogi :as log])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))

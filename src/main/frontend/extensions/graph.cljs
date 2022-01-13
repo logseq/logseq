@@ -7,7 +7,7 @@
             [rum.core :as rum]))
 
 (defn- highlight-neighbours!
-  [^js graph node focus-nodes dark?]
+  [^js graph node focus-nodes _dark?]
   (.forEachNeighbor
    (.-graph graph) node
    (fn [node attributes]
@@ -23,7 +23,7 @@
   [^js graph node dark?]
   (.forEachEdge
    (.-graph graph) node
-   (fn [edge attributes]
+   (fn [edge _attributes]
      (.resetEdgeStyle graph edge (bean/->js {:width 1
                                              :color (if dark? "#999" "#A5B4FC")})))))
 
@@ -59,7 +59,7 @@
    :will-unmount (fn [state]
                    (reset! pixi/*graph-instance nil)
                    state)}
-  [state opts]
+  [state _opts]
   [:div.graph {:ref (fn [value]
                       (let [ref (get state :ref)]
                         (when (and ref value)

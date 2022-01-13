@@ -45,6 +45,7 @@
 
 (rum/defc export-page
   []
+  #_:clj-kondo/ignore
   (when-let [current-repo (state/get-current-repo)]
     (when-let [page (state/get-current-page)]
       (rum/with-context [[t] i18n/*tongue-context*]

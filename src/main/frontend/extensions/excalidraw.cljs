@@ -28,13 +28,6 @@
          :error)))))
 
 (defonce *bounding-width (atom nil))
-(defn- get-bounding-width
-  [ref]
-  (when ref
-    (when-let [current (gobj/get ref "current")]
-      (-> current
-         (.getBoundingClientRect)
-         (gobj/get "width")))))
 
 (defn- update-draw-content-width
   [state]
@@ -52,9 +45,7 @@
   {:did-mount update-draw-content-width}
   {:did-update update-draw-content-width}
   [state data option]
-  (let [current-repo (state/sub :git/current-repo)
-        bounding-width (rum/react *bounding-width)
-        *draw-width (get state ::draw-width)
+  (let [*draw-width (get state ::draw-width)
         *zen-mode? (get state ::zen-mode?)
         *view-mode? (get state ::view-mode?)
         wide-mode? (state/sub :ui/wide-mode?)

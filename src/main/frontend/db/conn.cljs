@@ -46,7 +46,7 @@
   (swap! conns dissoc (datascript-db repo)))
 
 (defn me-tx
-  [db {:keys [name email avatar]}]
+  [_db {:keys [name email avatar]}]
   (util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))

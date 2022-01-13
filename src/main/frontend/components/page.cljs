@@ -1,11 +1,8 @@
 (ns frontend.components.page
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
-            [frontend.commands :as commands]
+  (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
-            [frontend.components.export :as export]
             [frontend.components.hierarchy :as hierarchy]
             [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
@@ -18,7 +15,6 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as format-block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
@@ -28,9 +24,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.shell :as shell]
             [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.search :as search]
@@ -70,7 +64,7 @@
 (rum/defc page-blocks-inner <
   {:did-mount  open-first-block!
    :did-update open-first-block!}
-  [page-name page-blocks hiccup sidebar? preview? block-uuid]
+  [page-name _page-blocks hiccup sidebar? _preview? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
      (content/content page-name
@@ -121,15 +115,8 @@
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
-          page-original-name (or (:block/original-name page-e) page-name)
-          format (get-page-format page-name)
-          journal? (db/journal-page? page-name)
           block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
-          page-empty? (and (not block?) (db/page-empty? repo (:db/id page-e)))
-          page-e (if (and page-e (:db/id page-e))
-                   {:db/id (:db/id page-e)}
-                   page-e)
           page-blocks (get-blocks repo page-name block-id)]
       (if (empty? page-blocks)
         (dummy-block page-name)
@@ -162,7 +149,7 @@
     (let [queries (state/sub [:config repo :default-queries :journals])]
       (when (seq queries)
         [:div#today-queries.mt-10
-         (for [{:keys [title] :as query} queries]
+         (for [query queries]
            (rum/with-key
              (block/custom-query {:attr {:class "mt-10"}
                                   :editor-box editor/box
@@ -188,29 +175,18 @@
   (rum/local false ::edit?)
   {:init (fn [state]
            (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
-  [state page-name icon title format fmt-journal?]
+  [state page-name icon title _format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
           repo (state/get-current-repo)
-          title-element (if (and (string/includes? title "[[")
-                                 (string/includes? title "]]"))
-                          (let [title (case format
-                                        :markdown
-                                        (string/replace title #"^#+\s+" "")
-                                        :org
-                                        (string/replace title #"^\*+\s+" "")
-                                        title)
-                                ast (mldoc/->edn title (mldoc/default-config format))]
-                            (block/markup-element-cp {} (ffirst ast)))
-                          title)
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
                   (pdf-assets/human-hls-filename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
-                       (let [merge? (and (not= (util/page-name-sanity-lc page-name) 
+                       (let [merge? (and (not= (util/page-name-sanity-lc page-name)
                                                (util/page-name-sanity-lc @*title-value))
                                          (page-handler/page-exists? page-name)
                                          (page-handler/page-exists? @*title-value))]
@@ -270,7 +246,7 @@
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
-  [state {:keys [repo page-name preview?] :as option}]
+  [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
                                 (state/get-current-page))]
@@ -286,7 +262,7 @@
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)]
-      (rum/with-context [[t] i18n/*tongue-context*]
+      (rum/with-context [[_t] i18n/*tongue-context*]
         (let [route-page-name path-page-name
               page (if block?
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -296,7 +272,7 @@
                          (let [m (format-block/page-name->map path-page-name true)]
                            (db/transact! repo [m])))
                        (db/pull [:block/name page-name])))
-              {:keys [icon] :as properties} (:block/properties page)
+              {:keys [icon]} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
               title (or page-original-name page-name)
@@ -392,9 +368,8 @@
 
 (rum/defc graph-filters < rum/reactive
   [graph settings n-hops]
-  (let [{:keys [layout journal? orphan-pages? builtin-pages?]
-         :or {layout "gForce"
-              orphan-pages? true}} settings
+  (let [{:keys [journal? orphan-pages? builtin-pages?]
+         :or {orphan-pages? true}} settings
         journal?' (rum/react *journal?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
@@ -535,7 +510,7 @@
                                                  (and (not (nodes (:source link)))
                                                       (not (nodes (:target link)))))
                                                links))))]
-    (rum/with-context [[t] i18n/*tongue-context*]
+    (rum/with-context [[_t] i18n/*tongue-context*]
       [:div.relative#global-graph
        (graph/graph-2d {:nodes (:nodes graph)
                         :links (:links graph)
@@ -559,7 +534,7 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "resize"
-                    (fn [e]
+                    (fn [_e]
                       (reset! layout [js/window.innerWidth js/window.innerHeight])))))
   {:will-mount (fn [state]
                  (state/set-search-mode! :graph)
@@ -574,12 +549,11 @@
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
-        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))
-        reset? (rum/react *graph-reset?)]
+        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
     (global-graph-inner graph settings theme)))
 
 (rum/defc page-graph-inner < rum/static
-  [page graph dark?]
+  [_page graph dark?]
   [:div.sidebar-item.flex-col
    (graph/graph-2d {:nodes (:nodes graph)
                     :links (:links graph)
@@ -669,7 +643,7 @@
           (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
 
         [:tbody
-         (for [[n {:block/keys [idx name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
+         (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
            [:tr {:key name}
             [:td.n.w-10 [:span.opacity-70 (str (inc n) ". ")]]
             [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
@@ -761,7 +735,7 @@
        (when current-repo
 
          ;; all pages
-         (if (nil? @*pages)
+         (when (nil? @*pages)
            (let [pages (->> (page-handler/get-all-pages current-repo)
                             (map-indexed (fn [idx page] (assoc page
                                                                :block/backlinks (count (:block/_refs (db/entity (:db/id page))))

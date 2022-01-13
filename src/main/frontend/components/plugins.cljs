@@ -8,7 +8,6 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
@@ -28,12 +27,12 @@
           (.focus target)
           (mixins/on-key-down
             state {38                                       ;; up
-                   (fn [^js e]
+                   (fn [^js _e]
                      (reset! *cursor
                              (if (zero? @*cursor)
                                (dec @*total) (dec @*cursor))))
                    40                                       ;; down
-                   (fn [^js e]
+                   (fn [^js _e]
                      (reset! *cursor
                              (if (= @*cursor (dec @*total))
                                0 (inc @*cursor))))
@@ -63,7 +62,7 @@
                  plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
              [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
               {:key      (str idx (:url opt))
-               :title    (if current-selected "Cancel selected theme")
+               :title    (when current-selected "Cancel selected theme")
                :class    (util/classnames
                            [{:is-selected current-selected
                              :is-active   (= idx @*cursor)}])
@@ -74,7 +73,7 @@
                 [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
                 (:name opt)]]
               [:small.flex-shrink-0.flex.items-center.opacity-10
-               (if current-selected (ui/icon "check"))]]))
+               (when current-selected (ui/icon "check"))]]))
          themes)])))
 
 (rum/defc unpacked-plugin-loader
@@ -141,7 +140,7 @@
        :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc remote-readme-display
-  [repo content]
+  [repo _content]
 
   (let [src (str "lsp://logseq.com/marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
@@ -164,7 +163,7 @@
   (let [disabled (:disabled settings)
         name (or title name "Untitled")
         unpacked? (not iir)
-        new-version (and coming-update (:latest-version coming-update))]
+        new-version (state/coming-update-new-version? coming-update)]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
@@ -183,13 +182,13 @@
           svg/folder)
 
         (when (and (not market?) unpacked?)
-          [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
+          [:span.flex.justify-center.text-xs.text-red-500.pt-2 (t :plugin/unpacked)])]
 
        [:div.r
         [:h3.head.text-xl.font-bold.pt-1.5
 
          [:span name]
-         (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+         (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
         [:div.desc.text-xs.opacity-70
          [:p description]
@@ -209,7 +208,7 @@
 
         ;; Github repo
         [:div.flag.is-top.opacity-50
-         (if repo
+         (when repo
            [:a.flex {:target "_blank"
                      :href   (plugin-handler/gh-repo-url repo)}
             (svg/github {:width 16 :height 16})])]
@@ -224,7 +223,7 @@
 
             ;; downloads
             (when-let [downloads (and stat (:total_downloads stat))]
-              (if (and downloads (> downloads 0))
+              (when (and downloads (> downloads 0))
                 [:li.flex.text-sm.items-center.pr-3
                  (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
@@ -247,7 +246,7 @@
             [:div.de
              [:strong (ui/icon "settings")]
              [:ul.menu-list
-              [:li {:on-click #(if usf (js/apis.openPath usf))} (t :plugin/open-settings)]
+              [:li {:on-click #(when usf (js/apis.openPath usf))} (t :plugin/open-settings)]
               [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
               [:li {:on-click
                     #(let [confirm-fn
@@ -269,7 +268,7 @@
             ]
 
            [:div.r.flex.items-center
-            (if (and unpacked? (not disabled))
+            (when (and unpacked? (not disabled))
               [:a.btn
                {:on-click #(js-invoke js/LSPluginCore "reload" id)}
                (t :plugin/reload)])
@@ -277,8 +276,8 @@
             (when (not unpacked?)
               [:div.updates-actions
                [:a.btn
-                {:class    (util/classnames [{:disabled (or installing-or-updating?)}])
-                 :on-click #(if-not has-other-pending?
+                {:class    (util/classnames [{:disabled installing-or-updating?}])
+                 :on-click #(when-not has-other-pending?
                               (plugin-handler/check-or-update-marketplace-plugin
                                 (assoc item :only-check (not new-version))
                                 (fn [e] (notification/show! e :error))))}
@@ -299,7 +298,7 @@
 (rum/defc panel-control-tabs
   < rum/static
   [t search-key *search-key category *category
-   sort-by *sort-by selected-unpacked-pkg
+   sort-or-filter-by *sort-or-filter-by selected-unpacked-pkg
    market? develop-mode? reload-market-fn]
 
   (let [*search-ref (rum/create-ref)]
@@ -342,7 +341,7 @@
         {:placeholder "Search plugins"
          :ref         *search-ref
          :on-key-down (fn [^js e]
-                        (if (= 27 (.-keyCode e))
+                        (when (= 27 (.-keyCode e))
                           (when-not (string/blank? search-key)
                             (util/stop e)
                             (reset! *search-key nil))))
@@ -351,31 +350,47 @@
          :value       (or search-key "")}]]
 
 
-      ;; sorter
+      ;; sorter & filter
       (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
           (ui/button
-            [:span (ui/icon "arrows-sort") ""]
-            :class "sort-by"
+            [:span (ui/icon (if market? "arrows-sort" "filter"))]
+            :class (str (when-not (contains? #{:default :downloads} sort-or-filter-by) "picked ") "sort-or-filter-by")
             :on-click toggle-fn
             :intent "link"))
-        (let [aim-icon #(if (= sort-by %) "check" "circle")]
+        (let [aim-icon #(if (= sort-or-filter-by %) "check" "circle")]
           (if market?
-            [{:title   "Downloads (Desc)"
-              :options {:on-click #(reset! *sort-by :downloads)}
+            [{:title   (t :plugin/downloads)
+              :options {:on-click #(reset! *sort-or-filter-by :downloads)}
               :icon    (ui/icon (aim-icon :downloads))}
 
-             {:title   "Stars (Desc)"
-              :options {:on-click #(reset! *sort-by :stars)}
+             {:title   (t :plugin/stars)
+              :options {:on-click #(reset! *sort-or-filter-by :stars)}
               :icon    (ui/icon (aim-icon :stars))}
 
-             {:title   "Title (A - Z)"
-              :options {:on-click #(reset! *sort-by :letters)}
+             {:title   (str (t :plugin/title) " (A - Z)")
+              :options {:on-click #(reset! *sort-or-filter-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}]
 
-            [{:title   (t :plugin/enabled)
-              :options {:on-click #(reset! *sort-by :enabled)}
-              :icon    (ui/icon (aim-icon :enabled))}]))
+            [{:title   (t :plugin/all)
+              :options {:on-click #(reset! *sort-or-filter-by :default)}
+              :icon    (ui/icon (aim-icon :default))}
+
+             {:title   (t :plugin/enabled)
+              :options {:on-click #(reset! *sort-or-filter-by :enabled)}
+              :icon    (ui/icon (aim-icon :enabled))}
+
+             {:title   (t :plugin/disabled)
+              :options {:on-click #(reset! *sort-or-filter-by :disabled)}
+              :icon    (ui/icon (aim-icon :disabled))}
+
+             {:title   (t :plugin/unpacked)
+              :options {:on-click #(reset! *sort-or-filter-by :unpacked)}
+              :icon    (ui/icon (aim-icon :unpacked))}
+
+             {:title   (t :plugin/update-available)
+              :options {:on-click #(reset! *sort-or-filter-by :update-available)}
+              :icon    (ui/icon (aim-icon :update-available))}]))
         {})
 
       ;; more - updater
@@ -397,11 +412,11 @@
                    {:title   [:span (ui/icon "file-code") "Open Preferences"]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath (str root "/preferences.json")))}}
+                                      (js/apis.openPath (str root "/preferences.json")))}}
                    {:title   [:span (ui/icon "bug") "Open " [:code " ~/.logseq"]]
                     :options {:on-click
                               #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                 (js/apis.openPath root))}}]))
+                                      (js/apis.openPath root))}}]))
         {})
 
       ;; developer
@@ -466,7 +481,7 @@
         sorted-pkgs (apply sort-by
                            (conj
                              (case @*sort-by
-                               :letters [:title #(compare %1 %2)]
+                               :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
                                [@*sort-by #(compare %2 %1)])
                              filtered-pkgs))]
 
@@ -512,7 +527,7 @@
 (rum/defcs installed-plugins
   < rum/static rum/reactive
     (rum/local "" ::search-key)
-    (rum/local :enabled ::sort-by)                          ;; enabled / letters / updates
+    (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
@@ -521,13 +536,24 @@
         develop-mode? (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
-        *sort-by (::sort-by state)
+        *filter-by (::filter-by state)
         *search-key (::search-key state)
         *category (::category state)
+        default-filter-by? (= :default @*filter-by)
         filtered-plugins (when (seq installed-plugins)
                            (if (= @*category :themes)
                              (filter #(:theme %) installed-plugins)
                              (filter #(not (:theme %)) installed-plugins)))
+        filtered-plugins (if-not default-filter-by?
+                           (filter (fn [it]
+                                     (let [disabled (get-in it [:settings :disabled])]
+                                       (case @*filter-by
+                                         :enabled (not disabled)
+                                         :disabled disabled
+                                         :unpacked (not (:iir it))
+                                         :update-available (state/plugin-update-available? (:id it))
+                                         true))) filtered-plugins)
+                           filtered-plugins)
         filtered-plugins (if-not (string/blank? @*search-key)
                            (if-let [author (and (string/starts-with? @*search-key "@")
                                                 (subs @*search-key 1))]
@@ -537,11 +563,13 @@
                                :limit 30
                                :extract-fn :name))
                            filtered-plugins)
-        sorted-plugins (->> filtered-plugins
-                            (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
-                                       (update %1 k conj %2)) [[] []])
-                            (#(update % 0 (fn [it] (sort-by :iir it))))
-                            (flatten))]
+        sorted-plugins (if default-filter-by?
+                         (->> filtered-plugins
+                              (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
+                                         (update %1 k conj %2)) [[] []])
+                              (#(update % 0 (fn [coll] (sort-by :iir coll))))
+                              (flatten))
+                         filtered-plugins)]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
@@ -551,7 +579,7 @@
          t
          @*search-key *search-key
          @*category *category
-         @*sort-by *sort-by
+         @*filter-by *filter-by
          selected-unpacked-pkg
          false develop-mode? nil)
 
@@ -563,6 +591,71 @@
                 item false *search-key updating
                 (and updating (= (keyword (:id updating)) pid))
                 true nil (get coming-updates pid))) (:id item)))]])))
+
+(rum/defcs waiting-coming-updates
+  < rum/reactive
+    {:will-mount (fn [s] (state/reset-unchecked-update) s)}
+  [_s]
+  (let [_ (state/sub :plugin/updates-coming)
+        downloading? (state/sub :plugin/updates-downloading?)
+        unchecked (state/sub :plugin/updates-unchecked)
+        updates (state/all-available-coming-updates)]
+
+    [:div.cp__plugins-waiting-updates
+     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (util/safe-parse-int (count updates)))]
+
+     (if (seq updates)
+       ;; lists
+       [:ul
+        {:class (when downloading? "downloading")}
+        (for [it updates
+              :let [k (str "lsp-it-" (:id it))
+                    c? (not (contains? unchecked (:id it)))
+                    notes (util/trim-safe (:latest-notes it))]]
+          [:li.flex.items-center
+           {:key   k
+            :class (when c? "checked")}
+
+           [:label.flex-1
+            {:for k}
+            (ui/checkbox {:id        k
+                          :checked   c?
+                          :on-change (fn [^js e]
+                                       (when-not downloading?
+                                         (state/set-unchecked-update (:id it) (not (util/echecked? e)))))})
+            [:strong.px-3 (:title it)
+             [:sup (str (:version it) " 👉 " (:latest-version it))]]]
+
+           [:div.px-4
+            (when-not (string/blank? notes)
+              (ui/tippy
+                {:html [:p notes]}
+                [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")]))]])]
+
+       ;; all done
+       [:div.py-4 [:strong.text-4xl "\uD83C\uDF89 All updated!"]])
+
+     ;; actions
+     (when (seq updates)
+       [:div.pt-5
+        (ui/button
+          (if downloading?
+            [:span (ui/loading " Downloading...")]
+            [:span "Update all of selected"])
+
+          :on-click
+          #(when-not downloading?
+             (plugin-handler/open-updates-downloading)
+             (if-let [n (state/get-next-selected-coming-update)]
+               (plugin-handler/check-or-update-marketplace-plugin
+                 (assoc n :only-check false)
+                 (fn [^js e] (notification/show! e :error)))
+               (plugin-handler/close-updates-downloading)))
+
+          :disabled
+          (or downloading?
+              (and (seq unchecked)
+                   (= (count unchecked) (count updates)))))])]))
 
 (defn open-select-theme!
   []
@@ -612,7 +705,7 @@
       (when (seq items)
         [:div {:class     (str "ui-items-container")
                :data-type (name type)}
-         (for [[_ {:keys [key template] :as opts} pid] items]
+         (for [[_ {:keys [key] :as opts} pid] items]
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
 
 (rum/defc plugins-page
@@ -653,7 +746,7 @@
           (installed-plugins))]])))
 
 (rum/defc custom-js-installer
-  [{:keys [t current-repo db-restoring? nfs-granted?] :as props}]
+  [{:keys [t current-repo db-restoring? nfs-granted?]}]
   (rum/use-effect!
     (fn []
       (when (and (not db-restoring?)
@@ -665,5 +758,12 @@
 (defn open-plugins-modal!
   []
   (state/set-modal!
-    (fn [close!]
+    (fn [_close!]
       (plugins-page))))
+
+(defn open-waiting-updates-modal!
+  []
+  (state/set-sub-modal!
+    (fn [_close!]
+      (waiting-coming-updates))
+    {:center? true}))

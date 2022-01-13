@@ -58,7 +58,7 @@
                  "Shortcut conflict!"
                  (if disabled? "Cannot override system default" "Click to modify"))
         :background (if conflict? "pink" (when disabled? "gray"))
-        :on-click (if-not disabled?
+        :on-click (when-not disabled?
                     #(state/set-modal! (customize-shortcut-dialog k action-name displayed-binding))))])))
 
 (rum/defc shortcut-table < rum/reactive

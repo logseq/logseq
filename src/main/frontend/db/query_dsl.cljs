@@ -311,23 +311,23 @@
                      (keyword (string/lower-case (name order)))
                      :desc)
              k (-> (string/lower-case (name k))
-                   (string/replace "_" "-"))]
-         (let [get-value (cond
-                           (= k "created-at")
-                           :block/created-at
+                   (string/replace "_" "-"))
+             get-value (cond
+                         (= k "created-at")
+                         :block/created-at
 
-                           (= k "updated-at")
-                           :block/updated-at
+                         (= k "updated-at")
+                         :block/updated-at
 
-                           :else
-                           #(get-in % [:block/properties k]))
-               comp (if (= order :desc) >= <=)]
-           (reset! sort-by
-                   (fn [result]
-                     (->> result
-                          flatten
-                          (clojure.core/sort-by get-value comp))))
-           nil))
+                         :else
+                         #(get-in % [:block/properties k]))
+             comp (if (= order :desc) >= <=)]
+         (reset! sort-by
+                 (fn [result]
+                   (->> result
+                        flatten
+                        (clojure.core/sort-by get-value comp))))
+         nil)
 
        (= 'page fe)
        (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
@@ -362,18 +362,17 @@
             [true]]))
 
        (= 'page-tags fe)
-       (do
-         (let [tags (if (coll? (first (rest e)))
-                      (first (rest e))
-                      (rest e))
-               tags (map (comp string/lower-case name) tags)]
-           (when (seq tags)
-             (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
-               (let [sym-1 (uniq-symbol counter "?t")
-                     sym-2 (uniq-symbol counter "?tag")]
-                 [['?p :block/tags sym-1]
-                  [sym-1 :block/name sym-2]
-                  [(list 'contains? tags sym-2)]])))))
+       (let [tags (if (coll? (first (rest e)))
+                    (first (rest e))
+                    (rest e))
+             tags (map (comp string/lower-case name) tags)]
+         (when (seq tags)
+           (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))
+                 sym-1 (uniq-symbol counter "?t")
+                 sym-2 (uniq-symbol counter "?tag")]
+             [['?p :block/tags sym-1]
+              [sym-1 :block/name sym-2]
+              [(list 'contains? tags sym-2)]])))
 
        (= 'all-page-tags fe)
        [['?e :block/tags '?p]]

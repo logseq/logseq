@@ -28,6 +28,8 @@
      :content result}))
 
 (defn build-blocks-indice
+  ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection
+  #_:clj-kondo/ignore
   [repo]
   (->> (db/get-all-block-contents)
        (map block->index)

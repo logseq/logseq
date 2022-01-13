@@ -10,9 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [rum.core :as rum]
-            [goog.dom :as gdom]
-            [frontend.commands :as commands]))
+            [rum.core :as rum]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})
@@ -89,22 +87,22 @@
 (defn- on-submit
   [e]
   (when e (util/stop e))
-  (let [{:keys [time repeater] :as timestamp} @*timestamp
+  (let [{:keys [repeater] :as timestamp} @*timestamp
         date (:date-picker/date @state/state)
         timestamp (assoc timestamp :date (or date (t/today)))
         kind (if (= "w" (:duration repeater)) "++" ".+")
         timestamp (assoc-in timestamp [:repeater :kind] kind)
         text (repeated/timestamp-map->text timestamp)
-        block-data (state/get-timestamp-block)]
-    (let [{:keys [block typ show?]} block-data
-          block-id (or (:block/uuid (state/get-edit-block))
-                       (:block/uuid block))
-          typ (or @commands/*current-command typ)]
-      (editor-handler/set-block-timestamp! block-id
-                                           typ
-                                           text)
-      (when show?
-        (reset! show? false))))
+        block-data (state/get-timestamp-block)
+        {:keys [block typ show?]} block-data
+        block-id (or (:block/uuid (state/get-edit-block))
+                     (:block/uuid block))]
+    typ (or @commands/*current-command typ)
+    (editor-handler/set-block-timestamp! block-id
+                                         typ
+                                         text)
+    (when show?
+      (reset! show? false)))
   (clear-timestamp!)
   (state/set-editor-show-date-picker! false)
   (commands/restore-state false))
@@ -117,7 +115,7 @@
                                         :node input
                                         :on-enter on-submit) 100))))
   []
-  (let [{:keys [time repeater] :as timestamp} (rum/react *timestamp)]
+  (let [{:keys [time repeater]} (rum/react *timestamp)]
     [:div#time-repeater.py-1.px-4 {:style {:min-width 300}}
      [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
      (time-input time)
@@ -142,7 +140,7 @@
    :will-unmount (fn [state]
                    (clear-timestamp!)
                    state)}
-  [id format ts]
+  [id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
                                    (contains? #{"deadline" "scheduled"}

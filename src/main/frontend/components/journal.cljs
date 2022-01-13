@@ -23,7 +23,7 @@
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page format]
+  [repo page _format]
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 

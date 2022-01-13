@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.debug :as debug]
             [frontend.format.block :as block]))
 
@@ -26,7 +26,9 @@
          (ffirst body)))))
 
 (defn transform-content
-  [{:block/keys [uuid format properties pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
+  [{:block/keys [uuid format properties pre-block? unordered content heading-level left page parent]}
+   level
+   {:keys [heading-to-list?]}]
   (let [{:block/keys [title body]} (block/parse-title-and-body uuid format pre-block? content)
         content (or content "")
         heading-with-title? (seq title)
@@ -85,8 +87,7 @@
     content))
 
 (defn tree->file-content
-  [tree {:keys [init-level heading-to-list?]
-         :or {heading-to-list? false}
+  [tree {:keys [init-level]
          :as opts}]
   (loop [block-contents []
          [f & r] tree
@@ -133,16 +134,13 @@
                   (-> (or (:block/original-name page) (:block/name page))
                       (util/page-name-sanity true))) "."
                 (if (= format "markdown") "md" format))
-          file-path (str "/" path)
-          dir (config/get-repo-dir repo)]
-      (let [file-path (config/get-file-path repo path)
-            page-blocks (db/get-page-blocks-no-cache (:block/name page))
-            file {:file/path file-path}
-            tx [{:file/path file-path}
-                {:block/name (:block/name page)
-                 :block/file file}]]
-        (db/transact! tx)
-        (when ok-handler (ok-handler))))))
+          file-path (config/get-file-path repo path)
+          file {:file/path file-path}
+          tx [{:file/path file-path}
+              {:block/name (:block/name page)
+               :block/file file}]]
+      (db/transact! tx)
+      (when ok-handler (ok-handler)))))
 
 (defn save-tree-aux!
   [page-block tree]

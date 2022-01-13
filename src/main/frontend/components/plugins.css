@@ -79,6 +79,7 @@
     }
 
     .ui__button {
+      position: relative;
       border: none;
 
       &:active {
@@ -104,8 +105,21 @@
         background: transparent;
       }
 
-      &.sort-by, &.more-do {
+      &.sort-or-filter-by, &.more-do {
         padding: 0 4px;
+      }
+
+      &.picked {
+        &:after {
+          content: " ";
+          position: absolute;
+          top: -2px;
+          right: 4px;
+          background-color: red;
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+        }
       }
     }
 
@@ -410,6 +424,27 @@
   }
 
   &-details {
+  }
+
+  &-waiting-updates {
+    margin: -15px;
+
+    > ul {
+      li {
+        user-select: none;
+        justify-content: space-between;
+        opacity: .9;
+
+        sup {
+          padding-left: 8px;
+          font-weight: 400;
+        }
+
+        &:hover, &.checked {
+          opacity: 1;
+        }
+      }
+    }
   }
 }
 

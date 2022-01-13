@@ -32,7 +32,7 @@
                                (->> (map transform-fn children)
                                     (string/join " "))
                                "\n"))
-        emphasis-transform (fn [tag attrs children]
+        emphasis-transform (fn [tag _attrs children]
                              (let [pattern (cond
                                              (contains? #{:b :strong} tag)
                                              (config/get-bold format)
@@ -61,120 +61,118 @@
                     content))
         single-hiccup-transform
         (fn [x]
-          (do
-            (cond
-              (vector? x)
-              (let [[tag attrs & children] x
-                    result (match tag
-                             :head nil
-                             :h1 (block-transform 1 children)
-                             :h2 (block-transform 2 children)
-                             :h3 (block-transform 3 children)
-                             :h4 (block-transform 4 children)
-                             :h5 (block-transform 5 children)
-                             :h6 (block-transform 6 children)
-                             :a (let [href (:href attrs)
-                                      title (:title attrs)
-                                      label (map-join children)
-                                      has-img-tag? (util/safe-re-find #"\[:img" (str x))]
-                                  (if has-img-tag?
-                                    (export-hiccup x)
+          (cond
+            (vector? x)
+            (let [[tag attrs & children] x
+                  result (match tag
+                                :head nil
+                                :h1 (block-transform 1 children)
+                                :h2 (block-transform 2 children)
+                                :h3 (block-transform 3 children)
+                                :h4 (block-transform 4 children)
+                                :h5 (block-transform 5 children)
+                                :h6 (block-transform 6 children)
+                                :a (let [href (:href attrs)
+                                         label (map-join children)
+                                         has-img-tag? (util/safe-re-find #"\[:img" (str x))]
+                                     (if has-img-tag?
+                                       (export-hiccup x)
+                                       (case format
+                                         :markdown (util/format "[%s](%s)" label href)
+                                         :org (util/format "[[%s][%s]]" href label)
+                                         nil)))
+                                :img (let [src (:src attrs)
+                                           alt (:alt attrs)]
+                                       (case format
+                                         :markdown (util/format "![%s](%s)" alt src)
+                                         :org (util/format "[[%s][%s]]" src alt)
+                                         nil))
+                                :p (util/format "%s"
+                                                (map-join children))
+
+                                :hr (config/get-hr format)
+
+                                (_ :guard #(contains? #{:b :strong
+                                                        :i :em
+                                                        :ins
+                                                        :del
+                                                        :mark} %))
+                                (emphasis-transform tag attrs children)
+
+                                :code (if @*inside-pre?
+                                        (map-join children)
+                                        (let [pattern (config/get-code format)]
+                                          (str " "
+                                               (str pattern (first children) pattern)
+                                               " ")))
+
+                                :pre
+                                (do
+                                  (reset! *inside-pre? true)
+                                  (let [content (string/trim (doall (map-join children)))]
+                                    (reset! *inside-pre? false)
                                     (case format
-                                      :markdown (util/format "[%s](%s)" label href)
-                                      :org (util/format "[[%s][%s]]" href label)
+                                      :markdown (if (util/starts-with? content "```")
+                                                  content
+                                                  (str "```\n" content "\n```"))
+                                      :org (if (util/starts-with? content "#+BEGIN_SRC")
+                                             content
+                                             (util/format "#+BEGIN_SRC\n%s\n#+END_SRC" content))
                                       nil)))
-                             :img (let [src (:src attrs)
-                                        alt (:alt attrs)]
-                                    (case format
-                                      :markdown (util/format "![%s](%s)" alt src)
-                                      :org (util/format "[[%s][%s]]" src alt)
-                                      nil))
-                             :p (util/format "%s"
-                                             (map-join children))
 
-                             :hr (config/get-hr format)
+                                :blockquote
+                                (case format
+                                  :markdown (str "> " (map-join children))
+                                  :org (util/format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" (map-join children))
+                                  nil)
 
-                             (_ :guard #(contains? #{:b :strong
-                                                     :i :em
-                                                     :ins
-                                                     :del
-                                                     :mark} %))
-                             (emphasis-transform tag attrs children)
+                                :li
+                                (str "- " (map-join children))
 
-                             :code (if @*inside-pre?
-                                     (map-join children)
-                                     (let [pattern (config/get-code format)]
-                                       (str " "
-                                            (str pattern (first children) pattern)
-                                            " ")))
+                                :dt
+                                (case format
+                                  :org (str "- " (map-join children) " ")
+                                  :markdown (str (map-join children) "\n")
+                                  nil)
 
-                             :pre
-                             (do
-                               (reset! *inside-pre? true)
-                               (let [content (string/trim (doall (map-join children)))]
-                                 (reset! *inside-pre? false)
-                                 (case format
-                                   :markdown (if (util/starts-with? content "```")
-                                               content
-                                               (str "```\n" content "\n```"))
-                                   :org (if (util/starts-with? content "#+BEGIN_SRC")
-                                          content
-                                          (util/format "#+BEGIN_SRC\n%s\n#+END_SRC" content))
-                                   nil)))
+                                :dd
+                                (case format
+                                  :markdown (str ": " (map-join children) "\n")
+                                  :org (str ":: " (map-join children) "\n")
+                                  nil)
 
-                             :blockquote
-                             (case format
-                               :markdown (str "> " (map-join children))
-                               :org (util/format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" (map-join children))
-                               nil)
+                                :thead
+                                (case format
+                                  :markdown (let [columns (count (last (first children)))]
+                                              (str
+                                               (map-join children)
+                                               (str "| " (string/join " | "
+                                                                      (repeat columns "----"))
+                                                    " |")))
+                                  :org (let [columns (count (last (first children)))]
+                                         (str
+                                          (map-join children)
+                                          (str "|" (string/join "+"
+                                                                (repeat columns "----"))
+                                               "|")))
+                                  nil)
+                                :tr
+                                (str "| "
+                                     (->> (map transform-fn children)
+                                          (string/join " | "))
+                                     " |")
 
-                             :li
-                             (str "- " (map-join children))
+                                (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
+                                (export-hiccup x)
 
-                             :dt
-                             (case format
-                               :org (str "- " (map-join children) " ")
-                               :markdown (str (map-join children) "\n")
-                               nil)
+                                :else (map-join children))]
+              (wrapper tag result))
 
-                             :dd
-                             (case format
-                               :markdown (str ": " (map-join children) "\n")
-                               :org (str ":: " (map-join children) "\n")
-                               nil)
+            (string? x)
+            x
 
-                             :thead
-                             (case format
-                               :markdown (let [columns (count (last (first children)))]
-                                           (str
-                                            (map-join children)
-                                            (str "| " (string/join " | "
-                                                                   (repeat columns "----"))
-                                                 " |")))
-                               :org (let [columns (count (last (first children)))]
-                                      (str
-                                       (map-join children)
-                                       (str "|" (string/join "+"
-                                                             (repeat columns "----"))
-                                            "|")))
-                               nil)
-                             :tr
-                             (str "| "
-                                  (->> (map transform-fn children)
-                                       (string/join " | "))
-                                  " |")
-
-                             (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
-                             (export-hiccup x)
-
-                             :else (map-join children))]
-                (wrapper tag result))
-
-              (string? x)
-              x
-
-              :else
-              (println "hiccup->doc error: " x))))
+            :else
+            (println "hiccup->doc error: " x)))
         result (if (vector? (first hiccup))
                  (for [x hiccup]
                    (single-hiccup-transform x))

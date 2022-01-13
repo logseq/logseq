@@ -3,12 +3,8 @@
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
-            [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
-            [frontend.handler.notification :as notification]
             [frontend.fs.capacitor-fs :as fs]
-            [frontend.handler.page :as page-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.components.repo :as repo]
             [frontend.handler.web.nfs :as nfs-handler]))
 
@@ -44,7 +40,7 @@
                   #(state/pub-event! [:mobile/keyboard-will-show]))
     (.addListener Keyboard "keyboardDidShow"
                   #(state/pub-event! [:mobile/keyboard-did-show]))
-    
+
     (.addListener App "appStateChange"
                   #(when-let [repo (state/get-current-repo)]
                      (nfs-handler/refresh! repo repo/refresh-cb)

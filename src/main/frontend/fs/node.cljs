@@ -35,7 +35,7 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?] :as opts} stat]
+  [this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
     (p/catch
         (p/let [result (ipc/ipc "writeFile" repo path content)]
@@ -53,8 +53,6 @@
                                           nil))))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
-            file-page (db/get-file-page-id path)
-            page-empty? (and file-page (db/page-empty? repo file-page))
             db-content (or old-content (db/get-file repo path) "")
             contents-matched? (contents-matched? disk-content db-content)
             pending-writes (state/get-write-chan-length)]
@@ -101,23 +99,23 @@
 
 (defrecord Node []
   protocol/Fs
-  (mkdir! [this dir]
+  (mkdir! [_this dir]
     (ipc/ipc "mkdir" dir))
-  (mkdir-recur! [this dir]
+  (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
-  (readdir [this dir]                   ; recursive
+  (readdir [_this dir]                   ; recursive
     (ipc/ipc "readdir" dir))
-  (unlink! [this repo path _opts]
+  (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
              (config/get-repo-dir repo)
              path))
-  (rmdir! [this dir]
+  (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
-  (read-file [this dir path _options]
+  (read-file [_this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))
-  (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
+  (write-file! [this repo dir path content opts]
     (let [path (concat-path dir path)]
       (p/let [stat (p/catch
                        (protocol/stat this dir path)
@@ -125,14 +123,14 @@
               sub-dir (first (util/get-dir-and-basename path))
               _ (protocol/mkdir-recur! this sub-dir)]
         (write-file-impl! this repo dir path content opts stat))))
-  (rename! [this repo old-path new-path]
+  (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
-  (stat [this dir path]
+  (stat [_this dir path]
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
-  (open-dir [this ok-handler]
+  (open-dir [_this _ok-handler]
     (open-dir))
-  (get-files [this path-or-handle ok-handler]
+  (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
-  (watch-dir! [this dir]
+  (watch-dir! [_this dir]
     (ipc/ipc "addDirWatcher" dir)))

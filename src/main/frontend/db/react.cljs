@@ -11,7 +11,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [profile react]]
+            [frontend.util :as util :refer [react]]
             [frontend.util.marker :as marker]
             [frontend.db.rules :as rules]))
 
@@ -50,13 +50,13 @@
 (defn clear-query-state-without-refs-and-embeds!
   []
   (let [state @query-state
-        state (->> (filter (fn [[[_repo k] v]]
+        state (->> (filter (fn [[[_repo k] _v]]
                              (contains? #{:blocks :block/block :custom} k)) state)
                    (into {}))]
     (reset! query-state state)))
 
 (defn get-current-repo-refs-keys
-  [{:keys [key data]}]
+  [{:keys [data]}]
   (when-let [current-repo (state/get-current-repo)]
     (->>
      (map (fn [[repo k id]]
@@ -143,8 +143,7 @@
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
-                transform-fn identity}
-           :as opts} query & inputs]
+                transform-fn identity}} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (conn/get-conn repo)]
@@ -230,7 +229,6 @@
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
-              {:block/keys [page]} (first blocks)
               related-keys (->>
                             (util/concat-without-nil
                              (mapcat
@@ -304,7 +302,7 @@
       [[key]])))
 
 (defn refresh!
-  [repo-url {:keys [key data] :as handler-opts}]
+  [repo-url handler-opts]
   (let [related-keys (get-related-keys handler-opts)
         db (conn/get-conn repo-url)]
     (doseq [related-key related-keys]
@@ -336,7 +334,7 @@
                 (set-new-result! related-key new-result)))))))))
 
 (defn transact-react!
-  [repo-url tx-data {:keys [key data] :as handler-opts}]
+  [repo-url tx-data handler-opts]
   (when-not config/publishing?
     (let [repo-url (or repo-url (state/get-current-repo))
           tx-data (->> (util/remove-nils tx-data)

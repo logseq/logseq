@@ -4,7 +4,6 @@
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.debug :as debug]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.pipeline :as pipelines]))
 
@@ -83,7 +82,7 @@
 (defn get-txs
   [redo? txs]
   (let [txs (if redo? txs (reverse txs))]
-    (mapv (fn [[id attr value tx add? :as datom]]
+    (mapv (fn [[id attr value tx add?]]
             (let [op (cond
                        (and redo? add?) :db/add
                        (and (not redo?) add?) :db/retract
@@ -103,7 +102,7 @@
   [txs]
   (let [conn (conn/get-conn false)
         db-report (d/transact! conn txs)]
-    (do (pipelines/invoke-hooks db-report))))
+    (pipelines/invoke-hooks db-report)))
 
 (defn- refresh!
   [opts]

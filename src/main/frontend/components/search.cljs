@@ -13,21 +13,12 @@
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.config :as config]
-            [frontend.search :as search]
             [clojure.string :as string]
-            [goog.object :as gobj]
-            [medley.core :as medley]
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.mobile.util :as mobile-util]))
-
-(defn- partition-between
-  "Split `coll` at positions where `pred?` is true."
-  [pred? coll]
-  (let [switch (reductions not= true (map pred? coll (rest coll)))]
-    (map (partial map first) (partition-by second (map list coll switch)))))
 
 (defn highlight-exact-query
   [content q]
@@ -75,7 +66,7 @@
    content])
 
 (rum/defc block-search-result-item
-  [repo uuid format content q search-mode]
+  [repo uuid _format content q search-mode]
   [:div [(when (not= search-mode :page)
            [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
                                                                       :block? true
@@ -320,48 +311,47 @@
                   300)
         in-page-search? (= search-mode :page)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      (let [input (::input state)]
-        [:div.cp__palette.cp__palette-main
-         (when (mobile-util/is-native-platform?)
-          {:style {:min-height "50vh"}})
+      [:div.cp__palette.cp__palette-main
+       (when (mobile-util/is-native-platform?)
+         {:style {:min-height "50vh"}})
 
-         [:div.input-wrap
-          [:input.cp__palette-input.w-full
-           {:type          "text"
-            :auto-focus    true
-            :placeholder   (case search-mode
-                             :graph
-                             (t :graph-search)
-                             :page
-                             (t :page-search)
-                             (t :search))
-            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-            :value         search-q
-            :on-change     (fn [e]
-                             (when @search-timeout
-                               (js/clearTimeout @search-timeout))
-                             (let [value (util/evalue e)
-                                   is-composing? (util/onchange-event-is-composing? e)] ;; #3199
-                               (if (and (string/blank? value) (not is-composing?))
-                                 (search-handler/clear-search! false)
-                                 (let [search-mode (state/get-search-mode)
-                                       opts (if (= :page search-mode)
-                                              (when-let [current-page (or (state/get-current-page)
-                                                                          (date/today))]
-                                                {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
-                                              {})]
-                                   (state/set-q! value)
-                                   (reset! search-timeout
-                                           (js/setTimeout
-                                            (fn []
-                                              (if (= :page search-mode)
-                                                (search-handler/search (state/get-current-repo) value opts)
-                                                (search-handler/search (state/get-current-repo) value)))
-                                            timeout))))))}]]
-         [:div.search-results-wrap
-          (if (seq search-result)
-            (search-auto-complete search-result search-q false)
-            (recent-search-and-pages in-page-search?))]]))))
+       [:div.input-wrap
+        [:input.cp__palette-input.w-full
+         {:type          "text"
+          :auto-focus    true
+          :placeholder   (case search-mode
+                           :graph
+                           (t :graph-search)
+                           :page
+                           (t :page-search)
+                           (t :search))
+          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+          :value         search-q
+          :on-change     (fn [e]
+                           (when @search-timeout
+                             (js/clearTimeout @search-timeout))
+                           (let [value (util/evalue e)
+                                 is-composing? (util/onchange-event-is-composing? e)] ;; #3199
+                             (if (and (string/blank? value) (not is-composing?))
+                               (search-handler/clear-search! false)
+                               (let [search-mode (state/get-search-mode)
+                                     opts (if (= :page search-mode)
+                                            (when-let [current-page (or (state/get-current-page)
+                                                                        (date/today))]
+                                              {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
+                                            {})]
+                                 (state/set-q! value)
+                                 (reset! search-timeout
+                                         (js/setTimeout
+                                          (fn []
+                                            (if (= :page search-mode)
+                                              (search-handler/search (state/get-current-repo) value opts)
+                                              (search-handler/search (state/get-current-repo) value)))
+                                          timeout))))))}]]
+       [:div.search-results-wrap
+        (if (seq search-result)
+          (search-auto-complete search-result search-q false)
+          (recent-search-and-pages in-page-search?))]])))
 
 (rum/defc more < rum/reactive
   [route]

@@ -17,4 +17,4 @@
 (defn init []
   (let [config (clj->js config)
         init-fn (if (util/electron?) Sentry-electron/init Sentry/init)]
-    (Sentry/init config)))
+    (init-fn config)))
