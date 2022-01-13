@@ -1,7 +1,5 @@
 (ns electron.file-sync-rsapi
-  (:require ["rsapi" :as rsapi]
-            [cljs.core.async :as async]
-            [cljs.core.async.interop :refer [p->c]]))
+  (:require ["rsapi" :as rsapi]))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))

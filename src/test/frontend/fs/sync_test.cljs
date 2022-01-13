@@ -1,6 +1,6 @@
 (ns frontend.fs.sync-test
   (:require [clojure.string :as string]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
+            [cljs.test :refer [deftest is]]
             [frontend.fs.sync :as sync]))
 
 
@@ -32,6 +32,10 @@
     ["delete_files"
      ["f2"]]]))
 
+(def txns-4
+  (create-txns
+   [["delete_files"
+     ["f2" "f3"]]]))
 
 (deftest test-FileTxnSet
   (is (=
@@ -43,6 +47,8 @@
        [(sync/->FileTxn "f1" "f1" false true 0)]))
   (is (=
        (seq (sync/update-txns (.-EMPTY sync/FileTxnSet) txns-3))
-       [(sync/->FileTxn "f1" "f2" false true 0)])))
-
-#_(run-tests)
+       [(sync/->FileTxn "f1" "f2" false true 0)]))
+  (is (=
+       (seq (sync/update-txns (.-EMPTY sync/FileTxnSet) txns-4))
+       [(sync/->FileTxn "f2" "f2" false true 0)
+        (sync/->FileTxn "f3" "f3" false true 1)])))

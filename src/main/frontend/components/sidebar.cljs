@@ -441,7 +441,6 @@
                 state)}
   [state route-match main-content]
   (let [{:keys [open-fn]} state
-        me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)

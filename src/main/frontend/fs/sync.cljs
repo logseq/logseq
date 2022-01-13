@@ -1,6 +1,5 @@
 (ns frontend.fs.sync
-  (:require ["path" :as path]
-            [cljs-http.client :as http]
+  (:require [cljs-http.client :as http]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
             [cljs.core.async.interop :refer [p->c]]
@@ -9,13 +8,12 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.debug :as debug]
-            [frontend.fs.macro :refer [exception-> exception->>]]
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [rum.core :as rum]
-            [cljs.spec.alpha :as s]))
+            [cljs.core.async.impl.channels]))
 
 ;;; Commentary
 ;;; file-sync related local files/dirs:
@@ -129,7 +127,7 @@
   (-relative-path [_] to-path)
 
   IEquiv
-  (-equiv [coll ^FileTxn other]
+  (-equiv [_ ^FileTxn other]
     (and (= from-path (.-from-path other))
          (= to-path (.-to-path other))
          (= updated (.-updated other))
@@ -137,7 +135,7 @@
          (= seq-id (.-seq-id other))))
 
   IComparable
-  (-compare [this ^FileTxn other]
+  (-compare [_ ^FileTxn other]
     (compare seq-id (.-seq-id other)))
 
   ISeqable
@@ -145,7 +143,7 @@
     `([:from-path ~from-path] [:to-path ~to-path] [:updated ~updated] [:deleted ~deleted]))
 
   IPrintWithWriter
-  (-pr-writer [coll w opts]
+  (-pr-writer [coll w _opts]
     (write-all w "#FileTxn[\"" from-path "\" -> \"" to-path
                "\" (updated? " updated ", renamed? " (.renamed? coll) ", deleted? " (.deleted? coll)
                ", seq-id " seq-id ")]")))
@@ -186,26 +184,26 @@
   ILookup
   (-lookup [coll to-path]
     (-lookup coll to-path nil))
-  (-lookup [coll to-path not-found]
+  (-lookup [_ to-path not-found]
     (-lookup to-path-file-map to-path not-found))
 
   ICollection
-  (-conj [coll ^FileTxn v]
+  (-conj [_ ^FileTxn v]
     (conj to-path-file-map [(.-to-path v) v]))
 
   ISet
-  (-disjoin [coll ^FileTxn v]
+  (-disjoin [_ ^FileTxn v]
     (FileTxnSet. (-dissoc to-path-file-map (.-to-path v)) seq-id))
 
   ISeqable
-  (-seq [coll]
+  (-seq [_]
     (some->
      (vals to-path-file-map)
      (sort)
      (seq)))
 
   IPrintWithWriter
-  (-pr-writer [o w opts]
+  (-pr-writer [_ w opts]
     (if-let [vals (vals to-path-file-map)]
       (-pr-writer vals w opts)
       (write-all w "()"))))
@@ -230,7 +228,7 @@
 
 (deftype FileMetadata [size etag path last-modified remote? ^:mutable normalized-path]
   Object
-  (get-normalized-path [this]
+  (get-normalized-path [_]
     (when-not normalized-path
       (set! normalized-path
             (cond-> path
@@ -248,10 +246,10 @@
          (= etag (.-etag other))))
 
   IHash
-  (-hash [o] (hash {:size size :etag etag :path path}))
+  (-hash [_] (hash {:size size :etag etag :path path}))
 
   IPrintWithWriter
-  (-pr-writer [coll w opts]
+  (-pr-writer [_ w _opts]
     (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
 
 
@@ -310,7 +308,7 @@
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
   IRSAPI
-  (get-local-all-files-meta [this graph-uuid base-path]
+  (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
         (if (instance? ExceptionInfo r)
@@ -320,7 +318,7 @@
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
                set)))))
-  (get-local-files-meta [this graph-uuid base-path filepaths]
+  (get-local-files-meta [_ graph-uuid base-path filepaths]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-files-meta" graph-uuid base-path filepaths))))]
         (if (instance? ExceptionInfo r)
@@ -366,13 +364,12 @@
   Object
 
   (request [this api-name body]
-    (let [c (chan)]
-      (go
-        (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this)))]
-          (if (http/unexceptional-status? (:status resp))
-            (get-resp-json-body resp)
-            (ex-info "request failed"
-                     {:err resp :body (get-resp-json-body resp)}))))))
+    (go
+      (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this)))]
+        (if (http/unexceptional-status? (:status resp))
+          (get-resp-json-body resp)
+          (ex-info "request failed"
+                   {:err resp :body (get-resp-json-body resp)})))))
 
   ;; for test
   (update-files [this graph-uuid txid files]
@@ -393,28 +390,32 @@
   IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid]
     (go
-      (exception->>
-       (<! (.request this "get_all_files" {:GraphUUID graph-uuid}))
-       (:Objects)
-       (map #(->FileMetadata (:Size %)
-                             (:ETag %)
-                             (remove-user-graph-uuid-prefix (:Key %))
-                             (:LastModified %)
-                             true nil))
-       set)))
+      (let [r (<! (.request this "get_all_files" {:GraphUUID graph-uuid}))]
+        (if (instance? ExceptionInfo r)
+          r
+          (->> r
+               :Objects
+               (map #(->FileMetadata (:Size %)
+                                     (:ETag %)
+                                     (remove-user-graph-uuid-prefix (:Key %))
+                                     (:LastModified %)
+                                     true nil))
+               set)))))
 
   (get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (exception->>
-       (<! (.request this "get_files_meta" {:GraphUUID graph-uuid :Files filepaths}))
-       (:Files)
-       (map #(->FileMetadata (:Size %)
-                             (:ETag %)
-                             (:FilePath %)
-                             (:LastModified %)
-                             true nil))
-       (into #{}))))
+      (let [r (<! (.request this "get_files_meta" {:GraphUUID graph-uuid :Files filepaths}))]
+        (if (instance? ExceptionInfo r)
+          r
+          (->> r
+               :Files
+               (map #(->FileMetadata (:Size %)
+                                     (:ETag %)
+                                     (:FilePath %)
+                                     (:LastModified %)
+                                     true nil))
+               (into #{}))))))
 
   (get-remote-graph [this graph-name-opt graph-uuid-opt]
     {:pre [(or graph-name-opt graph-uuid-opt)]}
@@ -431,46 +432,31 @@
   (get-diff [this graph-uuid from-txid]
     ;; TODO: path in transactions should be relative path(now s3 key, which includes graph-uuid and user-uuid)
     (go
-      (exception->
-       (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))
-       (:Transactions)
-       (as-> txns [txns (:TXId (last txns))]))))
+      (let [r (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
+        (if (instance? ExceptionInfo r)
+          r
+          (-> r :Transactions (as-> txns [txns (:TXId (last txns))]))))))
 
   (create-graph [this graph-name]
     (.request this "create_graph" {:GraphName graph-name})))
 
 (def remoteapi (->RemoteAPI))
 
-
-
-(defn- remote-graph-exists?
-  "200: true
-  404: false
-  else: return err resp"
-  [graph-uuid]
-  (go
-    (let [r (<! (get-remote-graph remoteapi nil graph-uuid))]
-      (if (instance? ExceptionInfo r)
-        (if (= 404 (get-in (ex-data r) [:err :status]))
-          false
-          r)
-        true))))
-
 (defn- update-txn [^FileTxnSet filetxnset txn]
-  (let [{:keys [TXType TXContent]} txn]
-    (let [files (->> (string/split-lines TXContent)
-                     (remove empty?)
-                     (mapv #(remove-user-graph-uuid-prefix %)))]
-      (case TXType
-        "update_files"
-        (reduce #(.update-file ^FileTxnSet %1 %2) filetxnset files)
+  (let [{:keys [TXType TXContent]} txn
+        files (->> (string/split-lines TXContent)
+                   (remove empty?)
+                   (mapv #(remove-user-graph-uuid-prefix %)))]
+    (case TXType
+      "update_files"
+      (reduce #(.update-file ^FileTxnSet %1 %2) filetxnset files)
 
-        "rename_file"
-        (let [[from to] files]
-          (.rename-file filetxnset from to))
+      "rename_file"
+      (let [[from to] files]
+        (.rename-file filetxnset from to))
 
-        "delete_files"
-        (reduce #(.delete-file ^FileTxnSet %1 %2) filetxnset files)))))
+      "delete_files"
+      (reduce #(.delete-file ^FileTxnSet %1 %2) filetxnset files))))
 
 (defn update-txns [filetxnset txns]
   (reduce update-txn filetxnset txns))
@@ -511,7 +497,7 @@
                                       (and (vector? v) (number? (first v)))
                                       :txid
 
-                                      (and (instance? ExceptionInfo v))
+                                      (instance? ExceptionInfo v)
                                       :exceptional-response
 
                                       (instance? cljs.core.async.impl.channels/ManyToManyChannel v)
@@ -551,11 +537,11 @@
          (= path (.-path other))))
 
   IPrintWithWriter
-  (-pr-writer [coll w opts]
+  (-pr-writer [_ w _opts]
     (write-all w (str {:type type :base-path dir :path path}))))
 
 (defn file-watch-handler
-  [type {:keys [dir path _content stat] :as payload}]
+  [type {:keys [dir path _content stat] :as _payload}]
   (go
     (when (some-> (state/get-file-sync-state-manager)
                   -stopped?
@@ -584,25 +570,27 @@
   (sync-remote->local! [_]
     (go
       (let [r
-            (exception->
-             (<! (get-diff remoteapi graph-uuid @*txid))
-             (as-> [diff-txns latest-txid]
-                 (when (number? latest-txid)
-                   (let [filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)]
-                     (prn "filetxnset" filetxnset)
-                     ;; TODO: precheck etag
-                     (let [apply-result (<! (apply-filetxns sync-state graph-uuid base-path filetxnset))]
-                       (when-not (instance? ExceptionInfo apply-result)
-                         (reset! *txid latest-txid)
-                         ;; persist txid
-                         (persist-var/-reset-value! graphs-txid [graph-uuid latest-txid] repo)
-                         (persist-var/persist-save graphs-txid))
-                       apply-result)))))]
+            (let [r (<! (get-diff remoteapi graph-uuid @*txid))]
+              (if (instance? ExceptionInfo r)
+                r
+                (let [[diff-txns latest-txid] r]
+                  (when (number? latest-txid)
+                    (let [filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)]
+                      (prn "filetxnset" filetxnset)
+                            ;; TODO: precheck etag
+                      (let [apply-result (<! (apply-filetxns sync-state graph-uuid base-path filetxnset))]
+                        (when-not (instance? ExceptionInfo apply-result)
+                          (reset! *txid latest-txid)
+                                ;; persist txid
+                          (persist-var/-reset-value! graphs-txid [graph-uuid latest-txid] repo)
+                          (persist-var/persist-save graphs-txid))
+                        apply-result))))))]
+
         (if (instance? ExceptionInfo r)
           {:unknown r}
           {:succ true}))))
 
-  (sync-remote->local-all-files! [this] nil))
+  (sync-remote->local-all-files! [_] nil))
 
 
 (defn- file-changed?
@@ -625,8 +613,9 @@
                                   (not (contains-path? (get-ignore-files this) (-relative-path e)))
                                   (contains-path? (get-monitored-dirs this) (-relative-path e)))))
 
-  (filtered-chan [this n]
-    "check base-path"
+  (filtered-chan
+    ;; "check base-path"
+    [this n]
     (chan n (filter (.filter-file-change-events-fn this))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
@@ -677,39 +666,39 @@
         (go {:succ true})               ; ignore
         (do
           (prn "sync-local->remote!" e)
-          (let [path* (-relative-path e)]
-            (let [r
-                  (cond
-                    (or (= "add" type) (= "change" type))
-                    (update-remote-file rsapi graph-uuid base-path path* @*txid)
+          (let [path* (-relative-path e)
+                r
+                (cond
+                  (or (= "add" type) (= "change" type))
+                  (update-remote-file rsapi graph-uuid base-path path* @*txid)
 
-                    (= "unlink" type)
-                    (delete-remote-files rsapi graph-uuid base-path [path*] @*txid)
+                  (= "unlink" type)
+                  (delete-remote-files rsapi graph-uuid base-path [path*] @*txid)
 
-                    ;; (= "rename" type)
-                    ;; (rename-local-file)
-                    )]
-              (go
-                (let [_ (.add-current-local->remote-files! sync-state [path*])
-                      r* (<! r)
-                      _ (.remove-current-local->remote-files! sync-state [path*])]
-                  (cond
-                    (need-sync-remote? r*)
-                    {:need-sync-remote true}
+                  ;; (= "rename" type)
+                  ;; (rename-local-file)
+                  )]
+            (go
+              (let [_ (.add-current-local->remote-files! sync-state [path*])
+                    r* (<! r)
+                    _ (.remove-current-local->remote-files! sync-state [path*])]
+                (cond
+                  (need-sync-remote? r*)
+                  {:need-sync-remote true}
 
-                    (number? r*)          ; succ
-                    (do
-                      (println "sync-local->remote! update txid" r*)
-                      ;; persist txid
-                      (persist-var/-reset-value! graphs-txid [graph-uuid r*] repo)
-                      (persist-var/persist-save graphs-txid)
-                      (reset! *txid r*)
-                      {:succ true})
+                  (number? r*)          ; succ
+                  (do
+                    (println "sync-local->remote! update txid" r*)
+                    ;; persist txid
+                    (persist-var/-reset-value! graphs-txid [graph-uuid r*] repo)
+                    (persist-var/persist-save graphs-txid)
+                    (reset! *txid r*)
+                    {:succ true})
 
-                    :else
-                    (do
-                      (println "sync-local->remote unknown:" r*)
-                      {:unknown r*}))))))))))
+                  :else
+                  (do
+                    (println "sync-local->remote unknown:" r*)
+                    {:unknown r*})))))))))
 
   (sync-local->remote-all-files! [this stop-chan]
     (go
@@ -750,13 +739,13 @@
            (apply conj history)
            (set! history))))
 
-  (update-state! [this v]
+  (update-state! [_ v]
     (set! state v)
     (state/set-file-sync-state v))
-  (add-current-local->remote-files! [this fs]
+  (add-current-local->remote-files! [_ fs]
     (set! current-local->remote-files (set/union current-local->remote-files (set fs)))
     (state/set-file-sync-uploading-files current-local->remote-files))
-  (add-current-remote->local-files! [this fs]
+  (add-current-remote->local-files! [_ fs]
     (set! current-remote->local-files (set/union current-remote->local-files (set fs)))
     (state/set-file-sync-downloading-files current-remote->local-files))
   (remove-current-local->remote-files! [this fs]
@@ -767,10 +756,10 @@
     (set! current-remote->local-files (set/difference current-remote->local-files (set fs)))
     (.add-to-history this fs)
     (state/set-file-sync-downloading-files current-remote->local-files))
-  (reset-current-local->remote-files! [this]
+  (reset-current-local->remote-files! [_]
     (set! current-local->remote-files #{})
     (state/set-file-sync-uploading-files current-local->remote-files))
-  (reset-current-remote->local-files! [this]
+  (reset-current-remote->local-files! [_]
     (set! current-remote->local-files #{})
     (state/set-file-sync-downloading-files current-remote->local-files))
 
@@ -778,7 +767,7 @@
   (-stopped? [_] (or (nil? state) (= ::stop state)))
 
   IPrintWithWriter
-  (-pr-writer [coll w opts]
+  (-pr-writer [_ w opts]
     (let [pr-map {:state state
                   :current-uploading-files current-local->remote-files
                   :current-downloading-files current-remote->local-files}]
@@ -820,7 +809,8 @@
 
   (idle [this]
     (go
-      (let [{:keys [stop full-sync trigger-remote trigger-local remote local trigger-full-sync]}
+      (let [{:keys [stop full-sync ;; trigger-remote trigger-local
+                    remote local trigger-full-sync]}
             (async/alt!
               stop-sync-chan {:stop true}
               full-sync-chan {:full-sync true}
@@ -888,14 +878,12 @@
             (debug/pprint "local->remote" unknown)
             (.schedule this ::idle))))))
   IStoppable
-  (-stop! [this]
+  (-stop! [_]
     (ws-stop! _*ws)
     (offer! stop-sync-chan true)
     (stop-local->remote! local->remote-syncer)
     (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
-    (.update-state! sync-state ::stop)
-    )
-  )
+    (.update-state! sync-state ::stop)))
 
 
 (defn sync-manager [graph-uuid base-path repo txid sync-state full-sync-chan stop-sync-chan
@@ -915,36 +903,6 @@
                    full-sync-chan stop-sync-chan
                    remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil)))
 
-(comment
-  (create-graph remoteapi "test3")
-  (def c (get-remote-graph remoteapi "test3" nil))
-  (poll! c)
-  ;; (def graph-uuid "1ef5aa6f-b703-47e4-a803-1599a1e752bd")
-  ;; (def txid 129)
-  (def graph-uuid (first @graphs-txid))
-  (def txid (second @graphs-txid))
-  (def full-sync-chan (chan))
-  (def stop-sync-chan (chan 1))
-  (def remote->local-sync-chan (chan))
-  (def local->remote-sync-chan (chan))
-  (vswap! *graph-base-path-map assoc graph-uuid {:repo (state/get-current-repo)
-                                                 :base-path (config/get-repo-dir (state/get-current-repo))})
-  (def sync-state (->SyncState nil #{} #{} '()))
-  (def sm (sync-manager graph-uuid
-                        (:base-path (@*graph-base-path-map graph-uuid)) (:repo (@*graph-base-path-map graph-uuid))
-                        txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                        local-changes-chan))
-  (.. sm start)
-  (offer! full-sync-chan true)
-  (.. sm -state)
-  (.. sm -*txid)
-  (.. sm stop)
-  (offer! stop-sync-chan true)
-  ;; drain `local-changes-chan`
-  (->> (repeatedly #(poll! local-changes-chan))
-       (take-while identity))
-
-  )
 
 (def full-sync-chan (chan 1))
 (def stop-sync-chan (chan 1))
@@ -978,11 +936,11 @@
 
     ;; watch :network/online?
     (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-               (fn [k r o n]
+               (fn [_k _r _o n]
                  (when (false? n)
                    (sync-stop))))
     ;; watch :auth/id-token
     (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-               (fn [k r o n]
+               (fn [_k _r _o n]
                  (when (nil? n)
                    (sync-stop))))))

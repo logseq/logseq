@@ -18,8 +18,7 @@
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]
             ["electron-context-menu" :as init-context-menu]
-            [goog.object :as gobj]
-            [clojure.string :as string]))
+            [goog.object :as gobj]))
 
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")

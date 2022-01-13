@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.fs.macro :refer [exception-> exception->>]]
             [frontend.fs.sync :as sync]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -24,9 +23,8 @@
 (defn create-graph
   [name]
   (go
-    (let [r (exception->
-             (<! (sync/create-graph sync/remoteapi name))
-             :GraphUUID)]
+    (let [r* (<! (sync/create-graph sync/remoteapi name))
+          r (if (instance? ExceptionInfo r*) r* (:GraphUUID r*))]
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
         (do
