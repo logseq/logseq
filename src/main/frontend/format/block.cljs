@@ -517,7 +517,8 @@
                                 :body @pre-block-body
                                 :properties @pre-block-properties
                                 :properties-order (keys @pre-block-properties)
-                                :refs (get-page-refs-from-properties @pre-block-properties)
+                                :refs (->> (get-page-refs-from-properties @pre-block-properties)
+                                           (map :block/original-name))
                                 :pre-block? true
                                 :unordered true}
                          block (with-page-block-refs block false)]
