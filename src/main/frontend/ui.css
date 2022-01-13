@@ -138,15 +138,6 @@
   }
 }
 
-html.is-native-ios,
-html.is-native-android {
-    .ui__modal {
-        &-panel {
-            min-height: 420px;
-        }
-    }
-}
-
 html.is-native-andorid,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
