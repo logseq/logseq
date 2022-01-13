@@ -12,22 +12,97 @@ on:
 
 env:
   CLOJURE_VERSION: '1.10.1.727'
+  CLJ_KONDO_VERSION: '2021.12.19'
+  # setup-java@v2 dropped support for legacy Java version syntax.
+  # This is the same as 1.8.
+  JAVA_VERSION: '8'
+  # This is the latest node version of we can run.
+  NODE_VERSION: '16'
 
 jobs:
 
-  test:
-    strategy:
-      matrix:
-        operating-system: [ubuntu-latest]
-
-    runs-on: ${{ matrix.operating-system }}
+  cljs-test:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v2
         with:
-          fetch-depth: 1
-          submodules: 'true'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            yarn.lock
+            static/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Clojure cache
+        uses: actions/cache@v2
+        id: clojure-deps
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
+        run: clojure -A:cljs -P
+
+      - name: Set up clj-kondo
+        uses: DeLaGuardo/setup-clj-kondo@master
+        with:
+          version: ${{ env.CLJ_KONDO_VERSION }}
+
+      - name: Run clj-kondo lint
+        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar,logseq} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,fs,format,external,extensions,db,context,components}
+
+      - name: Fetch yarn deps
+        run: yarn install
+
+      - name: Run ClojureScript test
+        run: |
+          yarn cljs:test
+          node static/tests.js
+
+  e2e-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            yarn.lock
+            static/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Clojure cache
         uses: actions/cache@v2
@@ -39,63 +114,37 @@ jobs:
           key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
-      - name: Prepare Java
-        uses: actions/setup-java@v1
-        with:
-          java-version: 1.8
-
-      # This is the latest node version of we can run
-      - name: Set up Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: 16
-
-      - name: Install Clojure tools.deps
-        uses: DeLaGuardo/setup-clojure@master
-        with:
-          cli: ${{ env.CLOJURE_VERSION }}
-
-      - uses: actions/checkout@v2
-      - uses: DeLaGuardo/setup-clj-kondo@master
-        with:
-          version: '2021.12.19'
-
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-      - name: yarn cache
-        uses: actions/cache@v1
-        id: yarn-cache
+      - name: Shadow-cljs cache
+        uses: actions/cache@v2
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          path: .shadow-cljs
+          # ensure update cache every time
+          key: ${{ runner.os }}-shadow-cljs-${{ github.sha }}
+          # will match most recent upload
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-shadow-cljs-
+
       - name: Fetch yarn deps
-        run: yarn cache clean && yarn install
+        run: yarn install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
-      - name: Run clj-kondo lint
-        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar,logseq} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,fs,format,external,extensions,db,context,components}
-
-      - name: Run ClojureScript test
+      - name: Prepare E2E test build
         run: |
-          yarn cljs:test
-          node static/tests.js
+          yarn gulp:build && yarn cljs:release
+          (cd static && yarn install && yarn rebuild:better-sqlite3)
 
       - name: Run Playwright test
-        run: |
-          yarn release
-          (cd static && yarn install && yarn rebuild:better-sqlite3)
-          xvfb-run -- yarn e2e-test
+        run: xvfb-run -- yarn e2e-test
         env:
           DEBUG: "pw:test"
 
       - name: Save test artifacts
-        if: ${{ github.event_name == 'pull_request' && failure() }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
           name: e2e-test-report
