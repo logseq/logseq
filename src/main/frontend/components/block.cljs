@@ -1912,7 +1912,7 @@
       (when (and (seq properties)
                  (let [hidden? (property/properties-built-in? properties)]
                    (not hidden?))
-                 (not block-ref?)
+                 (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))
         (properties-cp config block))
 
