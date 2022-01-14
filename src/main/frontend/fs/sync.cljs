@@ -35,15 +35,13 @@
 
 
 ;;; TODO: add some spec validate
+;;; TODO: use access-token instead of id-token
+;;; TODO: support stop from applying filetxns from remote
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
-
-(def *graph-base-path-map
-  "graph-uuid -> {:repo <repo> :base-path <base-path>}"
-  (volatile! {}))
 
 (defn- ws-stop! [*ws]
   (swap! *ws (fn [o] (assoc o :stop true)))
@@ -307,7 +305,7 @@
 
 (deftype RSAPI []
   IToken
-  (get-token [this]                     ;TODO: use access-token
+  (get-token [this]
     (go
       (or (state/get-auth-id-token)
           (<! (.refresh-token this)))))
@@ -491,7 +489,8 @@
           true
           r)))))
 
-;;; TODO: support stop from processing
+
+
 (defn- apply-filetxns [^SyncState sync-state graph-uuid base-path filetxns]
   (go-loop [filetxns* filetxns]
     (when (seq filetxns*)
