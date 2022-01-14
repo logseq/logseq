@@ -14,6 +14,12 @@ const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
 
+const gulpOptions = { 
+  ignoreInitial: true,
+  usePolling: true,  // fsevents watcher throws error for large amount of files
+  interval: 1000  // reduce polling cpu pressure
+}
+
 const css = {
   watchCSS () {
     return cp.spawn(`yarn css:watch`, {
@@ -46,10 +52,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { 
-      ignoreInitial: true,
-      usePolling: false  // Don't know why but have to set explicitly, or high cpu usage
-     }, common.syncResourceFile)
+    return gulp.watch(resourceFilePath, gulpOptions, common.syncResourceFile)
   },
 
   syncAllStatic () {
@@ -70,10 +73,7 @@ const common = {
     return gulp.watch([
       path.join(outputPath, 'js/**'),
       path.join(outputPath, 'css/**')
-    ], { 
-      ignoreInitial: true,
-      usePolling: false  // Don't know why but have to set explicitly, or high cpu usage
-    }, common.syncJS_CSSinRt)
+    ], gulpOptions, common.syncJS_CSSinRt)
   }
 }
 
