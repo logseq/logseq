@@ -1038,48 +1038,55 @@
                               (dom/attr sibling-block "id")
                               ""))))))
 
-(defn- block-property-aux!
-  [block-id key value]
-  (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        repo (state/get-current-repo)]
-    (when repo
-      (when-let [block (db/entity [:block/uuid block-id])]
-        (let [format (:block/format block)
-              content (:block/content block)
-              properties (:block/properties block)
-              properties (if (nil? value)
-                           (dissoc properties key)
-                           (assoc properties key value))
-              content (if (nil? value)
-                        (property/remove-property format key content)
-                        (property/insert-property format content key value))
-              content (property/remove-empty-properties content)
-              block (outliner-core/block {:block/uuid block-id
-                                          :block/properties properties
-                                          :block/content content})
-              input-pos (or (state/get-edit-pos) :max)]
-          (outliner-core/save-node block)
+(defn- batch-set-block-property!
+  "col: a collection of [block-id property-key property-value]."
+  [col]
+  (when-let [repo (state/get-current-repo)]
+    (ds/auto-transact!
+     [txs-state (ds/new-outliner-txs-state)]
+     {:outliner-op :set-block-properties
+      :skip-transact? false}
+     (doseq [[block-id key value] col]
+       (let [block-id (if (string? block-id) (uuid block-id) block-id)]
+         (when-let [block (db/entity [:block/uuid block-id])]
+           (let [format (:block/format block)
+                 content (:block/content block)
+                 properties (:block/properties block)
+                 properties (if (nil? value)
+                              (dissoc properties key)
+                              (assoc properties key value))
+                 content (if (nil? value)
+                           (property/remove-property format key content)
+                           (property/insert-property format content key value))
+                 content (property/remove-empty-properties content)
+                 block (outliner-core/block {:block/uuid block-id
+                                             :block/properties properties
+                                             :block/content content})
+                 input-pos (or (state/get-edit-pos) :max)]
+             (outliner-core/save-node block {:txs-state txs-state}))))))
 
-          (db/refresh! (state/get-current-repo)
-                       {:key :block/change
-                        :data [(db/pull [:block/uuid block-id])]})
-
-          ;; update editing input content
-          (when-let [editing-block (state/get-edit-block)]
-            (when (= (:block/uuid editing-block) block-id)
-              (edit-block! editing-block
-                           input-pos
-                           (state/get-edit-input-id)))))))))
+    (let [block-id (ffirst col)
+          block-id (if (string? block-id) (uuid block-id) block-id)
+          input-pos (or (state/get-edit-pos) :max)]
+      (db/refresh! (state/get-current-repo)
+                  {:key :block/change
+                   :data [(db/pull [:block/uuid block-id])]})
+      ;; update editing input content
+      (when-let [editing-block (state/get-edit-block)]
+        (when (= (:block/uuid editing-block) block-id)
+          (edit-block! editing-block
+                       input-pos
+                       (state/get-edit-input-id)))))))
 
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]
-    (block-property-aux! block-id key nil)))
+    (batch-set-block-property! [[block-id key nil]])))
 
 (defn set-block-property!
   [block-id key value]
   (let [key (keyword key)]
-    (block-property-aux! block-id key value)))
+    (batch-set-block-property! [[block-id key value]])))
 
 (defn set-block-query-properties!
   [block-id all-properties key add?]
@@ -1113,17 +1120,21 @@
             (state/set-edit-content! input-id new-content)
             (save-block-if-changed! block new-content)))))))
 
-(defn- set-block-id!
-  [block-id]
-  (let [block (db/entity [:block/uuid block-id])]
-    (when-not (:block/pre-block? block)
-      (set-block-property! block-id "id" (str block-id)))))
+(defn- set-blocks-id!
+  [block-ids]
+  (let [block-ids (remove nil? block-ids)
+        col (map (fn [block-id]
+                   (let [block (db/entity [:block/uuid block-id])]
+                     (when-not (:block/pre-block? block)
+                       [block-id :id (str block-id)])))
+              block-ids)]
+    (batch-set-block-property! col)))
 
 (defn copy-block-ref!
   ([block-id]
    (copy-block-ref! block-id #(str %)))
   ([block-id tap-clipboard]
-   (set-block-id! block-id)
+   (set-blocks-id! [block-id])
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
 (defn select-block!
@@ -1240,8 +1251,7 @@
                                     :markdown
                                     (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
                             (string/join "\n\n"))]
-      (doseq [block blocks]
-        (set-block-id! (:id block)))
+      (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
 
 (defn copy-block-embeds
@@ -1253,8 +1263,7 @@
           ids-str (some->> ids
                            (map (fn [id] (util/format "{{embed ((%s))}}" id)))
                            (string/join "\n\n"))]
-      (doseq [id ids]
-        (set-block-id! id))
+      (set-blocks-id! ids)
       (util/copy-to-clipboard! ids-str))))
 
 (defn get-selected-toplevel-block-uuids

@@ -1912,7 +1912,7 @@
       (when (and (seq properties)
                  (let [hidden? (property/properties-built-in? properties)]
                    (not hidden?))
-                 (not block-ref?)
+                 (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))
         (properties-cp config block))
 
@@ -2647,10 +2647,8 @@
                                  code)
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code options)
-             ;; FIXME: The following code seemed unreachable
-             ;; options has key: :lines, :language, :full_content, :pos_meta
              (let [options (:options options)]
-               (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+               (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
 
 (defn markup-element-cp

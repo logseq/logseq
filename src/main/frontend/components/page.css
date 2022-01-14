@@ -279,10 +279,6 @@
 
   &-wrap {
     cursor: pointer;
-
-    &:hover .add-button-link {
-      opacity: .3;
-    }
   }
 }
 
