@@ -350,7 +350,7 @@
                (when-let [pages (->> (seq sidebar)
                                      (remove string/blank?))]
                  (doseq [page pages]
-                   (let [page (util/safe-lower-case page)
+                   (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
                                               [page :page])]
