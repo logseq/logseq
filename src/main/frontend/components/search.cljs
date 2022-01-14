@@ -198,10 +198,11 @@
                                                   (search-result-item "File" (highlight-exact-query data search-q))
 
                                                   :block
-                                                  (let [{:block/keys [page content uuid]} data
+                                                  (let [{:block/keys [page uuid]} data  ;; content here is normalized
                                                         page (util/get-page-original-name page)
                                                         repo (state/sub :git/current-repo)
-                                                        format (db/get-page-format page)]
+                                                        format (db/get-page-format page)
+                                                        content (:block/content (model/query-block-by-uuid uuid))]
                                                     [:span {:data-block-ref uuid}
                                                       (search-result-item "Block"
                                                         (block-search-result-item repo uuid format content search-q search-mode))])
