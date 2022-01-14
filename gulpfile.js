@@ -46,10 +46,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { 
-      ignoreInitial: true,
-      usePolling: false  // Don't know why but have to set explicitly, or high cpu usage
-     }, common.syncResourceFile)
+    return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   },
 
   syncAllStatic () {
@@ -70,10 +67,7 @@ const common = {
     return gulp.watch([
       path.join(outputPath, 'js/**'),
       path.join(outputPath, 'css/**')
-    ], { 
-      ignoreInitial: true,
-      usePolling: false  // Don't know why but have to set explicitly, or high cpu usage
-    }, common.syncJS_CSSinRt)
+    ], { ignoreInitial: true }, common.syncJS_CSSinRt)
   }
 }
 
