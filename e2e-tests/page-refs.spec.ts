@@ -88,6 +88,7 @@ async function alias_test (page, page_name: string){
   // test search entering (page)
   page.keyboard.press("Enter")
   await page.waitForNavigation()
+  await page.waitForTimeout(100)
   await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
 
@@ -98,6 +99,7 @@ async function alias_test (page, page_name: string){
   await page.waitForTimeout(500)
   page.click(":nth-match(.menu-link, 2)")
   await page.waitForNavigation()
+  await page.waitForTimeout(100)
   await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
   await page.keyboard.press(hotkeyBack)
