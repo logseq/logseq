@@ -1,5 +1,5 @@
 (ns electron.file-sync-rsapi
-  (:require ["rsapi" :as rsapi]))
+  (:require ["@andelf/rsapi" :as rsapi]))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))
