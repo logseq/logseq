@@ -16,12 +16,17 @@
   [repo]
   (nil? (get @indices repo)))
 
+(defn block->content
+  "Convert a block to the display contents for searching"
+  [{:block/keys [content format]}]
+  (->> (text/remove-level-spaces content format)
+       (drawer/remove-logbook)
+       (property/remove-built-in-properties format)))
+
 (defn block->index
-  "Convert a block to the contents for searching (will be displayed in the search results)"
-  [{:block/keys [uuid content format page] :as block}]
-  (when-let [result (->> (text/remove-level-spaces content format)
-                         (drawer/remove-logbook)
-                         (property/remove-built-in-properties format)
+  "Convert a block to the index for searching"
+  [{:block/keys [uuid page] :as block}]
+  (when-let [result (->> (block->content block)
                          (util/search-normalize))]
     {:id (:db/id block)
      :uuid (str uuid)

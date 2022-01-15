@@ -11,6 +11,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
+            [frontend.search.db :as search-db]
             [frontend.mixins :as mixins]
             [frontend.config :as config]
             [clojure.string :as string]
@@ -202,7 +203,8 @@
                                                         page (util/get-page-original-name page)
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)
-                                                        content (:block/content (model/query-block-by-uuid uuid))]
+                                                        block (model/query-block-by-uuid uuid)
+                                                        content (search-db/block->content block)]
                                                     [:span {:data-block-ref uuid}
                                                       (search-result-item "Block"
                                                         (block-search-result-item repo uuid format content search-q search-mode))])
