@@ -138,12 +138,6 @@
                                         ;from-path, to-path is relative path
 (deftype FileTxn [from-path to-path updated deleted txid]
   Object
-  ;; (rename [_ to]
-  ;;   (FileTxn. from-path to updated false seq-id))
-  ;; (update [_]
-  ;;   (FileTxn. from-path to-path true false seq-id))
-  ;; (delete [_]
-  ;;   (FileTxn. from-path to-path false true seq-id))
   (renamed? [_]
     (not= from-path to-path))
   (updated? [_] updated)
@@ -164,10 +158,6 @@
   IComparable
   (-compare [_ ^FileTxn other]
     (compare txid (.-txid other)))
-
-  ;; ISeqable
-  ;; (-seq [_]
-  ;;   `([:from-path ~from-path] [:to-path ~to-path] [:updated ~updated] [:deleted ~deleted]))
 
   IPrintWithWriter
   (-pr-writer [coll w _opts]
