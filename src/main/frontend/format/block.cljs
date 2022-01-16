@@ -168,9 +168,6 @@
    (= "List" (first block))
    (:name (first (second block)))))
 
-(defonce non-parsing-properties
-  (atom #{"background-color" "background_color"}))
-
 ;; TODO: we should move this to mldoc
 (defn extract-properties
   [properties]
@@ -199,11 +196,10 @@
                                            "id"
                                            k)
                                        v (if (coll? v)
-                                           (->> (remove util/wrapped-by-quotes? v)
-                                                (remove string/blank?))
+                                           (remove string/blank? v)
                                            (if (string/blank? v)
                                              nil
-                                             (property/parse-property k v)))
+                                             (text/parse-property k v)))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)

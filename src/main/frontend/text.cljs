@@ -1,7 +1,8 @@
 (ns frontend.text
   (:require [frontend.config :as config]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.handler.link :as link]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -69,6 +70,14 @@
      (remove string/blank?)
      (map string/trim))))
 
+(defn sep-by-hashtag
+  [s]
+  (when s
+    (some->>
+     (string/split s #"#")
+     (remove string/blank?)
+     (map string/trim))))
+
 (defn- not-matched-nested-pages
   [s]
   (and (string? s)
@@ -132,23 +141,24 @@
                         (fn [s]
                           (when-not (util/wrapped-by-quotes? (string/trim s))
                             (string/split s page-ref-re-2))))
-                       (mapcat (fn [s] (cond
-                                        (util/wrapped-by-quotes? s)
-                                        nil
+                       (mapcat (fn [s]
+                                 (cond
+                                   (util/wrapped-by-quotes? s)
+                                   nil
 
-                                        (string/includes? (string/trimr s) "]],")
-                                        (let [idx (string/index-of s "]],")]
-                                          [(subs s 0 idx)
-                                           "]]"
-                                           (subs s (+ idx 3))])
+                                   (string/includes? (string/trimr s) "]],")
+                                   (let [idx (string/index-of s "]],")]
+                                     [(subs s 0 idx)
+                                      "]]"
+                                      (subs s (+ idx 3))])
 
-                                        :else
-                                        [s])))
+                                   :else
+                                   [s])))
                        (remove #(= % ""))
                        (mapcat (fn [s] (if (string/ends-with? s "]]")
-                                        [(subs s 0 (- (count s) 2))
-                                         "]]"]
-                                        [s])))
+                                         [(subs s 0 (- (count s) 2))
+                                          "]]"]
+                                         [s])))
                        concat-nested-pages
                        (remove string/blank?)
                        (mapcat (fn [s]
@@ -160,7 +170,8 @@
                                    [(if un-brackets? (page-ref-un-brackets! s) s)]
 
                                    :else
-                                   (sep-by-comma s))))
+                                   (->> (sep-by-comma s)
+                                        (mapcat sep-by-hashtag)))))
                        (distinct))]
        (if (or (coll? result)
                (and (string? result)
@@ -347,3 +358,35 @@
             (string/join "/" parts)
             (last parts))
           js/decodeURI))))
+
+(defonce non-parsing-properties
+  (atom #{"background-color" "background_color"}))
+
+(defn parse-property
+  [k v]
+  (let [k (name k)
+        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
+        v (string/trim v)]
+    (cond
+      (contains? #{"title" "filters"} k)
+      v
+
+      (= v "true")
+      true
+      (= v "false")
+      false
+
+      (util/safe-re-find #"^\d+$" v)
+      (util/safe-parse-int v)
+
+      (util/wrapped-by-quotes? v) ; wrapped in ""
+      v
+
+      (contains? @non-parsing-properties (string/lower-case k))
+      v
+
+      (link/link? v)
+      v
+
+      :else
+      (split-page-refs-without-brackets v))))

@@ -1689,6 +1689,9 @@
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
 
+       (and (string? v) (util/wrapped-by-quotes? v))
+       (util/unquote-string v)
+
        :else
        (inline-text (:block/format block) (str v)))]))
 

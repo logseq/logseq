@@ -171,7 +171,7 @@
                                               (->> (last first-block)
                                                    (map (fn [[x y]]
                                                           [x (if (string? y)
-                                                               (property/parse-property x y)
+                                                               (text/parse-property x y)
                                                                y)]))
                                                    (into {})
                                                    (walk/keywordize-keys)))]
