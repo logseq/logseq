@@ -1,7 +1,7 @@
 (ns frontend.format.block
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [cljs.core.match :refer [match]]
+            [cljs.core.match :as match]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -27,19 +27,19 @@
                             (= "Tag" (first block))
                             (second block))]
     (->
-     (mapv (fn [e]
-             (match e
-                    ["Plain" s]
-                    s
-                    ["Link" t]
-                    (let [{full_text :full_text} t]
-                      full_text)
-                    ["Nested_link" t]
-                    (let [ {content :content} t]
-                      content)
-                    :else
-                    ""
-                    )) tag-value)
+     (map (fn [e]
+            (match/match e
+              ["Plain" s]
+              s
+              ["Link" t]
+              (let [{full_text :full_text} t]
+                full_text)
+              ["Nested_link" t]
+              (let [ {content :content} t]
+                content)
+              :else
+              ""
+              )) tag-value)
      (string/join))))
 
 (defn get-page-reference

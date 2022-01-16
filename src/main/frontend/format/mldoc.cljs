@@ -1,6 +1,5 @@
 (ns frontend.format.mldoc
   (:require [cljs-bean.core :as bean]
-            [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.text :as text]

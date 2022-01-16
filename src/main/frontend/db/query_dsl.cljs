@@ -14,7 +14,6 @@
             [frontend.text :as text]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
 
