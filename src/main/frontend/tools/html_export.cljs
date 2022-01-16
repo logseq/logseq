@@ -4,7 +4,6 @@
             [clojure.walk :as walk]
             [frontend.components.block :as block]
             [frontend.db :as db]
-            [frontend.extensions.slide :as slide]
             [medley.core :as medley]
             [frontend.format.block :as format-block]))
 
