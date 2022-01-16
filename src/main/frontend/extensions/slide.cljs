@@ -5,7 +5,8 @@
             [frontend.loader :as loader]
             [frontend.ui :as ui]
             [frontend.config :as config]
-            [frontend.components.block :as block]))
+            [frontend.components.block :as block]
+            [clojure.string :as string]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -17,7 +18,8 @@
       (merge m
              (medley/map-keys
               (fn [k]
-                (str "data-" k))
+                (-> (str "data-" (name k))
+                    (string/replace "data-data-" "data-")))
               properties))
       m)))
 
