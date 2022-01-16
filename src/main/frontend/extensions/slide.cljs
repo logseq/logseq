@@ -4,7 +4,8 @@
             [cljs-bean.core :as bean]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.components.block :as block]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -34,8 +35,24 @@
                 :transition "slide"}))]
     (.initialize deck)))
 
+;; reveal.js doesn't support multiple nested sections yet.
+;; https://github.com/hakimel/reveal.js/issues/1440
+(rum/defc block-container
+  [config block level]
+  (let [deep-level? (>= level 2)
+        children (:block/children block)
+        has-children? (seq children)]
+    [:section (with-properties {:key (str "slide-block-" (:block/uuid block))} block)
+     [:section.relative
+      (block/block-container config (dissoc block :block/children))
+      (when (and has-children? deep-level?)
+        [:span.opacity-30.text-xl "Hidden children"])]
+     (when (and has-children? (not deep-level?))
+       (map (fn [block]
+              (block-container config block (inc level))) children))]))
+
 (defn slide-content
-  [loading? style sections]
+  [loading? style config blocks]
   [:div
    [:p.text-sm
     [:span.opacity-70 "Tip: press "]
@@ -45,17 +62,7 @@
     (when loading?
       [:div.ls-center (ui/loading "")])
     [:div.slides
-     (for [[idx sections] (medley/indexed sections)]
-       (if (> (count sections) 1)       ; nested
-         [:section {:key (str "slide-section-" idx)}
-          (for [[idx2 [block block-cp]] (medley/indexed sections)]
-            [:section (-> {:key (str "slide-section-" idx "-" idx2)}
-                          (with-properties block))
-             block-cp])]
-         (let [[block block-cp] (first sections)]
-           [:section (-> {:key (str "slide-section-" idx)}
-                         (with-properties block))
-            block-cp])))]]])
+     (map #(block-container config % 1) blocks)]]])
 
 (rum/defc slide < rum/reactive
   {:did-mount (fn [state]
@@ -71,6 +78,7 @@
                        (reset! *loading? false)
                        (render!)))))
                 state)}
-  [sections]
+  [config blocks]
+  (def blocks blocks)
   (let [loading? (rum/react *loading?)]
-    (slide-content loading? {:height 400} sections)))
+    (slide-content loading? {:height 400} config blocks)))

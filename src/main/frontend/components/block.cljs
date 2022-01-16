@@ -2842,33 +2842,6 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(defn build-slide-sections
-  ([blocks config]
-   (build-slide-sections blocks config nil))
-  ([blocks config build-block-fn]
-   (when (seq blocks)
-     (let [blocks (map #(dissoc % :block/children) blocks)
-           first-block-level (:block/level (first blocks))
-           sections (reduce
-                     (fn [acc block]
-                       (let [block (dissoc block :block/meta)
-                             level (:block/level block)
-                             config (assoc config :block/uuid (:block/uuid block))
-                             block-cp (if build-block-fn
-                                        (build-block-fn config block)
-                                        (rum/with-key
-                                          (block-container config block)
-                                          (str "slide-" (:block/uuid block))))]
-                         (if (= first-block-level level)
-                           ;; new slide
-                           (conj acc [[block block-cp]])
-                           (update acc (dec (count acc))
-                                   (fn [sections]
-                                     (conj sections [block block-cp]))))))
-                     []
-                     blocks)]
-       sections))))
-
 (defn- block-list
   [config blocks]
   (for [[idx item] (medley/indexed blocks)]

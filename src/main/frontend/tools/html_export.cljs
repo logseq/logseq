@@ -35,17 +35,9 @@
                  blocks)]
     (if (seq blocks)
       (let [config {:html-export? true :slide? slide?}
-            hiccup (if slide?
-                     (let [sections (block/build-slide-sections blocks
-                                                                (merge
-                                                                 config
-                                                                 {:id "slide"
-                                                                  :page-name page-name})
-                                                                build-block)]
-                       (slide/slide-content false "" sections))
-                     [:div.page
-                      (for [block blocks]
-                        (build-block config block))])
+            hiccup [:div.page
+                    (for [block blocks]
+                      (build-block config block))]
             remove-attrs #{:on-click :on-change}
             hiccup (walk/postwalk (fn [f]
                                     (if (and (map? f)

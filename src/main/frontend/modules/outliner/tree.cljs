@@ -41,17 +41,16 @@
     (block-children root 1)))
 
 (defn- get-root-and-page
-  [root-id]
-  (if (string? root-id)
-    (if (util/uuid-string? root-id)
-      [false (db/entity [:block/uuid (uuid root-id)])]
-      [true (or (db/entity [:block/name root-id])
-                (db/entity [:block/original-name root-id]))])
-    [false root-id]))
+  [page-name-or-block-id]
+  (if (string? page-name-or-block-id)
+    (if (util/uuid-string? page-name-or-block-id)
+      [false (db/entity [:block/uuid (uuid page-name-or-block-id)])]
+      [true (db/entity [:block/name (util/page-name-sanity-lc page-name-or-block-id)])])
+    [false page-name-or-block-id]))
 
 (defn blocks->vec-tree
-  [blocks root-id]
-  (let [[page? root] (get-root-and-page (str root-id))]
+  [blocks page-name-or-block-id]
+  (let [[page? root] (get-root-and-page (str page-name-or-block-id))]
     (if-not root ; custom query
       blocks
       (let [result (blocks->vec-tree-aux blocks root)]
