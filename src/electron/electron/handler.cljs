@@ -201,7 +201,8 @@
   (get-serialized-graph graph-name))
 
 (defmethod handle :saveGraph [_window [_ graph-name value-str]]
-  (when (and graph-name value-str)
+  ;; NOTE: graph-name is a plain "local" for demo graph.
+  (when (and graph-name value-str (not (= "local" graph-name)))
     (when-let [file-path (get-graph-path graph-name)]
       (fs/writeFileSync file-path value-str))))
 

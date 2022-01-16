@@ -32,7 +32,7 @@
   ([repo-url file update-status?]
    (when (and (not (config/local-db? repo-url))
               (not (util/electron?)))
-     (-> (p/let [result (git/add repo-url file)]
+     (-> (p/let [_result (git/add repo-url file)]
            (when update-status?
              (common-handler/check-changed-files-status)))
          (p/catch (fn [error]
@@ -45,9 +45,9 @@
     (->
      (p/let [remote-oid (common-handler/get-remote-ref repo)
              commit-oid (git/commit repo commit-message (array remote-oid))
-             result (git/write-ref! repo commit-oid)
+             _result (git/write-ref! repo commit-oid)
              token (common-handler/get-github-token repo)
-             push-result (git/push repo token true)]
+             _push-result (git/push repo token true)]
        (reset! pushing? false)
        (notification/clear! nil)
        (route-handler/redirect-to-home!))

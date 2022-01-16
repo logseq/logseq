@@ -12,17 +12,20 @@ on:
 
 env:
   CLOJURE_VERSION: '1.10.1.727'
-  CLJ_KONDO_VERSION: '2021.12.19'
   # setup-java@v2 dropped support for legacy Java version syntax.
   # This is the same as 1.8.
   JAVA_VERSION: '8'
-  # This is the latest node version of we can run.
+  # This is the latest node version we can run.
   NODE_VERSION: '16'
 
 jobs:
 
-  cljs-test:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest]
+
+    runs-on: ${{ matrix.operating-system }}
 
     steps:
       - name: Checkout
@@ -61,13 +64,8 @@ jobs:
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
-      - name: Set up clj-kondo
-        uses: DeLaGuardo/setup-clj-kondo@master
-        with:
-          version: ${{ env.CLJ_KONDO_VERSION }}
-
       - name: Run clj-kondo lint
-        run: clj-kondo --lint src/workspaces src/electron src/test src/dev-cljs src/main/{electron,grammar,logseq} src/main/frontend/{worker,util,ui,tools,search,publishing,modules,mobile,fs,format,external,extensions,db,context,components}
+        run: clojure -M:clj-kondo --lint src
 
       - name: Fetch yarn deps
         run: yarn install

@@ -140,7 +140,7 @@
   "Dissociates an entry from a nested associative structure returning a new
   nested structure. keys is a sequence of keys. Any empty maps that result
   will not be present in the new structure."
-  [m [k & ks :as keys]]
+  [m [k & ks]]
   (if ks
     (if-let [nextmap (get m k)]
       (let [newmap (dissoc-in nextmap ks)]
@@ -253,27 +253,27 @@
                    on-progress))
        (.send xhr file))))
 
-(defn post
-  [url body on-ok on-failed]
-  #?(:cljs
+#?(:cljs
+   (defn post
+     [url body on-ok on-failed]
      (fetch url {:method "post"
                  :headers {:Content-Type "application/json"}
                  :body (js/JSON.stringify (clj->js body))}
             on-ok
             on-failed)))
 
-(defn patch
-  [url body on-ok on-failed]
-  #?(:cljs
+#?(:cljs
+   (defn patch
+     [url body on-ok on-failed]
      (fetch url {:method "patch"
                  :headers {:Content-Type "application/json"}
                  :body (js/JSON.stringify (clj->js body))}
             on-ok
             on-failed)))
 
-(defn delete
-  [url on-ok on-failed]
-  #?(:cljs
+#?(:cljs
+   (defn delete
+     [url on-ok on-failed]
      (fetch url {:method "delete"
                  :headers {:Content-Type "application/json"}}
             on-ok
@@ -464,13 +464,15 @@
        (let [bottom (.-scrollHeight node)]
          (scroll-to node bottom false)))))
 
-(defn url-encode
-  [string]
-  #?(:cljs (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
+#?(:cljs
+   (defn url-encode
+     [string]
+     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
-(defn url-decode
-  [string]
-  #?(:cljs (some-> string str (js/decodeURIComponent))))
+#?(:cljs
+   (defn url-decode
+     [string]
+     (some-> string str (js/decodeURIComponent))))
 
 #?(:cljs
    (defn link?
@@ -522,9 +524,7 @@
 
 (defn drop-first-line
   [s]
-  (let [lines (string/split-lines s)
-        others (some->> (next lines)
-                        (string/join "\n"))]
+  (let [lines (string/split-lines s)]
     [(first lines)]))
 
 (defn distinct-by
@@ -608,9 +608,9 @@
            (when-not not-space? " ")
            (triml-without-newlines right)))))
 
-(defn join-newline
-  [& col]
-  #?(:cljs
+#?(:cljs
+   (defn join-newline
+     [& col]
      (let [col (remove nil? col)]
        (reduce (fn [acc s]
                  (if (or (= acc "") (= "\n" (last acc)))
@@ -778,8 +778,7 @@
    (defn get-nodes-between-two-nodes
      [id1 id2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [id #(gobj/get % "id")
-             node-1 (gdom/getElement id1)
+       (let [node-1 (gdom/getElement id1)
              node-2 (gdom/getElement id2)
              idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)
@@ -1060,11 +1059,12 @@
   (when (string? tag-name)
     (not (safe-re-find #"[# \t\r\n]+" tag-name))))
 
-(defn encode-str
-  [s]
-  (if (tag-valid? s)
-    s
-    (url-encode s)))
+#?(:cljs
+   (defn encode-str
+     [s]
+     (if (tag-valid? s)
+       s
+       (url-encode s))))
 
 #?(:cljs
    (defn get-clipboard-as-html
@@ -1077,6 +1077,7 @@
            [(.getData c "Text") (.getData c "Text")])))))
 
 (defn pp-str [x]
+  #_:clj-kondo/ignore
   (with-out-str (clojure.pprint/pprint x)))
 
 (defn hiccup-keywordize
@@ -1300,8 +1301,9 @@
          (string/join "/"))))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
-(defmacro profile [k & body]
-  #?(:clj
+#?(:clj
+   (defmacro profile
+     [k & body]
      `(if goog.DEBUG
         (let [k# ~k]
           (.time js/console k#)
@@ -1520,8 +1522,7 @@
 
 #?(:cljs
    (defn meta-key-name []
-     (let [user-agent (.. js/navigator -userAgent)]
-       (if mac? "Cmd" "Ctrl"))))
+     (if mac? "Cmd" "Ctrl")))
 
 ;; TODO: share with electron
 (defn ignored-path?

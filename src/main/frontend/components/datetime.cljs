@@ -96,8 +96,8 @@
         block-data (state/get-timestamp-block)
         {:keys [block typ show?]} block-data
         block-id (or (:block/uuid (state/get-edit-block))
-                     (:block/uuid block))]
-    typ (or @commands/*current-command typ)
+                     (:block/uuid block))
+        typ (or @commands/*current-command typ)]
     (editor-handler/set-block-timestamp! block-id
                                          typ
                                          text)

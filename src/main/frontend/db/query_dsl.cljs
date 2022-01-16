@@ -14,7 +14,6 @@
             [frontend.text :as text]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
 
@@ -264,7 +263,7 @@
        (let [k (string/replace (name (nth e 1)) "_" "-")
              v (nth e 2)
              v (if-not (nil? v)
-                 (property/parse-property k v)
+                 (text/parse-property k v)
                  v)
              v (if (coll? v) (first v) v)
              sym (if (= current-filter 'or)
@@ -346,7 +345,7 @@
        (let [[k v] (rest e)
              k (string/replace (name k) "_" "-")]
          (if-not (nil? v)
-           (let [v (property/parse-property k v)
+           (let [v (text/parse-property k v)
                  v (if (coll? v) (first v) v)
                  sym '?v]
              [['?p :block/name]

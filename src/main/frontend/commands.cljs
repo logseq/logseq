@@ -292,7 +292,7 @@
                    (p/let [_ (draw/create-draw-with-default-content path)]
                      (println "draw file created, " path))
                    text)) "Draw a graph with Excalidraw"])
-     
+
      (when (util/zh-CN-supported?)
        ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
                                                                 :backward-pos 2}]]])
@@ -612,8 +612,7 @@
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-            edit-content (gobj/get current-input "value")]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))]
         (property/goto-properties-end format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 

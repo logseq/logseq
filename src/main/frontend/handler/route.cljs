@@ -8,7 +8,6 @@
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
 

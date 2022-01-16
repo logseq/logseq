@@ -329,7 +329,8 @@
 
            :else
            [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
-                  :style {:margin-bottom (if global-graph-pages? 0 120)}}
+                  :style {:margin-bottom (if global-graph-pages? 0 120)
+                          :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
             main-content])]]])))
 
 (rum/defc footer

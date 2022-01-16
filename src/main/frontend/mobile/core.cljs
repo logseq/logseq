@@ -6,7 +6,10 @@
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.components.repo :as repo]
-            [frontend.handler.web.nfs :as nfs-handler]))
+            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
+            [promesa.core :as p]))
 
 (defn init!
   []
@@ -42,7 +45,10 @@
                   #(state/pub-event! [:mobile/keyboard-did-show]))
 
     (.addListener App "appStateChange"
-                  #(when-let [repo (state/get-current-repo)]
-                     (nfs-handler/refresh! repo repo/refresh-cb)
-                     ;; (notification/show! "Notes updated!" :success true)
-                     ))))
+                  (fn [^js state]
+                    (when-let [repo (state/get-current-repo)]
+                      (let [is-active? (.-isActive state)]
+                        (if is-active?
+                          (p/do! (nfs-handler/refresh! repo repo/refresh-cb)
+                                 (notification/show! "Notes updated!" :success true))
+                          (editor-handler/save-current-block!))))))))

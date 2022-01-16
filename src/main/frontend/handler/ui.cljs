@@ -13,7 +13,6 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [rum.core :as rum]
-            [clojure.edn :as edn]
             [frontend.mobile.util :as mobile]
             [electron.ipc :as ipc]))
 
@@ -149,11 +148,10 @@
              (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
              #(when-let [scripts (and % (string/trim %))]
                 (when-not (string/blank? scripts)
-                  (if (or (not should-ask?) (ask-allow))
+                  (when (or (not should-ask?) (ask-allow))
                     (try
-                      (do
-                        (js/eval scripts)
-                        (execed))
+                      (js/eval scripts)
+                      (execed)
                       (catch js/Error e
                         (js/console.error "[custom js]" e)))))))))))))
 
@@ -287,6 +285,6 @@
 (defn try-to-editing-input-into-viewport!
   []
   (when-let [input (state/get-input)]
-    (if (or (mobile/is-native-platform?)
+    (when (or (mobile/is-native-platform?)
             (util/mobile?))
       (util/make-el-into-viewport input))))

@@ -30,6 +30,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.image :as image]
+            [frontend.idb :as idb]
             [frontend.mobile.util :as mobile]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as ds]
@@ -79,7 +80,7 @@
            :input input})))))
 
 (defn- format-new-selection
-  [{:keys [selection-start selection-end format value edit-id input]}]
+  [{:keys [selection-start selection-end value]}]
   (let [selected (subs value selection-start selection-end)]
     [(+ selection-start (count (take-while #(= " " %) selected)))
      (- selection-end (count (take-while #(= " " %) (reverse selected))))]))
@@ -87,7 +88,7 @@
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format value edit-id input]} m
+    (let [{:keys [format value edit-id input]} m
           [selection-start selection-end] (format-new-selection m)
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
@@ -548,7 +549,6 @@
 (defn insert-new-block-before-block-aux!
   [config
    {:block/keys [repo]
-    db-id :db/id
     :as block}
    value
    {:keys [ok-handler]
@@ -567,18 +567,16 @@
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))
         _ (outliner-core/save-node (outliner-core/block current-block))
-        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
-        {:keys [sibling? blocks]} (profile
-                                   "outliner insert block"
-                                   (outliner-insert-block! config left-block prev-block sibling?))]
-
+        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+    (profile
+     "outliner insert block"
+     (outliner-insert-block! config left-block prev-block sibling?))
     (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
     (profile "ok handler" (ok-handler prev-block))))
 
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid repo]
-    db-id :db/id
     :as block}
    value
    {:keys [ok-handler]
@@ -650,7 +648,7 @@
 (defn insert-new-block!
   ([state]
    (insert-new-block! state nil))
-  ([state block-value]
+  ([_state block-value]
    (when (and (not config/publishing?)
               (not= :insert (state/get-editor-op)))
      (state/set-editor-op! :insert)
@@ -894,6 +892,7 @@
 
 (defn cycle-todo!
   []
+  #_:clj-kondo/ignore
   (if-let [blocks (seq (get-selected-blocks-with-children))]
     (cycle-todos!)
     (when (state/get-edit-block)
@@ -1038,48 +1037,56 @@
                               (dom/attr sibling-block "id")
                               ""))))))
 
-(defn- block-property-aux!
-  [block-id key value]
-  (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        repo (state/get-current-repo)]
-    (when repo
-      (when-let [block (db/entity [:block/uuid block-id])]
-        (let [format (:block/format block)
-              content (:block/content block)
-              properties (:block/properties block)
-              properties (if (nil? value)
-                           (dissoc properties key)
-                           (assoc properties key value))
-              content (if (nil? value)
-                        (property/remove-property format key content)
-                        (property/insert-property format content key value))
-              content (property/remove-empty-properties content)
-              block (outliner-core/block {:block/uuid block-id
-                                          :block/properties properties
-                                          :block/content content})
-              input-pos (or (state/get-edit-pos) :max)]
-          (outliner-core/save-node block)
+(defn- batch-set-block-property!
+  "col: a collection of [block-id property-key property-value]."
+  [col]
+  #_:clj-kondo/ignore
+  (when-let [repo (state/get-current-repo)]
+    (ds/auto-transact!
+     [txs-state (ds/new-outliner-txs-state)]
+     {:outliner-op :set-block-properties
+      :skip-transact? false}
+     (doseq [[block-id key value] col]
+       (let [block-id (if (string? block-id) (uuid block-id) block-id)]
+         (when-let [block (db/entity [:block/uuid block-id])]
+           (let [format (:block/format block)
+                 content (:block/content block)
+                 properties (:block/properties block)
+                 properties (if (nil? value)
+                              (dissoc properties key)
+                              (assoc properties key value))
+                 content (if (nil? value)
+                           (property/remove-property format key content)
+                           (property/insert-property format content key value))
+                 content (property/remove-empty-properties content)
+                 block (outliner-core/block {:block/uuid block-id
+                                             :block/properties properties
+                                             :block/content content})
+                 input-pos (or (state/get-edit-pos) :max)]
+             (outliner-core/save-node block {:txs-state txs-state}))))))
 
-          (db/refresh! (state/get-current-repo)
-                       {:key :block/change
-                        :data [(db/pull [:block/uuid block-id])]})
-
-          ;; update editing input content
-          (when-let [editing-block (state/get-edit-block)]
-            (when (= (:block/uuid editing-block) block-id)
-              (edit-block! editing-block
-                           input-pos
-                           (state/get-edit-input-id)))))))))
+    (let [block-id (ffirst col)
+          block-id (if (string? block-id) (uuid block-id) block-id)
+          input-pos (or (state/get-edit-pos) :max)]
+      (db/refresh! (state/get-current-repo)
+                   {:key :block/change
+                    :data [(db/pull [:block/uuid block-id])]})
+      ;; update editing input content
+      (when-let [editing-block (state/get-edit-block)]
+        (when (= (:block/uuid editing-block) block-id)
+          (edit-block! editing-block
+                       input-pos
+                       (state/get-edit-input-id)))))))
 
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]
-    (block-property-aux! block-id key nil)))
+    (batch-set-block-property! [[block-id key nil]])))
 
 (defn set-block-property!
   [block-id key value]
   (let [key (keyword key)]
-    (block-property-aux! block-id key value)))
+    (batch-set-block-property! [[block-id key value]])))
 
 (defn set-block-query-properties!
   [block-id all-properties key add?]
@@ -1113,17 +1120,21 @@
             (state/set-edit-content! input-id new-content)
             (save-block-if-changed! block new-content)))))))
 
-(defn- set-block-id!
-  [block-id]
-  (let [block (db/entity [:block/uuid block-id])]
-    (when-not (:block/pre-block? block)
-      (set-block-property! block-id "id" (str block-id)))))
+(defn- set-blocks-id!
+  [block-ids]
+  (let [block-ids (remove nil? block-ids)
+        col (map (fn [block-id]
+                   (let [block (db/entity [:block/uuid block-id])]
+                     (when-not (:block/pre-block? block)
+                       [block-id :id (str block-id)])))
+              block-ids)]
+    (batch-set-block-property! col)))
 
 (defn copy-block-ref!
   ([block-id]
    (copy-block-ref! block-id #(str %)))
   ([block-id tap-clipboard]
-   (set-block-id! block-id)
+   (set-blocks-id! [block-id])
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
 (defn select-block!
@@ -1223,7 +1234,7 @@
           adjusted-blocks (map-indexed
                             (fn [index {:keys [id level]}]
                               {:id id
-                               :level (if (and (< index first-root-level-index))
+                               :level (if (< index first-root-level-index)
                                         (if (< level @root-level)
                                           (do
                                             (reset! root-level level)
@@ -1240,8 +1251,7 @@
                                     :markdown
                                     (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
                             (string/join "\n\n"))]
-      (doseq [block blocks]
-        (set-block-id! (:id block)))
+      (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
 
 (defn copy-block-embeds
@@ -1253,8 +1263,7 @@
           ids-str (some->> ids
                            (map (fn [id] (util/format "{{embed ((%s))}}" id)))
                            (string/join "\n\n"))]
-      (doseq [id ids]
-        (set-block-id! id))
+      (set-blocks-id! ids)
       (util/copy-to-clipboard! ids-str))))
 
 (defn get-selected-toplevel-block-uuids
@@ -1396,7 +1405,6 @@
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
-          content (:block/content block)
           ;; TODO: support org mode
           [md-content _tree] (compose-copied-blocks-contents-&-block-tree repo [block-id])]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
@@ -1569,7 +1577,7 @@
      (fn [] [repo-dir assets-dir]))))
 
 (defn save-assets!
-  ([{block-id :block/uuid} repo files]
+  ([_ repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
                    (fn [index file-base]
@@ -1624,7 +1632,7 @@
             cached-url (get @*assets-url-cache (keyword handle-path))]
         (if cached-url
           (p/resolved cached-url)
-          (p/let [handle (frontend.idb/get-item handle-path)
+          (p/let [handle (idb/get-item handle-path)
                   file (and handle (.getFile handle))]
             (when file
               (p/let [url (js/URL.createObjectURL file)]
@@ -1740,9 +1748,7 @@
           (keys delete-map)))
 
 (defn autopair
-  [input-id prefix format {:keys [restore?]
-                           :or {restore? true}
-                           :as _option}]
+  [input-id prefix _format _option]
   (let [value (get autopair-map prefix)
         selected (util/get-selected-text)
         postfix (str selected value)
@@ -2085,7 +2091,7 @@
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
-    (if (= last-input-char (state/get-editor-command-trigger))
+    (when (= last-input-char (state/get-editor-command-trigger))
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
         (reset! commands/*show-commands true)))
@@ -2097,7 +2103,7 @@
       nil)))
 
 (defn block-on-chosen-handler
-  [input id q format]
+  [_input id q format]
   (fn [chosen _click?]
     (state/set-editor-show-block-search! false)
     (let [uuid-string (str (:block/uuid chosen))]
@@ -2441,7 +2447,7 @@
             (insert "\n")))))))
 
 (defn- dwim-in-list
-  [state]
+  [_state]
   (when-not (auto-complete?)
     (let [{:keys [block]} (get-state)]
       (when block
@@ -2493,6 +2499,7 @@
                   index-of-current-item (inc (.indexOf items-without-bullet
                                                        (last (string/split (:raw-content item) splitter-reg 2))))
                   numbers-length (->> (map-indexed
+                                       #_:clj-kondo/ignore
                                        #(str (inc %1) ". ")
                                        (subvec items-without-bullet 0 index-of-current-item))
                                       string/join
@@ -2532,7 +2539,7 @@
         (let [selection (get-selection-and-format)
               {:keys [selection-start selection-end value]} selection]
           (if (not= selection-start selection-end)
-            (do (delete-and-update selection-start selection-end)
+            (do (delete-and-update input selection-start selection-end)
                 (insert (util/format "[[%s]]" value)))
             (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
               (let [{:keys [raw-content start end]} embed-ref]
@@ -2541,7 +2548,7 @@
                   (page-ref-fn "[[]]" 2)
                   (insert raw-content)))
               (if-let [page-ref (thingatpt/page-ref-at-point input)]
-                (let [{:keys [start end link full-content raw-content]} page-ref]
+                (let [{:keys [start end full-content raw-content]} page-ref]
                   (delete-and-update input start end)
                   (if (= raw-content "")
                     (page-ref-fn "{{embed [[]]}}" 4)
@@ -2790,7 +2797,7 @@
         (cursor/move-cursor-to input current-pos)))))
 
 (defn keydown-delete-handler
-  [e]
+  [_e]
   (let [^js input (state/get-input)
         current-pos (cursor/pos input)
         value (gobj/get input "value")
@@ -2928,7 +2935,7 @@
 
 (defn keydown-not-matched-handler
   [format]
-  (fn [e key-code]
+  (fn [e _key-code]
     (let [input-id (state/get-edit-input-id)
           input (state/get-input)
           key (gobj/get e "key")
@@ -2936,8 +2943,6 @@
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
           pos (cursor/pos input)
-          shift? (.-shiftKey e)
-          code (gobj/getValueByKeys e "event_" "code")
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
                        (= key "#"))]
@@ -2949,6 +2954,16 @@
 
         (or ctrlKey metaKey)
         nil
+
+        ;; FIXME: On iOS, a backspace click to call keydown-backspace-handler
+        ;; does not work sometimes in an empty block, hence the empty block
+        ;; can't be deleted. Need to figure out why and find a better solution.
+        (and (mobile/native-ios?)
+             (= key "Backspace")
+             (= value ""))
+        (do
+          (util/stop e)
+          (delete-block! (state/get-current-repo) false))
 
         (and (= key "#")
              (and
@@ -3015,7 +3030,7 @@
         nil))))
 
 (defn keyup-handler
-  [state input input-id search-timeout]
+  [_state input input-id search-timeout]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
       (let [k (gobj/get e "key")
@@ -3026,7 +3041,6 @@
             c (util/nth-safe value (dec current-pos))
             last-key-code (state/get-last-key-code)
             blank-selected? (string/blank? (util/get-selected-text))
-            shift? (.-shiftKey e)
             is-processed? (util/event-is-composing? e true) ;; #3440
             non-enter-processed? (and is-processed? ;; #3251
                                       (not= code keycode/enter-code))] ;; #3459
@@ -3141,11 +3155,6 @@
                  #(edit-box-on-change! e block id)
                  timeout)))
       (edit-box-on-change! e block id))))
-
-(defn- get-current-page-format
-  []
-  (when-let [page (state/get-current-page)]
-    (db/get-page-format page)))
 
 (defn blocks->tree-by-level
   [blocks]

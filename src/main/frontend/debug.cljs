@@ -3,8 +3,7 @@
   (:refer-clojure :exclude [print])
   (:require [cljs.pprint :as pprint]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.handler.notification :as notification]))
+            [frontend.util :as util]))
 
 (defn pprint
   [& xs]
@@ -23,7 +22,7 @@
 
 ;; For debugging file changes are not saved on disk.
 (defn wait-for-write-ack!
-  [page-title file-path]
+  [_page-title file-path]
   (when file-path
     (let [requested-at (util/time-ms)]
       (state/set-state! [:debug/write-acks file-path :last-requested-at] requested-at)

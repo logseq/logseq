@@ -6,8 +6,7 @@
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
-            [frontend.util.cursor :as cursor]
-            [frontend.handler.link :as link]))
+            [frontend.util.cursor :as cursor]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -439,35 +438,3 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
-
-(defonce non-parsing-properties
-  (atom #{"background-color" "background_color"}))
-
-(defn parse-property
-  [k v]
-  (let [k (name k)
-        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
-        v (string/trim v)]
-    (cond
-      (contains? #{"title" "filters"} k)
-      v
-
-      (= v "true")
-      true
-      (= v "false")
-      false
-
-      (util/safe-re-find #"^\d+$" v)
-      (util/safe-parse-int v)
-
-      (util/wrapped-by-quotes? v) ; wrapped in ""
-      (util/unquote-string v)
-
-      (contains? @non-parsing-properties (string/lower-case k))
-      v
-
-      (link/link? v)
-      v
-
-      :else
-      (text/split-page-refs-without-brackets v))))

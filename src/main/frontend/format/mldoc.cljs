@@ -1,6 +1,5 @@
 (ns frontend.format.mldoc
   (:require [cljs-bean.core :as bean]
-            [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.text :as text]
@@ -89,41 +88,6 @@
                      config
                      (or references default-references)))
 
-;; Org-roam
-;; TODO: recur is in wrong place. Unclear what the intent is but likely a bug
-#_:clj-kondo/ignore
-(defn get-tags-from-definition
-  [ast]
-  (loop [ast ast]
-    (if (seq ast)
-      (match (first ast)
-        ["List" l]
-        (when-let [name (:name (first l))]
-          (let [name (and (vector? name)
-                          (last (first name)))]
-            (when (and (string? name)
-                       (= (string/lower-case name) "tags"))
-              (->>
-               (last (first (:content (first l))))
-               (map second)
-               (filter (and map? :url))
-               (map (fn [x]
-                      (let [label (last (first (:label x)))
-                            search (and (= (first (:url x)) "Search")
-                                        (last (:url x)))
-                            tag (if-not (string/blank? label)
-                                  label
-                                  search)]
-                        (when tag (string/lower-case tag)))))
-               (remove nil?)))))
-
-        ["Heading" _h]
-        nil
-
-        :else
-        (recur (rest ast)))
-      nil)))
-
 (defn- ->vec
   [s]
   (if (string? s) [s] s))
@@ -154,9 +118,9 @@
                       properties-ast
                       (map (fn [[k v]]
                              (let [k (keyword (string/lower-case k))
-                                   v (if (contains? #{:title :description :filters :roam_tags :macro} k)
+                                   v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (text/split-page-refs-without-brackets v))]
+                                       (text/parse-property k v))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -173,36 +137,21 @@
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into (linked/map)))
-          properties (if (seq properties)
-                       (cond-> properties
-                         (:roam_key properties)
-                         (assoc :key (:roam_key properties)))
-                       properties)
-          definition-tags (get-tags-from-definition ast)
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          alias (->> (->vec-concat (:roam_alias properties) (:alias properties))
+          alias (->> (:alias properties)
                      (remove string/blank?))
           filetags (when-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
-          roam-tags (when-let [org-roam-tags (:roam_tags properties)]
-                      (let [pat #"\"(.*?)\"" ;; note: lazy, capturing group
-                            quoted (map second (re-seq pat org-roam-tags))
-                            rest   (string/replace org-roam-tags pat "")
-                            rest (->> (string/split rest " ")
-                                      (remove string/blank?))]
-                        (concat quoted rest)))
-          tags (->> (->vec-concat roam-tags (:tags properties) definition-tags filetags)
+          tags (:tags properties)
+          tags (->> (->vec-concat tags filetags)
                     (remove string/blank?))
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
-                         (update :roam_alias ->vec)
-                         (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [_k v] (seq v)) properties)
-          properties (medley/map-vals util/unquote-string-if-wrapped properties)]
+          properties (medley/filter-kv (fn [_k v] (seq v)) properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))

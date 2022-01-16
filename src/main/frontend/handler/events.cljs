@@ -29,7 +29,6 @@
             [frontend.util :as util]
             [rum.core :as rum]
             ["semver" :as semver]
-            [clojure.string :as string]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
@@ -71,12 +70,13 @@
     close-fn)))
 
 (defmethod handle :graph/added [[_ repo]]
-  ;; add ast/version to db
-  (let [conn (conn/get-conn repo false)
-        ast-version (d/datoms @conn :aevt :ast/version)]
+  ;; TODO: add ast/version to db
+  (let [_conn (conn/get-conn repo false)
+        ; ast-version (d/datoms @conn :aevt :ast/version)
+        ]
     (db/set-key-value repo :ast/version db-schema/ast-version)))
 
-(defmethod handle :graph/migrated [[_ repo]]
+(defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
 
 (defn get-local-repo
@@ -111,7 +111,7 @@
   {:will-unmount (fn [state]
                    (reset! *query-properties {})
                    state)}
-  [block shown-properties all-properties close-fn]
+  [block shown-properties all-properties _close-fn]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
      [:div.font-bold "Properties settings for this query:"]
@@ -160,13 +160,13 @@
 (defmethod handle :modal/show [[_ content]]
   (state/set-modal! #(modal-output content)))
 
-(defmethod handle :modal/set-git-username-and-email [[_ content]]
+(defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (state/set-modal! git-component/set-git-username-and-email))
 
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 
-(defmethod handle :page/create-today-journal [[_ repo]]
+(defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
@@ -221,7 +221,7 @@
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
 
-(defmethod handle :exec-plugin-cmd [[_ {:keys [type key pid cmd action]}]]
+(defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
 
 (defmethod handle :shortcut-handler-refreshed [[_]]

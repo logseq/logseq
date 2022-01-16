@@ -8,12 +8,12 @@
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react]
+            [frontend.db.utils]
             [frontend.db.persist :as db-persist]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.config :as config]
             [electron.ipc :as ipc]))
 
 (import-vars
@@ -90,10 +90,9 @@
              (fn []
                (if (and (state/input-idle? repo)
                         (state/db-idle? repo))
-                 (do
-                   (persist! repo)
-                   ;; (state/set-db-persisted! repo true)
-)
+                 (persist! repo)
+                 ;; (state/set-db-persisted! repo true)
+
                  (persist-if-idle! repo)))
              3000)]
     (swap! persistent-jobs assoc repo job)))
@@ -112,7 +111,7 @@
                    (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
                     (when graph-has-other-window?
                       (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
-                 (let [tx-id (get-tx-id tx-report)]
+                 (do
                    (state/set-last-transact-time! repo (util/time-ms))
                    (persist-if-idle! repo)))
 
@@ -139,7 +138,7 @@
                        :listen-handler listen-and-persist!))))
 
 (defn restore!
-  [{:keys [repos] :as me} old-db-schema restore-config-handler]
+  [{:keys [repos] :as me} _old-db-schema restore-config-handler]
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]

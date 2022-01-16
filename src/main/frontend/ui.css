@@ -142,12 +142,8 @@ html.is-native-andorid,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
-    .ui__modal {
-        top: 10vh;
-    }
-
     .references .foldable-title {
-        margin-left: 4px
+        margin-left: 0px
     }
 
     .cards-review .block-control {

@@ -99,20 +99,11 @@
         (page-cp repo page-name)]])
 
     :page-presentation
-    (let [page-name (get-in block-data [:page :block/name])
-          journal? (:journal? block-data)
-          blocks (db/get-page-blocks repo page-name)
-          blocks (if journal?
-                   (rest blocks)
-                   blocks)
-          sections (block/build-slide-sections blocks {:id          "slide-reveal-js"
-                                                       :slide?      true
-                                                       :sidebar?    true
-                                                       :page-name   page-name})]
+    (let [page-name (get-in block-data [:page :block/name])]
       [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
-        (slide/slide sections)]])
+        (slide/slide page-name)]])
 
     ["" [:span]]))
 

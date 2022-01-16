@@ -37,7 +37,7 @@
 (defn set-global-error-notification!
   []
   (set! js/window.onerror
-        (fn [message, source, lineno, colno, error]
+        (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
             (js/console.error error)
             ;; (notification/show!
@@ -49,8 +49,8 @@
 
 (defn- watch-for-date!
   []
-  (let [cards-last-check-time (atom (util/time-ms))
-        f (fn []
+  (let [f (fn []
+            #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
                 ;; Don't create the journal file until user writes something
@@ -135,10 +135,10 @@
                             ;;   (state/pub-event! [:after-db-restore repos]))
                             ))
                          (p/catch (fn [error]
-                                    (log/error :db/restore-failed error))))))]
+                                    (log/error :db/restore-failed error))))))
+        interval-id (js/setInterval inner-fn 50)]
     ;; clear this interval
-    (let [interval-id (js/setInterval inner-fn 50)]
-      (reset! interval interval-id))))
+    (reset! interval interval-id)))
 
 (defn- handle-connection-change
   [e]
@@ -213,7 +213,7 @@
   [render]
   (set-global-error-notification!)
   (let [db-schema (storage/get :db-schema)
-        {:keys [me logged? repos]} (get-me-and-repos)]
+        {:keys [me logged?]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (register-components-fns!)
     (state/set-db-restoring! true)

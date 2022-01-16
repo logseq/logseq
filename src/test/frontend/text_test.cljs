@@ -137,4 +137,23 @@
     (text/get-string-all-indexes "a.c a.c ab" "a.")
     [0 4]))
 
+(deftest test-parse-property
+  (testing "parse-property"
+    (are [k v y] (= (text/parse-property k v) y)
+      :tags "foo" "foo"
+      :tags "foo, bar" #{"foo" "bar"}
+      :tags "foo,bar" #{"foo" "bar"}
+      :tags "[[foo]]" "[[foo]]"
+      :tags "[[foo]] [[bar]]" #{"foo" "bar"}
+      :tags "[[foo]], [[bar]]" #{"foo" "bar"}
+      :tags "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
+      :tags "#baz, [[foo]], [[bar]]" #{"foo" "bar" "baz"}
+      :tags "[[foo [[bar]]]]" #{"foo [[bar]]"}
+      :tags "[[foo [[bar]]]], baz" #{"baz" "foo [[bar]]"}))
+  (testing "parse-property with quoted strings"
+    (are [k v y] (= (text/parse-property k v) y)
+      :tags "\"foo, bar\"" "\"foo, bar\""
+      :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
+      :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
+
 #_(cljs.test/test-ns 'frontend.text-test)

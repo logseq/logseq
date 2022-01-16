@@ -2,15 +2,12 @@
   (:require [promesa.core :as p]
             [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.fs :as fs]
-            [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notifications]
-            [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as md]
             [electron.ipc :as ipc]
-            [reitit.frontend.easy :as rfe]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
@@ -38,7 +35,7 @@
 
 (defn pkg-asset [id asset]
   (if (and asset (string/starts-with? asset "http"))
-    asset (if-let [asset (and asset (string/replace asset #"^[./]+" ""))]
+    asset (when-let [asset (and asset (string/replace asset #"^[./]+" ""))]
             (str central-endpoint "packages/" id "/" asset))))
 
 (defn load-marketplace-plugins
@@ -80,7 +77,7 @@
        (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
 
 (defn install-marketplace-plugin
-  [{:keys [repo id] :as mft}]
+  [{:keys [id] :as mft}]
   (when-not (and (:plugin/installing @state/state)
                  (installed? id))
     (p/create
@@ -102,9 +99,8 @@
                 (state/reset-all-updates-state)
                 (throw e))))
         (fn [mfts]
-          (if-let [mft (some #(if (= (:id %) id) %) mfts)]
-            (do
-              (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft)))
+          (when-let [mft (some #(when (= (:id %) id) %) mfts)]
+            (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft))
             (throw (js/Error. (str ":not-found-in-marketplace" id))))
           true))
 
@@ -117,7 +113,7 @@
   [id]
   (try
     (js/LSPluginCore.ensurePlugin id)
-    (catch js/Error e
+    (catch js/Error _e
       nil)))
 
 (defn open-updates-downloading
@@ -147,7 +143,7 @@
                      (case (keyword status)
 
                        :completed
-                       (let [{:keys [id dst name title version theme]} payload
+                       (let [{:keys [id dst name title theme]} payload
                              name (or title name "Untitled")]
                          (if only-check
                            (state/consume-updates-coming-plugin payload false)
@@ -164,7 +160,7 @@
                              (do    ;; register new
                                (p/then
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                 (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                (notifications/show!
                                  (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
@@ -183,7 +179,10 @@
 
                            (do
                              ;; consume failed download updates
-                             (state/consume-updates-coming-plugin payload true)
+                             (when (and (not only-check) (not pending?))
+                               (state/consume-updates-coming-plugin payload true))
+
+                             ;; notify human tips
                              (notifications/show!
                                (str
                                  (if (= :error type) "[Install Error]" "")
@@ -219,9 +218,9 @@
   [pid [cmd actions]]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (do (swap! state/state update-in [:plugin/installed-commands pid]
-                 (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
-          true))))
+      (swap! state/state update-in [:plugin/installed-commands pid]
+             (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
+      true)))
 
 (defn unregister-plugin-slash-command
   [pid]
@@ -260,24 +259,24 @@
 
 (defn register-plugin-simple-command
   ;; action => [:action-key :event-key]
-  [pid {:keys [key label type] :as cmd} action]
+  [pid {:keys [type] :as cmd} action]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (do (swap! state/state update-in [:plugin/simple-commands pid]
-                 (fnil conj []) [type cmd action pid])
-          true))))
+      (swap! state/state update-in [:plugin/simple-commands pid]
+             (fnil conj []) [type cmd action pid])
+      true)))
 
 (defn unregister-plugin-simple-command
   [pid]
   (swap! state/state md/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
 (defn register-plugin-ui-item
-  [pid {:keys [key type template] :as opts}]
+  [pid {:keys [type] :as opts}]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (do (swap! state/state update-in [:plugin/installed-ui-items pid]
-                 (fnil conj []) [type opts pid])
-          true))))
+      (swap! state/state update-in [:plugin/installed-ui-items pid]
+             (fnil conj []) [type opts pid])
+      true)))
 
 (defn unregister-plugin-ui-items
   [pid]
@@ -397,7 +396,7 @@
 (rum/defc lsp-indicator < rum/reactive
   []
   (let [text (state/sub :plugin/indicator-text)]
-    (if-not (= text "END")
+    (when-not (= text "END")
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.w-60.flex-col
         [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]

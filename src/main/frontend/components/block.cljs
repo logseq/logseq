@@ -1465,7 +1465,9 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (:ui/show-empty-bullets? (state/get-config)) (not doc-mode?))
+         (and (or (mobile-util/is-native-platform?)
+                  (:ui/show-empty-bullets? (state/get-config)))
+              (not doc-mode?))
          bullet
 
          (or
@@ -1684,6 +1686,9 @@
              elems (interpose (span-comma) vals)]
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
+
+       (and (string? v) (util/wrapped-by-quotes? v))
+       (util/unquote-string v)
 
        :else
        (inline-text (:block/format block) (str v)))]))
@@ -1908,7 +1913,7 @@
       (when (and (seq properties)
                  (let [hidden? (property/properties-built-in? properties)]
                    (not hidden?))
-                 (not block-ref?)
+                 (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))
         (properties-cp config block))
 
@@ -2647,10 +2652,8 @@
                                  code)
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code options)
-             ;; FIXME: The following code seemed unreachable
-             ;; options has key: :lines, :language, :full_content, :pos_meta
              (let [options (:options options)]
-               (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+               (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
 
 (defn markup-element-cp
@@ -2838,33 +2841,6 @@
 (defn markup-elements-cp
   [config col]
   (map #(markup-element-cp config %) col))
-
-(defn build-slide-sections
-  ([blocks config]
-   (build-slide-sections blocks config nil))
-  ([blocks config build-block-fn]
-   (when (seq blocks)
-     (let [blocks (map #(dissoc % :block/children) blocks)
-           first-block-level (:block/level (first blocks))
-           sections (reduce
-                     (fn [acc block]
-                       (let [block (dissoc block :block/meta)
-                             level (:block/level block)
-                             config (assoc config :block/uuid (:block/uuid block))
-                             block-cp (if build-block-fn
-                                        (build-block-fn config block)
-                                        (rum/with-key
-                                          (block-container config block)
-                                          (str "slide-" (:block/uuid block))))]
-                         (if (= first-block-level level)
-                           ;; new slide
-                           (conj acc [[block block-cp]])
-                           (update acc (dec (count acc))
-                                   (fn [sections]
-                                     (conj sections [block block-cp]))))))
-                     []
-                     blocks)]
-       sections))))
 
 (defn- block-list
   [config blocks]

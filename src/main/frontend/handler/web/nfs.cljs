@@ -15,7 +15,6 @@
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -47,7 +46,7 @@
   (->>
    (cond
      mobile-native?
-     (map (fn [{:keys [uri content type size mtime]}]
+     (map (fn [{:keys [uri content size mtime]}]
             {:file/path             (string/replace uri "file://" "")
              :file/last-modified-at mtime
              :file/size             size
@@ -189,7 +188,7 @@
                           (log/error :exception error)))))))
      (p/catch (fn [error]
                 (log/error :exception error)
-                (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
+                (when (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (when @*repo (state/set-loading-files! @*repo false))
                   ;; (log/error :nfs/open-dir-error error)
                   ))))))
@@ -226,7 +225,7 @@
                                                   (:file/last-modified-at file)))
                                               new-files))
         get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
-        {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
+        {:keys [added modified deleted]} (compute-diffs old-files new-files)
         ;; Use the same labels as isomorphic-git
         rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file :last-modified-at (get-last-modified-at file)}) col))
         _ (when (and nfs? (seq deleted))

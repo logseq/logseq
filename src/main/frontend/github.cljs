@@ -46,5 +46,5 @@
                                       :Content-Type "application/json"
                                       :Authorization token}})
                 (fn [result] (true-handler result))
-                (fn [error]
+                (fn [_error]
                   (false-handler)))))
