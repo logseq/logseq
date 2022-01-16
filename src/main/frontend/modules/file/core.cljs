@@ -7,8 +7,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.debug :as debug]
-            [frontend.format.block :as block]))
+            [frontend.debug :as debug]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -16,7 +15,7 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [uuid format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
+  [{:block/keys [format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)

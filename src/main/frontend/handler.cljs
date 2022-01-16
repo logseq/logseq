@@ -130,10 +130,7 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-current-graph-dir!)
-                            ;; (when-not (state/logged?)
-                            ;;   (state/pub-event! [:after-db-restore repos]))
-                            ))
+                            (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))
         interval-id (js/setInterval inner-fn 50)]

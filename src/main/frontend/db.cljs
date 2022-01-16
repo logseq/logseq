@@ -10,6 +10,7 @@
             [frontend.db.react]
             [frontend.db.utils]
             [frontend.db.persist :as db-persist]
+            [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -65,6 +66,21 @@
   react-query custom-query-result-transform]
 
  [frontend.db.default built-in-pages-names built-in-pages])
+
+(defn get-schema-version [db]
+  (d/q
+    '[:find ?v .
+      :where
+      [_ :schema/version ?v]]
+    db))
+
+(defn old-schema?
+  [db]
+  (let [v (get-schema-version db)]
+    (if (integer? v)
+      (> db-schema/version v)
+      ;; backward compatibility
+      true)))
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
@@ -137,6 +153,8 @@
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
+;; TODO: only restore the current graph instead of all the graphs to speedup and
+;; reduce memory usage.
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
   (let [logged? (:name me)]
@@ -145,17 +163,20 @@
        (let [repo url]
          (p/let [db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
-                 _ (d/transact! db-conn [{:schema/version db-schema/version}])
                  _ (swap! conns assoc db-name db-conn)
                  stored (db-persist/get-serialized-graph db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
                            attached-db (d/db-with stored-db (concat
                                                              [(me-tx stored-db me)]
-                                                             default-db/built-in-pages))]
-                       (conn/reset-conn! db-conn attached-db))
+                                                             default-db/built-in-pages))
+                           db (if (old-schema? attached-db)
+                                (db-migrate/migrate attached-db)
+                                attached-db)]
+                       (conn/reset-conn! db-conn db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+           (d/transact! db-conn [{:schema/version db-schema/version}])
            (restore-config-handler repo)
            (listen-and-persist! repo)))))))
 

@@ -115,7 +115,7 @@
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
-  [repo page-e {:keys [sidebar? preview?] :as config}]
+  [repo page-e {:keys [sidebar?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))

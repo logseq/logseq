@@ -15,7 +15,7 @@
 (defonce write-chan (async/chan 100))
 (defonce write-chan-batch-buf (atom []))
 
-(def batch-write-interval 3000)
+(def batch-write-interval 1000)
 
 (defn writes-finished?
   []

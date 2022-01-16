@@ -59,8 +59,7 @@
 (defn custom-query-result-transform
   [query-result remove-blocks q]
   (try
-    (let [repo (state/get-current-repo)
-          result (db-utils/seq-flatten query-result)
+    (let [result (db-utils/seq-flatten query-result)
           block? (:block/uuid (first result))
           result (if block?
                    (let [result (if (seq remove-blocks)

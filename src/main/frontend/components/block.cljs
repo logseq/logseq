@@ -19,7 +19,6 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
-            [frontend.mixins :as mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.extensions.highlight :as highlight]
@@ -2195,7 +2194,7 @@
                                   (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                                         (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
-  [state config {:block/keys [uuid children pre-block? top? properties refs heading-level level type format content] :as block}]
+  [state config {:block/keys [uuid children pre-block? top? refs heading-level level type format content] :as block}]
   (let [repo (state/get-current-repo)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
@@ -2866,11 +2865,6 @@
 (def initial-blocks-length 200)
 (def step-loading-blocks 50)
 
-(defn- flat-blocks-tree
-  [vec-tree]
-  (->> (mapcat (fn [x] (tree-seq map? :block/children x)) vec-tree)
-       (map #(dissoc % :block/children))))
-
 (defn- get-segment
   [flat-blocks idx blocks->vec-tree]
   (let [new-idx (if (< idx initial-blocks-length)
@@ -2883,10 +2877,9 @@
      idx]))
 
 (rum/defcs lazy-blocks < rum/reactive
-  {:did-remount (fn [old-state new-state]
+  {:did-remount (fn [_old-state new-state]
                   ;; Loading more when pressing Enter or paste
-                  (let [args (:rum/args new-state)
-                        *last-idx (::last-idx new-state)
+                  (let [*last-idx (::last-idx new-state)
                         new-idx (if (zero? *last-idx)
                                   1
                                   (inc @*last-idx))]
