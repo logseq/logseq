@@ -6,7 +6,11 @@
             [frontend.ui :as ui]
             [frontend.config :as config]
             [frontend.components.block :as block]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db :as db]
+            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.state :as state]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -43,15 +47,20 @@
   [config block level]
   (let [deep-level? (>= level 2)
         children (:block/children block)
-        has-children? (seq children)]
-    [:section (with-properties {:key (str "slide-block-" (:block/uuid block))} block)
-     [:section.relative
-      (block/block-container config (dissoc block :block/children))
-      (when (and has-children? deep-level?)
-        [:span.opacity-30.text-xl "Hidden children"])]
-     (when (and has-children? (not deep-level?))
-       (map (fn [block]
-              (block-container config block (inc level))) children))]))
+        has-children? (seq children)
+        children (when (and has-children? (not deep-level?))
+                   (map (fn [block]
+                          (block-container config block (inc level))) children))
+        block-el (block/block-container config (dissoc block :block/children))
+        dom-attrs (with-properties {:key (str "slide-block-" (:block/uuid block))} block)]
+    (if has-children?
+      [:section dom-attrs
+       [:section.relative
+        block-el
+        (when deep-level?
+          [:span.opacity-30.text-xl "Hidden children"])]
+       children]
+      [:section dom-attrs block-el])))
 
 (defn slide-content
   [loading? style config blocks]
@@ -66,7 +75,7 @@
     [:div.slides
      (map #(block-container config % 1) blocks)]]])
 
-(rum/defc slide < rum/reactive
+(rum/defc slide < rum/reactive db-mixins/query
   {:did-mount (fn [state]
                 (if (loaded?)
                   (do
@@ -80,7 +89,18 @@
                        (reset! *loading? false)
                        (render!)))))
                 state)}
-  [config blocks]
-  (def blocks blocks)
-  (let [loading? (rum/react *loading?)]
+  [page-name]
+  (let [loading? (rum/react *loading?)
+        page (db/entity [:block/name page-name])
+        journal? (:journal? page)
+        repo (state/get-current-repo)
+        blocks (-> (db/get-page-blocks repo page-name)
+                   (outliner-tree/blocks->vec-tree page-name))
+        blocks (if journal?
+                 (rest blocks)
+                 blocks)
+        config {:id          "slide-reveal-js"
+                :slide?      true
+                :sidebar?    true
+                :page-name   page-name}]
     (slide-content loading? {:height 400} config blocks)))

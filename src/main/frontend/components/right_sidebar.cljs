@@ -14,7 +14,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.modules.outliner.tree :as outliner-tree]
             [goog.object :as gobj]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
@@ -100,21 +99,11 @@
         (page-cp repo page-name)]])
 
     :page-presentation
-    (let [page-name (get-in block-data [:page :block/name])
-          journal? (:journal? block-data)
-          blocks (-> (db/get-page-blocks repo page-name)
-                     (outliner-tree/blocks->vec-tree page-name))
-          blocks (if journal?
-                   (rest blocks)
-                   blocks)]
+    (let [page-name (get-in block-data [:page :block/name])]
       [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
-        (slide/slide {:id          "slide-reveal-js"
-                      :slide?      true
-                      :sidebar?    true
-                      :page-name   page-name}
-                     blocks)]])
+        (slide/slide page-name)]])
 
     ["" [:span]]))
 
