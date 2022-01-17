@@ -1171,7 +1171,6 @@
         (subs s 0 (dec (count s)))
         s))))
 
-
 (defn normalize
   [s]
   (.normalize s "NFC"))

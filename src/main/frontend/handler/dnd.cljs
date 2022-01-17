@@ -62,7 +62,8 @@
             (if first-child?
               (let [parent (tree/-get-parent target-node)]
                 (outliner-core/move-subtree current-node parent false))
-              (outliner-core/move-subtree current-node target-node true)))
+              (let [before-node (tree/-get-left target-node)]
+                (outliner-core/move-subtree current-node before-node true))))
           nested?
           (outliner-core/move-subtree current-node target-node false)
 

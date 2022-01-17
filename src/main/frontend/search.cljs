@@ -185,8 +185,8 @@
                        (doseq [page-name pages-to-remove-set]
                          (.remove indice
                                   (fn [page]
-                                    (= (util/safe-lower-case page-name)
-                                       (util/safe-lower-case (gobj/get page "name"))))))
+                                    (= (util/safe-page-name-sanity-lc page-name)
+                                       (util/safe-page-name-sanity-lc (gobj/get page "name"))))))
                        (when (seq pages-to-add)
                          (doseq [page pages-to-add]
                            (.add indice (bean/->js page)))))

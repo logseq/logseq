@@ -10,6 +10,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
@@ -17,6 +18,7 @@
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
+            [frontend.search.db :as search-db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -164,11 +166,13 @@
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
         :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-        :item-render (fn [{:block/keys [content page uuid]}]
+        :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                        (let [page (or (:block/original-name page)
                                       (:block/name page))
                              repo (state/sub :git/current-repo)
-                             format (db/get-page-format page)]
+                             format (db/get-page-format page)
+                             block (db-model/query-block-by-uuid uuid)
+                             content (search-db/block->content block)]
 
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))

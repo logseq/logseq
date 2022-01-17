@@ -420,13 +420,13 @@
                      :data [block]}]
            (db/refresh! repo opts)))
 
-       ;; page title changed
+       ;; sanitized page name changed
        (when-let [title (get-in block [:block/properties :title])]
-         (when-let [old-title (:block/name (db/entity (:db/id (:block/page block))))]
+         (when-let [old-page-name (:block/name (db/entity (:db/id (:block/page block))))]
            (when (and (:block/pre-block? block)
                       (not (string/blank? title))
-                      (not= (string/lower-case title) old-title))
-             (state/pub-event! [:page/title-property-changed old-title title]))))))
+                      (not= (util/page-name-sanity-lc title) old-page-name))
+             (state/pub-event! [:page/title-property-changed old-page-name title]))))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
