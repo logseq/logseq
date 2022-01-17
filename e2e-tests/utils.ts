@@ -7,34 +7,34 @@ export const IsLinux = process.platform === 'linux'
 export const IsWindows = process.platform === 'win32'
 
 export function randomString(length: number) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-    let result = '';
-    const charactersLength = characters.length;
-    for (let i = 0; i < length; i++) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
-    }
+  let result = '';
+  const charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
 
-    return result;
+  return result;
 }
 
 export async function appFirstLoaded(page: Page) {
-    await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
+  await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
 }
 
 export async function createRandomPage(page: Page) {
-    const randomTitle = randomString(20)
+  const randomTitle = randomString(20)
 
-    // Click #search-button
-    await page.click('#search-button')
-    // Fill [placeholder="Search or create page"]
-    await page.fill('[placeholder="Search or create page"]', randomTitle)
-    // Click text=/.*New page: "new page".*/
-    await page.click('text=/.*New page: ".*/')
-    // wait for textarea of first block
-    await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  // Click #search-button
+  await page.click('#search-button')
+  // Fill [placeholder="Search or create page"]
+  await page.fill('[placeholder="Search or create page"]', randomTitle)
+  // Click text=/.*New page: "new page".*/
+  await page.click('text=/.*New page: ".*/')
+  // wait for textarea of first block
+  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
 
-    return randomTitle;
+  return randomTitle;
 }
 
 /**
@@ -43,25 +43,25 @@ export async function createRandomPage(page: Page) {
 * @returns The locator of the last block.
 */
 export async function lastInnerBlock(page: Page): Promise<Locator> {
-    // discard any popups
-    await page.keyboard.press('Escape')
-    // click last block
-    await page.waitForSelector('.page-blocks-inner .ls-block >> nth=-1')
-    await page.click('.page-blocks-inner .ls-block >> nth=-1')
-    // wait for textarea
-    await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
-    return page.locator(':nth-match(textarea, 1)')
+  // discard any popups
+  await page.keyboard.press('Escape')
+  // click last block
+  await page.waitForSelector('.page-blocks-inner .ls-block >> nth=-1')
+  await page.click('.page-blocks-inner .ls-block >> nth=-1')
+  // wait for textarea
+  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  return page.locator(':nth-match(textarea, 1)')
 }
 
 export async function lastBlock(page: Page): Promise<Locator> {
-    // discard any popups
-    await page.keyboard.press('Escape')
-    // click last block
-    await page.click('.ls-block >> nth=-1')
-    // wait for textarea
-    await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  // discard any popups
+  await page.keyboard.press('Escape')
+  // click last block
+  await page.click('.ls-block >> nth=-1')
+  // wait for textarea
+  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
 
-    return page.locator(':nth-match(textarea, 1)')
+  return page.locator(':nth-match(textarea, 1)')
 }
 
 /**
@@ -70,37 +70,37 @@ export async function lastBlock(page: Page): Promise<Locator> {
 * @returns The locator of the last block
 */
 export async function newInnerBlock(page: Page): Promise<Locator> {
-    await lastInnerBlock(page)
-    await page.press(':nth-match(textarea, 1)', 'Enter')
+  await lastInnerBlock(page)
+  await page.press(':nth-match(textarea, 1)', 'Enter')
 
-    return page.locator(':nth-match(textarea, 1)')
+  return page.locator(':nth-match(textarea, 1)')
 }
 
 export async function newBlock(page: Page): Promise<Locator> {
-    await lastBlock(page)
-    await page.press(':nth-match(textarea, 1)', 'Enter')
+  await lastBlock(page)
+  await page.press(':nth-match(textarea, 1)', 'Enter')
 
-    return page.locator(':nth-match(textarea, 1)')
+  return page.locator(':nth-match(textarea, 1)')
 }
 
 export async function escapeToCodeEditor(page: Page): Promise<void> {
-    await page.press('.block-editor textarea', 'Escape')
-    await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
+  await page.press('.block-editor textarea', 'Escape')
+  await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
 
-    await page.waitForTimeout(300)
-    await page.click('.CodeMirror pre')
-    await page.waitForTimeout(300)
+  await page.waitForTimeout(300)
+  await page.click('.CodeMirror pre')
+  await page.waitForTimeout(300)
 
-    await page.waitForSelector('.CodeMirror textarea', { state: 'visible' })
+  await page.waitForSelector('.CodeMirror textarea', { state: 'visible' })
 }
 
 export async function escapeToBlockEditor(page: Page): Promise<void> {
-    await page.waitForTimeout(300)
-    await page.click('.CodeMirror pre')
-    await page.waitForTimeout(300)
+  await page.waitForTimeout(300)
+  await page.click('.CodeMirror pre')
+  await page.waitForTimeout(300)
 
-    await page.press('.CodeMirror textarea', 'Escape')
-    await page.waitForTimeout(300)
+  await page.press('.CodeMirror textarea', 'Escape')
+  await page.waitForTimeout(300)
 }
 
 export async function setMockedOpenDirPath(
@@ -119,17 +119,25 @@ export async function setMockedOpenDirPath(
 }
 
 export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
-  const hasOpenButton = await page.$('#head >> .button >> text=Open')
   await setMockedOpenDirPath(page, path);
+
+  await page.click('#left-menu.button')
+  const hasOpenButton = await page.$('#head >> .button >> text=Open')
+
   if (hasOpenButton) {
     await page.click('#head >> .button >> text=Open')
   } else {
-    if (!(await page.$('.ls-left-sidebar-open'))) {
-      await page.click('.cp__header-left-menu.button')
+    let sidebar = page.locator('#left-sidebar')
+    if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+      await page.click('#left-menu.button')
+      expect(await sidebar.getAttribute('class')).toMatch(/is-open/)
     }
-    await page.click('#left-sidebar >> #repo-switch')
+
+    await page.click('#left-sidebar #repo-switch');
+    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
+
     await page.click('text=Add new graph')
-    await page.waitForSelector('h1:has-text("Open a local directory")')
+    await page.waitForSelector('h1:has-text("Open a local directory")', { state: 'visible' })
     await page.click('h1:has-text("Open a local directory")')
   }
 
@@ -146,6 +154,6 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
 }
 
 export async function activateNewPage(page: Page) {
-    await page.click('.ls-block >> nth=0')
-    await page.waitForTimeout(500)
+  await page.click('.ls-block >> nth=0')
+  await page.waitForTimeout(500)
 }
