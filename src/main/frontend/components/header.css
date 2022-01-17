@@ -276,6 +276,10 @@ html.is-native-iphone {
         }
     }
     
+    .ui__notifications {
+        top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
+    }
+    
     @media (orientation: landscape) {
         --ls-headbar-inner-top-padding: 8px;
         --ls-headbar-height: 2.5rem;
