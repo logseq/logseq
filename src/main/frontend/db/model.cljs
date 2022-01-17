@@ -1404,12 +1404,12 @@
 (defn delete-page-blocks
   [repo-url page]
   (when page
-    (let [db (conn/get-conn repo-url)
-          page (db-utils/pull [:block/name (util/page-name-sanity-lc page)])]
-      (when page
-        (let [datoms (d/datoms db :avet :block/page (:db/id page))
-              block-eids (mapv :e datoms)]
-          (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids))))))
+    (when-let [db (conn/get-conn repo-url)]
+      (let [page (db-utils/pull [:block/name (util/page-name-sanity-lc page)])]
+        (when page
+          (let [datoms (d/datoms db :avet :block/page (:db/id page))
+                block-eids (mapv :e datoms)]
+            (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids)))))))
 
 (defn delete-file-pages!
   [repo-url path]

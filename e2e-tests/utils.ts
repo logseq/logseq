@@ -147,5 +147,5 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
 
 export async function activateNewPage(page: Page) {
     await page.click('.ls-block >> nth=0')
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(1000)
 }

@@ -8,7 +8,9 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 let repoName = randomString(10)
-export let graphDir = path.resolve(__dirname, '../tmp/e2e-graph', repoName)
+let testGraphDir = path.resolve(__dirname, '../tmp/e2e-graph')
+
+export let graphDir = path.resolve(testGraphDir, repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
