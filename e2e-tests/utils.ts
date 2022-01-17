@@ -18,10 +18,6 @@ export function randomString(length: number) {
   return result;
 }
 
-export async function appFirstLoaded(page: Page) {
-  await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
-}
-
 export async function createRandomPage(page: Page) {
   const randomTitle = randomString(20)
 

@@ -67,6 +67,11 @@ base.beforeAll(async () => {
   // NOTE: The following ensures first start.
   // await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
 
+  await page.waitForSelector(':has-text("Loading")', {
+    state: "hidden",
+    timeout: 1000 * 15,
+  });
+
   page.once('load', async () => {
     console.log('Page loaded!')
     await page.screenshot({ path: 'startup.png' })
