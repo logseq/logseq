@@ -7,6 +7,7 @@ import { loadLocalGraph, randomString } from './utils';
 let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
+
 let repoName = randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
@@ -18,7 +19,8 @@ export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  // expect(msg.text()).not.toMatch(/^Failed to/)
+  // console.log(msg.text())
+  expect(msg.text()).not.toMatch(/^Failed to/)
   expect(msg.text()).not.toMatch(/^Error/)
   expect(msg.text()).not.toMatch(/^Uncaught/)
   // NOTE: React warnings will be logged as error.
@@ -43,10 +45,16 @@ base.beforeAll(async () => {
   await context.tracing.start({ screenshots: true, snapshots: true });
 
   // NOTE: The following ensures App first start with the correct path.
-  const appPath = await electronApp.evaluate(async ({ app }) => {
-    return app.getAppPath()
+  const info = await electronApp.evaluate(async ({ app }) => {
+
+    return {
+      "appPath": app.getAppPath(),
+      "appData": app.getPath("appData"),
+      "userData": app.getPath("userData"),
+      "appName": app.getName(),
+    }
   })
-  console.log("Test start with AppPath:", appPath)
+  console.log("Test start with:", info)
 
   page = await electronApp.firstWindow()
   // Direct Electron console to watcher
@@ -61,7 +69,13 @@ base.beforeAll(async () => {
 
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction('window.document.title != "Loading"')
-  await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
+  // NOTE: The following ensures first start.
+  // await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
+
+  await page.waitForSelector(':has-text("Loading")', {
+    state: "hidden",
+    timeout: 1000 * 15,
+  });
 
   page.once('load', async () => {
     console.log('Page loaded!')
