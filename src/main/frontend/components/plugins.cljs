@@ -781,4 +781,5 @@
   (state/set-sub-modal!
     (fn [_close!]
       (focused-settings-content))
-    {:center? true}))
+    {:center? true
+     :id "ls-focused-settings-modal"}))
