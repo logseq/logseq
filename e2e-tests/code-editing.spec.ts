@@ -113,7 +113,7 @@ test('code block mixed input source', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill('.block-editor textarea', '```\n  ABC\n```')
-  await page.waitForTimeout(100) // wait for fill
+  await page.waitForTimeout(500) // wait for fill
   await escapeToCodeEditor(page)
   await page.type('.CodeMirror textarea', '  DEF\nGHI')
 

@@ -167,16 +167,17 @@
 
 (defn- get-graphs-dir
   []
-  (let [dir (.join path (.homedir os) ".logseq" "graphs")]
+  (let [dir (if utils/ci?
+              (.resolve path js/__dirname "../tmp/graphs")
+              (.join path (.homedir os) ".logseq" "graphs"))]
     (fs-extra/ensureDirSync dir)
     dir))
 
 (defn- get-graphs
   []
-  (let [dir (get-graphs-dir)
-        graphs-path (.join path (.homedir os) ".logseq" "graphs")]
+  (let [dir (get-graphs-dir)]
     (->> (readdir dir)
-         (remove #{graphs-path})
+         (remove #{dir})
          (map #(path/basename % ".transit"))
          (map graph-name->path))))
 

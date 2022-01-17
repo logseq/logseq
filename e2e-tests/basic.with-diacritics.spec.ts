@@ -10,7 +10,7 @@ test('create page and blocks (diacritics)', async ({ page }) => {
     hotkeyOpenLink = 'Meta+o'
     hotkeyBack = 'Meta+['
   }
-  
+
   const rand = randomString(20)
 
   // diacritic opening test
@@ -22,14 +22,9 @@ test('create page and blocks (diacritics)', async ({ page }) => {
   // build target Page with diacritics
   await activateNewPage(page)
   await page.type(':nth-match(textarea, 1)', 'Diacritic title test content')
-  await page.keyboard.press(hotkeyBack)
 
-  // visit target Page with diacritics (looks same but not same in Unicode)
-  await newBlock(page)
-  await page.type(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
-  await page.keyboard.press(hotkeyOpenLink)
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('Diacritic title test content')
+  await page.keyboard.press('Enter')
+  await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed

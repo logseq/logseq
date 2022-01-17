@@ -8,13 +8,17 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 let repoName = randomString(10)
-let testGraphDir = path.resolve(__dirname, '../tmp/e2e-graph')
+let testTmpDir = path.resolve(__dirname, '../tmp')
 
-export let graphDir = path.resolve(testGraphDir, repoName)
+if (fs.existsSync(testTmpDir)) {
+    fs.rmdirSync(testTmpDir, { recursive: true })
+}
+
+export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  expect(msg.text()).not.toMatch(/^Failed to/)
+  // expect(msg.text()).not.toMatch(/^Failed to/)
   expect(msg.text()).not.toMatch(/^Error/)
   expect(msg.text()).not.toMatch(/^Uncaught/)
   // NOTE: React warnings will be logged as error.
