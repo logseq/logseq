@@ -99,7 +99,7 @@
                 (state/reset-all-updates-state)
                 (throw e))))
         (fn [mfts]
-          (when-let [mft (some #(when (= (:id %) id) %) mfts)]
+          (if-let [mft (some #(when (= (:id %) id) %) mfts)]
             (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft))
             (throw (js/Error. (str ":not-found-in-marketplace" id))))
           true))
