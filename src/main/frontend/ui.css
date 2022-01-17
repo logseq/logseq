@@ -149,6 +149,10 @@ html.is-native-iphone-without-notch
     .cards-review .block-control {
         margin-left: -24px;
     }
+
+    .ls-card {
+        min-height: 75vh;
+    }
 }
 
 html.is-mobile {
