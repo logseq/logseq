@@ -483,14 +483,17 @@
         ;; FIXME: for translateY layer
         x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
                          (let [delta-width (- vw-width (+ (:left rect) left))]
-                           (< delta-width (* max-width 0.5))))]
+                           (< delta-width (* max-width 0.5))))
+        pos-rect (when (and (seq rect) editing-key)
+                   (:rect (cursor/get-caret-pos (state/get-input))))
+        y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :class (if x-overflow-vw? "is-overflow-vw-x" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
       :style (merge
-              {:top        (+ top offset-top)
+              {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                :max-height to-max-height
                :max-width 700
                 ;; TODO: auto responsive fixed size
@@ -500,7 +503,7 @@
                 {:width max-width})
               (if config/mobile?
                 {:left 0}
-                {:left left}))}
+                {:left (if (and y-diff (= y-diff 0)) left 0)}))}
      cp]))
 
 (rum/defc transition-cp < rum/reactive
