@@ -140,8 +140,11 @@
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          alias (->> (:alias properties)
-                     (remove string/blank?))
+          alias (:alias properties)
+          alias (when alias
+                  (if (coll? alias)
+                    (remove string/blank? alias)
+                    [alias]))
           filetags (when-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
