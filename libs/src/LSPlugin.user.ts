@@ -1,4 +1,4 @@
-import { deepMerge, safetyPathJoin } from './helpers'
+import { deepMerge, mergeSettingsWithSchema, safetyPathJoin } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
   IAppProxy, IDBProxy,
@@ -12,7 +12,7 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding
+  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -220,9 +220,7 @@ const KEY_MAIN_UI = 0
  * @public
  */
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
-  /**
-   * @private
-   */
+  private _settingsSchema?: Array<SettingSchemaDesc>
   private _connected: boolean = false
 
   /**
@@ -285,7 +283,6 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     if (this._connected) return
 
     try {
-
       if (typeof model === 'function') {
         callback = model
         model = {}
@@ -293,9 +290,18 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
       let baseInfo = await this._caller.connectToParent(model)
 
+      this._connected = true
+
       baseInfo = deepMerge(this._baseInfo, baseInfo)
 
-      this._connected = true
+      if (this._settingsSchema) {
+        baseInfo.settings = mergeSettingsWithSchema(
+          baseInfo.settings, this._settingsSchema
+        )
+
+        // TODO: update host schema
+        await this.useSettingsSchema(this._settingsSchema)
+      }
 
       if (baseInfo?.id) {
         this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
@@ -338,9 +344,26 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     return this
   }
 
+  useSettingsSchema (schema: Array<SettingSchemaDesc>) {
+    if (this.connected) {
+      this.caller.call('settings:schema', schema)
+    }
+
+    this._settingsSchema = schema
+    return this
+  }
+
   updateSettings (attrs: Record<string, any>) {
     this.caller.call('settings:update', attrs)
     // TODO: update associated baseInfo settings
+  }
+
+  showSettingsUI () {
+    this.caller.call('settings:visible:changed', { visible: true })
+  }
+
+  hideSettingsUI () {
+    this.caller.call('settings:visible:changed', { visible: false })
   }
 
   setMainUIAttrs (attrs: Partial<UIContainerAttrs>): void {

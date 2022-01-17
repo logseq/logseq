@@ -214,6 +214,9 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
+(defmethod handle :go/plugins-settings [_]
+  (plugin/open-focused-settings-modal!))
+
 
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))

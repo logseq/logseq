@@ -1,4 +1,4 @@
-import { StyleString, UIOptions } from './LSPlugin'
+import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
 import * as nodePath from 'path'
@@ -244,7 +244,6 @@ export function setupInjectedUI (
 
   const pl = this
 
-
   if ('slot' in ui) {
     slot = ui.slot
     selector = `#${slot}`
@@ -425,4 +424,18 @@ export function setupInjectedTheme (url?: string) {
     }
     injectedThemeEffect = null
   })
+}
+
+export function mergeSettingsWithSchema (
+  settings: Record<string, any>,
+  schema: Array<SettingSchemaDesc>) {
+  const defaults = (schema || []).reduce((a, b) => {
+    if ('default' in b) {
+      a[b.key] = b.default
+    }
+    return a
+  }, {})
+
+  // shadow copy
+  return Object.assign(defaults, settings)
 }

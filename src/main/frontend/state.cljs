@@ -174,6 +174,7 @@
       :plugin/updates-coming                 {}
       :plugin/updates-downloading?           false
       :plugin/updates-unchecked              #{}
+      :plugin/focused-settings               nil            ;; plugin id
 
       ;; pdf
       :pdf/current                           nil

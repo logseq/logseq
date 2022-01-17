@@ -631,6 +631,11 @@
   (let [^js el (gdom/getElement id)]
     (if el (str (.-tagName el) "#" id) false)))
 
+(defn ^:export set_focused_settings
+  [pid]
+  (state/set-state! :plugin/focused-settings pid)
+  (state/pub-event! [:go/plugins-settings pid]))
+
 (defn ^:export force_save_graph
   []
   (p/let [_ (el/persist-dbs!)]

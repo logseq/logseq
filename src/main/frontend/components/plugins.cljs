@@ -745,6 +745,14 @@
           (marketplace-plugins)
           (installed-plugins))]])))
 
+(rum/defcs focused-settings-content
+  < rum/reactive
+  [state]
+
+  (when-let [focused (state/sub :plugin/focused-settings)]
+    (when-let [^js pl (plugin-handler/get-plugin-inst focused)]
+      [:pre.p-2 (js/JSON.stringify (.-settingsSchema pl) nil 2)])))
+
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
   (rum/use-effect!
@@ -766,4 +774,11 @@
   (state/set-sub-modal!
     (fn [_close!]
       (waiting-coming-updates))
+    {:center? true}))
+
+(defn open-focused-settings-modal!
+  []
+  (state/set-sub-modal!
+    (fn [_close!]
+      (focused-settings-content))
     {:center? true}))
