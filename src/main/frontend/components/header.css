@@ -239,29 +239,35 @@ html.is-native-ipad {
         align-items: center;
       }
     }
-
-    .ls-left-sidebar-open {
-      .cp__header {
-        > .l {
-            /* background-color: transparent; */
-        }
-      }
-    }
     
     .left-sidebar-inner  {
-      > .wrap {
-        padding-top: 20px;
+        > .wrap {
+            padding-top: 20px;
       }
     }
 
-    .cp__right-sidebar-settings {
-        margin-top: -4px;
-    }
+    .cp__right-sidebar {
+        &-settings {
+            margin-top: -4px;
+        }
 
-    .cp__right-sidebar-topbar {
-        padding-top: 37px;
+        &-topbar {
+            padding-top: 37px;
+        }
+
+        &-inner {
+            .resizer {
+                top: 30vh;
+                width: 12px;
+                height: 40vh;
+            }
+            
+            .resizer:hover {
+                background-color: var(--ls-guideline-color, #ddd);
+            }
+        }
     }
-  }
+}
 
 html.is-native-iphone {
     --ls-headbar-inner-top-padding: 36px;
