@@ -45,7 +45,7 @@
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   #_:clj-kondo/ignore
-  [repo-url format ast properties file content _utf8-content _journal?]
+  [repo-url format ast properties file content]
   (try
     (let [page (get-page-name file ast)
           [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
@@ -138,39 +138,31 @@
       (log/error :exception e))))
 
 (defn extract-blocks-pages
-  ([repo-url file content]
-   (extract-blocks-pages repo-url file content (utf8/encode content)))
-  ([repo-url file content utf8-content]
-   (if (string/blank? content)
-     (p/resolved [])
-     (p/let [format (format/get-format file)
-             _ (println "Parsing start : " file)
-             parse-f (if (and (mobile/is-native-platform?) config/dev?)
-                       mldoc/->edn
-                       (fn [content config]
-                         (mldoc/->edn-async file content config)))
-             ast (parse-f content (mldoc/default-config format))]
-       _ (println "Parsing finished : " file)
-       (let [journal? (config/journal? file)
-             first-block (ffirst ast)
-             properties (let [properties (and (property/properties-ast? first-block)
-                                              (->> (last first-block)
-                                                   (map (fn [[x y]]
-                                                          [x (if (string? y)
-                                                               (text/parse-property x y)
-                                                               y)]))
-                                                   (into {})
-                                                   (walk/keywordize-keys)))]
-                          (when (and properties (seq properties))
-                            (if (:filters properties)
-                              (update properties :filters
-                                      (fn [v]
-                                        (string/replace (or v "") "\\" "")))
-                              properties)))]
-         (extract-pages-and-blocks
-          repo-url
-          format ast properties
-          file content utf8-content journal?))))))
+  [repo-url file content]
+  (if (string/blank? content)
+    []
+    (let [format (format/get-format file)
+          ast (mldoc/->edn content (mldoc/default-config format {:parse_outline_only? true}))]
+      (println "Parsing finished : " file)
+      (let [first-block (ffirst ast)
+            properties (let [properties (and (property/properties-ast? first-block)
+                                             (->> (last first-block)
+                                                  (map (fn [[x y]]
+                                                         [x (if (string? y)
+                                                              (text/parse-property x y)
+                                                              y)]))
+                                                  (into {})
+                                                  (walk/keywordize-keys)))]
+                         (when (and properties (seq properties))
+                           (if (:filters properties)
+                             (update properties :filters
+                                     (fn [v]
+                                       (string/replace (or v "") "\\" "")))
+                             properties)))]
+        (extract-pages-and-blocks
+         repo-url
+         format ast properties
+         file content)))))
 
 (defn with-block-uuid
   [pages]
@@ -190,57 +182,26 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
-(defn remove-illegal-refs
-  [block block-ids-set refresh?]
-  (let [aux-fn (fn [refs]
-                 (let [block-refs (if refresh? (set refs)
-                                      (set/intersection (set refs) block-ids-set))]
-                   (set/union
-                    (set (filter :block/name refs))
-                    block-refs)))]
-    (-> block
-        (update :block/refs aux-fn)
-        (update :block/path-refs aux-fn))))
-
-;; TODO: refactor with reset-file!
-(defn extract-all-blocks-pages
-  [repo-url files metadata refresh?]
-  (when (seq files)
-    (-> (p/all (map
-                 (fn [{:file/keys [path content]}]
-                   (when content
-                     (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
-                           content (if org?
-                                     content
-                                     (text/scheduled-deadline-dash->star content))
-                           utf8-content (utf8/encode content)]
-                       (extract-blocks-pages repo-url path content utf8-content))))
-                 files))
-        (p/then (fn [result]
-                  (let [result (remove empty? result)]
-                    (when (seq result)
-                      (let [result (util/distinct-by (fn [[pages _blocks]]
-                                                       (let [page (first pages)]
-                                                         (:block/name page))) result)
-                            [pages blocks] (apply map concat result)
-                            block-ids (->> (map :block/uuid blocks)
-                                           (remove nil?))
-                            pages (with-ref-pages pages blocks)
-                            blocks (map (fn [block]
-                                          (let [id (:block/uuid block)
-                                                properties (merge (get-in metadata [:block/properties id])
-                                                                  (:block/properties block))]
-                                            (if (seq properties)
-                                              (assoc block :block/properties properties)
-                                              (dissoc block :block/properties))))
-                                     blocks)
-                            ;; To prevent "unique constraint" on datascript
-                            pages-index (map #(select-keys % [:block/name]) pages)
-                            block-ids-set (set (map (fn [uuid] [:block/uuid uuid]) block-ids))
-                            blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)
-                            block-ids (map (fn [uuid] {:block/uuid uuid}) block-ids)]
-                        (apply concat [pages-index pages block-ids blocks])))))))))
-
 (defn extract-all-block-refs
   [content]
   (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))
+
+(comment
+  (def page (frontend.db/entity [:block/name (string/lower-case "Scripture (NASB 1995)")]))
+  (def page (frontend.db/entity [:block/name (string/lower-case "test")]))
+  (def file (:block/file page))
+  (def content (:file/content (db/pull (:db/id file))))
+
+  (do
+    (prn "Full parse: ")
+    (dotimes [_ 5] (time (do (mldoc/->edn content (mldoc/default-config :markdown)) nil)))
+    (prn "Parse outline-only")
+    (dotimes [_ 5] (time (do (mldoc/->edn content (mldoc/default-config :markdown {:parse_outline_only? true})) nil))))
+  (simple-benchmark []
+                    (mldoc/->edn content (mldoc/default-config :markdown))
+                    5)
+  (simple-benchmark []
+                    (mldoc/->edn content (mldoc/default-config :markdown {:parse_outline_only? true}))
+                    5)
+
+  )

@@ -18,12 +18,12 @@
             [frontend.handler.extract :as extract-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.debug :as debug]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [clojure.set :as set]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -131,74 +131,73 @@
        current-file))))
 
 (defn reset-file!
-  [repo-url file content]
-  (let [electron-local-repo? (and (util/electron?)
-                                  (config/local-db? repo-url))
-        file (cond
-               (and electron-local-repo?
-                    util/win32?
-                    (utils/win32 file))
-               file
+  ([repo-url file content]
+   (reset-file! repo-url file content false))
+  ([repo-url file content new-graph?]
+   (let [electron-local-repo? (and (util/electron?)
+                                   (config/local-db? repo-url))
+         file (cond
+                (and electron-local-repo?
+                     util/win32?
+                     (utils/win32 file))
+                file
 
-               (and electron-local-repo? (or
-                                          util/win32?
-                                          (not= "/" (first file))))
-               (str (config/get-repo-dir repo-url) "/" file)
+                (and electron-local-repo? (or
+                                           util/win32?
+                                           (not= "/" (first file))))
+                (str (config/get-repo-dir repo-url) "/" file)
 
-               (and (mobile/native-android?) (not= "/" (first file)))
-               (str (config/get-repo-dir repo-url) "/" file)
+                (and (mobile/native-android?) (not= "/" (first file)))
+                (str (config/get-repo-dir repo-url) "/" file)
 
-               (and (mobile/native-ios?) (not= "/" (first file)))
-               file
+                (and (mobile/native-ios?) (not= "/" (first file)))
+                file
 
-               :else
-               file)
-        file (util/path-normalize file)
-        new? (nil? (db/entity [:file/path file]))]
-    ;; TODO: refactor with reset-file!
-    ;; TODO: missing text/scheduled-deadline-dash->star
-    (db/set-file-content! repo-url file content)
-    (let [format (format/get-format file)
-          utf8-content (utf8/encode content)
-          file-content [{:file/path file}]]
-      (p/let [tx (if (contains? config/mldoc-support-formats format)
-                   ;; TODO: compare the logic with extract-all-blocks-pages
-                   (p/let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
-                           first-page (first pages)
-                           delete-blocks (->
-                                          (concat
-                                           (db/delete-file-blocks! repo-url file)
-                                           (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
-                                          (distinct))
-                           _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-                               (when (not= file current-file)
-                                 (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
-                                   (state/pub-event! [:notification/show
-                                                      {:content error
-                                                       :status :error
-                                                       :clear? false}]))))
-                           ;; TODO: merge with the validation logic in extract-all-blocks-pages
-                           blocks (remove-non-exists-refs! blocks)
-                           block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-                           pages (extract-handler/with-ref-pages pages blocks)
-                           ;; To prevent "unique constraint" on datascript
-                           pages-index (map #(select-keys % [:block/name]) pages)
-                           block-ids-set (set (map (fn [uuid] [:block/uuid uuid]) block-ids))
-                           blocks (map #(extract-handler/remove-illegal-refs % block-ids-set true) blocks) ;; refresh should be true or false?
-                           block-ids (map (fn [uuid] {:block/uuid uuid}) block-ids)]
-                     ;; does order matter?
-                     (concat file-content pages-index delete-blocks pages block-ids blocks))
-                   file-content)]
-        (let [tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
-                               (cond->
-                                 {:file/path file}
-                                 new?
-                                 (assoc :file/created-at t)))])]
-          (db/transact! repo-url tx))))))
+                :else
+                file)
+         file (util/path-normalize file)
+         new? (nil? (db/entity [:file/path file]))]
+     (db/set-file-content! repo-url file content)
+     (let [format (format/get-format file)
+           file-content [{:file/path file}]]
+       (let [tx (if (contains? config/mldoc-support-formats format)
+                  (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
+                        first-page (first pages)
+                        delete-blocks (->
+                                       (concat
+                                        (db/delete-file-blocks! repo-url file)
+                                        (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
+                                       (distinct))
+                        _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
+                            (when (not= file current-file)
+                              (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+                                (state/pub-event! [:notification/show
+                                                   {:content error
+                                                    :status :error
+                                                    :clear? false}]))))
+                        block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+                        block-refs-ids (->> (mapcat :block/refs blocks)
+                                            (filter (fn [ref] (and (vector? ref)
+                                                                   (= :block/uuid (first ref)))))
+                                            (map (fn [ref] {:block/uuid (second ref)}))
+                                            (seq))
+                        ;; To prevent "unique constraint" on datascript
+                        block-ids (set/union (set block-ids) (set block-refs-ids))
+                        pages (extract-handler/with-ref-pages pages blocks)
+                        pages-index (map #(select-keys % [:block/name]) pages)]
+                    ;; does order matter?
+                    (concat file-content pages-index delete-blocks pages block-ids blocks))
+                  file-content)]
+         (let [tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
+                                (cond->
+                                  {:file/path file}
+                                  new?
+                                  (assoc :file/created-at t)))])]
+           (db/transact! repo-url tx (when new-graph? {:new-graph? true}))))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare?]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph?]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
@@ -209,14 +208,14 @@
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
                                        (assoc (when original-content {:old-content original-content})
                                               :skip-compare? skip-compare?)))]
-    (p/let [_ (if reset?
-                (do
-                  (when-let [page-id (db/get-file-page-id path)]
-                    (db/transact! repo
-                      [[:db/retract page-id :block/alias]
-                       [:db/retract page-id :block/tags]]))
-                  (reset-file! repo path content))
-                (db/set-file-content! repo path content))]
+    (let [_ (if reset?
+              (do
+                (when-let [page-id (db/get-file-page-id path)]
+                  (db/transact! repo
+                    [[:db/retract page-id :block/alias]
+                     [:db/retract page-id :block/tags]]))
+                (reset-file! repo path content new-graph?))
+              (db/set-file-content! repo path content))]
       (util/p-handle (write-file!)
                      (fn [_]
                        (when (= path (config/get-config-path repo))

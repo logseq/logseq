@@ -7,7 +7,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.modules.outliner.state :as outliner-state]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
@@ -52,13 +51,6 @@
         (assoc acc left-id block)))
     {}
     blocks))
-
-(defn get-children
-  [id]
-  (let [repo (state/get-current-repo)]
-   (some->>
-     (outliner-state/get-by-parent-id repo [:block/uuid id])
-     (mapv block))))
 
 (defn- block-with-timestamps
   [block]
@@ -209,24 +201,10 @@
       block-id))
 
   (-get-children [this]
-    (let [children (get-children (tree/-get-id this))]
-      (when (seq children)
-        (let [left-id->block (index-blocks-by-left-id children)]
-          (loop [sorted-children []
-                 current-node this]
-            (let [id (tree/-get-id current-node)]
-              (if-let [right (get left-id->block id)]
-                (recur (conj sorted-children right) right)
-                (do
-                  (let [should-equal
-                        (=
-                          (count children)
-                          (count sorted-children))]
-                    (when-not should-equal
-                      (prn "children: " (mapv #(get-in % [:data :block/uuid]) children))
-                      (prn "sorted-children: " (mapv #(get-in % [:data :block/uuid]) sorted-children))
-                      (throw (js/Error. "Number of children and sorted-children are not equal."))))
-                  sorted-children)))))))))
+    (let [parent-id (tree/-get-id this)
+          parent-data (get-data this)
+          children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
+      (map block children))))
 
 (defn set-block-collapsed! [txs-state id collapsed?]
   (swap! txs-state concat [{:db/id id

@@ -13,7 +13,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.extract :as extract-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.notification :as notification]
@@ -202,21 +201,22 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (p/let [refresh? (:refresh? opts)
-          parsed-files (filter
-                        (fn [file]
-                          (let [format (format/get-format (:file/path file))]
-                            (contains? config/mldoc-support-formats format)))
-                        files)
-          blocks-pages (if (seq parsed-files)
-                         (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata refresh?)
-                         [])]
-    (let [config-file (config/get-config-path)]
-      (when (contains? (set file-paths) config-file)
-        (when-let [content (some #(when (= (:file/path %) config-file)
-                                    (:file/content %)) files)]
-          (file-handler/restore-config! repo-url content true))))
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks refresh?)
+  (let [refresh? (:refresh? opts)
+        parsed-files (filter
+                      (fn [file]
+                        (let [format (format/get-format (:file/path file))]
+                          (contains? config/mldoc-support-formats format)))
+                      files)
+        parsed-files (sort-by :file/path parsed-files)
+        new-graph? (:new-graph? opts)]
+    (doseq [file parsed-files]
+      (file-handler/alter-file repo-url
+                               (:file/path file)
+                               (:file/content file)
+                               {:new-graph? new-graph?
+                                :re-render-root? false
+                                :from-disk? true
+                                :metadata metadata}))
     (load-pages-metadata! repo-url file-paths files)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
@@ -261,7 +261,8 @@
       (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh?]}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]
+             :as opts}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
@@ -282,7 +283,8 @@
                            (parse-files-and-load-to-db! repo-url files-contents (assoc option :refresh? refresh?)))))]
     (cond
       (and (not (seq diffs)) nfs-files)
-      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
+      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true
+                                                       :new-graph? new-graph?})
 
       (and first-clone? (not nfs-files))
       (->
