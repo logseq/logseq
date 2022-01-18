@@ -76,7 +76,7 @@
                          (util/remove-nils
                           (assoc
                            (block/page-name->map page false)
-                           :block/file {:file/path file}))
+                           :block/file {:file/path (util/path-normalize file)}))
                          (seq properties)
                          (assoc :block/properties properties)
 

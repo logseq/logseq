@@ -1174,12 +1174,10 @@
 (defn normalize
   [s]
   (.normalize s "NFC"))
-
-(defn search-normalize-content
-  "Normalize string for searching (loose, without lowercasing)
-   Case-sensitivity is ensured by the search engine"
+(defn path-normalize
+  "Normalize file path (for reading, not writting)"
   [s]
-  (.normalize s "NFKD"))
+  (.normalize s "NFC"))
 
 (defn search-normalize
   "Normalize string for searching (loose)"
@@ -1193,7 +1191,7 @@
     (.normalize (string/lower-case s) "NFKD") s))
 
 (defn page-name-sanity
-  "Sanitize the page-name for file name (strict)"
+  "Sanitize the page-name for file name (strict), for file writting"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]
