@@ -41,9 +41,9 @@
     ;; Keyboard watcher
     (.addListener Keyboard "keyboardWillShow"
                   #(state/pub-event! [:mobile/keyboard-will-show]))
-    (.addListener Keyboard "keyboardDidShow"
-                  #(state/pub-event! [:mobile/keyboard-did-show]))
-
+    ;; (.addListener Keyboard "keyboardDidShow"
+    ;;               #(state/pub-event! [:mobile/keyboard-did-show]))
+    
     (.addListener App "appStateChange"
                   (fn [^js state]
                     (when-let [repo (state/get-current-repo)]
