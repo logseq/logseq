@@ -95,6 +95,7 @@
         "is-svg": "4.3.0",
         "jszip": "3.5.0",
         "mldoc": "1.2.7",
+        "remove-accents": "0.4.2",
         "path": "0.12.7",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",

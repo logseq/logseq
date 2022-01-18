@@ -5,6 +5,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["grapheme-splitter" :as GraphemeSplitter]
+            ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -1189,16 +1190,17 @@
   [s]
   (.normalize s "NFC"))
 
-(defn search-normalize
-  "Normalize string for searching (loose)"
-  [s]
-  (.normalize (string/lower-case s) "NFKD")
-)
+#?(:cljs
+   (defn search-normalize
+     "Normalize string for searching (loose)"
+     [s]
+     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn safe-search-normalize
+#?(:cljs
+   (defn safe-search-normalize
   [s]
   (if (string? s)
-    (.normalize (string/lower-case s) "NFKD") s))
+        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
 
 (defn page-name-sanity
   "Sanitize the page-name for file name (strict), for file writting"

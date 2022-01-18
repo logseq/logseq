@@ -129,13 +129,13 @@
            ;; TODO: add indexes for highlights
            (->> (map
                   (fn [{:keys [item]}]
-                    (:name item))
+                    (:original-name item))
                  result)
                 (remove nil?)
                 (map string/trim)
                 (distinct)
-                (filter (fn [name]
-                          (exact-matched? q name))))))))))
+                (filter (fn [original-name]
+                          (exact-matched? q original-name))))))))))
 
 (defn file-search
   ([q]

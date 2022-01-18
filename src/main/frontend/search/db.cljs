@@ -60,7 +60,8 @@
   (when-let [repo (state/get-current-repo)]
     (let [pages (->> (db/get-pages (state/get-current-repo))
                      (remove string/blank?)
-                     (map (fn [p] {:name p}))
+                     (map (fn [p] {:name (util/search-normalize p)
+                                   :original-name p}))
                      (bean/->js))
           indice (fuse. pages
                         (clj->js {:keys ["name"]
