@@ -1383,17 +1383,19 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-(defn batch [in max-time handler]
-  (async/go-loop [buf [] t (async/timeout max-time)]
+(defn batch [in max-time handler buf-atom]
+  (async/go-loop [buf buf-atom t (async/timeout max-time)]
     (let [[v p] (async/alts! [in t])]
       (cond
         (or (= p t) (nil? v))
         (let [timeout (async/timeout max-time)]
-          (handler buf)
-          (recur [] timeout))
+          (handler @buf)
+          (reset! buf [])
+          (recur buf timeout))
 
         :else
-        (recur (conj buf v) t)))))
+        (do (swap! buf conj v)
+          (recur buf t))))))
 
 #?(:cljs
    (defn trace!
@@ -1638,3 +1640,9 @@
        (if (and (not route?) (electron?))
          (js/window.apis.openExternal url)
          (set! (.-href js/window.location) url)))))
+
+(defn collapsed?
+  [block]
+  (or (:block/collapsed? block)
+      ;; for backward compatiblity
+      (get-in block [:properties :collapsed])))

@@ -1422,18 +1422,13 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *control-show? edit?]
+  [state config block uuid block-id children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
-                    (or has-children-blocks?
-                        (and (seq (:block/title block)) (seq body))))
-        control-show? (and
-                       (or (and (seq (:block/title block))
-                                (seq body))
-                           has-children-blocks?)
-                       (util/react *control-show?))
+                    has-children-blocks?)
+        control-show? (util/react *control-show?)
         ref? (:ref? config)
         block? (:block? config)
         empty-content? (block-content-empty? block)]
@@ -1864,7 +1859,7 @@
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
-        collapsed? (get properties :collapsed)
+        collapsed? (util/collapsed? block)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
         block-type (or (:ls-type properties) :default)
@@ -2121,9 +2116,12 @@
   (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
-  [e *control-show? block-id doc-mode?]
+  [uuid e *control-show? block-id doc-mode?]
   (util/stop e)
-  (reset! *control-show? true)
+  (when (or
+         (model/block-collapsed? uuid)
+         (editor-handler/collapsable? uuid))
+    (reset! *control-show? true))
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
@@ -2178,26 +2176,27 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
-             (when-not (some? (state/sub-collapsed (:block/uuid block)))
+             (when (and (not (some? (state/sub-collapsed (:block/uuid block))))
+                        (or (:ref? config) (:block? config)))
                (state/set-collapsed-block! (:block/uuid block)
                                            (editor-handler/block-default-collapsed? block config)))
-             (assoc state
-                    ::init-collapsed? (get-in block [:block/properties :collapsed])
-                    ::control-show? (atom false))))
+             (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/properties
-                                        :block/parent :block/left
-                                        :block/children :block/content
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
+                                        :block/properties
                                         :block/_refs]
-                          config-compare-keys [:show-cloze?]]
-                      (or
-                       (not= (select-keys (second (:rum/args old-state)) compare-keys)
-                             (select-keys (second (:rum/args new-state)) compare-keys))
-                       (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                             (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
-  [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
-        body (:block/body block)
+                          config-compare-keys [:show-cloze?]
+                          b1 (second (:rum/args old-state))
+                          b2 (second (:rum/args new-state))
+                          result (or
+                                  (not= (select-keys b1 compare-keys)
+                                        (select-keys b2 compare-keys))
+                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                      (boolean result)))}
+  [state config {:block/keys [uuid children pre-block? top? refs heading-level level type format content] :as block}]
+  (let [repo (state/get-current-repo)
+        block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
         ;; Each block might have multiple queries, but we store only the first query's result
@@ -2210,7 +2209,7 @@
         block? (boolean (:block? config))
         collapsed? (if (or ref? block?)
                      (state/sub-collapsed uuid)
-                     (:collapsed properties))
+                     (util/collapsed? block))
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2221,8 +2220,8 @@
         has-child? (boolean
                     (and
                      (not pre-block?)
-                     (or (and (coll? children) (seq children))
-                         (seq body))))
+                     (coll? children)
+                     (seq children)))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2269,11 +2268,11 @@
      [:div.flex.flex-row.pr-2
       {:class (if heading? "items-baseline" "")
        :on-mouse-over (fn [e]
-                        (block-mouse-over e *control-show? block-id doc-mode?))
+                        (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id children collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
@@ -2866,48 +2865,47 @@
 (def initial-blocks-length 200)
 (def step-loading-blocks 50)
 
-(defn- flat-blocks-tree
-  [vec-tree]
-  (->> (mapcat (fn [x] (tree-seq map? :block/children x)) vec-tree)
-       (map #(dissoc % :block/children))))
-
 (defn- get-segment
-  [_config flat-blocks idx blocks->vec-tree]
-  (let [new-idx (if-not (zero? idx)
-                  (+ idx step-loading-blocks)
-                  initial-blocks-length)
+  [flat-blocks idx blocks->vec-tree]
+  (let [new-idx (if (< idx initial-blocks-length)
+                  initial-blocks-length
+                  (+ idx step-loading-blocks))
         max-idx (count flat-blocks)
         idx (min max-idx new-idx)
         blocks (util/safe-subvec flat-blocks 0 idx)]
     [(blocks->vec-tree blocks)
      idx]))
 
-(rum/defcs lazy-blocks <
+(rum/defcs lazy-blocks < rum/reactive
   {:did-remount (fn [_old-state new-state]
                   ;; Loading more when pressing Enter or paste
-                  ;; FIXME: what if users paste too many blocks?
-                  ;; or, a template with a lot of blocks?
-                  (swap! (::last-idx new-state) + 100)
+                  (let [*last-idx (::last-idx new-state)
+                        new-idx (if (zero? *last-idx)
+                                  1
+                                  (inc @*last-idx))]
+                    (reset! *last-idx new-idx))
                   new-state)}
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
-        [segment idx] (get-segment config
-                                   flat-blocks
+        [segment idx] (get-segment flat-blocks
                                    @*last-idx
                                    blocks->vec-tree)
         bottom-reached (fn []
                          (reset! *last-idx idx)
                          (reset! ignore-scroll? false))
-        has-more? (>= (count flat-blocks) (inc idx))]
+        has-more? (and (>= (count flat-blocks) (inc idx))
+                       (not (and (:block? config)
+                                 (state/sub-collapsed (uuid (:id config))))))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
-       :threshold 1000
        :has-more has-more?
-       :more (if (:preview? config) "More" (ui/loading "Loading"))})]))
+       :more (if (or (:preview? config) (:sidebar? config))
+               "More"
+               (ui/loading "Loading"))})]))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
@@ -2923,12 +2921,7 @@
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
       (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
-            blocks-tree (blocks->vec-tree blocks)
-            blocks-tree (if (seq blocks-tree) blocks-tree blocks)
-            flat-blocks (if (custom-query-or-ref? config)
-                          blocks-tree
-                          (flat-blocks-tree blocks-tree))
-            flat-blocks (vec flat-blocks)]
+            flat-blocks (vec blocks)]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config flat-blocks blocks->vec-tree)]))))

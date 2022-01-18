@@ -85,7 +85,7 @@ test('create page and blocks', async ({ page }) => {
   await page.waitForTimeout(500)
   expect(await page.$$('.ls-block')).toHaveLength(5)
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(1000)
 
   const contentOnDisk = await fs.readFile(
     path.join(graphDir, `pages/${pageTitle}.md`),

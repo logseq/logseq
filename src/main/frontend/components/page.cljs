@@ -62,9 +62,13 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:did-mount  open-first-block!
+  {:init (fn [state]
+           (when-let [block-id (last (:rum/args state))]
+             (state/set-collapsed-block! block-id false))
+           state)
+   :did-mount  open-first-block!
    :did-update open-first-block!}
-  [page-name _page-blocks hiccup sidebar? _preview? _block-uuid]
+  [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
      (content/content page-name
@@ -111,7 +115,7 @@
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
-  [repo page-e {:keys [sidebar? preview?] :as config}]
+  [repo page-e {:keys [sidebar?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -131,7 +135,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? preview? block-id)
+           (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}

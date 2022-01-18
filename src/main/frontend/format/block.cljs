@@ -603,6 +603,9 @@
 
                                 (seq (:properties-order properties))
                                 (assoc :properties-order (:properties-order properties)))
+                        block (if (get-in block [:properties :collapsed])
+                                (assoc block :collapsed? true)
+                                block)
                         block (-> block
                                   (assoc-in [:meta :start-pos] start_pos)
                                   (assoc-in [:meta :end-pos] last-pos)

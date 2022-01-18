@@ -7,37 +7,21 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.debug :as debug]
-            [frontend.format.block :as block]))
+            [frontend.debug :as debug]))
 
 (defn- indented-block-content
   [content spaces-tabs]
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- allowed-block-as-title?
-  "Allowed to be in the first line of a block (a.k.a block title)"
-  [title body properties]
-  (and (not (seq title))
-       (or
-        (seq properties)
-        (contains?
-         #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example" "Horizontal_Rule"}
-         (ffirst body)))))
-
 (defn transform-content
-  [{:block/keys [uuid format properties pre-block? unordered content heading-level left page parent]}
-   level
-   {:keys [heading-to-list?]}]
-  (let [{:block/keys [title body]} (block/parse-title-and-body uuid format pre-block? content)
-        content (or content "")
-        heading-with-title? (seq title)
-        allowed-block-as-title? (allowed-block-as-title? title body properties)
+  [{:block/keys [format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
+  (let [content (or content "")
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
         markdown? (= format :markdown)
         content (cond
-                  (and first-block? pre-block?)
+                  pre-block?
                   (let [content (string/trim content)]
                     (str content "\n"))
 
@@ -71,18 +55,10 @@
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
-                        sep (cond
-                              markdown-top-heading?
+                        sep (if (or markdown-top-heading?
+                                    (string/blank? new-content))
                               ""
-
-                              (or heading-with-title? allowed-block-as-title?)
-                              " "
-
-                              (string/blank? new-content)
-                              ""
-
-                              :else
-                              (str "\n" spaces-tabs))]
+                              " ")]
                     (str prefix sep new-content)))]
     content))
 
@@ -92,16 +68,19 @@
   (loop [block-contents []
          [f & r] tree
          level init-level]
-    (if (nil? f)
-      (string/join "\n" block-contents)
-      (let [page? (nil? (:block/page f))
-            content (if page? nil (transform-content f level opts))
-            new-content
-            (->> (if-let [children (seq (:block/children f))]
-                   [content (tree->file-content children {:init-level (inc level)})]
-                   [content])
-                 (remove nil?))]
-        (recur (into block-contents new-content) r level)))))
+    (let [f (if (:block/collapsed? f)
+              (assoc-in f [:block/properties :collapsed] true)
+              f)]
+      (if (nil? f)
+        (string/join "\n" block-contents)
+        (let [page? (nil? (:block/page f))
+              content (if page? nil (transform-content f level opts))
+              new-content
+              (->> (if-let [children (seq (:block/children f))]
+                     [content (tree->file-content children {:init-level (inc level)})]
+                     [content])
+                   (remove nil?))]
+          (recur (into block-contents new-content) r level))))))
 
 (def init-level 1)
 

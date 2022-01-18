@@ -229,13 +229,8 @@
                   sorted-children)))))))))
 
 (defn set-block-collapsed! [txs-state id collapsed?]
-  (let [e (db/entity id)
-        properties (:block/properties e)
-        properties (if collapsed?
-                     (assoc properties :collapsed true)
-                     (dissoc properties :collapsed))]
-    (swap! txs-state concat [{:db/id id
-                              :block/properties properties}])))
+  (swap! txs-state concat [{:db/id id
+                            :block/collapsed? collapsed?}]))
 
 (defn save-node
   ([node]

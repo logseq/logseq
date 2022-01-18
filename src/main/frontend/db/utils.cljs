@@ -54,12 +54,6 @@
   (util/parse-int
    (string/replace (date/ymd date) "/" "")))
 
-(defn with-repo
-  [repo blocks]
-  (map (fn [block]
-         (assoc block :block/repo repo))
-       blocks))
-
 (defn entity
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))

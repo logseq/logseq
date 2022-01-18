@@ -8,9 +8,14 @@ let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
 
-// NOTE: Will test against a newly opened graph
-const repoName = 'Test' + randomString(6)
-export const graphDir = path.resolve(__dirname, '../tmp/e2e-graph', repoName)
+let repoName = randomString(10)
+let testTmpDir = path.resolve(__dirname, '../tmp')
+
+if (fs.existsSync(testTmpDir)) {
+    fs.rmdirSync(testTmpDir, { recursive: true })
+}
+
+export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
