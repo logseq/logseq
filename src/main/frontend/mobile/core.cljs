@@ -3,6 +3,7 @@
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            #_:clj-kondo/ignore
             ["@capacitor/status-bar" :refer [^js StatusBar]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
