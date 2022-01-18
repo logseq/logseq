@@ -11,7 +11,7 @@ import {
   getSDKPathRoot,
   PROTOCOL_FILE, URL_LSP,
   safetyPathJoin,
-  path, safetyPathNormalize
+  path, safetyPathNormalize, mergeSettingsWithSchema
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -90,8 +90,14 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
     return this._settings
   }
 
-  setSchema (schema: Array<SettingSchemaDesc>) {
+  setSchema (schema: Array<SettingSchemaDesc>, syncSettings?: boolean) {
     this._schema = schema
+
+    if (syncSettings) {
+      const _settings = this._settings
+      this._settings = mergeSettingsWithSchema(_settings, schema)
+      this.emit('change', this._settings, _settings)
+    }
   }
 
   reset () {
@@ -193,9 +199,9 @@ enum PluginLocalLoadStatus {
 function initUserSettingsHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `settings:${label}`
 
-  pluginLocal.on(_('schema'), (schema: Array<SettingSchemaDesc>) => {
+  pluginLocal.on(_('schema'), ({ schema, isSync }: { schema: Array<SettingSchemaDesc>, isSync?: boolean }) => {
     pluginLocal.settingsSchema = schema
-    pluginLocal.settings?.setSchema(schema)
+    pluginLocal.settings?.setSchema(schema, isSync)
   })
 
   pluginLocal.on(_('update'), (attrs) => {

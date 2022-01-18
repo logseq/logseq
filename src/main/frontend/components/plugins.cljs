@@ -10,6 +10,7 @@
             [frontend.mixins :as mixins]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
+            [frontend.components.plugins-settings :as plugins-settings]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.page :as page-handler]
@@ -156,7 +157,7 @@
       understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
-  [{:keys [id name title settings version url description author icon usf iir repo sponsors] :as item}
+  [t {:keys [id name title settings version url description author icon usf iir repo sponsors] :as item}
    market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
@@ -164,136 +165,134 @@
         name (or title name "Untitled")
         unpacked? (not iir)
         new-version (state/coming-update-new-version? coming-update)]
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div.cp__plugins-item-card
+     {:key   (str "lsp-card-" id)
+      :class (util/classnames
+               [{:market          market?
+                 :installed       installed?
+                 :updating        installing-or-updating?
+                 :has-new-version new-version}])}
 
-      [:div.cp__plugins-item-card
-       {:class (util/classnames
-                 [{:market          market?
-                   :installed       installed?
-                   :updating        installing-or-updating?
-                   :has-new-version new-version}])}
+     [:div.l.link-block
+      {:on-click #(plugin-handler/open-readme!
+                    url item (if repo remote-readme-display local-markdown-display))}
+      (if (and icon (not (string/blank? icon)))
+        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
+        svg/folder)
 
-       [:div.l.link-block
-        {:on-click #(plugin-handler/open-readme!
-                      url item (if repo remote-readme-display local-markdown-display))}
-        (if (and icon (not (string/blank? icon)))
-          [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-          svg/folder)
+      (when (and (not market?) unpacked?)
+        [:span.flex.justify-center.text-xs.text-red-500.pt-2 (t :plugin/unpacked)])]
 
-        (when (and (not market?) unpacked?)
-          [:span.flex.justify-center.text-xs.text-red-500.pt-2 (t :plugin/unpacked)])]
+     [:div.r
+      [:h3.head.text-xl.font-bold.pt-1.5
 
-       [:div.r
-        [:h3.head.text-xl.font-bold.pt-1.5
+       [:span name]
+       (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
-         [:span name]
-         (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+      [:div.desc.text-xs.opacity-70
+       [:p description]
+       ;;[:small (js/JSON.stringify (bean/->js settings))]
+       ]
 
-        [:div.desc.text-xs.opacity-70
-         [:p description]
-         ;;[:small (js/JSON.stringify (bean/->js settings))]
-         ]
+      ;; Author & Identity
+      [:div.flag
+       [:p.text-xs.pr-2.flex.justify-between
+        [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+                              (reset! *search-key (str "@" author))
+                              (.select el))} author]
+        [:small {:on-click #(do
+                              (notification/show! "Copied!" :success)
+                              (util/copy-to-clipboard! id))}
+         (str "ID: " id)]]]
 
-        ;; Author & Identity
-        [:div.flag
-         [:p.text-xs.pr-2.flex.justify-between
-          [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
-                                (reset! *search-key (str "@" author))
-                                (.select el))} author]
-          [:small {:on-click #(do
-                                (notification/show! "Copied!" :success)
-                                (util/copy-to-clipboard! id))}
-           (str "ID: " id)]]]
+      ;; Github repo
+      [:div.flag.is-top.opacity-50
+       (when repo
+         [:a.flex {:target "_blank"
+                   :href   (plugin-handler/gh-repo-url repo)}
+          (svg/github {:width 16 :height 16})])]
 
-        ;; Github repo
-        [:div.flag.is-top.opacity-50
-         (when repo
-           [:a.flex {:target "_blank"
-                     :href   (plugin-handler/gh-repo-url repo)}
-            (svg/github {:width 16 :height 16})])]
+      (if market?
+        ;; market ctls
+        [:div.ctl
+         [:ul.l.flex.items-center
+          ;; stars
+          [:li.flex.text-sm.items-center.pr-3
+           (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
 
-        (if market?
-          ;; market ctls
-          [:div.ctl
-           [:ul.l.flex.items-center
-            ;; stars
-            [:li.flex.text-sm.items-center.pr-3
-             (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
+          ;; downloads
+          (when-let [downloads (and stat (:total_downloads stat))]
+            (when (and downloads (> downloads 0))
+              [:li.flex.text-sm.items-center.pr-3
+               (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
-            ;; downloads
-            (when-let [downloads (and stat (:total_downloads stat))]
-              (when (and downloads (> downloads 0))
-                [:li.flex.text-sm.items-center.pr-3
-                 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+         [:div.r.flex.items-center
 
-           [:div.r.flex.items-center
+          [:a.btn
+           {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
+                                         :installing installing-or-updating?}])
+            :on-click #(plugin-handler/install-marketplace-plugin item)}
+           (if installed?
+             (t :plugin/installed)
+             (if installing-or-updating?
+               [:span.flex.items-center [:small svg/loading]
+                (t :plugin/installing)]
+               (t :plugin/install)))]]]
 
-            [:a.btn
-             {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
-                                           :installing installing-or-updating?}])
-              :on-click #(plugin-handler/install-marketplace-plugin item)}
-             (if installed?
-               (t :plugin/installed)
-               (if installing-or-updating?
-                 [:span.flex.items-center [:small svg/loading]
-                  (t :plugin/installing)]
-                 (t :plugin/install)))]]]
+        ;; installed ctls
+        [:div.ctl
+         [:div.l
+          [:div.de
+           [:strong (ui/icon "settings")]
+           [:ul.menu-list
+            [:li {:on-click #(when usf (js/apis.openPath usf))} (t :plugin/open-settings)]
+            [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+            [:li {:on-click
+                  #(let [confirm-fn
+                         (ui/make-confirm-modal
+                           {:title      (t :plugin/delete-alert name)
+                            :on-confirm (fn [_ {:keys [close-fn]}]
+                                          (close-fn)
+                                          (plugin-handler/unregister-plugin id))})]
+                     (state/set-sub-modal! confirm-fn {:center? true}))}
+             (t :plugin/uninstall)]]]
 
-          ;; installed ctls
-          [:div.ctl
-           [:div.l
-            [:div.de
-             [:strong (ui/icon "settings")]
+          (when (seq sponsors)
+            [:div.de.sponsors
+             [:strong (ui/icon "coffee")]
              [:ul.menu-list
-              [:li {:on-click #(when usf (js/apis.openPath usf))} (t :plugin/open-settings)]
-              [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
-              [:li {:on-click
-                    #(let [confirm-fn
-                           (ui/make-confirm-modal
-                             {:title      (t :plugin/delete-alert name)
-                              :on-confirm (fn [_ {:keys [close-fn]}]
-                                            (close-fn)
-                                            (plugin-handler/unregister-plugin id))})]
-                       (state/set-sub-modal! confirm-fn {:center? true}))}
-               (t :plugin/uninstall)]]]
+              (for [link sponsors]
+                [:li [:a {:href link :target "_blank"}
+                      [:span.flex.items-center link (ui/icon "external-link")]]])]])
+          ]
 
-            (when (seq sponsors)
-              [:div.de.sponsors
-               [:strong (ui/icon "coffee")]
-               [:ul.menu-list
-                (for [link sponsors]
-                  [:li [:a {:href link :target "_blank"}
-                        [:span.flex.items-center link (ui/icon "external-link")]]])]])
-            ]
+         [:div.r.flex.items-center
+          (when (and unpacked? (not disabled))
+            [:a.btn
+             {:on-click #(js-invoke js/LSPluginCore "reload" id)}
+             (t :plugin/reload)])
 
-           [:div.r.flex.items-center
-            (when (and unpacked? (not disabled))
-              [:a.btn
-               {:on-click #(js-invoke js/LSPluginCore "reload" id)}
-               (t :plugin/reload)])
+          (when (not unpacked?)
+            [:div.updates-actions
+             [:a.btn
+              {:class    (util/classnames [{:disabled installing-or-updating?}])
+               :on-click #(when-not has-other-pending?
+                            (plugin-handler/check-or-update-marketplace-plugin
+                              (assoc item :only-check (not new-version))
+                              (fn [e] (notification/show! e :error))))}
 
-            (when (not unpacked?)
-              [:div.updates-actions
-               [:a.btn
-                {:class    (util/classnames [{:disabled installing-or-updating?}])
-                 :on-click #(when-not has-other-pending?
-                              (plugin-handler/check-or-update-marketplace-plugin
-                                (assoc item :only-check (not new-version))
-                                (fn [e] (notification/show! e :error))))}
+              (if installing-or-updating?
+                (t :plugin/updating)
+                (if new-version
+                  (str (t :plugin/update) " 👉 " new-version)
+                  (t :plugin/check-update))
+                )]])
 
-                (if installing-or-updating?
-                  (t :plugin/updating)
-                  (if new-version
-                    (str (t :plugin/update) " 👉 " new-version)
-                    (t :plugin/check-update))
-                  )]])
-
-            (ui/toggle (not disabled)
-                       (fn []
-                         (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
-                         (page-handler/init-commands!))
-                       true)]])]])))
+          (ui/toggle (not disabled)
+            (fn []
+              (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
+              (page-handler/init-commands!))
+            true)]])]]))
 
 (rum/defc panel-control-tabs
   < rum/static
@@ -518,7 +517,7 @@
              (rum/with-key
                (let [pid (keyword (:id item))
                      stat (:stat item)]
-                 (plugin-item-card
+                 (plugin-item-card t
                    item true *search-key installing
                    (and installing (= (keyword (:id installing)) pid))
                    (contains? installed-plugins pid) stat nil))
@@ -587,10 +586,11 @@
         (for [item sorted-plugins]
           (rum/with-key
             (let [pid (keyword (:id item))]
-              (plugin-item-card
+              (plugin-item-card t
                 item false *search-key updating
                 (and updating (= (keyword (:id updating)) pid))
-                true nil (get coming-updates pid))) (:id item)))]])))
+                true nil (get coming-updates pid)))
+            (:id item)))]])))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -751,7 +751,9 @@
 
   (when-let [focused (state/sub :plugin/focused-settings)]
     (when-let [^js pl (plugin-handler/get-plugin-inst focused)]
-      [:pre.p-2 (js/JSON.stringify (.-settingsSchema pl) nil 2)])))
+      [:div.ui__plugin-settings
+       (plugins-settings/settings-container
+         (bean/->clj (.-settingsSchema pl)) pl)])))
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]

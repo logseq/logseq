@@ -446,6 +446,13 @@
       }
     }
   }
+
+  &-settings {
+
+    &-inner {
+      max-height: 50vh;
+    }
+  }
 }
 
 .cp__themes {

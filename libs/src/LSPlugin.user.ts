@@ -299,7 +299,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
           baseInfo.settings, this._settingsSchema
         )
 
-        // TODO: update host schema
+        // TODO: sync host settings schema
         await this.useSettingsSchema(this._settingsSchema)
       }
 
@@ -346,7 +346,9 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
   useSettingsSchema (schema: Array<SettingSchemaDesc>) {
     if (this.connected) {
-      this.caller.call('settings:schema', schema)
+      this.caller.call('settings:schema', {
+        schema, isSync: true
+      })
     }
 
     this._settingsSchema = schema
