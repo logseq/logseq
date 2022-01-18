@@ -3,13 +3,15 @@
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            ["@capacitor/status-bar" :refer [^js StatusBar]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.components.repo :as repo]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 (defn init!
   []
@@ -51,4 +53,8 @@
                         (if is-active?
                           (p/do! (nfs-handler/refresh! repo repo/refresh-cb)
                                  (notification/show! "Notes updated!" :success true))
-                          (editor-handler/save-current-block!))))))))
+                          (editor-handler/save-current-block!)))))))
+
+  (when (mobile-util/is-native-platform?)
+    (.addEventListener js/window "statusTap"
+                       #(util/scroll-to-top true))))
