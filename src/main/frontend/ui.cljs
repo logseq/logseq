@@ -739,10 +739,55 @@
    (for [{:keys [label value selected]} options]
      [:option (cond->
                {:key   label
-                :value (or value label)}
+                :default-value (or value label)}
                 selected
                 (assoc :selected selected))
       label])])
+
+(rum/defc radio-list
+  [options on-change class]
+
+  [:div.ui__radio-list
+   {:class class}
+   (for [{:keys [label value selected]} options]
+     [:label
+      {:key (str "radio-list-" label)}
+      [:input.form-radio
+       {:value value
+        :type "radio"
+        :on-change #(on-change (util/evalue %))
+        :checked selected}]
+      label])])
+
+(rum/defc checkbox-list
+  [options on-change class]
+
+  (let [checked-vals
+        (->> options (filter :selected) (map :value) (into #{}))
+
+        on-item-change
+        (fn [^js e]
+          (let [^js target (.-target e)
+                checked? (.-checked target)
+                value (.-value target)]
+
+            (on-change
+              (into []
+                (if checked?
+                  (conj checked-vals value)
+                  (disj checked-vals value))))))]
+
+    [:div.ui__checkbox-list
+     {:class class}
+     (for [{:keys [label value selected]} options]
+       [:label
+        {:key (str "check-list-" label)}
+        [:input.form-checkbox
+         {:value value
+          :type  "checkbox"
+          :on-change on-item-change
+          :checked selected}]
+        label])]))
 
 (rum/defcs tippy < rum/static
   (rum/local false ::mounted?)

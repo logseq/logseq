@@ -751,7 +751,7 @@
 
   (when-let [focused (state/sub :plugin/focused-settings)]
     (when-let [^js pl (plugin-handler/get-plugin-inst focused)]
-      [:div.ui__plugin-settings
+      [:div.cp__plugins-settings
        (plugins-settings/settings-container
          (bean/->clj (.-settingsSchema pl)) pl)])))
 

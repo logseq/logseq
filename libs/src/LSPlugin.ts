@@ -192,7 +192,7 @@ export type SettingSchemaDesc = {
   title: string
   description: string // support markdown
   enumChoices?: Array<string>
-  enumPicker?: 'select' | 'radio' | 'checkbox' | 'input' // default: select
+  enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
 }
 
 export type ExternalCommandType =
