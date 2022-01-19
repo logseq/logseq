@@ -15,7 +15,8 @@
   [db]
   (when db
     (let [collapsed-blocks (get-collapsed-blocks db)]
-      (when (seq collapsed-blocks)
+      (if (seq collapsed-blocks)
         (let [tx-data (map (fn [id] {:db/id id
                                      :block/collapsed? true}) collapsed-blocks)]
-          (d/db-with db tx-data))))))
+          (d/db-with db tx-data))
+        db))))

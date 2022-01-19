@@ -166,13 +166,17 @@
                  _ (swap! conns assoc db-name db-conn)
                  stored (db-persist/get-serialized-graph db-name)
                  _ (if stored
-                     (let [stored-db (string->db stored)
+                     (let [stored-db (try (string->db stored)
+                                          (catch js/Error _e
+                                            (js/console.warn "Invalid graph cache")
+                                            (d/empty-db db-schema/schema)))
                            attached-db (d/db-with stored-db (concat
                                                              [(me-tx stored-db me)]
                                                              default-db/built-in-pages))
                            db (if (old-schema? attached-db)
                                 (db-migrate/migrate attached-db)
                                 attached-db)]
+                       (prn {:db db})
                        (conn/reset-conn! db-conn db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]

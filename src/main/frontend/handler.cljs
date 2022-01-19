@@ -39,7 +39,7 @@
   (set! js/window.onerror
         (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
-            (js/console.error error)
+            (log/error :exception error)
             ;; (notification/show!
             ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
             ;;  :error
@@ -132,7 +132,7 @@
                             (watch-for-date!)
                             (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
-                                    (log/error :db/restore-failed error))))))
+                                    (log/error :exception error))))))
         interval-id (js/setInterval inner-fn 50)]
     ;; clear this interval
     (reset! interval interval-id)))
