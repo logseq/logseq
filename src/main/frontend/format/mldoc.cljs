@@ -154,7 +154,7 @@
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [_k v] (seq v)) properties)]
+          properties (medley/remove-kv (fn [_k v] (or (nil? v) (and (coll? v) (empty? v)))) properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
