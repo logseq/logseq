@@ -29,21 +29,22 @@
 
   If you only need character position, use `pos` instead. Do NOT call this."
   [input]
-  (let [pos (util/get-selection-start input)
-        rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
-    (try
-      (-> (gdom/getElement "mock-text")
-          gdom/getChildren
-          array-seq
-          (util/nth-safe pos)
-          mock-char-pos
-          (assoc :rect rect))
-      (catch :default _e
-        (js/console.log "index error" _e)
-        {:pos pos
-         :rect rect
-         :left js/Number.MAX_SAFE_INTEGER
-         :top js/Number.MAX_SAFE_INTEGER}))))
+  (when input
+    (let [pos (util/get-selection-start input)
+          rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
+      (try
+        (some-> (gdom/getElement "mock-text")
+                gdom/getChildren
+                array-seq
+                (util/nth-safe pos)
+                mock-char-pos
+                (assoc :rect rect))
+        (catch :default _e
+          (js/console.log "index error" _e)
+          {:pos pos
+           :rect rect
+           :left js/Number.MAX_SAFE_INTEGER
+           :top js/Number.MAX_SAFE_INTEGER})))))
 
 
 (defn pos [input]
