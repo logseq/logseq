@@ -100,7 +100,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn exact-matched?
-  "Check if two strings points toward same file"
+  "Check if two strings points toward same search result"
   [q match]
   (when (and (string? q) (string? match))
     (boolean
