@@ -71,6 +71,12 @@
          :closure-defines {frontend.util/NODETEST true}
          :devtools        {:enabled false}}
 
+  :test-auto {:target          :node-test
+              :output-to       "static/tests.js"
+              :closure-defines {frontend.util/NODETEST true}
+              :devtools        {:enabled false}
+              :autorun true}
+
   :publishing {:target        :browser
                :module-loader true
                :js-options    {:ignore-asset-requires true}
