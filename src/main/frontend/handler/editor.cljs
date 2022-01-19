@@ -1342,8 +1342,8 @@
         :else
         (subs match 2 (- (count match) 2))))))
 
-(defn- get-nearest-page-or-link
-  "Return the nearest page-name (not dereferenced, may be an alias), block, tag or link"
+(defn- get-nearest-page-or-url
+  "Return the nearest page-name (not dereferenced, may be an alias), block, tag or url"
   []
   (when-let [block (state/get-edit-block)]
     (when (:block/uuid block)
@@ -1366,7 +1366,7 @@
 
 (defn follow-link-under-cursor!
   []
-  (when-let [page (get-nearest-page-or-link)]
+  (when-let [page (get-nearest-page-or-url)]
     (when-not (string/blank? page)
       (if (re-find url-regex page)
         (js/window.open page)
