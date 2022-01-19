@@ -448,8 +448,80 @@
   }
 
   &-settings {
+    margin: -15px;
+
     &-inner {
+      padding: 10px 0;
       max-height: 60vh;
+
+      .desc-item {
+        padding: 12px;
+        padding-bottom: 6px;
+
+        > h2 {
+          padding-bottom: 2px;
+          font-weight: 600;
+          font-size: 13px;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+
+          code {
+            margin-right: 4px;
+            line-height: 1.2;
+          }
+        }
+
+        > .form-control {
+          display: flex;
+          align-items: center;
+          padding: 5px 2px;
+
+          > small {
+            user-select: none;
+          }
+        }
+
+        &.as-toggle {
+        }
+
+        &.as-input, &.as-enum {
+          > .form-control {
+            flex-direction: column;
+
+            > small {
+              padding-bottom: 4px;
+              width: 100%;
+            }
+          }
+        }
+
+        &.as-enum {
+          > .form-control {
+            > .wrap {
+              flex-direction: column;
+              width: 100%;
+            }
+          }
+        }
+
+        &:hover {
+          background: var(--ls-tertiary-background-color);
+        }
+
+        .ui__radio-list, .ui__checkbox-list {
+          display: flex;
+          align-items: center;
+
+          label {
+            padding-right: 15px;
+          }
+
+          input {
+            margin-right: 4px;
+          }
+        }
+      }
     }
   }
 }

@@ -9,10 +9,10 @@
   [val {:keys [key type title default description]} update-setting!]
 
   [:div.desc-item.as-input
-   [:h2.font-bold.text-md title]
+   [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:label.form-control
-    [:small.pl-1 description]
+    [:small.pl-1.flex-1 description]
 
     [:input.form-input
      {:type      (name type)
@@ -24,13 +24,12 @@
 
   (let [val (if (boolean? val) val (boolean default))]
     [:div.desc-item.as-toggle
-     [:h2.font-bold.text-md (str "#" key ":" title)]
+     [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
-     [:div.form-control
-      [:label
-       (ui/checkbox {:checked   val
-                     :on-change #(update-setting! key (not val))})
-       [:small.pl-1 description]]]]))
+     [:label.form-control
+      (ui/checkbox {:checked   val
+                    :on-change #(update-setting! key (not val))})
+      [:small.pl-1.flex-1 description]]]))
 
 (rum/defc render-item-enum
   [val {:keys [key title description default enumChoices enumPicker]} update-setting!]
@@ -41,10 +40,10 @@
                               :selected (contains? vals v)}) enumChoices)
         picker  (keyword enumPicker)]
     [:div.desc-item.as-enum
-     [:h2.font-bold.text-md (str "#" key ":" title)]
+     [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
      [:div.form-control
-      [(if (contains? #{:radio :checkbox} picker) :div :label)
+      [(if (contains? #{:radio :checkbox} picker) :div.wrap :label.wrap)
        [:small.pl-1 description]
 
        (case picker
@@ -72,11 +71,9 @@
     (if (seq schema)
       [:div.cp__plugins-settings-inner
 
-       [:h2.font-bold.text-2xl (str "⚙️ " (.. pl -options -name))]
+       [:h2.font-bold.text-2xl.pb-4 (str "⚙️ " (.. pl -options -name))]
 
-       [:hr]
-
-       ;; setting items
+       ;; render items
        (for [desc schema
              :let [key  (:key desc)
                    val  (get settings (keyword key))
@@ -87,9 +84,9 @@
            #{:boolean} (render-item-toggle val desc update-setting!)
            #{:enum} (render-item-enum val desc update-setting!)
 
-           [:p (str "Not Handled #" key)]))
+           [:p (str "#Not Handled#" key)]))
 
-       [:hr]
+       ;;[:hr]
        ;;[:pre.p-2 (js/JSON.stringify (bean/->js schema) nil 2)]
        ;;[:pre.p-2 (js/JSON.stringify _settings nil 2)]
        ]
