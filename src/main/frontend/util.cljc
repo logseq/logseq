@@ -363,9 +363,19 @@
                  (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
                  (gobj/get pre-caret-text-range "text")))))))))
 
+(defn get-selection-start
+  [input]
+  (when input
+    (.-selectionStart input)))
+
+(defn get-selection-end
+  [input]
+  (when input
+    (.-selectionEnd input)))
+
 (defn get-first-or-last-line-pos
   [input]
-  (let [pos (.-selectionStart input)
+  (let [pos (get-selection-start input)
         value (.-value input)
         last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
     (- pos last-newline-pos 1)))
@@ -670,12 +680,14 @@
    (defn safe-set-range-text!
      ([input text start end]
       (try
-        (.setRangeText input text start end)
+        (when (and start end)
+          (.setRangeText input text start end))
         (catch js/Error _e
           nil)))
      ([input text start end select-mode]
       (try
-        (.setRangeText input text start end select-mode)
+        (when (and start end)
+          (.setRangeText input text start end select-mode))
         (catch js/Error _e
           nil)))))
 
@@ -715,7 +727,7 @@
    (defn kill-line-before!
      [input]
      (let [val (.-value input)
-           end (.-selectionStart input)
+           end (get-selection-start input)
            n-pos (string/last-index-of val \newline (dec end))
            start (if n-pos (inc n-pos) 0)]
        (safe-set-range-text! input "" start end))))
@@ -724,7 +736,7 @@
    (defn kill-line-after!
      [input]
      (let [val   (.-value input)
-           start (.-selectionStart input)
+           start (get-selection-start input)
            end   (or (string/index-of val \newline start)
                      (count val))]
        (safe-set-range-text! input "" start end))))
@@ -732,8 +744,8 @@
 #?(:cljs
    (defn insert-at-current-position!
      [input text]
-     (let [start (.-selectionStart input)
-           end   (.-selectionEnd input)]
+     (let [start (get-selection-start input)
+           end   (get-selection-end input)]
        (safe-set-range-text! input text start end "end"))))
 
 ;; copied from re_com
@@ -868,8 +880,8 @@
 #?(:cljs
    (defn input-selected?
      [input]
-     (not= (.-selectionStart input)
-           (.-selectionEnd input))))
+     (not= (get-selection-start input)
+           (get-selection-end input))))
 
 #?(:cljs
    (defn get-selected-text
@@ -1417,7 +1429,7 @@
    (defn backward-kill-word
      [input]
      (let [val     (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            prev    (or
                     (->> [(string/last-index-of val \space (dec current))
                           (string/last-index-of val \newline (dec current))]
@@ -1438,7 +1450,7 @@
    (defn forward-kill-word
      [input]
      (let [val   (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            current (loop [idx current]
                      (if (#{\space \newline} (nth-safe val idx))
                        (recur (inc idx))
