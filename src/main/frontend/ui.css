@@ -104,7 +104,7 @@
     background: var(--ls-secondary-background-color);
 
     .panel-content {
-      overflow-y: auto;
+      overflow: overlay;
       width: 94vw;
       max-height: 85vh;
       padding: 2rem;
