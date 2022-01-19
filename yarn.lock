@@ -500,6 +500,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/splash-screen/-/splash-screen-1.1.3.tgz#024bc91b2b521b9f1d5e86f16a114f294bf326fa"
   integrity sha512-DJh1w9872UofZWAxPLgd5yWi09W0IoWPVBdVd8Ku1mrPfFvtcMeguZHGLEIo+A6DkdCTWzMrh26TLCIympws2g==
 
+"@capacitor/status-bar@1.0.6":
+  version "1.0.6"
+  resolved "https://registry.npmmirror.com/@capacitor/status-bar/download/@capacitor/status-bar-1.0.6.tgz?cache=0&sync_timestamp=1635951607471&other_urls=https%3A%2F%2Fregistry.npmmirror.com%2F%40capacitor%2Fstatus-bar%2Fdownload%2F%40capacitor%2Fstatus-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
+  integrity sha1-1YyQh8/Hxzd+gAm+qGFS5P3Sk54=
+
 "@electron/get@^1.13.0":
   version "1.13.1"
   resolved "https://registry.yarnpkg.com/@electron/get/-/get-1.13.1.tgz#42a0aa62fd1189638bd966e23effaebb16108368"
