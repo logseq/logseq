@@ -1176,7 +1176,7 @@
   [s]
   (.normalize s "NFC"))
 (defn path-normalize
-  "Normalize file path (for reading, not writting)"
+  "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
   (.normalize s "NFC"))
 

@@ -117,7 +117,7 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; TODO: merge with frontend.search.exact-matched?
+                              (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
                               (empty? matched-pages)
