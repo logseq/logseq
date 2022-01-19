@@ -176,7 +176,6 @@
                            db (if (old-schema? attached-db)
                                 (db-migrate/migrate attached-db)
                                 attached-db)]
-                       (prn {:db db})
                        (conn/reset-conn! db-conn db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
