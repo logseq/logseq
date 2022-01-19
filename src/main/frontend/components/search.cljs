@@ -68,15 +68,19 @@
    content])
 
 (rum/defc block-search-result-item
-  [repo uuid _format content q search-mode]
-  [:div [(when (not= search-mode :page)
-           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
-                                                                      :block? true
-                                                                      :search? true}
-                                                                     repo
-                                                                     (clojure.core/uuid uuid)
-                                                                     {:indent? false})])
-         [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
+  [repo uuid format content q search-mode]
+  (let [content (search-handler/sanity-search-content format content)]
+    [:div
+     (when (not= search-mode :page)
+       [:div {:class "mb-1" :key "parents"}
+        (block/block-parents {:id "block-search-block-parent"
+                              :block? true
+                              :search? true}
+                             repo
+                             (clojure.core/uuid uuid)
+                             {:indent? false})])
+     [:div {:class "font-medium" :key "content"}
+      (highlight-exact-query content q)]]))
 
 (defonce search-timeout (atom nil))
 
@@ -207,7 +211,7 @@
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)
                                                         block (model/query-block-by-uuid uuid)
-                                                        content (search-db/block->content block)]
+                                                        content (:block/content block)]
                                                     [:span {:data-block-ref uuid}
                                                       (search-result-item "Block"
                                                         (block-search-result-item repo uuid format content search-q search-mode))])
