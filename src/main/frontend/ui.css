@@ -136,6 +136,16 @@
       transform: translateY(-60%);
     }
   }
+
+  &[label="diff__cp"] {
+      .panel-content {
+          padding: 2rem 1rem;
+
+          @screen sm {
+              padding: 2rem;
+          }
+      }
+  }
 }
 
 html.is-native-andorid,
