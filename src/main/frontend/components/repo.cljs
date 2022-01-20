@@ -15,6 +15,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -22,6 +23,7 @@
             [frontend.fs :as fs]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
+            [frontend.modules.outliner.file :as outliner-file]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]
@@ -38,6 +40,14 @@
     (route-handler/redirect-to-home!))
   (when-let [dir-name (config/get-repo-dir url)]
     (fs/watch-dir! dir-name)))
+
+(defn- switch-repo-if-writes-finished?
+  [url]
+  (if (outliner-file/writes-finished?)
+    (open-repo-url url)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
 
 (rum/defc add-repo
   [args]
@@ -82,7 +92,7 @@
                  (let [local-dir (config/get-local-dir url)
                        graph-name (text/get-graph-name-from-path local-dir)]
                    [:a {:title local-dir
-                        :on-click #(open-repo-url url)}
+                        :on-click #(switch-repo-if-writes-finished? url)}
                     graph-name])
                  [:a {:target "_blank"
                       :href url}
@@ -226,7 +236,7 @@
                               {:title short-repo-name
                                :hover-detail repo-path ;; show full path on hover
                                :options {:class "ml-1"
-                                         :on-click #(open-repo-url url)}}))
+                                         :on-click #(switch-repo-if-writes-finished? url)}}))
                           switch-repos)
               links (->>
                      (concat repo-links

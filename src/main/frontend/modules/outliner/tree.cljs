@@ -1,6 +1,8 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.string :as string]
+            [frontend.state :as state]))
 
 (defprotocol INode
   (-get-id [this])
@@ -41,25 +43,27 @@
     (block-children root 1)))
 
 (defn- get-root-and-page
-  [page-name-or-block-id]
-  (if (string? page-name-or-block-id)
-    (if (util/uuid-string? page-name-or-block-id)
-      [false (db/entity [:block/uuid (uuid page-name-or-block-id)])]
-      [true (db/entity [:block/name (util/page-name-sanity-lc page-name-or-block-id)])])
-    [false page-name-or-block-id]))
+  [repo root-id]
+  (if (string? root-id)
+    (if (util/uuid-string? root-id)
+      [false (db/entity repo [:block/uuid (uuid root-id)])]
+      [true (db/entity repo [:block/name (string/lower-case root-id)])])
+    [false root-id]))
 
 (defn blocks->vec-tree
-  [blocks page-name-or-block-id]
-  (let [[page? root] (get-root-and-page (str page-name-or-block-id))]
-    (if-not root ; custom query
-      blocks
-      (let [result (blocks->vec-tree-aux blocks root)]
-        (if page?
-          result
-          ;; include root block
-          (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
-                root-block (assoc root-block :block/children result)]
-            [root-block]))))))
+  ([blocks root-id]
+   (blocks->vec-tree (state/get-current-repo) blocks root-id))
+  ([repo blocks root-id]
+   (let [[page? root] (get-root-and-page repo (str root-id))]
+     (if-not root ; custom query
+       blocks
+       (let [result (blocks->vec-tree-aux blocks root)]
+         (if page?
+           result
+           ;; include root block
+           (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
+                 root-block (assoc root-block :block/children result)]
+             [root-block])))))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

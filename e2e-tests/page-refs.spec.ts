@@ -8,7 +8,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInn
  * Consider diacritics
  ***/
 
-async function alias_test (page, page_name: string){
+async function alias_test (page, page_name: string, search_kws: string[]){
   let hotkeyOpenLink = 'Control+o'
   let hotkeyBack = 'Control+['
   if (IsMac) {
@@ -69,40 +69,43 @@ async function alias_test (page, page_name: string){
   // TODO: test alias from graph clicking
 
   // test alias from search
-  await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.fill('[placeholder="Search or create page"]', alias_name)
-  await page.waitForTimeout(500)
+  for (let kw of search_kws){
+    let kw_name = kw + ' alias ' + rand
 
-  const results = await page.$$('#ui__ac-inner .block')
-  expect(results.length).toEqual(3) // page + block + alias property
+    await page.click('#search-button')
+    await page.waitForSelector('[placeholder="Search or create page"]')
+    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.waitForTimeout(500)
 
-  // test search results
-  expect(await results[0].innerText()).toContain("Alias -> " + target_name)
-  expect(await results[0].innerText()).toContain(alias_name)
-  expect(await results[1].innerText()).toContain(parent_title)
-  expect(await results[1].innerText()).toContain("[[" + alias_name + "]]")
-  expect(await results[2].innerText()).toContain(target_name)
-  expect(await results[2].innerText()).toContain("alias:: [[" + alias_name + "]]")
+    const results = await page.$$('#ui__ac-inner .block')
+    expect(results.length).toEqual(3) // page + block + alias property
 
-  // test search entering (page)
-  page.keyboard.press("Enter")
-  await page.waitForNavigation()
-  await page.waitForTimeout(100)
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
+    // test search results
+    expect(await results[0].innerText()).toContain("Alias -> " + target_name)
+    expect(await results[0].innerText()).toContain(alias_name)
+    expect(await results[1].innerText()).toContain(parent_title)
+    expect(await results[1].innerText()).toContain("[[" + alias_name + "]]")
+    expect(await results[2].innerText()).toContain(target_name)
+    expect(await results[2].innerText()).toContain("alias:: [[" + alias_name + "]]")
 
-  // test search clicking (block)
-  await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.fill('[placeholder="Search or create page"]', alias_name)
-  await page.waitForTimeout(500)
-  page.click(":nth-match(.menu-link, 2)")
-  await page.waitForNavigation()
-  await page.waitForTimeout(100)
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
-  await page.keyboard.press(hotkeyBack)
+    // test search entering (page)
+    page.keyboard.press("Enter")
+    await page.waitForNavigation()
+    await page.waitForTimeout(100)
+    await lastInnerBlock(page)
+    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
+
+    // test search clicking (block)
+    await page.click('#search-button')
+    await page.waitForSelector('[placeholder="Search or create page"]')
+    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.waitForTimeout(500)
+    page.click(":nth-match(.menu-link, 2)")
+    await page.waitForNavigation()
+    await page.waitForTimeout(100)
+    await lastInnerBlock(page)
+    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
+    await page.keyboard.press(hotkeyBack)}
 
   // TODO: search clicking (alias property)
 }
@@ -113,5 +116,5 @@ async function alias_test (page, page_name: string){
 
 
 test('page diacritic alias', async ({ page }) => {
-  await alias_test(page, "ü")
+  await alias_test(page, "ü", ["ü", "ü", "Ü"])
 })

@@ -10,6 +10,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
@@ -17,6 +18,7 @@
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
+            [frontend.search.db :as search-db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -96,6 +98,7 @@
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
+  "Editor embedded page searching"
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -114,7 +117,7 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map util/search-normalize matched-pages)) (util/search-normalize (string/trim q)))
+                              (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
                               (empty? matched-pages)
@@ -164,11 +167,13 @@
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
         :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-        :item-render (fn [{:block/keys [content page uuid]}]
+        :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                        (let [page (or (:block/original-name page)
                                       (:block/name page))
                              repo (state/sub :git/current-repo)
-                             format (db/get-page-format page)]
+                             format (db/get-page-format page)
+                             block (db-model/query-block-by-uuid uuid)
+                             content (search-db/block->content block)]
 
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
@@ -479,14 +484,17 @@
         ;; FIXME: for translateY layer
         x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
                          (let [delta-width (- vw-width (+ (:left rect) left))]
-                           (< delta-width (* max-width 0.5))))]
+                           (< delta-width (* max-width 0.5))))
+        pos-rect (when (and (seq rect) editing-key)
+                   (:rect (cursor/get-caret-pos (state/get-input))))
+        y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :class (if x-overflow-vw? "is-overflow-vw-x" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
       :style (merge
-              {:top        (+ top offset-top)
+              {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                :max-height to-max-height
                :max-width 700
                 ;; TODO: auto responsive fixed size
@@ -496,7 +504,7 @@
                 {:width max-width})
               (if config/mobile?
                 {:left 0}
-                {:left left}))}
+                {:left (if (and y-diff (= y-diff 0)) left 0)}))}
      cp]))
 
 (rum/defc transition-cp < rum/reactive

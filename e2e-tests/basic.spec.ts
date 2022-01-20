@@ -85,7 +85,7 @@ test('create page and blocks', async ({ page }) => {
   await page.waitForTimeout(500)
   expect(await page.$$('.ls-block')).toHaveLength(5)
 
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(1000)
 
   const contentOnDisk = await fs.readFile(
     path.join(graphDir, `pages/${pageTitle}.md`),
@@ -288,4 +288,14 @@ test.skip('open directory', async ({ page }) => {
   await page.keyboard.press('Escape')
 
   await page.click('#left-sidebar >> text=Journals')
+})
+
+test('invalid page props #3944', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill(':nth-match(textarea, 1)', 'public:: true\nsize:: 65535')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+
+  await page.waitForTimeout(1000)
 })

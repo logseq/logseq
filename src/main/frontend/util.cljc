@@ -5,6 +5,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["grapheme-splitter" :as GraphemeSplitter]
+            ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -363,9 +364,19 @@
                  (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
                  (gobj/get pre-caret-text-range "text")))))))))
 
+(defn get-selection-start
+  [input]
+  (when input
+    (.-selectionStart input)))
+
+(defn get-selection-end
+  [input]
+  (when input
+    (.-selectionEnd input)))
+
 (defn get-first-or-last-line-pos
   [input]
-  (let [pos (.-selectionStart input)
+  (let [pos (get-selection-start input)
         value (.-value input)
         last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
     (- pos last-newline-pos 1)))
@@ -454,8 +465,10 @@
 
 #?(:cljs
    (defn scroll-to-top
-     []
-     (scroll-to (app-scroll-container-node) 0 false)))
+     ([]
+      (scroll-to (app-scroll-container-node) 0 false))
+     ([animate?]
+      (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
    (defn scroll-to-bottom
@@ -715,7 +728,7 @@
    (defn kill-line-before!
      [input]
      (let [val (.-value input)
-           end (.-selectionStart input)
+           end (get-selection-start input)
            n-pos (string/last-index-of val \newline (dec end))
            start (if n-pos (inc n-pos) 0)]
        (safe-set-range-text! input "" start end))))
@@ -724,7 +737,7 @@
    (defn kill-line-after!
      [input]
      (let [val   (.-value input)
-           start (.-selectionStart input)
+           start (get-selection-start input)
            end   (or (string/index-of val \newline start)
                      (count val))]
        (safe-set-range-text! input "" start end))))
@@ -732,8 +745,8 @@
 #?(:cljs
    (defn insert-at-current-position!
      [input text]
-     (let [start (.-selectionStart input)
-           end   (.-selectionEnd input)]
+     (let [start (get-selection-start input)
+           end   (get-selection-end input)]
        (safe-set-range-text! input text start end "end"))))
 
 ;; copied from re_com
@@ -868,8 +881,8 @@
 #?(:cljs
    (defn input-selected?
      [input]
-     (not= (.-selectionStart input)
-           (.-selectionEnd input))))
+     (not= (get-selection-start input)
+           (get-selection-end input))))
 
 #?(:cljs
    (defn get-selected-text
@@ -1171,30 +1184,28 @@
         (subs s 0 (dec (count s)))
         s))))
 
-
 (defn normalize
   [s]
   (.normalize s "NFC"))
-
-(defn search-normalize-content
-  "Normalize string for searching (loose, without lowercasing)
-   Case-sensitivity is ensured by the search engine"
+(defn path-normalize
+  "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
-  (.normalize s "NFKD"))
+  (.normalize s "NFC"))
 
-(defn search-normalize
-  "Normalize string for searching (loose)"
-  [s]
-  (.normalize (string/lower-case s) "NFKD")
-)
+#?(:cljs
+   (defn search-normalize
+     "Normalize string for searching (loose)"
+     [s]
+     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn safe-search-normalize
+#?(:cljs
+   (defn safe-search-normalize
   [s]
   (if (string? s)
-    (.normalize (string/lower-case s) "NFKD") s))
+        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
 
 (defn page-name-sanity
-  "Sanitize the page-name for file name (strict)"
+  "Sanitize the page-name for file name (strict), for file writting"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]
@@ -1384,17 +1395,19 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-(defn batch [in max-time handler]
-  (async/go-loop [buf [] t (async/timeout max-time)]
+(defn batch [in max-time handler buf-atom]
+  (async/go-loop [buf buf-atom t (async/timeout max-time)]
     (let [[v p] (async/alts! [in t])]
       (cond
         (or (= p t) (nil? v))
         (let [timeout (async/timeout max-time)]
-          (handler buf)
-          (recur [] timeout))
+          (handler @buf)
+          (reset! buf [])
+          (recur buf timeout))
 
         :else
-        (recur (conj buf v) t)))))
+        (do (swap! buf conj v)
+          (recur buf t))))))
 
 #?(:cljs
    (defn trace!
@@ -1416,7 +1429,7 @@
    (defn backward-kill-word
      [input]
      (let [val     (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            prev    (or
                     (->> [(string/last-index-of val \space (dec current))
                           (string/last-index-of val \newline (dec current))]
@@ -1437,7 +1450,7 @@
    (defn forward-kill-word
      [input]
      (let [val   (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            current (loop [idx current]
                      (if (#{\space \newline} (nth-safe val idx))
                        (recur (inc idx))
@@ -1639,3 +1652,9 @@
        (if (and (not route?) (electron?))
          (js/window.apis.openExternal url)
          (set! (.-href js/window.location) url)))))
+
+(defn collapsed?
+  [block]
+  (or (:block/collapsed? block)
+      ;; for backward compatiblity
+      (get-in block [:properties :collapsed])))

@@ -51,15 +51,16 @@
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)]
                   (. el addEventListener "mouseup"
-                     #(let [start (.-selectionStart el)
-                            end (.-selectionEnd el)]
-                        (when-let [e (and (not= start end)
-                                          {:caret (cursor/get-caret-pos el)
-                                           :start start :end end
-                                           :text  (. (.-value el) substring start end)
-                                           :point {:x (.-x %) :y (.-y %)}})]
+                     #(let [start (util/get-selection-start el)
+                            end (util/get-selection-end el)]
+                        (when (and start end)
+                          (when-let [e (and (not= start end)
+                                            {:caret (cursor/get-caret-pos el)
+                                             :start start :end end
+                                             :text  (. (.-value el) substring start end)
+                                             :point {:x (.-x %) :y (.-y %)}})]
 
-                          (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))))))
+                            (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e)))))))
                 state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (or

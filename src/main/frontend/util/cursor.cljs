@@ -29,34 +29,35 @@
 
   If you only need character position, use `pos` instead. Do NOT call this."
   [input]
-  (let [pos (.-selectionStart input)
-        rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
-    (try
-      (-> (gdom/getElement "mock-text")
-          gdom/getChildren
-          array-seq
-          (util/nth-safe pos)
-          mock-char-pos
-          (assoc :rect rect))
-      (catch :default _e
-        (js/console.log "index error" _e)
-        {:pos pos
-         :rect rect
-         :left js/Number.MAX_SAFE_INTEGER
-         :top js/Number.MAX_SAFE_INTEGER}))))
+  (when input
+    (let [pos (util/get-selection-start input)
+          rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
+      (try
+        (some-> (gdom/getElement "mock-text")
+                gdom/getChildren
+                array-seq
+                (util/nth-safe pos)
+                mock-char-pos
+                (assoc :rect rect))
+        (catch :default _e
+          (js/console.log "index error" _e)
+          {:pos pos
+           :rect rect
+           :left js/Number.MAX_SAFE_INTEGER
+           :top js/Number.MAX_SAFE_INTEGER})))))
 
 
 (defn pos [input]
   (when input
-    (.-selectionStart input)))
+    (util/get-selection-start input)))
 
 (defn start? [input]
-  (and input (zero? (.-selectionStart input))))
+  (and input (zero? (util/get-selection-start input))))
 
 (defn end? [input]
   (and input
        (= (count (.-value input))
-          (.-selectionStart input))))
+          (util/get-selection-start input))))
 
 (defn set-selection-to [input n m]
   (.setSelectionRange input n m))
@@ -147,7 +148,7 @@
 (defn move-cursor-forward-by-word
   [input]
   (let [val   (.-value input)
-        current (.-selectionStart input)
+        current (util/get-selection-start input)
         current (loop [idx current]
                   (if (#{\space \newline} (util/nth-safe val idx))
                     (recur (inc idx))
@@ -162,7 +163,7 @@
 (defn move-cursor-backward-by-word
   [input]
   (let [val     (.-value input)
-        current (.-selectionStart input)
+        current (util/get-selection-start input)
         prev    (or
                  (->> [(string/last-index-of val \space (dec current))
                        (string/last-index-of val \newline (dec current))]
@@ -243,7 +244,7 @@
     "Move cursor up. If EOL, always move cursor to previous EOL."
     [input]
     (let [val (gobj/get input "value")
-          pos (.-selectionStart input)
+          pos (util/get-selection-start input)
           prev-idx (string/last-index-of val \newline pos)
           pprev-idx (or (string/last-index-of val \newline (dec prev-idx)) -1)
           cal-idx (+ pprev-idx pos (- prev-idx))]
@@ -257,7 +258,7 @@
   If EOL, always move cursor to next EOL."
     [input]
     (let [val (gobj/get input "value")
-          pos (.-selectionStart input)
+          pos (util/get-selection-start input)
           prev-idx (or (string/last-index-of val \newline pos) -1)
           next-idx (or (string/index-of val \newline (inc pos))
                        (count val))

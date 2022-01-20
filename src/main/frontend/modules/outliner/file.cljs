@@ -9,39 +9,47 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.state :as state]))
 
-(def write-chan (async/chan))
+(defonce write-chan (async/chan 100))
+(defonce write-chan-batch-buf (atom []))
 
 (def batch-write-interval 1000)
 
-;; FIXME name conflicts between multiple graphs
+(defn writes-finished?
+  []
+  (empty? @write-chan-batch-buf))
+
 (defn do-write-file!
-  [page-db-id]
-  (let [page-block (db/pull page-db-id)
+  [repo page-db-id]
+  (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        blocks (model/get-blocks-by-page page-db-id)]
+        blocks (model/get-blocks-by-page repo page-db-id)]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
-      (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
+      (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
         (if page-block
           (file/save-tree page-block tree)
           (js/console.error (str "can't find page id: " page-db-id)))))))
 
 (defn write-files!
-  [page-db-ids]
-  (when (seq page-db-ids)
+  [pages]
+  (when (seq pages)
     (when-not config/publishing?
-      (doseq [page-db-id (set page-db-ids)]
-        (try (do-write-file! page-db-id)
-             (catch js/Error e
-               (notification/show!
-                [:div
-                 [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                 "Error: " (str (gobj/get e "stack"))]
-                :error)
-               (log/error :file/write-file-error {:error e})))))))
+      (if (state/input-idle? (state/get-current-repo))
+        (doseq [[repo page-id] (set pages)]
+          (try (do-write-file! repo page-id)
+               (catch js/Error e
+                 (notification/show!
+                  [:div
+                   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                   "Error: " (str (gobj/get e "stack"))]
+                  :error)
+                 (log/error :file/write-file-error {:error e}))))
+        (doseq [page pages]
+          (async/put! write-chan page))))))
 
 (defn sync-to-file
   [{page-db-id :db/id}]
@@ -49,8 +57,10 @@
     (notification/show!
      "Write file failed, can't find the current page!"
      :error)
-    (async/put! write-chan page-db-id)))
+    (when-let [repo (state/get-current-repo)]
+      (async/put! write-chan [repo page-db-id]))))
 
 (util/batch write-chan
             batch-write-interval
-            write-files!)
+            write-files!
+            write-chan-batch-buf)

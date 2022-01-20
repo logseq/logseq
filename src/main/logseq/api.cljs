@@ -533,7 +533,7 @@
     (when-let [block (db-model/get-block-by-uuid uuid)]
       (let [{:keys [flag]} (bean/->clj opts)
             flag (if (= "toggle" flag)
-                   (not (-> block :block/properties :collapsed))
+                   (not (util/collapsed? block))
                    (boolean flag))]
         (if flag (editor-handler/collapse-block! uuid)
                  (editor-handler/expand-block! uuid))))))

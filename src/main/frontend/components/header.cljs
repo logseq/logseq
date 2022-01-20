@@ -160,9 +160,10 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         vw-state (state/sub :ui/visual-viewport-state)
-        show-open-folder? (and (or (nfs/supported?)
-                                   (mobile-util/is-native-platform?))
-                               (empty? repos)
+        show-open-folder? (and (nfs/supported?)
+                               (or (empty? repos)
+                                   (nil? (state/sub :git/current-repo)))
+                               (not (mobile-util/is-native-platform?))
                                (not config/publishing?))
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -230,9 +231,7 @@
 
         (repo/sync-status current-repo)
 
-        (when (and
-               show-open-folder?
-               (not (mobile-util/is-native-platform?)))
+        (when show-open-folder?
           [:a.text-sm.font-medium.button
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
            [:div.flex.flex-row.text-center.open-button__inner.items-center

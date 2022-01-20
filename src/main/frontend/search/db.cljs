@@ -16,13 +16,18 @@
   [repo]
   (nil? (get @indices repo)))
 
+(defn block->content
+  "Convert a block to the display contents for searching"
+  [{:block/keys [content format]}]
+  (->> (text/remove-level-spaces content format)
+       (drawer/remove-logbook)
+       (property/remove-built-in-properties format)))
+
 (defn block->index
-  "Convert a block to the contents for searching (will be displayed in the search results)"
-  [{:block/keys [uuid content format page] :as block}]
-  (when-let [result (->> (text/remove-level-spaces content format)
-                         (drawer/remove-logbook)
-                         (property/remove-built-in-properties format)
-                         (util/search-normalize-content))]
+  "Convert a block to the index for searching"
+  [{:block/keys [uuid page] :as block}]
+  (when-let [result (->> (block->content block)
+                         (util/search-normalize))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page
@@ -50,12 +55,18 @@
     (swap! indices assoc-in [repo :blocks] indice)
     indice))
 
+(defn original-page-name->index
+  [p] {:name (util/search-normalize p)
+       :original-name p})
+
 (defn make-pages-indice!
+  "Build a page indice from scratch.
+   Incremental page indice is implemented in frontend.search.sync-search-indice!"
   []
   (when-let [repo (state/get-current-repo)]
     (let [pages (->> (db/get-pages (state/get-current-repo))
                      (remove string/blank?)
-                     (map (fn [p] {:name p}))
+                     (map original-page-name->index)
                      (bean/->js))
           indice (fuse. pages
                         (clj->js {:keys ["name"]

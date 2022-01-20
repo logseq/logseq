@@ -11,6 +11,11 @@
 (defonce linux? (= (.-platform js/process) "linux"))
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
+
+(defonce ci? (let [v js/process.env.CI]
+               (or (true? v)
+                   (= v "true"))))
+
 (defonce dev? (not prod?))
 (defonce logger (js/require "electron-log"))
 
