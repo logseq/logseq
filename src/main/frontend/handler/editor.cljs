@@ -944,8 +944,8 @@
         (let [original-content (util/trim-safe (:block/content block))
               value' (-> (property/remove-built-in-properties format original-content)
                          (drawer/remove-logbook))
-              new-value (str value' " " (string/triml value))
-              tail-len (count (string/triml value))
+              new-value (str value' value)
+              tail-len (count value)
               pos (max
                    (if original-content
                      (utf8/length (utf8/encode original-content))
