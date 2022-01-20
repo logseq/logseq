@@ -674,3 +674,11 @@
          (state/get-current-repo)
          block-id
          (str (string/trim content) " #" card-hash-tag))))))
+
+(defn update-cards-due-count!
+  []
+  (js/setTimeout
+   (fn []
+     (let [total (get-srs-cards-total)]
+       (state/set-state! :srs/cards-due-count total)))
+   200))

@@ -100,7 +100,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn exact-matched?
-  "Check if two strings the same thing"
+  "Check if two strings points toward same search result"
   [q match]
   (when (and (string? q) (string? match))
     (boolean
@@ -129,13 +129,13 @@
            ;; TODO: add indexes for highlights
            (->> (map
                   (fn [{:keys [item]}]
-                    (:name item))
+                    (:original-name item))
                  result)
                 (remove nil?)
                 (map string/trim)
                 (distinct)
-                (filter (fn [name]
-                          (exact-matched? q name))))))))))
+                (filter (fn [original-name]
+                          (exact-matched? q original-name))))))))))
 
 (defn file-search
   ([q]
@@ -175,8 +175,9 @@
                                       (set))
                 pages-to-add (->> (filter (fn [page]
                                             (contains? pages-to-add-set (:db/id page))) pages-result)
-                                  (map (fn [p] {:name (or (:block/original-name p)
-                                                          (:block/name p))})))
+                                  (map (fn [p] (or (:block/original-name p)
+                                                   (:block/name p))))
+                                  (map search-db/original-page-name->index))
                 pages-to-remove-set (->> (remove :added pages)
                                          (map :v))]
             (swap! search-db/indices update-in [repo :pages]
@@ -186,7 +187,7 @@
                          (.remove indice
                                   (fn [page]
                                     (= (util/safe-page-name-sanity-lc page-name)
-                                       (util/safe-page-name-sanity-lc (gobj/get page "name"))))))
+                                       (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
                        (when (seq pages-to-add)
                          (doseq [page pages-to-add]
                            (.add indice (bean/->js page)))))

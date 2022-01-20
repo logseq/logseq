@@ -502,7 +502,7 @@
 
 "@capacitor/status-bar@1.0.6":
   version "1.0.6"
-  resolved "https://registry.npmmirror.com/@capacitor/status-bar/download/@capacitor/status-bar-1.0.6.tgz?cache=0&sync_timestamp=1635951607471&other_urls=https%3A%2F%2Fregistry.npmmirror.com%2F%40capacitor%2Fstatus-bar%2Fdownload%2F%40capacitor%2Fstatus-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
+  resolved "https://registry.npmmirror.com/@capacitor/status-bar/download/@capacitor/status-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
   integrity sha1-1YyQh8/Hxzd+gAm+qGFS5P3Sk54=
 
 "@electron/get@^1.13.0":
@@ -6964,6 +6964,11 @@ remark@^13.0.0:
     remark-parse "^9.0.0"
     remark-stringify "^9.0.0"
     unified "^9.1.0"
+
+remove-accents@0.4.2:
+  version "0.4.2"
+  resolved "https://registry.yarnpkg.com/remove-accents/-/remove-accents-0.4.2.tgz#0a43d3aaae1e80db919e07ae254b285d9e1c7bb5"
+  integrity sha1-CkPTqq4egNuRngeuJUsoXZ4ce7U=
 
 remove-bom-buffer@^3.0.0:
   version "3.0.0"
