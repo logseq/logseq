@@ -31,6 +31,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string></string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
@@ -40,6 +42,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>We will access your camera when you take a photo, and embed it in your note.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string></string>
 	<key>NSDownloadsFolderUsageDescription</key>
@@ -48,6 +52,10 @@
 	<string></string>
 	<key>NSFileProviderPresenceUsageDescription</key>
 	<string></string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We will access your album when you save a photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We will access your album when you choose a photo, and embed it in your note.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.logseq.logseq</key>
@@ -64,12 +72,6 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>We will access your album when you save a photo.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>We will access your camera when you take a photo, and embed it in your note.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We will access your album when you choose a photo, and embed it in your note.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

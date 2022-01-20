@@ -71,8 +71,8 @@
     (when (:block/uuid block)
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
-          {:selection-start (gobj/get input "selectionStart")
-           :selection-end (gobj/get input "selectionEnd")
+          {:selection-start (util/get-selection-start input)
+           :selection-end (util/get-selection-end input)
            :format (:block/format block)
            :value (gobj/get input "value")
            :block block
@@ -632,7 +632,7 @@
         node (gdom/getElement id)]
     (when node
       (let [value (gobj/get node "value")
-            pos (gobj/get node "selectionStart")]
+            pos (util/get-selection-start node)]
         {:config config
          :on-hide on-hide
          :sidebar? sidebar?
@@ -944,8 +944,8 @@
         (let [original-content (util/trim-safe (:block/content block))
               value' (-> (property/remove-built-in-properties format original-content)
                          (drawer/remove-logbook))
-              new-value (str value' " " (string/triml value))
-              tail-len (count (string/triml value))
+              new-value (str value' value)
+              tail-len (count value)
               pos (max
                    (if original-content
                      (utf8/length (utf8/encode original-content))
@@ -1420,8 +1420,8 @@
    (input-start-or-end? input nil))
   ([input up?]
    (let [value (gobj/get input "value")
-         start (gobj/get input "selectionStart")
-         end (gobj/get input "selectionEnd")]
+         start (util/get-selection-start input)
+         end (util/get-selection-end input)]
      (if (nil? up?)
        (or (= start 0) (= end (count value)))
        (or (and (= start 0) up?)
@@ -2382,8 +2382,8 @@
   [insertion]
   (when-not (auto-complete?)
     (let [^js input (state/get-input)
-          selected-start (gobj/get input "selectionStart")
-          selected-end (gobj/get input "selectionEnd")
+          selected-start (util/get-selection-start input)
+          selected-end (util/get-selection-end input)
           value (.-value input)
           s1 (subs value 0 selected-start)
           s2 (subs value selected-end)]
@@ -2704,8 +2704,8 @@
 (defn keydown-up-down-handler
   [direction]
   (let [input (state/get-input)
-        selected-start (.-selectionStart input)
-        selected-end (.-selectionEnd input)
+        selected-start (util/get-selection-start input)
+        selected-end (util/get-selection-end input)
         up? (= direction :up)
         down? (= direction :down)]
     (cond
@@ -2746,8 +2746,8 @@
   [direction]
   (let [input (state/get-input)
         element js/document.activeElement
-        selected-start (.-selectionStart input)
-        selected-end (.-selectionEnd input)
+        selected-start (util/get-selection-start input)
+        selected-end (util/get-selection-end input)
         left? (= direction :left)
         right? (= direction :right)]
     (when (= input element)
@@ -2803,8 +2803,8 @@
         value (gobj/get input "value")
         end? (= current-pos (count value))
         current-block (state/get-edit-block)
-        selected-start (gobj/get input "selectionStart")
-        selected-end (gobj/get input "selectionEnd")]
+        selected-start (util/get-selection-start input)
+        selected-end (util/get-selection-end input)]
     (when current-block
       (cond
         (not= selected-start selected-end)
@@ -2824,8 +2824,8 @@
         value (gobj/get input "value")
         deleted (and (> current-pos 0)
                      (util/nth-safe value (dec current-pos)))
-        selected-start (gobj/get input "selectionStart")
-        selected-end (gobj/get input "selectionEnd")
+        selected-start (util/get-selection-start input)
+        selected-end (util/get-selection-end input)
         block-id (:block/uuid (state/get-edit-block))
         page (state/get-current-page)
         repo (state/get-current-repo)]
@@ -3325,8 +3325,8 @@
 
       (state/editing?)
       (let [input (state/get-input)
-            selected-start (.-selectionStart input)
-            selected-end (.-selectionEnd input)]
+            selected-start (util/get-selection-start input)
+            selected-end (util/get-selection-end input)]
         (if (= selected-start selected-end)
           (copy-current-block-ref)
           (js/document.execCommand "copy")))

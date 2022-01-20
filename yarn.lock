@@ -500,6 +500,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/splash-screen/-/splash-screen-1.1.3.tgz#024bc91b2b521b9f1d5e86f16a114f294bf326fa"
   integrity sha512-DJh1w9872UofZWAxPLgd5yWi09W0IoWPVBdVd8Ku1mrPfFvtcMeguZHGLEIo+A6DkdCTWzMrh26TLCIympws2g==
 
+"@capacitor/status-bar@1.0.6":
+  version "1.0.6"
+  resolved "https://registry.npmmirror.com/@capacitor/status-bar/download/@capacitor/status-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
+  integrity sha1-1YyQh8/Hxzd+gAm+qGFS5P3Sk54=
+
 "@electron/get@^1.13.0":
   version "1.13.1"
   resolved "https://registry.yarnpkg.com/@electron/get/-/get-1.13.1.tgz#42a0aa62fd1189638bd966e23effaebb16108368"
@@ -6959,6 +6964,11 @@ remark@^13.0.0:
     remark-parse "^9.0.0"
     remark-stringify "^9.0.0"
     unified "^9.1.0"
+
+remove-accents@0.4.2:
+  version "0.4.2"
+  resolved "https://registry.yarnpkg.com/remove-accents/-/remove-accents-0.4.2.tgz#0a43d3aaae1e80db919e07ae254b285d9e1c7bb5"
+  integrity sha1-CkPTqq4egNuRngeuJUsoXZ4ce7U=
 
 remove-bom-buffer@^3.0.0:
   version "3.0.0"

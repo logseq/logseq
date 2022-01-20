@@ -177,20 +177,16 @@
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
-                (js/setTimeout
-                 (fn []
-                   (let [total (srs/get-srs-cards-total)]
-                     (state/set-state! :srs/cards-due-count total)))
-                 200)
+                (srs/update-cards-due-count!)
                 state)}
   [state]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [num (state/sub :srs/cards-due-count)]
+  (let [num (state/sub :srs/cards-due-count)]
+    (rum/with-context [[t] i18n/*tongue-context*]
       [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
-      (ui/icon "infinity mr-3" {:style {:font-size 20}})
-      [:span.flex-1 (t :right-side-bar/flashcards)]
-      (when (and num (not (zero? num)))
-        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])])))
+       (ui/icon "infinity mr-3" {:style {:font-size 20}})
+       [:span.flex-1 (t :right-side-bar/flashcards)]
+       (when (and num (not (zero? num)))
+         [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])])))
 
 (defn get-default-home-if-valid
   []

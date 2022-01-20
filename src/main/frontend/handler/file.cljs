@@ -98,7 +98,7 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path file
+                                        {:file/path (util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
@@ -124,6 +124,7 @@
       data)))
 
 (defn- page-exists-in-another-file
+  "Conflict of files towards same page"
   [repo-url page file]
   (when-let [page-name (:block/name page)]
     (let [current-file (:file/path (db/get-page-file repo-url page-name))]
@@ -153,6 +154,7 @@
 
                :else
                file)
+        file (util/path-normalize file)
         new? (nil? (db/entity [:file/path file]))]
     ;; TODO: refactor with reset-file!
     ;; TODO: missing text/scheduled-deadline-dash->star

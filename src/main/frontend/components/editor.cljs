@@ -98,6 +98,7 @@
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
+  "Editor embedded page searching"
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -116,19 +117,23 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map util/search-normalize matched-pages)) (util/search-normalize (string/trim q)))
+                              (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
                               (empty? matched-pages)
                               matched-pages
 
+                              ;; reorder, shortest and starts-with first.
                               :else
-                              (->>
-                               (cons (first matched-pages)
-                                     (cons
-                                      (str "New page: " q)
-                                      (rest matched-pages)))
-                               (remove nil?)))]
+                              (let [matched-pages (remove nil? matched-pages)
+                                    matched-pages (sort-by
+                                                   (fn [m]
+                                                     [(not (string/starts-with? m q)) (count m)])
+                                                   matched-pages)]
+                                (cons (first matched-pages)
+                                      (cons
+                                       (str "New page: " q)
+                                       (rest matched-pages)))))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)

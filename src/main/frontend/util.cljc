@@ -5,6 +5,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["grapheme-splitter" :as GraphemeSplitter]
+            ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -336,6 +337,17 @@
                                       (apply f args))
                                    threshold)))))))
 
+(defn nth-safe [c i]
+  (if (or (< i 0) (>= i (count c)))
+    nil
+    (nth c i)))
+
+#?(:cljs
+   (when-not node-test?
+     (extend-type js/NodeList
+       ISeqable
+       (-seq [array] (array-seq array 0)))))
+
 ;; Caret
 #?(:cljs
    (defn caret-range [node]
@@ -354,7 +366,21 @@
                  (.setEnd pre-caret-range
                           (gobj/get range "endContainer")
                           (gobj/get range "endOffset"))
-                 (.toString pre-caret-range))))
+                 (let [contents (.cloneContents pre-caret-range)
+                       html (some-> (first (.-childNodes contents))
+                                    (gobj/get "innerHTML")
+                                    str)
+                       ;; FIXME: this depends on the dom structure,
+                       ;; need a converter from html to text includes newlines
+                       br-ended? (or
+                                  ;; first line with a new line
+                                  (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
+                                  ;; multiple lines with a new line
+                                  (string/ends-with? html "<br></div></div></span></div></div></div>"))
+                       value (.toString pre-caret-range)]
+                   (if br-ended?
+                     (str value "\n")
+                     value)))))
            (when-let [selection (gobj/get doc "selection")]
              (when (not= "Control" (gobj/get selection "type"))
                (let [text-range (.createRange selection)
@@ -363,9 +389,19 @@
                  (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
                  (gobj/get pre-caret-text-range "text")))))))))
 
+(defn get-selection-start
+  [input]
+  (when input
+    (.-selectionStart input)))
+
+(defn get-selection-end
+  [input]
+  (when input
+    (.-selectionEnd input)))
+
 (defn get-first-or-last-line-pos
   [input]
-  (let [pos (.-selectionStart input)
+  (let [pos (get-selection-start input)
         value (.-value input)
         last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
     (- pos last-newline-pos 1)))
@@ -454,8 +490,10 @@
 
 #?(:cljs
    (defn scroll-to-top
-     []
-     (scroll-to (app-scroll-container-node) 0 false)))
+     ([]
+      (scroll-to (app-scroll-container-node) 0 false))
+     ([animate?]
+      (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
    (defn scroll-to-bottom
@@ -715,7 +753,7 @@
    (defn kill-line-before!
      [input]
      (let [val (.-value input)
-           end (.-selectionStart input)
+           end (get-selection-start input)
            n-pos (string/last-index-of val \newline (dec end))
            start (if n-pos (inc n-pos) 0)]
        (safe-set-range-text! input "" start end))))
@@ -724,7 +762,7 @@
    (defn kill-line-after!
      [input]
      (let [val   (.-value input)
-           start (.-selectionStart input)
+           start (get-selection-start input)
            end   (or (string/index-of val \newline start)
                      (count val))]
        (safe-set-range-text! input "" start end))))
@@ -732,8 +770,8 @@
 #?(:cljs
    (defn insert-at-current-position!
      [input text]
-     (let [start (.-selectionStart input)
-           end   (.-selectionEnd input)]
+     (let [start (get-selection-start input)
+           end   (get-selection-end input)]
        (safe-set-range-text! input text start end "end"))))
 
 ;; copied from re_com
@@ -868,8 +906,8 @@
 #?(:cljs
    (defn input-selected?
      [input]
-     (not= (.-selectionStart input)
-           (.-selectionEnd input))))
+     (not= (get-selection-start input)
+           (get-selection-end input))))
 
 #?(:cljs
    (defn get-selected-text
@@ -983,11 +1021,6 @@
                                   (d/parent))]
          (when section
            (gdom/getElement section "id"))))))
-
-(defn nth-safe [c i]
-  (if (or (< i 0) (>= i (count c)))
-    nil
-    (nth c i)))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
@@ -1174,26 +1207,25 @@
 (defn normalize
   [s]
   (.normalize s "NFC"))
-
-(defn search-normalize-content
-  "Normalize string for searching (loose, without lowercasing)
-   Case-sensitivity is ensured by the search engine"
+(defn path-normalize
+  "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
-  (.normalize s "NFKD"))
+  (.normalize s "NFC"))
 
-(defn search-normalize
-  "Normalize string for searching (loose)"
-  [s]
-  (.normalize (string/lower-case s) "NFKD")
-)
+#?(:cljs
+   (defn search-normalize
+     "Normalize string for searching (loose)"
+     [s]
+     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn safe-search-normalize
+#?(:cljs
+   (defn safe-search-normalize
   [s]
   (if (string? s)
-    (.normalize (string/lower-case s) "NFKD") s))
+        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
 
 (defn page-name-sanity
-  "Sanitize the page-name for file name (strict)"
+  "Sanitize the page-name for file name (strict), for file writting"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]
@@ -1417,7 +1449,7 @@
    (defn backward-kill-word
      [input]
      (let [val     (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            prev    (or
                     (->> [(string/last-index-of val \space (dec current))
                           (string/last-index-of val \newline (dec current))]
@@ -1438,7 +1470,7 @@
    (defn forward-kill-word
      [input]
      (let [val   (.-value input)
-           current (.-selectionStart input)
+           current (get-selection-start input)
            current (loop [idx current]
                      (if (#{\space \newline} (nth-safe val idx))
                        (recur (inc idx))
