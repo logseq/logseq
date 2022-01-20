@@ -47,7 +47,7 @@
    (cond
      mobile-native?
      (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (string/replace uri "file://" "")
+            {:file/path             (util/path-normalize (string/replace uri "file://" ""))
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
@@ -56,7 +56,7 @@
      electron?
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
-              {:file/path             path
+              {:file/path             (util/path-normalize path)
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
@@ -70,7 +70,7 @@
                     path (-> (get-attr "webkitRelativePath")
                              (string/replace-first (str dir-name "/") ""))]
                 {:file/name             (get-attr "name")
-                 :file/path             path
+                 :file/path             (util/path-normalize path)
                  :file/last-modified-at (get-attr "lastModified")
                  :file/size             (get-attr "size")
                  :file/type             (get-attr "type")

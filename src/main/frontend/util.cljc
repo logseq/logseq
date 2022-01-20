@@ -5,6 +5,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["grapheme-splitter" :as GraphemeSplitter]
+            ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -464,8 +465,10 @@
 
 #?(:cljs
    (defn scroll-to-top
-     []
-     (scroll-to (app-scroll-container-node) 0 false)))
+     ([]
+      (scroll-to (app-scroll-container-node) 0 false))
+     ([animate?]
+      (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
    (defn scroll-to-bottom
@@ -680,14 +683,12 @@
    (defn safe-set-range-text!
      ([input text start end]
       (try
-        (when (and start end)
-          (.setRangeText input text start end))
+        (.setRangeText input text start end)
         (catch js/Error _e
           nil)))
      ([input text start end select-mode]
       (try
-        (when (and start end)
-          (.setRangeText input text start end select-mode))
+        (.setRangeText input text start end select-mode)
         (catch js/Error _e
           nil)))))
 
@@ -1186,26 +1187,25 @@
 (defn normalize
   [s]
   (.normalize s "NFC"))
-
-(defn search-normalize-content
-  "Normalize string for searching (loose, without lowercasing)
-   Case-sensitivity is ensured by the search engine"
+(defn path-normalize
+  "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
-  (.normalize s "NFKD"))
+  (.normalize s "NFC"))
 
-(defn search-normalize
-  "Normalize string for searching (loose)"
-  [s]
-  (.normalize (string/lower-case s) "NFKD")
-)
+#?(:cljs
+   (defn search-normalize
+     "Normalize string for searching (loose)"
+     [s]
+     (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn safe-search-normalize
+#?(:cljs
+   (defn safe-search-normalize
   [s]
   (if (string? s)
-    (.normalize (string/lower-case s) "NFKD") s))
+        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
 
 (defn page-name-sanity
-  "Sanitize the page-name for file name (strict)"
+  "Sanitize the page-name for file name (strict), for file writting"
   ([page-name]
    (page-name-sanity page-name false))
   ([page-name replace-slash?]
