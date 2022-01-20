@@ -22,4 +22,8 @@ We have unit and end to end tests as described in https://github.com/logseq/logs
 
 ### Unit Testing
 
-When writing unit tests it is helpful to have tests automatically run on file save with `clojure -M:test watch test-auto`. For more about the shadow-cljs test runner, see [this documentation](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing).
+When writing unit tests it is helpful to have tests automatically run on file
+save with `yarn shadow-cljs watch test --config-merge '{:autorun true}'`. The
+test output may appear where shadow-cljs was first invoked e.g. where `yarn
+watch` is running. For more about the shadow-cljs test runner, see [this
+documentation](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing).
