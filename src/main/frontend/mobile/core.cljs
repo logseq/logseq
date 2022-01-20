@@ -3,13 +3,16 @@
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            #_:clj-kondo/ignore
+            ["@capacitor/status-bar" :refer [^js StatusBar]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.components.repo :as repo]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 (defn init!
   []
@@ -41,10 +44,13 @@
     ;; Keyboard watcher
     (.addListener Keyboard "keyboardWillShow"
                   #(state/pub-event! [:mobile/keyboard-will-show]))
-    (.addListener Keyboard "keyboardDidShow"
-                  #(state/pub-event! [:mobile/keyboard-did-show])))
+    ;; (.addListener Keyboard "keyboardDidShow"
+    ;;               #(state/pub-event! [:mobile/keyboard-did-show]))
 
   (when (mobile-util/is-native-platform?)
+    (.addEventListener js/window "statusTap"
+                       #(util/scroll-to-top true)))
+    
     (.addListener App "appStateChange"
                   (fn [^js state]
                     (when-let [repo (state/get-current-repo)]

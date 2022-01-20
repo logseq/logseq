@@ -385,7 +385,7 @@
 
         (d/transact! (db/get-conn repo false) page-txs)
 
-        (when (not= new-page-name new-name)
+        (when (not= (util/page-name-sanity new-name false) new-name)  ;; If page name changed after sanitization
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))

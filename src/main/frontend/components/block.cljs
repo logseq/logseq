@@ -2266,7 +2266,7 @@
        (dnd-separator-wrapper block block-id slide? true false))
 
      [:div.flex.flex-row.pr-2
-      {:class (if heading? "items-baseline" "")
+      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]

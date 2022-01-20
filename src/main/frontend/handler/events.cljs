@@ -74,7 +74,8 @@
   (let [_conn (conn/get-conn repo false)
         ; ast-version (d/datoms @conn :aevt :ast/version)
         ]
-    (db/set-key-value repo :ast/version db-schema/ast-version)))
+    (db/set-key-value repo :ast/version db-schema/ast-version)
+    (srs/update-cards-due-count!)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
