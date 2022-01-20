@@ -123,13 +123,17 @@
                               (empty? matched-pages)
                               matched-pages
 
+                              ;; reorder, shortest and starts-with first.
                               :else
-                              (->>
-                               (cons (first matched-pages)
-                                     (cons
-                                      (str "New page: " q)
-                                      (rest matched-pages)))
-                               (remove nil?)))]
+                              (let [matched-pages (remove nil? matched-pages)
+                                    matched-pages (sort-by
+                                                   (fn [m]
+                                                     [(not (string/starts-with? m q)) (count m)])
+                                                   matched-pages)]
+                                (cons (first matched-pages)
+                                      (cons
+                                       (str "New page: " q)
+                                       (rest matched-pages)))))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)

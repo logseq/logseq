@@ -337,6 +337,17 @@
                                       (apply f args))
                                    threshold)))))))
 
+(defn nth-safe [c i]
+  (if (or (< i 0) (>= i (count c)))
+    nil
+    (nth c i)))
+
+#?(:cljs
+   (when-not node-test?
+     (extend-type js/NodeList
+       ISeqable
+       (-seq [array] (array-seq array 0)))))
+
 ;; Caret
 #?(:cljs
    (defn caret-range [node]
@@ -355,7 +366,21 @@
                  (.setEnd pre-caret-range
                           (gobj/get range "endContainer")
                           (gobj/get range "endOffset"))
-                 (.toString pre-caret-range))))
+                 (let [contents (.cloneContents pre-caret-range)
+                       html (some-> (first (.-childNodes contents))
+                                    (gobj/get "innerHTML")
+                                    str)
+                       ;; FIXME: this depends on the dom structure,
+                       ;; need a converter from html to text includes newlines
+                       br-ended? (or
+                                  ;; first line with a new line
+                                  (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
+                                  ;; multiple lines with a new line
+                                  (string/ends-with? html "<br></div></div></span></div></div></div>"))
+                       value (.toString pre-caret-range)]
+                   (if br-ended?
+                     (str value "\n")
+                     value)))))
            (when-let [selection (gobj/get doc "selection")]
              (when (not= "Control" (gobj/get selection "type"))
                (let [text-range (.createRange selection)
@@ -996,11 +1021,6 @@
                                   (d/parent))]
          (when section
            (gdom/getElement section "id"))))))
-
-(defn nth-safe [c i]
-  (if (or (< i 0) (>= i (count c)))
-    nil
-    (nth c i)))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
