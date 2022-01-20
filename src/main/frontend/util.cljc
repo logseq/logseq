@@ -680,14 +680,12 @@
    (defn safe-set-range-text!
      ([input text start end]
       (try
-        (when (and start end)
-          (.setRangeText input text start end))
+        (.setRangeText input text start end)
         (catch js/Error _e
           nil)))
      ([input text start end select-mode]
       (try
-        (when (and start end)
-          (.setRangeText input text start end select-mode))
+        (.setRangeText input text start end select-mode)
         (catch js/Error _e
           nil)))))
 
