@@ -28,8 +28,10 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]
             [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.extensions.srs :as srs]))
 
+;; TODO: move to events
 (defn- open-repo-url [url]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! url)
@@ -39,7 +41,8 @@
   (when-not (= :draw (state/get-current-route))
     (route-handler/redirect-to-home!))
   (when-let [dir-name (config/get-repo-dir url)]
-    (fs/watch-dir! dir-name)))
+    (fs/watch-dir! dir-name))
+  (srs/update-cards-due-count!))
 
 (defn- switch-repo-if-writes-finished?
   [url]
