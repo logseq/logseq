@@ -343,9 +343,10 @@
     (nth c i)))
 
 #?(:cljs
-   (extend-type js/NodeList
-     ISeqable
-     (-seq [array] (array-seq array 0))))
+   (when-not node-test?
+     (extend-type js/NodeList
+       ISeqable
+       (-seq [array] (array-seq array 0)))))
 
 ;; Caret
 #?(:cljs
