@@ -105,8 +105,7 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
-  [_this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
-  (println (string/join "\n" [repo dir path content stat]))
+  [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
     (p/catch
      (p/let [result (.writeFile Filesystem (clj->js {:path path
@@ -129,7 +128,7 @@
                                         nil)))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
-            db-content (or old-content (db/get-file repo path) "")
+            db-content (or old-content (db/get-file repo (js/decodeURI path)) "")
             contents-matched? (contents-matched? disk-content db-content)
             pending-writes (state/get-write-chan-length)]
       (cond
@@ -151,7 +150,7 @@
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
                              content)]
-             (db/set-file-content! repo path content))
+             (db/set-file-content! repo (js/decodeURI path) content))
            (when ok-handler
              (ok-handler repo path result))
            result)
