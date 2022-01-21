@@ -99,27 +99,28 @@
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (let [format (name (get page :block/format
-                            (state/get-preferred-format)))
-          title (string/capitalize (:block/name page))
-          journal-page? (date/valid-journal-title? title)
-          path (str
-                (if journal-page?
-                  (config/get-journals-directory)
-                  (config/get-pages-directory))
-                "/"
-                (if journal-page?
-                  (date/journal-title->default title)
-                  (-> (or (:block/original-name page) (:block/name page))
-                      (util/page-name-sanity true))) "."
-                (if (= format "markdown") "md" format))
-          file-path (config/get-file-path repo path)
-          file {:file/path file-path}
-          tx [{:file/path file-path}
-              {:block/name (:block/name page)
-               :block/file file}]]
-      (db/transact! tx)
-      (when ok-handler (ok-handler)))))
+    (when (:block/name page)
+      (let [format (name (get page :block/format
+                              (state/get-preferred-format)))
+            title (string/capitalize (:block/name page))
+            journal-page? (date/valid-journal-title? title)
+            path (str
+                  (if journal-page?
+                    (config/get-journals-directory)
+                    (config/get-pages-directory))
+                  "/"
+                  (if journal-page?
+                    (date/journal-title->default title)
+                    (-> (or (:block/original-name page) (:block/name page))
+                        (util/page-name-sanity true))) "."
+                  (if (= format "markdown") "md" format))
+            file-path (config/get-file-path repo path)
+            file {:file/path file-path}
+            tx [{:file/path file-path}
+                {:block/name (:block/name page)
+                 :block/file file}]]
+        (db/transact! tx)
+        (when ok-handler (ok-handler))))))
 
 (defn save-tree-aux!
   [page-block tree]
