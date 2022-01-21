@@ -1200,6 +1200,8 @@
   [s]
   (and (string? s)
        (or (include-windows-reserved-chars? s)
+           (string/includes? s "_")
+           (string/includes? s "/")
            (string/includes? s ".")
            (string/includes? s "%")
            (string/includes? s "#"))))
