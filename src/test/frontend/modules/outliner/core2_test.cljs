@@ -1,8 +1,9 @@
 (ns frontend.modules.outliner.core2-test
   (:require [cljs.test :refer [deftest is testing] :as test]
-            [frontend.modules.outliner.core2 :as outliner-core]
+            [clojure.test.check.generators :as g]
             [datascript.core :as d]
-            [clojure.test.check.generators :as g]))
+            [frontend.modules.outliner.core2 :as outliner-core]
+            [frontend.modules.outliner.transaction :as tx]))
 
 (def tree
   "
@@ -57,6 +58,9 @@
 (defn- get-page-nodes
   [db]
   (map #(select-keys % [:data :block/level]) (outliner-core/get-page-nodes (d/entity db 1) db)))
+
+
+;;; testcases for operations (pure functions)
 
 (deftest test-insert-nodes
   (testing "insert 15, 16 as children after 5; 15 & 16 are siblings"
@@ -202,9 +206,7 @@
                 {:data 13 :block/level 2}
                 {:data 14 :block/level 3}]))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; some generative tests  ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defn- validate-nodes-level
   "check consecutive sorted nodes' :block/level are legal"
   [nodes]
@@ -217,6 +219,7 @@
 
 
 (defn- gen-random-tree
+  "PREFIX: used for generating unique data, :data is :db/unique in this test-file for test"
   [n prefix]
   (let [coll (transient [])]
     (loop [i 0 last-level 0]
@@ -233,7 +236,6 @@
       {:txs-data [] :nodes-count-change 0}
       (let [nodes (gen-random-tree (inc (rand-int 10)) (vswap! seq-state inc))
             target-id (:e (g/generate (g/elements datoms)))]
-        (println "insert at" (:data (d/entity db target-id)))
         {:txs-data (outliner-core/insert-nodes nodes db target-id (g/generate g/boolean))
          :nodes-count-change (count nodes)}))))
 
@@ -244,7 +246,6 @@
       {:txs-data [] :nodes-count-change 0}
       (let [node (d/entity db (:e (g/generate (g/elements datoms))))
             nodes (outliner-core/get-children-nodes node db)]
-        (println "delete at" (:data node))
         {:txs-data (outliner-core/delete-nodes nodes db)
          :nodes-count-change (- (count nodes))}))))
 
@@ -256,9 +257,8 @@
       (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity db 1) db)
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (if (seq nodes)
-          (do (println "indent" (count nodes) "nodes")
-              {:txs-data (outliner-core/indent-nodes nodes db)
-             :nodes-count-change 0})
+          {:txs-data (outliner-core/indent-nodes nodes db)
+             :nodes-count-change 0}
           {:txs-data [] :nodes-count-change 0})))))
 
 (defn- op-outdent-nodes
@@ -269,11 +269,33 @@
       (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity db 1) db)
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (if (seq nodes)
-          (do (println "outdent" (count nodes) "nodes")
-              {:txs-data (outliner-core/outdent-nodes nodes db)
-               :nodes-count-change 0})
+          {:txs-data (outliner-core/outdent-nodes nodes db)
+           :nodes-count-change 0}
           {:txs-data [] :nodes-count-change 0})))))
 
+(defn- op-move-nodes
+  [db _seq-state]
+  (let [datoms (d/datoms db :avet :data)]
+    (if (empty? datoms)
+      {:txs-data [] :nodes-count-change 0}
+      (let [node (d/entity db (:e (g/generate (g/elements datoms))))
+            nodes (outliner-core/get-children-nodes node db)
+            target (loop [n 10 maybe-node (d/entity db (:e (g/generate (g/elements datoms))))]
+                     (cond
+                       (= 0 n)
+                       nil
+                       (outliner-core/contains-node? nodes maybe-node)
+                       (recur (dec n) (d/entity db (:e (g/generate (g/elements datoms)))))
+                       :else
+                       maybe-node))]
+        (if-not target
+          {:txs-data [] :nodes-count-change 0}
+          {:txs-data (outliner-core/move-nodes nodes db target (g/generate g/boolean))
+           :nodes-count-change 0})))))
+
+
+;;; generative testcases
+;; build random legal tree, then apply random operations on it.
 
 (deftest test-random-op
   (testing "random insert/delete/indent/outdent nodes"
@@ -282,15 +304,105 @@
             tree (gen-random-tree 20 (vswap! seq-state inc))
             conn (build-db-records tree)
             nodes-count (volatile! (count tree))]
+        (println "(test-random-op) random insert/delete/indent/outdent nodes (100 runs)")
         (dotimes [_ 100]
           (let [{:keys [txs-data nodes-count-change]}
                 ((g/generate (g/elements [op-insert-nodes
                                           op-delete-nodes
                                           op-indent-nodes
-                                          op-outdent-nodes])) @conn seq-state)]
+                                          op-outdent-nodes
+                                          op-move-nodes])) @conn seq-state)]
             (d/transact! conn txs-data)
             (vswap! nodes-count #(+ % nodes-count-change))
             (let [page-nodes (get-page-nodes @conn)]
               (validate-nodes-level page-nodes) ;check nodes level
               (is (= @nodes-count (count page-nodes))) ; check node count
               )))))))
+
+;;; generative testcases on write-operations with side-effects
+
+(defn- fetch-tx-data [*txs]
+  (fn [tx-data]
+    (vswap! *txs #(apply conj % tx-data))))
+
+(defn- undo-tx-data! [conn tx-data]
+  (let [rev-tx-data (->> tx-data
+                         reverse
+                         (map (fn [[e a v t add?]]
+                                (let [op (if add? :db/retract :db/add)]
+                                  [op e a v t]))))]
+    (d/transact! conn rev-tx-data)))
+
+(defn- op-insert-nodes!
+  [conn seq-state]
+  (let [datoms (d/datoms @conn :avet :data)]
+    (when (seq datoms)
+      (let [nodes (gen-random-tree (inc (rand-int 10)) (vswap! seq-state inc))
+            target-id (:e (g/generate (g/elements datoms)))]
+        (outliner-core/insert-nodes! nodes conn target-id (g/generate g/boolean))))))
+
+(defn- op-delete-nodes!
+  [conn _seq-state]
+  (let [datoms (d/datoms @conn :avet :data)]
+    (when (seq datoms)
+      (let [node (d/entity @conn (:e (g/generate (g/elements datoms))))
+            nodes (outliner-core/get-children-nodes node @conn)]
+        (outliner-core/delete-nodes! nodes conn)))))
+
+(defn- op-indent-nodes!
+  [conn _seq-state]
+  (let [datoms (d/datoms @conn :avet :data)]
+    (when (seq datoms)
+      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity @conn 1) @conn)
+                         (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
+        (when (seq nodes)
+          (outliner-core/indent-nodes! nodes conn))))))
+
+(defn- op-outdent-nodes!
+  [conn _seq-state]
+  (let [datoms (d/datoms @conn :avet :data)]
+    (when (seq datoms)
+      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity @conn 1) @conn)
+                         (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
+        (when (seq nodes)
+          (outliner-core/outdent-nodes! nodes conn))))))
+
+(defn- op-move-nodes!
+  [conn _seq-state]
+  (let [datoms (d/datoms @conn :avet :data)]
+    (when (seq datoms)
+      (let [node (d/entity @conn (:e (g/generate (g/elements datoms))))
+            nodes (outliner-core/get-children-nodes node @conn)
+            target (loop [n 10 maybe-node (d/entity @conn (:e (g/generate (g/elements datoms))))]
+                     (cond
+                       (= 0 n)
+                       nil
+                       (outliner-core/contains-node? nodes maybe-node)
+                       (recur (dec n) (d/entity @conn (:e (g/generate (g/elements datoms)))))
+                       :else
+                       maybe-node))]
+        (when target
+          (outliner-core/move-nodes! nodes conn target (g/generate g/boolean)))))))
+
+(deftest test-random-op!
+  (testing "random insert nodes"
+    (dotimes [_ 20]
+      (let [seq-state (volatile! 0)
+            tree (gen-random-tree 20 (vswap! seq-state inc))
+            conn (build-db-records tree)
+            origin-db @conn
+            *tx-data (volatile! [])]
+        (binding [tx/listeners (volatile! [(fetch-tx-data *tx-data)])]
+          (tx/save-transactions
+           {}
+           (println "(test-random-op!) random insert/delete/indent/outdent nodes (100 runs)")
+           (dotimes [_ 100]
+             ((g/generate (g/elements [op-insert-nodes!
+                                       op-delete-nodes!
+                                       op-indent-nodes!
+                                       op-outdent-nodes!
+                                       op-move-nodes!])) conn seq-state)))
+          ;; undo all *tx-data, then validate it's equal to origin db
+          (is (not= origin-db @conn))
+          (undo-tx-data! conn @*tx-data)
+          (is (= origin-db @conn)))))))
