@@ -941,6 +941,10 @@
 (defn set-theme!
   [theme]
   (set-state! :ui/theme theme)
+  (when (mobile-util/native-ios?)
+    (if (= theme "white")
+      (util/set-theme-light)
+      (util/set-theme-dark)))
   (storage/set :ui/theme theme))
 
 (defn sync-system-theme!
@@ -958,10 +962,6 @@
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))
     (sync-system-theme!)))
-
-(defn dark?
-  []
-  (= "dark" (:ui/theme @state)))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
