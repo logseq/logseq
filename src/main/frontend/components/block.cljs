@@ -1883,7 +1883,7 @@
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
-    [:div.block-content.inline
+    [:div.block-content.inline.select-none
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [e]
                              (when (and
