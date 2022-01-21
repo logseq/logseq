@@ -312,6 +312,7 @@
         :all-journals "All journals"
         :my-publishing "My publishing"
         :settings "Settings"
+        :settings-of-plugins "Settings of plugins"
         :plugins "Plugins"
         :themes "Themes"
         :developer-mode-alert "You need to restart the app to enable the plugin system. Do you want to restart it now?"

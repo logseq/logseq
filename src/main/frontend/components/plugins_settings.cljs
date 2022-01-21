@@ -70,9 +70,6 @@
 
     (if (seq schema)
       [:div.cp__plugins-settings-inner
-
-       [:h2.font-bold.text-2xl.pb-4 (str "⚙️ " (.. pl -options -name))]
-
        ;; render items
        (for [desc schema
              :let [key  (:key desc)
@@ -92,4 +89,4 @@
        ]
 
       ;; no settings
-      [:h2.font-bold.text-lg "No Settings Schema"])))
+      [:h2.font-bold.text-lg.py-4.opacity-90 "No Settings Schema!"])))

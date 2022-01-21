@@ -289,10 +289,10 @@
                 )]])
 
           (ui/toggle (not disabled)
-            (fn []
-              (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
-              (page-handler/init-commands!))
-            true)]])]]))
+                     (fn []
+                       (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
+                       (page-handler/init-commands!))
+                     true)]])]]))
 
 (rum/defc panel-control-tabs
   < rum/static
@@ -518,9 +518,9 @@
                (let [pid (keyword (:id item))
                      stat (:stat item)]
                  (plugin-item-card t
-                   item true *search-key installing
-                   (and installing (= (keyword (:id installing)) pid))
-                   (contains? installed-plugins pid) stat nil))
+                                   item true *search-key installing
+                                   (and installing (= (keyword (:id installing)) pid))
+                                   (contains? installed-plugins pid) stat nil))
                (:id item)))]])])))
 
 (rum/defcs installed-plugins
@@ -587,9 +587,9 @@
           (rum/with-key
             (let [pid (keyword (:id item))]
               (plugin-item-card t
-                item false *search-key updating
-                (and updating (= (keyword (:id updating)) pid))
-                true nil (get coming-updates pid)))
+                                item false *search-key updating
+                                (and updating (= (keyword (:id updating)) pid))
+                                true nil (get coming-updates pid)))
             (:id item)))]])))
 
 (rum/defcs waiting-coming-updates
@@ -747,13 +747,36 @@
 
 (rum/defcs focused-settings-content
   < rum/reactive
-  [state]
+  [_state]
+  (let [focused (state/sub :plugin/focused-settings)
+        _ (state/sub :plugin/installed-plugins)]
 
-  (when-let [focused (state/sub :plugin/focused-settings)]
-    (when-let [^js pl (plugin-handler/get-plugin-inst focused)]
-      [:div.cp__plugins-settings
-       (plugins-settings/settings-container
-         (bean/->clj (.-settingsSchema pl)) pl)])))
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
+      [:div.cp__plugins-settings.cp__settings-main
+       [:header
+        [:h1.title (t :settings-of-plugins)]]
+
+       [:div.cp__settings-inner.md:flex
+        [:aside.md:w-64 {:style {:min-width "10rem"}}
+         (let [plugins (state/get-enabled-installed-plugins false true)]
+           [:ul
+            (for [{:keys [id name title icon]} plugins]
+              [:li
+               {:class (util/classnames [{:active (= id focused)}])}
+               [:a.flex.items-center
+                {:on-click #(do (state/set-state! :plugin/focused-settings id))}
+                (if (and icon (not (string/blank? icon)))
+                  [:img.icon {:src icon}]
+                  svg/folder)
+                [:strong.flex-1 (or title name)]]])])]
+
+        [:article
+         [:div.panel-wrap
+          (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
+            (plugins-settings/settings-container
+              (bean/->clj (.-settingsSchema pl)) pl))
+          ]]]])))
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
@@ -782,6 +805,7 @@
   []
   (state/set-sub-modal!
     (fn [_close!]
-      (focused-settings-content))
-    {:center? true
-     :id "ls-focused-settings-modal"}))
+      [:div.settings-modal.of-plugins
+       (focused-settings-content)])
+    {:center? false
+     :id      "ls-focused-settings-modal"}))

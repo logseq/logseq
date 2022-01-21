@@ -1683,12 +1683,13 @@
   (:ui/visual-viewport-state @state))
 
 (defn get-enabled-installed-plugins
-  [theme?]
-  (filterv
-    #(and (:iir %)
-          (not (get-in % [:settings :disabled]))
-          (= (boolean theme?) (:theme %)))
-    (vals (:plugin/installed-plugins @state))))
+  ([theme?] (get-enabled-installed-plugins theme? false))
+  ([theme? include-unpacked?]
+   (filterv
+     #(and (if include-unpacked? true (:iir %))
+           (not (get-in % [:settings :disabled]))
+           (= (boolean theme?) (:theme %)))
+     (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
   []

@@ -448,11 +448,9 @@
   }
 
   &-settings {
-    margin: -15px;
-
     &-inner {
       padding: 10px 0;
-      max-height: 60vh;
+      max-height: 70vh;
 
       .desc-item {
         padding: 12px;
@@ -487,10 +485,12 @@
 
         &.as-input, &.as-enum {
           > .form-control {
+            padding-top: 4px;
             flex-direction: column;
+            align-items: flex-start;
 
-            > small {
-              padding-bottom: 4px;
+            small {
+              padding-bottom: 6px;
               width: 100%;
             }
           }
@@ -501,6 +501,7 @@
             > .wrap {
               flex-direction: column;
               width: 100%;
+              margin-top: -3px;
             }
           }
         }
@@ -512,16 +513,57 @@
         .ui__radio-list, .ui__checkbox-list {
           display: flex;
           align-items: center;
+          padding-top: 3px;
 
           label {
             padding-right: 15px;
+            user-select: none;
           }
 
           input {
-            margin-right: 4px;
+            margin-right: 6px;
+          }
+        }
+
+        .form-input {
+          padding: 5px;
+          width: 50%;
+        }
+
+        .form-select {
+          width: 50%;
+          padding: 4px 4px 4px 7px !important;
+          margin: 5px 0 0;
+        }
+      }
+    }
+
+    aside {
+      max-height: 70vh;
+      overflow: auto;
+      margin-bottom: -17px;
+
+      ul {
+        img.icon {
+          height: 24px;
+          width: 24px;
+        }
+
+        li {
+          strong {
+            font-weight: 400;
+            overflow: hidden;
+            height: 22px;
+
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
         }
       }
+    }
+
+    article .panel-wrap {
+      padding: 0;
     }
   }
 }
