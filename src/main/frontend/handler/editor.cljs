@@ -3568,7 +3568,6 @@
                        expand-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
-
      :else
      ;; expand one level
      (let [blocks-with-level (all-blocks-with-level {})

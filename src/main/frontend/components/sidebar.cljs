@@ -452,9 +452,10 @@
        "?"])))
 
 (defn- hide-context-menu-and-clear-selection
-  []
+  [e]
   (state/hide-custom-context-menu!)
-  (editor-handler/clear-selection!))
+  (when-not (gobj/get e "shiftKey")
+    (editor-handler/clear-selection!)))
 
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
@@ -467,7 +468,7 @@
                       (when (= 27 (.-keyCode e))
                         (if (state/modal-opened?)
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection)))))))
+                          (hide-context-menu-and-clear-selection e)))))))
   {:did-mount (fn [state]
                 (swipe/setup-listeners!)
                 state)}
