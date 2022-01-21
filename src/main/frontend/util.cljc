@@ -385,11 +385,12 @@
                                     str)
                        ;; FIXME: this depends on the dom structure,
                        ;; need a converter from html to text includes newlines
-                       br-ended? (or
-                                  ;; first line with a new line
-                                  (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
-                                  ;; multiple lines with a new line
-                                  (string/ends-with? html "<br></div></div></span></div></div></div>"))
+                       br-ended? (and html
+                                      (or
+                                       ;; first line with a new line
+                                       (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
+                                       ;; multiple lines with a new line
+                                       (string/ends-with? html "<br></div></div></span></div></div></div>")))
                        value (.toString pre-caret-range)]
                    (if br-ended?
                      (str value "\n")
