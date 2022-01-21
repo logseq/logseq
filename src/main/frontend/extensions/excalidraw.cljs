@@ -3,6 +3,8 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
@@ -59,7 +61,7 @@
         *grid-mode? (get state ::grid-mode?)
         wide-mode? (state/sub :ui/wide-mode?)
         *elements (get state ::elements)
-        file (:file option)]
+        {:keys [file block-uuid]} option]
     (when data
       [:div.overflow-hidden {:on-mouse-down (fn [e] (util/stop e))}
        [:div.my-1 {:style {:font-size 10}}
@@ -70,7 +72,10 @@
         [:a.mr-2 {:on-click #(swap! *view-mode? not)}
          (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(swap! *grid-mode? not)}
-         (util/format "Grid Mode (%s)" (if @*view-mode? "ON" "OFF"))]]
+         (util/format "Grid Mode (%s)" (if @*view-mode? "ON" "OFF"))]
+        [:a.mr-2 {:on-click #(when-let [block (db/pull [:block/uuid block-uuid])]
+                               (editor-handler/edit-block! block :max block-uuid))}
+         "Edit Block"]]
        [:div.draw-wrap
         {:on-mouse-down (fn [e]
                           (util/stop e)
@@ -81,11 +86,11 @@
         (excalidraw
          (merge
           {:on-change (fn [elements app-state]
-                        (when-not (or (= "down" (.-cursorButton app-state))
-                                      (.-draggingElement app-state)
-                                      (.-editingElement app-state)
-                                      (.-editingGroupId app-state)
-                                      (.-editingLinearElement app-state))
+                        (when-not (or (= "down" (gobj/get app-state "cursorButton"))
+                                      (gobj/get app-state "draggingElement")
+                                      (gobj/get app-state "editingElement")
+                                      (gobj/get app-state "editingGroupId")
+                                      (gobj/get app-state "editingLinearElement"))
                           (let [elements->clj (bean/->clj elements)]
                             (when (and (seq elements->clj)
                                        (not= elements->clj @*elements)) ;; not= requires clj collections

@@ -526,22 +526,23 @@
            (p/let [_ (loader/load :excalidraw)]
              (reset! excalidraw-loaded? true))
            state)}
-  [file]
+  [file block-uuid]
   (let [loaded? (rum/react excalidraw-loaded?)
         draw-component (when loaded?
                          (resolve 'frontend.extensions.excalidraw/draw))]
     (when draw-component
-      (draw-component {:file file}))))
+      (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
   (let [show-brackets? (state/show-brackets?)
         nested-link? (:nested-link? config)
-        contents-page? (= "contents" (string/lower-case (str (:id config))))]
+        contents-page? (= "contents" (string/lower-case (str (:id config))))
+        block-uuid (:block/uuid config)]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
-       (excalidraw s)]
+       (excalidraw s block-uuid)]
       [:span.page-reference
        {:data-ref s}
        (when (and (or show-brackets? nested-link?)
