@@ -129,6 +129,16 @@
      []
      (gobj/get js/window "innerWidth")))
 
+#?(:cljs
+   (defn set-theme-light
+     []
+     (utils/setStatusBarStyleLight)))
+
+#?(:cljs
+   (defn set-theme-dark
+     []
+     (utils/setStatusBarStyleDark)))
+
 (defn indexed
   [coll]
   (map-indexed vector coll))
@@ -1190,6 +1200,8 @@
   [s]
   (and (string? s)
        (or (include-windows-reserved-chars? s)
+           (string/includes? s "_")
+           (string/includes? s "/")
            (string/includes? s ".")
            (string/includes? s "%")
            (string/includes? s "#"))))
