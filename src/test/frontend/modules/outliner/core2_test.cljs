@@ -323,7 +323,7 @@
 
 (defn- fetch-tx-data [*txs]
   (fn [tx-data]
-    (vswap! *txs #(apply conj % tx-data))))
+    (vswap! *txs into tx-data)))
 
 (defn- undo-tx-data! [conn tx-data]
   (let [rev-tx-data (->> tx-data
