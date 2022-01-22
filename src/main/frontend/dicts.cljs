@@ -2338,7 +2338,7 @@
     :on-boarding/privacy "O servidor nunca irá armazenar ou analisar as suas notas privadas. Os seus dados são arquivos de texto simples, e suportamos neste momento Markdown e o modo Emacs Org. Mesmo que o servidor na web esteja fora do ar ou seja permanentemente desativado, os seus dados serão sempre seus."
     :on-boarding/inspired-by " é fortemente inspirado por "
     :on-boarding/where-are-my-notes-saved "Onde são guardadas as minhas notas?"
-    :on-boarding/storage "A suas notas serão salvas no armazenamento local do navegador usando "
+    :on-boarding/storage "As suas notas serão salvas no armazenamento local do navegador usando "
     :on-boarding/how-do-i-use-it "Como usar?"
     :on-boarding/use-1 "1. Sincronizar entre vários dispositivos"
     :on-boarding/use-1-desc "Atualmente, apenas suportamos sincronização através do GitHub, outras opções (git auto-hospedado, WebDAV, Google Drive, etc.) serão acrescentadas em breve."
@@ -2454,7 +2454,7 @@
     :git/title "Diferenças"
     :git/no-diffs "Sem diferenças"
     :git/commit-message "Mensagem de consolidação (opcional)"
-    :git/pushing "A fazer push"
+    :git/pushing "Enviando"
     :git/force-push "Consolidar e forçar envio"
     :git/a-force-push "Envio forçado"
     :git/add-repo-prompt "Instalar o Logseq no seu repositório"
@@ -2503,7 +2503,7 @@
     :publishing/save "Guardar"
     :publishing/cancel "Cancelar"
     :publishing/delete "Apagar"
-    :journal/multiple-files-with-different-formats "Parece que tem vários arquivos de diário (com diferentes formatos) para o mesmo mês, por favor salve apenas um arquivo de diário para cada mês."
+    :journal/multiple-files-with-different-formats "Parece que tem vários arquivos (em vários formatos) de diário para o mesmo mês, por favor salve apenas um arquivo de diário para cada mês."
     :journal/go-to "Ir para arquivos"
     :file/name "Nome do arquivo"
     :file/file "Arquivo: "
@@ -2514,7 +2514,7 @@
     :page/updated-at "Atualizado em"
     :page/backlinks "Back Links"
     :editor/block-search "Pesquisar por um bloco"
-    :editor/image-uploading "A enviar"
+    :editor/image-uploading "Enviando"
     :draw/invalid-file "Não foi possível carregar este arquivo excalidraw inválido"
     :draw/specify-title "Por favor indique um título primeiro!"
     :draw/rename-success "Arquivo foi renomeado com sucesso!"
@@ -2529,7 +2529,7 @@
     :draw/back-to-logseq "Voltar a logseq"
     :text/image "Imagem"
     :asset/confirm-delete "Tem certeza que quer apagar este {1}?"
-    :asset/physical-delete "Remover também o arquivo (note que não pode ser restaurado)"
+    :asset/physical-delete "Remover também o arquivo (não poderá ser restaurado)"
     :content/copy "Copiar"
     :content/cut "Cortar"
     :content/make-todos "Fazer {1}s"
@@ -2557,7 +2557,7 @@
     :settings-page/enable-encryption "Ativar funcionalidade de criptografia"
     :settings-page/customize-shortcuts "Atalhos de teclado"
     :settings-page/shortcut-settings "Personalizar atalhos"
-    :settings-page/home-default-page "Definir a página inicial por omissão"
+    :settings-page/home-default-page "Definir a página inicial padrão"
     :settings-page/enable-block-time "Ativar carimbos temporais nos blocos"
     :settings-page/dont-use-other-peoples-proxy-servers "Não use servidores proxy de outras pessoas. É muito perigoso, o que pode levar a que o seu token e notas sejam roubadas. O Logseq não será responsável por estas perdas se usar servidores proxy de outras pessoas. Pode criar o seu, veja "
     :settings-page/clear-cache "Limpar cache"
@@ -2573,7 +2573,7 @@
     :settings-page/tab-editor "Editor"
     :settings-page/tab-shortcuts "Atalhos"
     :settings-page/tab-advanced "Avançado"
-    :settings-page/tab-version-control "Controlo de Versões"
+    :settings-page/tab-version-control "Controle de Versões"
     :logseq "Logseq"
     :on "ON"
     :more-options "Mais opções"
@@ -2601,7 +2601,7 @@
     :export "Exportar"
     :export-markdown "Exportar como Markdown padrão (sem propriedades de bloco)"
     :export-opml "Exportar como OPML"
-    :export-public-pages "Export páginas públicas"
+    :export-public-pages "Exportar páginas públicas"
     :export-json "Exportar como JSON"
     :export-roam-json "Exportar como Roam JSON"
     :export-edn "Exportar como EDN"
@@ -2609,7 +2609,7 @@
     :convert-markdown "Converter cabeçalhos Markdown para listas não-ordenadas (# -> -)"
     :all-graphs "Todos os grafos"
     :all-pages "Todas as páginas"
-    :all-files "Todos os ficheiros"
+    :all-files "Todos os arquivos"
     :all-journals "Todos os diários"
     :my-publishing "Minhas publicações"
     :settings "Definições"
@@ -2649,7 +2649,7 @@
     :pdf/copy-ref "Copiar referência"
     :pdf/copy-text "Copiar texto"
     :pdf/linked-ref "Referências ligadas"
-    :command-palette/prompt "Entre um comando"}
+    :command-palette/prompt "Digite um comando"}
 
    :pt-PT
    {:on-boarding/title "Olá, bem-vindo ao Logseq!"
@@ -2658,7 +2658,7 @@
     :on-boarding/vision "Uma plataforma de código-aberto focada na privacidade para gestão de conhecimento e colaboração."
     :on-boarding/local-first "local"
     :on-boarding/non-linear "não-linear"
-    :on-boarding/outliner "delineador"
+    :on-boarding/outliner "estruturador"
     :on-boarding/notebook-for-organizing-and " para organização e "
     :on-boarding/your-personal-knowledge-base " a sua base de conhecimento pessoal."
     :on-boarding/notice "Note que este projeto está em fase de testes Beta e sob rápido desenvolvimento, lembre-se de fazer uma cópia de segurança regular pelo menos 1x/dia."
@@ -3360,6 +3360,7 @@
                 {:label "Afrikaans" :value :af}
                 {:label "Español" :value :es}
                 {:label "Norsk (bokmål)" :value :nb-NO}
+                {:label "Português (Brasileiro)" :value :pt-BR}
                 {:label "Português (Europeu)" :value :pt-PT}
                 {:label "Русский" :value :ru}])
 
