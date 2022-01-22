@@ -16,27 +16,27 @@
             [cljs.core.async.impl.channels]))
 
 ;;; Commentary
-;;; file-sync related local files/dirs:
-;;; - logseq/graphs-txid.edn
-;;;   this file contains graph-uuid & transaction-id
-;;;   graph-uuid: the unique identifier of the graph on the server
-;;;   transaction-id: sync progress of local files
-;;; - logseq/version-files
-;;;   downloaded version-files
-;;; files included by `get-ignore-files` will not be synchronized.
-;;; files in these `get-monitored-dirs` dirs will be synchronized.
-;;;
-;;; sync strategy:
-;;; - when toggle file-sync on, trigger a full-sync first,
-;;;   full-sync will compare local-files with remote-files (by md5 & size),
-;;;   and upload new-added-files to remote server.
-;;; - full-sync will be triggered after 20min of idle
-;;; - every 20s will flush local changes, and sync to remote
+;; file-sync related local files/dirs:
+;; - logseq/graphs-txid.edn
+;;   this file contains graph-uuid & transaction-id
+;;   graph-uuid: the unique identifier of the graph on the server
+;;   transaction-id: sync progress of local files
+;; - logseq/version-files
+;;   downloaded version-files
+;; files included by `get-ignore-files` will not be synchronized.
+;; files in these `get-monitored-dirs` dirs will be synchronized.
+;;
+;; sync strategy:
+;; - when toggle file-sync on, trigger a full-sync first,
+;;   full-sync will compare local-files with remote-files (by md5 & size),
+;;   and upload new-added-files to remote server.
+;; - full-sync will be triggered after 20min of idle
+;; - every 20s will flush local changes, and sync to remote
 
 
-;;; TODO: add some spec validate
-;;; TODO: use access-token instead of id-token
-;;; TODO: update-remote-file failed when pagename contains whitespace
+;; TODO: add some spec validate
+;; TODO: use access-token instead of id-token
+;; TODO: update-remote-file failed when pagename contains whitespace
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -174,7 +174,7 @@
         (comp
          (remove empty?)
          (map #(->FileTxn % % update? delete? TXId)))
-        filepaths (string/split-lines TXContent)]
+        filepaths (map js/decodeURIComponent (string/split-lines TXContent))]
     (case TXType
       ("update_files" "delete_files")
       (sequence update-or-del-type-xf filepaths)
@@ -319,6 +319,8 @@
     :else
     (throw (js/Error. (str "unsupport type " (type o))))))
 
+;;; APIs
+;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
@@ -467,29 +469,28 @@
       (let [r (<! (.request this "get_all_files" {:GraphUUID graph-uuid}))]
         (if (instance? ExceptionInfo r)
           r
-          (->> r
-               :Objects
-               (map #(->FileMetadata (:Size %)
-                                     (:ETag %)
-                                     (remove-user-graph-uuid-prefix (:Key %))
-                                     (:LastModified %)
-                                     true nil))
-               set)))))
+          (into #{} (map
+                     #(->FileMetadata (:Size %)
+                                      (:ETag %)
+                                      (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
+                                      (:LastModified %)
+                                      true nil))
+                (:Objects r))))))
 
   (get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (let [r (<! (.request this "get_files_meta" {:GraphUUID graph-uuid :Files filepaths}))]
+      (let [encoded-filepaths (map js/encodeURIComponent filepaths)
+            r (<! (.request this "get_files_meta" {:GraphUUID graph-uuid :Files encoded-filepaths}))]
         (if (instance? ExceptionInfo r)
           r
-          (->> r
-               :Files
-               (map #(->FileMetadata (:Size %)
-                                     (:ETag %)
-                                     (:FilePath %)
-                                     (:LastModified %)
-                                     true nil))
-               (into #{}))))))
+          (into #{}
+                (map #(->FileMetadata (:Size %)
+                                      (:ETag %)
+                                      (js/decodeURIComponent (:FilePath %))
+                                      (:LastModified %)
+                                      true nil))
+                (:Files r))))))
 
   (get-remote-graph [this graph-name-opt graph-uuid-opt]
     {:pre [(or graph-name-opt graph-uuid-opt)]}
@@ -499,7 +500,7 @@
                                  (seq graph-uuid-opt)
                                  (assoc :GraphUUID graph-uuid-opt))))
   (get-remote-file-versions [this graph-uuid filepath]
-    (.request this "get_file_version_list" {:GraphUUID graph-uuid :File filepath}))
+    (.request this "get_file_version_list" {:GraphUUID graph-uuid :File (js/encodeURIComponent filepath)}))
   (list-remote-graphs [this]
     (.request this "list_graphs"))
 
@@ -590,9 +591,8 @@
 
 
 
-(def local-changes-chan (chan 100))
 
-;;; type = "change" | "add" | "unlink"
+;; type = "change" | "add" | "unlink"
 (deftype FileChangeEvent [type dir path stat]
   IRelativePath
   (-relative-path [_] (remove-dir-prefix dir path))
@@ -620,8 +620,9 @@
    (map #(partition-all n %))
    cat))
 
-
+(def local-changes-chan (chan 100))
 (defn file-watch-handler
+  "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
   (go
     (when (some-> (state/get-file-sync-state-manager)
@@ -629,6 +630,7 @@
                   not)
       (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
 
+;;; remote->local syncer & local->remote syncer
 
 (defprotocol IRemote->LocalSync
   (stop-remote->local! [this])
@@ -825,6 +827,7 @@
 
                   (or need-sync-remote unknown) r)))))))))
 
+;;; sync state
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
                     ^:mutable history]
   Object
@@ -869,6 +872,7 @@
                   :current-downloading-files current-remote->local-files}]
       (-pr-writer pr-map w opts))))
 
+;;; put all stuff together
 
 (deftype SyncManager [graph-uuid base-path ^SyncState sync-state
                       ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
