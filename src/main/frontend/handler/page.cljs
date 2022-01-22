@@ -756,6 +756,10 @@
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.openPath file-path)))
 
+(defn copy-current-file []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (util/copy-to-clipboard! file-path)))
+
 (defn open-file-in-directory []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.showItemInFolder file-path)))

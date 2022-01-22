@@ -15,3 +15,15 @@ There are outstanding linting items that are currently ignored to allow linting 
 
 * Comments starting with `TODO:lint`
 * Code marked with `#_:clj-kondo/ignore` require a good understanding of the context to address as they usually involve something with a side effect or require changing multiple fns up the call stack.
+
+## Testing
+
+We have unit and end to end tests as described in https://github.com/logseq/logseq#5-run-tests.
+
+### Unit Testing
+
+When writing unit tests it is helpful to have tests automatically run on file
+save with `yarn shadow-cljs watch test --config-merge '{:autorun true}'`. The
+test output may appear where shadow-cljs was first invoked e.g. where `yarn
+watch` is running. For more about the shadow-cljs test runner, see [this
+documentation](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing).

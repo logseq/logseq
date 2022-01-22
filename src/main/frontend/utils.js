@@ -1,4 +1,5 @@
 import path from 'path/path.js'
+import { StatusBar, Style } from '@capacitor/status-bar'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -294,3 +295,19 @@ export const nodePath = Object.assign({}, path, {
     return path.extname(input)
   }
 })
+
+export const setStatusBarStyleDark = async () => {
+  await StatusBar.setStyle({ style: Style.Dark });
+};
+
+export const setStatusBarStyleLight = async () => {
+  await StatusBar.setStyle({ style: Style.Light });
+};
+
+export const hideStatusBar = async () => {
+  await StatusBar.hide();
+};
+
+export const showStatusBar = async () => {
+  await StatusBar.show();
+};
