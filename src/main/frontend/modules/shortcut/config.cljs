@@ -18,7 +18,7 @@
             [medley.core :as medley]))
 
 ;; Note – when you change this file, you will need to do a hard reset.
-;; The commands are registered when the Clojurescript code runs for the fir
+;; The commands are registered when the Clojurescript code runs for the first time
 (defonce all-default-keyboard-shortcuts
   {:date-picker/complete         {:desc    "Date picker: Choose selected day"
                                   :binding "enter"
@@ -406,6 +406,11 @@
                                        :binding false
                                        :fn      page-handler/open-file-in-directory})
 
+   :editor/copy-current-file        (when (util/electron?)
+                                      {:desc    "Copy current file"
+                                       :binding false
+                                       :fn      page-handler/copy-current-file})
+
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
                                      :binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
@@ -559,6 +564,7 @@
                           :ui/open-new-window
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
+                          :editor/copy-current-file
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins

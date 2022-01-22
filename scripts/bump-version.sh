@@ -25,6 +25,7 @@ NOTICE_FLAG="${CYAN}❯"
 LATEST_HASH=`git log --pretty=format:'%h' -n 1`
 
 BASE_VERSION=$(cat resources/package.json | jq '.version' | tr -d '"')
+VERSION_CODE=$(cat android/app/build.gradle | grep -oh 'versionCode [[:digit:]]*' | awk '{print $2}')
 
 BASE_LIST=(`echo $BASE_VERSION | tr '.' ' '`)
 V_MAJOR=${BASE_LIST[0]}
@@ -33,6 +34,7 @@ V_PATCH=${BASE_LIST[2]}
 
 echo -e "${NOTICE_FLAG} Current version: ${WHITE}$BASE_VERSION"
 echo -e "${NOTICE_FLAG} Latest commit hash: ${WHITE}$LATEST_HASH"
+echo -e "${NOTICE_FLAG} Current versionCode(Android): ${WHITE}$VERSION_CODE"
 
 # V_MINOR=$((V_MINOR + 1))
 # V_PATCH=0
@@ -45,14 +47,17 @@ read INPUT_STRING
 if [ "$INPUT_STRING" = "" ]; then
   INPUT_STRING=$SUGGESTED_VERSION
 fi
+NEW_VERSION_CODE=$(($VERSION_CODE + 1))
 
 echo -e "${NOTICE_FLAG} Will set new version to be ${WHITE}$INPUT_STRING"
+echo -e "${NOTICE_FLAG} Will set new versionCode to be ${WHITE}$VERSION_CODE"
 
 NEW_VERSION=$INPUT_STRING
 
 $SED -i 's/defonce version ".*"/defonce version "'${NEW_VERSION}'"/g' src/main/frontend/version.cljs
 $SED -i 's/"version": ".*"/"version": "'${NEW_VERSION}'"/g' resources/package.json
 $SED -i 's/versionName ".*"/versionName "'${NEW_VERSION}'"/g' android/app/build.gradle
+$SED -i 's/versionCode .*/versionCode '${NEW_VERSION_CODE}'/g' android/app/build.gradle
 
 git --no-pager diff -U0
 

@@ -56,7 +56,7 @@
    (when page-name
      (let [page-name (util/page-name-sanity-lc page-name)]
        (when-let [page (db/entity [:block/name page-name])]
-        (:file/path (:block/file page)))))))
+         (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   (let [original-name (:block/original-name page)]
@@ -198,14 +198,14 @@
                             "\\[\\[file:\\.*/.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                           content))]
     (-> (if old-org-ref
-            (let [[old-full-ref old-label] old-org-ref
-                  new-label (if (= old-label original-old-name)
-                                original-new-name
-                              old-label)
-                  new-full-ref (-> (string/replace old-full-ref old-name new-name)
-                                   (string/replace (str "[" old-label "]")
-                                                   (str "[" new-label "]")))]
-              (string/replace content old-full-ref new-full-ref))
+          (let [[old-full-ref old-label] old-org-ref
+                new-label (if (= old-label original-old-name)
+                            original-new-name
+                            old-label)
+                new-full-ref (-> (string/replace old-full-ref old-name new-name)
+                                 (string/replace (str "[" old-label "]")
+                                                 (str "[" new-label "]")))]
+            (string/replace content old-full-ref new-full-ref))
           content)
         (string/replace old-ref new-ref))))
 
@@ -385,7 +385,9 @@
 
         (d/transact! (db/get-conn repo false) page-txs)
 
-        (when (not= (util/page-name-sanity new-name false) new-name)  ;; If page name changed after sanitization
+        ;; If page name changed after sanitization
+        (when (or (util/create-title-property? new-page-name)
+                  (not= (util/page-name-sanity new-name false) new-name))
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
@@ -395,8 +397,7 @@
 
         (outliner-file/sync-to-file page))
 
-
-      ;; Redirect to the new page
+      ;; Redirect to the newly renamed page
       (when redirect?
         (route-handler/redirect! {:to          :page
                                   :push        false
@@ -405,8 +406,9 @@
       (repo-handler/push-if-auto-enabled! repo)
 
       (when (favorited? old-page-name)
-        (p/let [_ (unfavorite-page! old-page-name)]
-          (favorite-page! new-page-name)))
+        (p/do!
+         (unfavorite-page! old-page-name)
+         (favorite-page! new-page-name)))
 
       (recent-handler/update-or-add-renamed-page repo old-page-name new-page-name)
 
@@ -425,9 +427,9 @@
       (doseq [{:block/keys [name original-name]} nested-pages]
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
-                             old-page-title
-                             (util/format "[[%s]]" old-ns-name)
-                             (util/format "[[%s]]" new-ns-name))]
+                              old-page-title
+                              (util/format "[[%s]]" old-ns-name)
+                              (util/format "[[%s]]" new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -438,8 +440,8 @@
         (let [old-page-title (or original-name name)
               new-page-title (string/replace
                               old-page-title
-                             (util/format "[[%s/" old-ns-name)
-                             (util/format "[[%s/" new-ns-name))]
+                              (util/format "[[%s/" old-ns-name)
+                              (util/format "[[%s/" new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
              (rename-page-aux old-page-title new-page-title false)
@@ -753,6 +755,10 @@
 (defn open-file-in-default-app []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.openPath file-path)))
+
+(defn copy-current-file []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (util/copy-to-clipboard! file-path)))
 
 (defn open-file-in-directory []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
