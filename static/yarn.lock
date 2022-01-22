@@ -12,35 +12,35 @@
   resolved "https://registry.yarnpkg.com/7zip-bin/-/7zip-bin-5.1.1.tgz#9274ec7460652f9c632c59addf24efb1684ef876"
   integrity sha512-sAP4LldeWNz0lNzmTird3uWfFDWWTeg6V/MsmyyLR9X1idwKBWIgt/ZvinqQldJm3LecKEs1emkbquO6PCiLVQ==
 
-"@andelf/rsapi-darwin-arm64@0.0.2":
-  version "0.0.2"
-  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-arm64/download/@andelf/rsapi-darwin-arm64-0.0.2.tgz#c89a025fbc2e632ef1ed2a96fa64787e29e4bab8"
-  integrity sha512-WfsVD+5EZkGD7NMyJ0Akwrowgf3IF2BcckERwx0PHQzHi09NZLxZtMr2NN2s6q8QOvGUfbqHYEATZ8zaZMU7XQ==
+"@andelf/rsapi-darwin-arm64@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-arm64/download/@andelf/rsapi-darwin-arm64-0.0.5.tgz#894724098fcb722088a2971b6e7771b1aaf1a77b"
+  integrity sha512-S+BzDs0a3El4VnULFBRnaWm8oKGlW+oYVTPELop53gbjcDgmoRq+wIYI8MvvkPdtVYRZ6a/e4DfqrtDKDVWOxQ==
 
-"@andelf/rsapi-darwin-x64@0.0.2":
-  version "0.0.2"
-  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-x64/download/@andelf/rsapi-darwin-x64-0.0.2.tgz#d9f71946122dc4bb056e512fa9fc820d30c7159b"
-  integrity sha512-r5F9odlNt0dD2W4eKYlJnqqoim/5kn/lzch7kHmvR9SKbxIe8jn/XwGqk5Kj5zIlhwpksT24dF47ppnZ8gJZRw==
+"@andelf/rsapi-darwin-x64@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-x64/download/@andelf/rsapi-darwin-x64-0.0.5.tgz#a520066709b84c3c20b987c0cda2efa1d0fe1468"
+  integrity sha512-4nVKhh48mVbDgI+EYd3o4J1TC1WwzLk/5/pTvt76lwd5+OhzgFDxQnaFeUsxSMkc7UKixWhp5pnBrrwKRhbVRA==
 
-"@andelf/rsapi-linux-x64-gnu@0.0.2":
-  version "0.0.2"
-  resolved "https://registry.npmmirror.com/@andelf/rsapi-linux-x64-gnu/download/@andelf/rsapi-linux-x64-gnu-0.0.2.tgz#f90d8402cbb7e07fcc5defc5c3743d2a591cc22b"
-  integrity sha512-olB2TYRzqB5e8brtyvj0+YnbdLyWCvsQjbDqV8nKyvUThSEvBPUgREBigdpb26wSETPCX7q/IEQNDDOLdXjzmQ==
+"@andelf/rsapi-linux-x64-gnu@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-linux-x64-gnu/download/@andelf/rsapi-linux-x64-gnu-0.0.5.tgz#e35c976c6cd73cb22c6fd61f0ee943ee475d3774"
+  integrity sha512-ed5FI+8IGgQMho1hVEV2iip7AdvgeRYtgfCPPmHqRi3uAxILJqp+vRltZb1SqFqmPGSm4IJzvIGZCMGNqcLXSg==
 
-"@andelf/rsapi-win32-x64-msvc@0.0.2":
-  version "0.0.2"
-  resolved "https://registry.npmmirror.com/@andelf/rsapi-win32-x64-msvc/download/@andelf/rsapi-win32-x64-msvc-0.0.2.tgz#cee77358a4a3601d8e5a6aa5199ef537eadbd6f3"
-  integrity sha512-qgVZY4lnnlVFu5cNV/pEkvlI/hGokpfpIAGAipYLKVcAmuZ/H9+3aD8PcSi4uRIuexFlSBIcNBi7FtnNahMUcA==
+"@andelf/rsapi-win32-x64-msvc@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-win32-x64-msvc/download/@andelf/rsapi-win32-x64-msvc-0.0.5.tgz#8506d864596cf8bf1f8f381ed62653e4731436b8"
+  integrity sha512-8JYGrPGOm00xaYb3KmjMjcIb8T8gkjhNOwduWOS81xkLwGFbwYPeDIKCWEOyXUGy7VCQUvQg2UY9H1t08cR+3w==
 
-"@andelf/rsapi@0.0.2":
-  version "0.0.2"
-  resolved "https://registry.npmmirror.com/@andelf/rsapi/download/@andelf/rsapi-0.0.2.tgz#8b24e9792123131f5f4529f00fb8f380333acc26"
-  integrity sha512-/CVyYM3+fRFvO6Dqyd8TJv6IOZsaFpKAkX07Vs2FbnSzR50XtGujYpcjyKjmq3zLPmtJYuvD80qwKqixvzCPPw==
+"@andelf/rsapi@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi/download/@andelf/rsapi-0.0.5.tgz#6d90290c5a8a88d81402aa2a43d30030fceab60a"
+  integrity sha512-kEobsAzceX+8cGKaAYx4hin/Aw7p5ObdbVapBBzRQRfFqdxU3CJADPxo+InpIRCK4+4B9yzfi7cXWSyi/Av0hQ==
   optionalDependencies:
-    "@andelf/rsapi-darwin-arm64" "0.0.2"
-    "@andelf/rsapi-darwin-x64" "0.0.2"
-    "@andelf/rsapi-linux-x64-gnu" "0.0.2"
-    "@andelf/rsapi-win32-x64-msvc" "0.0.2"
+    "@andelf/rsapi-darwin-arm64" "0.0.5"
+    "@andelf/rsapi-darwin-x64" "0.0.5"
+    "@andelf/rsapi-linux-x64-gnu" "0.0.5"
+    "@andelf/rsapi-win32-x64-msvc" "0.0.5"
 
 "@develar/schema-utils@~2.1.0":
   version "2.1.0"
