@@ -3,6 +3,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
             [cljs.core.async.interop :refer [p->c]]
+            [cljs.spec.alpha :as s]
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -12,10 +13,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
-            [rum.core :as rum]
-            [cljs.core.async.impl.channels]
-            [cljs.spec.alpha :as s]
-            [medley.core :refer [dedupe-by]]))
+            [medley.core :refer [dedupe-by]]
+            [rum.core :as rum]))
 
 ;;; Commentary
 ;; file-sync related local files/dirs:
@@ -821,7 +820,7 @@
   {:post [(s/valid? ::sync-state %)]}
   (update sync-state :current-local->remote-files into paths))
 
-(defn- sync-state--add-history-items
+(defn- add-history-items
   [history paths now]
   (sequence
    (comp
@@ -838,7 +837,7 @@
   (let [now (t/now)]
     (-> sync-state
         (update :current-remote->local-files set/difference paths)
-        (update :history sync-state--add-history-items paths now))))
+        (update :history add-history-items paths now))))
 
 (defn sync-state--remove-current-local->remote-files
   [sync-state paths]
@@ -846,7 +845,7 @@
   (let [now (t/now)]
     (-> sync-state
         (update :current-local->remote-files set/difference paths)
-        (update :history sync-state--add-history-items paths now))))
+        (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
   [sync-state]
