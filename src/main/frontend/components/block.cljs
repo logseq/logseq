@@ -1883,7 +1883,7 @@
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
-    [:div.block-content.inline.select-none
+    [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [e]
                              (when (and
@@ -1893,7 +1893,11 @@
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+
+       ;; not playwright ci
+       (not js/window.navigator.webdriver)
+       (assoc :class "select-none"))
 
      [:span
       [:div.flex.flex-row.justify-between
