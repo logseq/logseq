@@ -156,7 +156,7 @@
      (merge
       {:type  "button"
        :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small?)
+      (dissoc option :background :class :small? :large?)
       (when href
         {:on-click (fn []
                      (util/open-url href)

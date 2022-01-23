@@ -91,7 +91,7 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
-   (transact! (state/get-current-repo) tx-data nil))
+   (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
    (when-not config/publishing?
      (let [tx-data (->> (util/remove-nils tx-data)

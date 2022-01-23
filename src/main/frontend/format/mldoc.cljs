@@ -10,8 +10,8 @@
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
-            [promesa.core :as p]
-            [frontend.util.pool :as pool]))
+            ;; [frontend.util.pool :as pool]
+            ))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))

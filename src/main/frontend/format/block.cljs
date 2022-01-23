@@ -418,26 +418,6 @@
       content
       (property/->new-properties content))))
 
-(defn- remove-indentations
-  [format level element]
-  (if (= format :org)
-    element
-    (case (first element)
-      "Paragraph"
-      ["Paragraph"
-       (let [level (if (= (ffirst (second element)) "Plain")
-                     (count (re-find #"^[\s\t]+" (second (first (second element)))))
-                     level)]
-         (->> (partition-by #(contains? #{["Break_Line"] ["Hard_Break_Line"]} %) (second element))
-             (map (fn [c]
-                    (if (and (= (ffirst c) "Plain")
-                             (>= (count (re-find #"^[\s\t]+" (second (first c)))) level))
-                      (cons ["Plain" (subs (second (first c)) level)] (rest c))
-                      c)))
-             (apply concat)))]
-
-      element)))
-
 (defn get-custom-id-or-new-id
   [properties]
   (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
@@ -523,8 +503,7 @@
                 (cond
                   (paragraph-timestamp-block? block)
                   (let [timestamps (extract-timestamps block)
-                        timestamps' (merge timestamps timestamps)
-                        [timestamps others] (split-with #(= "Timestamp" (first %)) (second block))]
+                        timestamps' (merge timestamps timestamps)]
                     (recur headings (rest blocks) timestamps' properties last-pos last-level children (conj block-all-content block-content)))
 
                   (property/properties-ast? block)

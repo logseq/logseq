@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
@@ -27,7 +26,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
-            [clojure.set :as set]
             [frontend.mobile.util :as mobile-util]
             [frontend.db.persist :as db-persist]
             [electron.ipc :as ipc]))
@@ -145,35 +143,6 @@
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
-(defn- remove-non-exists-refs!
-  [data all-block-ids]
-  (let [block-ids (->> (->> (map :block/uuid data)
-                        (remove nil?)
-                        (set))
-                       (set/union (set all-block-ids)))
-        keep-block-ref-f (fn [refs]
-                           (filter (fn [ref]
-                                     (if (and (vector? ref)
-                                              (= :block/uuid (first ref)))
-                                       (contains? block-ids (second ref))
-                                       ref)) refs))]
-    (map (fn [item]
-           (if (and (map? item)
-                    (:block/uuid item))
-             (update item :block/refs keep-block-ref-f)
-             item)) data)))
-
-(defn- reset-contents-and-blocks!
-  [repo-url files blocks-pages delete-files delete-blocks refresh?]
-  (db/transact-files-db! repo-url files)
-  (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
-        all-data (-> (concat delete-files delete-blocks files blocks-pages)
-                     (util/remove-nils))
-        all-data (if refresh?
-                   (remove-non-exists-refs! all-data (db-model/get-all-block-uuids))
-                   (remove-non-exists-refs! all-data nil))]
-    (db/transact! repo-url all-data)))
-
 (defn- load-pages-metadata!
   [repo file-paths files]
   (try
@@ -201,14 +170,18 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (let [refresh? (:refresh? opts)
-        parsed-files (filter
+  (let [parsed-files (filter
                       (fn [file]
                         (let [format (format/get-format (:file/path file))]
                           (contains? config/mldoc-support-formats format)))
                       files)
         parsed-files (sort-by :file/path parsed-files)
-        new-graph? (:new-graph? opts)]
+        new-graph? (:new-graph? opts)
+        delete-data (->> (concat delete-files delete-blocks)
+                         (remove nil?))]
+    (when delete-data
+      (js/console.dir delete-data))
+    (when (seq delete-data) (db/transact! repo-url delete-data))
     (doseq [file parsed-files]
       (file-handler/alter-file repo-url
                                (:file/path file)
@@ -261,8 +234,7 @@
       (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]
-             :as opts}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))

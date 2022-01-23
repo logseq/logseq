@@ -12,7 +12,6 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
-            [frontend.search.db :as search-db]
             [frontend.mixins :as mixins]
             [frontend.config :as config]
             [clojure.string :as string]

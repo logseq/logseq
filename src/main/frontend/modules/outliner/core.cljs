@@ -38,20 +38,6 @@
       [:block/uuid left-id])
     (block)))
 
-(defn- index-blocks-by-left-id
-  [blocks]
-  (reduce
-    (fn [acc block]
-      (assert (tree/satisfied-inode? block) "Block should match satisfied-inode?.")
-      (let [left-id (tree/-get-left-id block)]
-        (when (get acc left-id)
-          (prn "acc: " acc)
-          (prn "block: " (:data block))
-          (throw (js/Error. "There are two blocks have the same left-id")))
-        (assoc acc left-id block)))
-    {}
-    blocks))
-
 (defn- block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
@@ -202,7 +188,6 @@
 
   (-get-children [this]
     (let [parent-id (tree/-get-id this)
-          parent-data (get-data this)
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 

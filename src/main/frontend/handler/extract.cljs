@@ -10,12 +10,9 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
             [frontend.text :as text]
-            [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.util.property :as property]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile]))
+            [lambdaisland.glogi :as log]))
 
 (defn get-page-name
   [file ast]

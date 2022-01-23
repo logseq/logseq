@@ -648,7 +648,7 @@
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
-      (if block
+      (if (and block (:block/content block))
         (let [title [:span {:class "block-ref"}
                      (block-content (assoc config :block-ref? true)
                                     block nil (:block/uuid block)
