@@ -310,14 +310,8 @@
   [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
-        blocks-count (or (db/blocks-count) 0)
         search-mode (state/sub :search/mode)
-        timeout (cond
-                  (> blocks-count 2000)
-                  400
-
-                  :else
-                  300)
+        timeout 300
         in-page-search? (= search-mode :page)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__palette.cp__palette-main

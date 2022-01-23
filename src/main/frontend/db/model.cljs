@@ -665,18 +665,6 @@
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
-(defn get-blocks-by-page
-  [repo id-or-lookup-ref]
-  (when-let [conn (conn/get-conn repo)]
-    (->
-     (d/q
-      '[:find (pull ?block [*])
-        :in $ ?page
-        :where
-        [?block :block/page ?page]]
-      conn id-or-lookup-ref)
-     flatten)))
-
 (defn get-block-children
   "Including nested children."
   [repo block-uuid]
