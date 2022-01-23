@@ -204,7 +204,7 @@
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [original-content (db/get-file-no-sub repo path)
+  (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
@@ -254,7 +254,7 @@
   ;; old file content
   (let [file->content (let [paths (map first files)]
                         (zipmap paths
-                                (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
+                                (map (fn [path] (db/get-file repo path)) paths)))]
     ;; update db
     (when update-db?
       (doseq [[path content] files]
@@ -376,7 +376,7 @@
 (defn edn-file-set-key-value
   [path k v]
   (when-let [repo (state/get-current-repo)]
-    (when-let [content (db/get-file-no-sub path)]
+    (when-let [content (db/get-file path)]
       (common-handler/read-config content)
       (let [result (try
                      (rewrite/parse-string content)

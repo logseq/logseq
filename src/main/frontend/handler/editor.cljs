@@ -406,8 +406,7 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [repo block value {:keys [refresh?]
-                     :or {refresh? true}}]
+  [repo block value {}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -415,10 +414,6 @@
      (let [block (wrap-parse-block block)]
        (-> (outliner-core/block block)
            (outliner-core/save-node))
-       (when refresh?
-         (let [opts {:key :block/change
-                     :data [block]}]
-           (db/refresh! repo opts)))
 
        ;; sanitized page name changed
        (when-let [title (get-in block [:block/properties :title])]
@@ -510,42 +505,6 @@
                        current-page))]
     (= uuid (and block-id (medley/uuid block-id)))))
 
-;; FIXME: painful
-(defn update-cache-for-block-insert!
-  "Currently, this only affects current editor container to improve the performance."
-  [repo config {:block/keys [page uuid] :as _block} blocks]
-  (let [blocks (map :data blocks)
-        [first-block last-block right-block] blocks
-        child? (= (first (:block/parent last-block))
-                  (:block/uuid first-block))
-        blocks-container-id (when-let [id (:id config)]
-                              (and (util/uuid-string? id) (medley/uuid id)))
-        new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
-                         (assoc last-block
-                                :block/left first-block-id
-                                :block/parent (if child?
-                                                first-block-id
-                                                ;; sibling
-                                                (:block/parent first-block))))
-        blocks [first-block new-last-block]
-        blocks-atom (if blocks-container-id
-                      (db/get-block-blocks-cache-atom repo blocks-container-id)
-                      (db/get-page-blocks-cache-atom repo (:db/id page)))
-        [before-part after-part] (and blocks-atom
-                                      (split-with
-                                       #(not= uuid (:block/uuid %))
-                                       @blocks-atom))
-        after-part (rest after-part)
-        blocks (concat before-part blocks after-part)
-        blocks (if right-block
-                 (map (fn [block]
-                        (if (= (:block/uuid right-block) (:block/uuid block))
-                          (assoc block :block/left (:block/left right-block))
-                          block)) blocks)
-                 blocks)]
-    (when blocks-atom
-      (reset! blocks-atom blocks))))
-
 (defn insert-new-block-before-block-aux!
   [config
    {:block/keys [repo]
@@ -571,7 +530,6 @@
     (profile
      "outliner insert block"
      (outliner-insert-block! config left-block prev-block sibling?))
-    (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
     (profile "ok handler" (ok-handler prev-block))))
 
 (defn insert-new-block-aux!
@@ -599,18 +557,7 @@
         sibling? (when block-self? false)
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! config current-block next-block sibling?))
-        refresh-fn (fn []
-                     (let [opts {:key :block/insert
-                                 :data [current-block next-block]}]
-                       (db/refresh! repo opts)))]
-    (if (or (:ref? config)
-            (not sibling?)
-            zooming?)
-      (refresh-fn)
-      (do
-        (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
-        (state/add-tx! refresh-fn)))
+                                   (outliner-insert-block! config current-block next-block sibling?))]
     ;; WORKAROUND: The block won't refresh itself even if the content is empty.
     (when block-self?
       (gobj/set input "value" ""))
@@ -734,7 +681,6 @@
 
           (when block-m
             (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
-            (db/refresh! (state/get-current-repo) {:key :block/insert :data [block-m new-block]})
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -933,8 +879,7 @@
     (when block
       (->
        (outliner-core/block block)
-       (outliner-core/delete-node children?))
-      (db/refresh! repo {:key :block/change :data [block]}))))
+       (outliner-core/delete-node children?)))))
 
 (defn- move-to-prev-block
   [repo sibling-block format id value]
@@ -1026,11 +971,7 @@
             sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
         (if (= start-node end-node)
           (delete-block-aux! (first blocks) true)
-          (when (outliner-core/delete-nodes start-node end-node lookup-refs)
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh! repo opts)
-              (ui-handler/re-render-root!))))
+          (outliner-core/delete-nodes start-node end-node lookup-refs))
         (when sibling-block
           (move-to-prev-block repo sibling-block
                               (:block/format block)
@@ -1068,9 +1009,6 @@
     (let [block-id (ffirst col)
           block-id (if (string? block-id) (uuid block-id) block-id)
           input-pos (or (state/get-edit-pos) :max)]
-      (db/refresh! (state/get-current-repo)
-                   {:key :block/change
-                    :data [(db/pull [:block/uuid block-id])]})
       ;; update editing input content
       (when-let [editing-block (state/get-edit-block)]
         (when (= (:block/uuid editing-block) block-id)
@@ -1952,7 +1890,6 @@
                                opts {:key :block/change
                                      :data blocks}]
                            (outliner-core/move-nodes nodes up?)
-                           (db/refresh! repo opts)
                            (rehighlight-selected-nodes)
                            (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                              (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
@@ -1983,10 +1920,7 @@
                                                (get-in % [:block/parent :db/id])) blocks)
                                    (map outliner-core/block))]
           (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-          (let [opts {:key :block/change
-                      :data blocks}]
-            (db/refresh! repo opts)
-            (rehighlight-selected-nodes)))))))
+          (rehighlight-selected-nodes))))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2277,9 +2211,7 @@
             _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
             _ (when (and delete-editing-block? editing-block)
                 (when-let [id (:db/id editing-block)]
-                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))
-            new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
-        (db/refresh! repo {:key :block/insert :data new-blocks})
+                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))]
         (last metadata-replaced-blocks)))))
 
 (defn- tree->vec-tree
@@ -2376,7 +2308,6 @@
                    opts)
              last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
          (clear-when-saved!)
-         (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
          (let [block (if (tree/satisfied-inode? last-block)
                        (:data last-block)
                        (:data (last (flatten last-block))))]
@@ -2396,9 +2327,7 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
-      (outliner-core/move-subtree node parent-node true)))
-  (let [repo (state/get-current-repo)]
-    (db/refresh! repo {:key :block/change :data [(:data node)]})))
+      (outliner-core/move-subtree node parent-node true))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2935,10 +2864,7 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [current-node (outliner-core/block block)]
-        (outliner-core/indent-outdent-nodes [current-node] indent?)
-        (let [repo (state/get-current-repo)]
-          (db/refresh! repo
-                       {:key :block/change :data [(:data current-node)]}))))
+        (outliner-core/indent-outdent-nodes [current-node] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -3559,9 +3485,6 @@
                 (outliner-core/save-node block {:txs-state txs-state})))))))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
-        (db/refresh! (state/get-current-repo)
-                    {:key :block/change
-                     :data [(db/pull [:block/uuid block-id])]})
         ;; update editing input content
         (when-let [editing-block (state/get-edit-block)]
           (when (= (:block/uuid editing-block) block-id)

@@ -13,7 +13,8 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.util.marker :as marker]
-            [frontend.db.rules :as rules]))
+            [frontend.db.rules :as rules]
+            [frontend.db-schema :as db-schema]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -301,54 +302,62 @@
            distinct)))
       [[key]])))
 
+(defn- new-db
+  [result tx-data]
+  (let [result (util/remove-nils result)
+        db (-> (d/empty-db db-schema/schema)
+               (d/with result)
+               (:db-after))]
+    (:db-after (d/with db tx-data))))
+
 (defn refresh!
-  [repo-url handler-opts]
-  (let [related-keys (get-related-keys handler-opts)
-        db (conn/get-conn repo-url)]
-    (doseq [related-key related-keys]
-      (let [related-key (vec (cons repo-url related-key))]
-        (when-let [cache (get @query-state related-key)]
-          (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+  [repo-url {:keys [tx-data tx-meta]}]
+  (when (and repo-url
+             (seq tx-data)
+             (not (:skip-refresh? tx-meta)))
+    (let [db (conn/get-conn repo-url)]
+      (doseq [[k cache] @query-state]
+        (when (and (= (first k) repo-url) cache)
+          (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
             (when (or query query-fn)
-              (let [new-result (->
-                                (cond
-                                  query-fn
-                                  (let [result (query-fn db)]
-                                    (if (coll? result)
-                                      (doall result)
-                                      result))
+              (try
+                (let [db (if (and (coll? @result)
+                                  (:db/id (first @result)))
+                           (util/profile
+                            (str "Construct new db: " k)
+                            (new-db @result tx-data))
+                           db)
+                      new-result (util/profile (str "refresh: " (rest k))
+                                               (->
+                                                (cond
+                                                  query-fn
+                                                  (let [result (query-fn db)]
+                                                    (if (coll? result)
+                                                      (doall result)
+                                                      result))
 
-                                  inputs-fn
-                                  (let [inputs (inputs-fn)]
-                                    (apply d/q query db inputs))
+                                                  inputs-fn
+                                                  (let [inputs (inputs-fn)]
+                                                    (apply d/q query db inputs))
 
-                                  (keyword? query)
-                                  (db-utils/get-key-value repo-url query)
+                                                  (keyword? query)
+                                                  (db-utils/get-key-value repo-url query)
 
-                                  (seq inputs)
-                                  (apply d/q query db inputs)
+                                                  (seq inputs)
+                                                  (apply d/q query db inputs)
 
-                                  :else
-                                  (d/q query db))
-                                transform-fn)]
-                (set-new-result! related-key new-result)))))))))
-
-(defn transact-react!
-  [repo-url tx-data handler-opts]
-  (when-not config/publishing?
-    (let [repo-url (or repo-url (state/get-current-repo))
-          tx-data (->> (util/remove-nils tx-data)
-                       (remove nil?))
-          get-conn (fn [] (conn/get-conn repo-url false))]
-      (when (and (seq tx-data) (get-conn))
-        (d/transact! (get-conn) (vec tx-data))
-        (refresh! repo-url handler-opts)))))
+                                                  :else
+                                                  (d/q query db))
+                                                transform-fn))]
+                  (when-not (= new-result result)
+                    (set-new-result! k new-result)))
+                (catch js/Error e
+                  (js/console.error e))))))))))
 
 (defn set-key-value
   [repo-url key value]
   (if value
-    (transact-react! repo-url [(kv key value)]
-                     {:key [:kv key]})
+    (db-utils/transact! repo-url [(kv key value)])
     (remove-key! repo-url key)))
 
 (defn sub-key-value

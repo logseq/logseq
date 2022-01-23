@@ -139,7 +139,7 @@
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
         path (cfg/get-config-path)]
-    (when-let [content (db/get-file-no-sub path)]
+    (when-let [content (db/get-file path)]
       (let [result (try
                      (rewrite/parse-string content)
                      (catch js/Error e

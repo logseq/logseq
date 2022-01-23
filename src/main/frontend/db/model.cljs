@@ -215,8 +215,9 @@
   (when (and repo path last-modified-at)
     (when-let [conn (conn/get-conn repo false)]
       (d/transact! conn
-                   [{:file/path path
-                     :file/last-modified-at last-modified-at}]))))
+        [{:file/path path
+          :file/last-modified-at last-modified-at}]
+        {:skip-refresh? true}))))
 
 (defn get-file-last-modified-at
   [repo path]
@@ -230,23 +231,6 @@
   (when (and repo path)
     (when-let [conn (conn/get-conn repo false)]
       (d/entity (d/db conn) [:file/path path]))))
-
-(defn get-file
-  ([path]
-   (get-file (state/get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (->
-      (react/q repo [:file/content path]
-               {:use-cache? true}
-               '[:find ?content
-                 :in $ ?path
-                 :where
-                 [?file :file/path ?path]
-                 [?file :file/content ?content]]
-               path)
-      react
-      ffirst))))
 
 (defn get-file-contents
   [repo]
@@ -278,18 +262,18 @@
     (when-let [conn (conn/get-conn repo)]
       (d/pull conn '[*] [:file/path file-path]))))
 
-(defn get-custom-css
-  []
-  (when-let [repo (state/get-current-repo)]
-    (get-file (config/get-file-path repo "logseq/custom.css"))))
-
-(defn get-file-no-sub
+(defn get-file
   ([path]
-   (get-file-no-sub (state/get-current-repo) path))
+   (get-file (state/get-current-repo) path))
   ([repo path]
    (when (and repo path)
      (when-let [conn (conn/get-conn repo)]
        (:file/content (d/entity conn [:file/path path]))))))
+
+(defn get-custom-css
+  []
+  (when-let [repo (state/get-current-repo)]
+    (get-file (config/get-file-path repo "logseq/custom.css"))))
 
 (defn get-block-by-uuid
   [id]
@@ -477,12 +461,14 @@
   [block-id]
   (when-let [repo-url (state/get-current-repo)]
     (when block-id
-      (some->
-      (react/q repo-url [:block/refs-count block-id]
-        {:query-fn (fn [_db]
-                     (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
-        nil)
-      react))))
+      (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id])))
+      ;; (some->
+      ;; (react/q repo-url [:block/refs-count block-id]
+      ;;   {:query-fn (fn [_db]
+      ;;                (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
+      ;;   nil)
+      ;; react)
+      )))
 
 ;; TODO: native sort and limit support in DB
 (defn- get-limited-blocks
@@ -1454,10 +1440,7 @@
   (when (and repo path)
     (let [tx-data {:file/path path
                    :file/content content}]
-      (react/transact-react!
-       repo
-       [tx-data]
-       {:key [:file/content path]}))))
+      (db-utils/transact! repo [tx-data] {:skip-refresh? true}))))
 
 (defn get-pre-block
   [repo page-id]
