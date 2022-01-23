@@ -24,7 +24,8 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [cljs.core.async :as a]))
+            [cljs.core.async :as a]
+            [cljs.spec.alpha :as s]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -52,14 +53,14 @@
   (rum/local nil ::existed-graphs)
   [state]
   (let [_ (state/sub :auth/id-token)
-        _ (state/sub :file-sync/sync-state)
-        ^fs-sync/SyncState sync-state (state/get-file-sync-state-manager)
-        not-syncing? (or (nil? sync-state) (fs-sync/-stopped? sync-state))
+        sync-state (state/sub :file-sync/sync-state)
+        _ (when sync-state (assert (s/valid? :frontend.fs.sync/sync-state sync-state)))
+        not-syncing? (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
         *existed-graphs (::existed-graphs state)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)
-        uploading-files (state/sub :file-sync/sync-uploading-files)
-        downloading-files (state/sub :file-sync/sync-downloading-files)]
+        uploading-files (:current-local->remote-files sync-state)
+        downloading-files (:current-remote->local-files sync-state)]
     (when-not config/publishing?
       (when (user-handler/logged?)
         (when-not (file-sync-handler/graph-txid-exists?)
@@ -97,7 +98,7 @@
             (when sync-state
               (map (fn [f] (:time f)
                      {:title [:div [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
-                   (take 10 (.-history sync-state))))))
+                   (take 10 (:history sync-state))))))
 
          (cond-> {}
            (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
