@@ -369,16 +369,6 @@
   (fn []
     (state/get-edit-content)))
 
-(def ^:export get_current_block
-  (fn []
-    (let [block (state/get-edit-block)
-          block (or block (some-> (first (:selection/blocks @state/state))
-                                  (.getAttribute "blockid")
-                                  (db-model/get-block-by-uuid)))
-          block (or block (state/get-last-edit-block))
-          block (and block (db-utils/pull (:db/id block)))]
-      (bean/->js (normalize-keyword-for-json block)))))
-
 (def ^:export get_selected_blocks
   (fn []
     (when-let [blocks (and (state/in-selection-mode?)
@@ -510,10 +500,24 @@
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
                 repo (state/get-current-repo)
-                block (if (not includeChildren)
-                        block (first (outliner-tree/blocks->vec-tree
-                                       (db-model/get-block-and-children repo uuid) uuid)))]
+                block (if includeChildren
+                        ;; nested children results
+                        (first (outliner-tree/blocks->vec-tree
+                                       (db-model/get-block-and-children repo uuid) uuid))
+                        ;; attached shallow children
+                        (assoc block :block/children
+                          (map #(list :uuid (get-in % [:data :block/uuid]))
+                            (outliner/get-children uuid))))]
             (bean/->js (normalize-keyword-for-json block))))))))
+
+(def ^:export get_current_block
+  (fn [^js opts]
+    (let [block (state/get-edit-block)
+          block (or block (some-> (first (:selection/blocks @state/state))
+                            (.getAttribute "blockid")
+                            (db-model/get-block-by-uuid)))
+          block (or block (state/get-last-edit-block))]
+      (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block
   (fn [uuid]
