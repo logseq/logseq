@@ -13,7 +13,9 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [rum.core :as rum]
-            [cljs.core.async.impl.channels]))
+            [cljs.core.async.impl.channels]
+            [cljs.spec.alpha :as s]
+            [medley.core :refer [dedupe-by]]))
 
 ;;; Commentary
 ;; file-sync related local files/dirs:
@@ -226,61 +228,6 @@
     distinct-update-filetxns-xf
     (partition-filetxns n)))
 
-
-(deftype FileNotFoundErr [when file])
-(deftype FileTxnSet [to-path-file-map seq-id]
-  Object
-  (rename-file [_ from to]
-    (if-let [^FileTxn file (some-> (get to-path-file-map from) (as-> f (and (not (.deleted? f)) f)))]
-      (if (.deleted? file)
-        (throw (->FileNotFoundErr :rename-file from))
-        (let [next-file (.rename file to)]
-          (-> to-path-file-map
-              (-dissoc (.-to-path file))
-              (-conj [to next-file])
-              (FileTxnSet. seq-id))))
-      (FileTxnSet. (assoc to-path-file-map to (->FileTxn from to false false seq-id)) (inc seq-id))))
-
-  (update-file [_ to]
-    (if-let [file (get to-path-file-map to)]
-      (let [next-file (.update file)]
-        (FileTxnSet. (assoc to-path-file-map to next-file) seq-id))
-      (FileTxnSet. (assoc to-path-file-map to (->FileTxn to to true false seq-id)) (inc seq-id))))
-
-  (delete-file [_ to]
-    (if-let [file (get to-path-file-map to)]
-      (let [next-file (.delete file)]
-        (FileTxnSet. (assoc to-path-file-map to next-file) seq-id))
-      (FileTxnSet. (assoc to-path-file-map to (->FileTxn to to false true seq-id)) (inc seq-id))))
-
-  ILookup
-  (-lookup [coll to-path]
-    (-lookup coll to-path nil))
-  (-lookup [_ to-path not-found]
-    (-lookup to-path-file-map to-path not-found))
-
-  ICollection
-  (-conj [_ ^FileTxn v]
-    (conj to-path-file-map [(.-to-path v) v]))
-
-  ISet
-  (-disjoin [_ ^FileTxn v]
-    (FileTxnSet. (-dissoc to-path-file-map (.-to-path v)) seq-id))
-
-  ISeqable
-  (-seq [_]
-    (some->
-     (vals to-path-file-map)
-     sort
-     seq))
-
-  IPrintWithWriter
-  (-pr-writer [_ w opts]
-    (if-let [vals (vals to-path-file-map)]
-      (-pr-writer vals w opts)
-      (write-all w "()"))))
-
-(set! (.-EMPTY FileTxnSet) (FileTxnSet. {} 0))
 
 (deftype FileMetadata [size etag path last-modified remote? ^:mutable normalized-path]
   Object
@@ -540,16 +487,22 @@
             true
             r))))))
 
-(defn- apply-filetxns-partitions [^SyncState sync-state graph-uuid base-path filetxns-partitions repo *txid *stopped]
+(declare sync-state--add-current-local->remote-files
+         sync-state--add-current-remote->local-files
+         sync-state--remove-current-local->remote-files
+         sync-state--remove-current-remote->local-files
+         sync-state--stopped?)
+
+(defn- apply-filetxns-partitions [*sync-state graph-uuid base-path filetxns-partitions repo *txid *stopped]
   (go-loop [filetxns-partitions* filetxns-partitions]
     (if @*stopped
       {:stop true}
       (when (seq filetxns-partitions*)
         (let [filetxns (first filetxns-partitions*)
               paths (map relative-path filetxns)
-              _ (. sync-state (add-current-remote->local-files! paths))
+              _ (swap! *sync-state sync-state--add-current-remote->local-files paths)
               r (<! (apply-filetxns graph-uuid base-path filetxns))
-              _ (. sync-state (remove-current-remote->local-files! paths))]
+              _ (swap! *sync-state sync-state--remove-current-remote->local-files paths)]
           (if (instance? ExceptionInfo r)
             r
             (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
@@ -625,8 +578,8 @@
   "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
   (go
-    (when (some-> (state/get-file-sync-state-manager)
-                  -stopped?
+    (when (some-> (state/get-file-sync-state)
+                  sync-state--stopped?
                   not)
       (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
 
@@ -647,7 +600,7 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(deftype Remote->LocalSyncer [graph-uuid base-path repo *txid ^SyncState sync-state
+(deftype Remote->LocalSyncer [graph-uuid base-path repo *txid *sync-state
                               ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -672,7 +625,7 @@
                             (reset! *txid latest-txid)
                             {:succ true})
                         (<! (apply-filetxns-partitions
-                             sync-state graph-uuid base-path partitioned-filetxns repo *txid *stopped))))))))]
+                             *sync-state graph-uuid base-path partitioned-filetxns repo *txid *stopped))))))))]
         (cond
           (instance? ExceptionInfo r)
           {:unknown r}
@@ -697,7 +650,7 @@
 (defn- contains-path? [regexps path]
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
-(deftype Local->RemoteSyncer [graph-uuid base-path repo ^SyncState sync-state
+(deftype Local->RemoteSyncer [graph-uuid base-path repo *sync-state
                               ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
   Object
   (filter-file-change-events-fn [this]
@@ -772,9 +725,9 @@
                   "unlink"
                   (delete-remote-files rsapi graph-uuid base-path paths @*txid))]
           (go
-            (let [_ (.add-current-local->remote-files! sync-state paths)
+            (let [_ (swap! *sync-state sync-state--add-current-local->remote-files paths)
                   r* (<! r)
-                  _ (.remove-current-local->remote-files! sync-state paths)]
+                  _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
               (cond
                 (need-sync-remote? r*)
                 {:need-sync-remote true}
@@ -827,63 +780,94 @@
 
                   (or need-sync-remote unknown) r)))))))))
 
+;;; specs
+(s/def ::state #{::idle
+                 ::local->remote
+                 ::remote->local
+                 ::full-sync
+                 ::remote->local=>local->remote
+                 ::remote->local=>full-sync
+                 ::stop})
+(s/def ::path string?)
+(s/def ::time t/date?)
+(s/def ::current-local->remote-files (s/coll-of ::path :kind set?))
+(s/def ::current-remote->local-files (s/coll-of ::path :kind set?))
+(s/def ::history-item (s/keys :req-un [::path ::time]))
+(s/def ::history (s/coll-of ::history-item :kind seq?))
+(s/def ::sync-state (s/keys :req-un [::state ::current-local->remote-files ::current-remote->local-files ::history]))
+
 ;;; sync state
-(deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files
-                    ^:mutable history]
-  Object
-  (add-to-history [_ fs]
-    (let [now (t/now)]
-      (->> fs
-           (map (fn [p] {:path p :time now}))
-           (apply conj history)
-           (set! history))))
 
-  (update-state! [_ v]
-    (set! state v)
-    (state/set-file-sync-state v))
-  (add-current-local->remote-files! [_ fs]
-    (set! current-local->remote-files (set/union current-local->remote-files (set fs)))
-    (state/set-file-sync-uploading-files current-local->remote-files))
-  (add-current-remote->local-files! [_ fs]
-    (set! current-remote->local-files (set/union current-remote->local-files (set fs)))
-    (state/set-file-sync-downloading-files current-remote->local-files))
-  (remove-current-local->remote-files! [this fs]
-    (set! current-local->remote-files (set/difference current-local->remote-files (set fs)))
-    (.add-to-history this fs)
-    (state/set-file-sync-uploading-files current-local->remote-files))
-  (remove-current-remote->local-files! [this fs]
-    (set! current-remote->local-files (set/difference current-remote->local-files (set fs)))
-    (.add-to-history this fs)
-    (state/set-file-sync-downloading-files current-remote->local-files))
-  (reset-current-local->remote-files! [_]
-    (set! current-local->remote-files #{})
-    (state/set-file-sync-uploading-files current-local->remote-files))
-  (reset-current-remote->local-files! [_]
-    (set! current-remote->local-files #{})
-    (state/set-file-sync-downloading-files current-remote->local-files))
+(defn sync-state
+  "create a new sync-state"
+  []
+  {:post [(s/valid? ::sync-state %)]}
+  {:state ::idle
+   :current-local->remote-files #{}
+   :current-remote->local-files #{}
+   :history '()})
 
-  IStopped?
-  (-stopped? [_] (or (nil? state) (= ::stop state)))
+(defn- sync-state--update-state
+  [sync-state next-state]
+  {:pre [(s/valid? ::state next-state)]
+   :post [(s/valid? ::sync-state %)]}
+  (assoc sync-state :state next-state))
 
-  IPrintWithWriter
-  (-pr-writer [_ w opts]
-    (let [pr-map {:state state
-                  :current-uploading-files current-local->remote-files
-                  :current-downloading-files current-remote->local-files}]
-      (-pr-writer pr-map w opts))))
+(defn sync-state--add-current-remote->local-files
+  [sync-state paths]
+  {:post [(s/valid? ::sync-state %)]}
+  (update sync-state :current-remote->local-files into paths))
+
+(defn sync-state--add-current-local->remote-files
+  [sync-state paths]
+  {:post [(s/valid? ::sync-state %)]}
+  (update sync-state :current-local->remote-files into paths))
+
+(defn- sync-state--add-history-items
+  [history paths now]
+  (sequence
+   (comp
+    ;; only reserve the latest one of same-path-items
+    (dedupe-by :path)
+    ;; reserve the latest 20 history items
+    (take 20))
+   (into history
+         (map (fn [path] {:path path :time now}) paths))))
+
+(defn sync-state--remove-current-remote->local-files
+  [sync-state paths]
+  {:post [(s/valid? ::sync-state %)]}
+  (let [now (t/now)]
+    (-> sync-state
+        (update :current-remote->local-files set/difference paths)
+        (update :history sync-state--add-history-items paths now))))
+
+(defn sync-state--remove-current-local->remote-files
+  [sync-state paths]
+  {:post [(s/valid? ::sync-state %)]}
+  (let [now (t/now)]
+    (-> sync-state
+        (update :current-local->remote-files set/difference paths)
+        (update :history sync-state--add-history-items paths now))))
+
+(defn sync-state--stopped?
+  [sync-state]
+  (= ::stop (:state sync-state)))
+
 
 ;;; put all stuff together
 
-(deftype SyncManager [graph-uuid base-path ^SyncState sync-state
+(deftype SyncManager [graph-uuid base-path *sync-state
                       ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
                       full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                       local-changes-chan ^:mutable ratelimit-local-changes-chan
                       *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable stopped]
   Object
   (schedule [this next-state & args]
+    {:pre [(s/valid? ::state next-state)]}
     (println "[SyncManager" graph-uuid "]" (and state (name state)) "->" (and next-state (name next-state)))
     (set! state next-state)
-    (.update-state! sync-state next-state)
+    (swap! *sync-state sync-state--update-state next-state)
     (go
       (case state
         ::idle
@@ -986,23 +970,23 @@
       (stop-local->remote! local->remote-syncer)
       (stop-remote->local! remote->local-syncer)
       (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
-      (.update-state! sync-state ::stop))))
+      (swap! *sync-state sync-state--update-state ::stop))))
 
 
-(defn sync-manager [graph-uuid base-path repo txid sync-state full-sync-chan stop-sync-chan
+(defn sync-manager [graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
                     remote->local-sync-chan local->remote-sync-chan local-changes-chan]
   (let [*txid (atom txid)
         local->remote-syncer (->Local->RemoteSyncer graph-uuid
                                                     base-path
-                                                    repo sync-state
+                                                    repo *sync-state
                                                     20000
                                                     *txid nil (chan) false)
         remote->local-syncer (->Remote->LocalSyncer graph-uuid
                                                     base-path
-                                                    repo *txid sync-state nil (volatile! false))]
+                                                    repo *txid *sync-state nil (volatile! false))]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
-    (->SyncManager graph-uuid base-path sync-state local->remote-syncer remote->local-syncer
+    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer
                    full-sync-chan stop-sync-chan
                    remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil false)))
 
@@ -1021,18 +1005,21 @@
 (defn sync-start []
   (let [graph-uuid (first @graphs-txid)
         txid (second @graphs-txid)
-        sync-state (->SyncState nil #{} #{} '())
+        *sync-state (atom (sync-state))
         sm (sync-manager graph-uuid
                          (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
-                         txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
+                         txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                          local-changes-chan)]
     ;; drain `local-changes-chan`
     (->> (repeatedly #(poll! local-changes-chan))
          (take-while identity))
     (poll! stop-sync-chan)
-
+    ;; update global state when *sync-state changes
+    (add-watch *sync-state ::update-global-state
+               (fn [_ _ _ n]
+                 (state/set-file-sync-state n)))
     (.start sm)
-    (state/set-file-sync-state-manager sync-state)
+
     (state/set-file-sync-manager sm)
 
     (offer! full-sync-chan true)
