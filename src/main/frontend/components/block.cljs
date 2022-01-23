@@ -757,9 +757,7 @@
      (if @lite-mode?
        [:div
         [:img.w-full.h-full.absolute
-         {:src (if (util/electron?)
-                 (str (config/get-static-path) "img/tutorial-thumb.jpg")
-                 "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
+         {:src "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg"}]
         [:button
          {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
           :on-click (fn [_] (swap! lite-mode? not))}
