@@ -35,10 +35,8 @@
 ;; - full-sync will be triggered after 20min of idle
 ;; - every 20s will flush local changes, and sync to remote
 
-
 ;; TODO: add some spec validate
 ;; TODO: use access-token instead of id-token
-;; TODO: update-remote-file failed when pagename contains whitespace
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
