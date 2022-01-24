@@ -391,7 +391,10 @@
         :tips/all-done "All Done"
 
         :command-palette/prompt "Type a command"
-        :select/prompt "Select one"}
+        :select/default-prompt "Select one"
+        :select.graph/prompt "Select a graph"
+        :select.graph/empty-placeholder-description "No matched graphs. Do you want to add another one?"
+        :select.graph/add-graph "Yes, add another graph"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
@@ -1961,7 +1964,10 @@
 
         :help/shortcut-page-title "Atajos personalizados"
 
-        :select/prompt "Seleccione uno"}
+        :select/prompt "Seleccione uno"
+        :select.graph/prompt "Seleccione un grafo"
+        :select.graph/empty-placeholder-description "No encontramos un grafo. Queries añadir otro?"
+        :select.graph/add-graph "Si, añadame otro grafo"}
 
    :nb-NO {:on-boarding/title "Hei, og velkommen til Logseq!"
            :on-boarding/sharing "deling"

@@ -24,6 +24,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
+            [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
@@ -80,7 +81,7 @@
     (db/set-key-value repo :ast/version db-schema/ast-version)
     (srs/update-cards-due-count!)))
 
-(defmethod handle :graph/switch [[_ graph]]
+(defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! graph)
   ;; load config
@@ -91,6 +92,13 @@
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!))
+
+(defmethod handle :graph/switch [[_ graph]]
+  (if (outliner-file/writes-finished?)
+    (graph-switch graph)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))

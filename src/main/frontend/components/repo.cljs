@@ -14,27 +14,17 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.outliner.file :as outliner-file]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
-
-(defn switch-repo-if-writes-finished?
-  [url]
-  (if (outliner-file/writes-finished?)
-    (state/pub-event! [:graph/switch url])
-    (notification/show!
-     "Please wait seconds until all changes are saved for the current graph."
-     :warning)))
 
 (rum/defc add-repo
   [args]
@@ -79,7 +69,7 @@
                  (let [local-dir (config/get-local-dir url)
                        graph-name (text/get-graph-name-from-path local-dir)]
                    [:a {:title local-dir
-                        :on-click #(switch-repo-if-writes-finished? url)}
+                        :on-click #(state/pub-event! [:graph/switch url])}
                     graph-name])
                  [:a {:target "_blank"
                       :href url}
@@ -223,7 +213,7 @@
                               {:title short-repo-name
                                :hover-detail repo-path ;; show full path on hover
                                :options {:class "ml-1"
-                                         :on-click #(switch-repo-if-writes-finished? url)}}))
+                                         :on-click #(state/pub-event! [:graph/switch url])}}))
                           switch-repos)
               links (->>
                      (concat repo-links

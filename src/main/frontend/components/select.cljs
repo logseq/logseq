@@ -5,13 +5,12 @@
   :select-graph/open command for an example."
   (:require [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :as i18n]
-            ;; Would prefer to depend on handler.repo but unable to because
-            ;; of a circular dependency
-            [frontend.components.repo :as repo]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.db :as db]
+            [frontend.text :as text]
             [rum.core :as rum]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]))
@@ -31,15 +30,16 @@
   {:will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
                    state)}
-  [state {:keys [items limit on-chosen empty-placeholder]
-          :or {limit 100}}]
+  [state {:keys [items limit on-chosen empty-placeholder prompt-key]
+          :or {limit 100
+               prompt-key :select/default-prompt}}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [input (::input state)]
       [:div.cp__select.cp__select-main
        [:div.input-wrap
         [:input.cp__select-input.w-full
          {:type        "text"
-          :placeholder (t :select/prompt)
+          :placeholder (t prompt-key)
           :auto-focus  true
           :value       @input
           :on-change   (fn [e] (reset! input (util/evalue e)))}]]
@@ -52,7 +52,7 @@
           :on-chosen   (fn [x]
                          (state/close-modal!)
                          (on-chosen x))
-          :empty-placeholder empty-placeholder})]])))
+          :empty-placeholder (empty-placeholder t)})]])))
 
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new
@@ -62,7 +62,9 @@
     fuzzy search and selection. Items can have an optional :id and are displayed
     lightly for a given item.
   * :on-chosen - fn that is given item when it is chosen.
-  * :empty-placeholder - Hiccup html to render if no matched graphs found"
+  * :empty-placeholder - fn that returns hiccup html to render if no matched graphs found.
+  * :prompt-key - dictionary keyword that prompts when components is first open.
+    Defaults to :select/default-prompt."
   []
   {:select-graph
    {:items-fn (fn []
@@ -72,25 +74,30 @@
                            (or (config/demo-graph? url)
                                (= url (state/get-current-repo)))))
                  (map (fn [{:keys [url]}]
-                        (hash-map :value (second (util/get-dir-and-basename url))
-                                  :id (config/get-repo-dir url)
-                                  :graph url)))))
-    :on-chosen #(repo/switch-repo-if-writes-finished? (:graph %))
-    :empty-placeholder [:div.px-4.py-2
-                        [:div.mb-2 "No matched graphs, do you want to add another one?"]
-                        (ui/button
-                          "Yes, add another graph"
-                          :href (rfe/href :repo-add)
-                          :on-click state/close-modal!)]}})
+                        {:value (text/get-graph-name-from-path
+                                 (if (config/local-db? url)
+                                   (config/get-local-dir url)
+                                   (db/get-repo-path url)))
+                         :id (config/get-repo-dir url)
+                         :graph url}))))
+    :prompt-key :select.graph/prompt
+    :on-chosen #(state/pub-event! [:graph/switch (:graph %)])
+    :empty-placeholder (fn [t]
+                         [:div.px-4.py-2
+                          [:div.mb-2 (t :select.graph/empty-placeholder-description)]
+                          (ui/button
+                           (t :select.graph/add-graph)
+                           :href (rfe/href :repo-add)
+                           :on-click state/close-modal!)])}})
 
 (rum/defc select-modal < rum/reactive
   []
   (when-let [select-type (state/sub [:ui/open-select])]
-    (let [{:keys [on-chosen items-fn empty-placeholder]} (get (select-config) select-type)]
+    (let [select-type-config (get (select-config) select-type)]
       (state/set-modal!
-       #(select {:items (items-fn)
-                 :on-chosen on-chosen
-                 :empty-placeholder empty-placeholder})
+       #(select (-> select-type-config
+                    (select-keys [:on-chosen :empty-placeholder :prompt-key])
+                    (assoc :items ((:items-fn select-type-config)))))
        {:fullscreen? false
         :close-btn?  false}))
     nil))
