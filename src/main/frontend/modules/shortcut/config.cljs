@@ -319,6 +319,10 @@
                                     :fn      (fn [] (state/toggle! :ui/command-palette-open?))
                                     :force?   true}
 
+   :select-graph/open              {:desc    "Open select graph component"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
+                                    :binding "mod+shift+g"}
+
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
                                       :binding "mod+shift+1"
@@ -432,7 +436,7 @@
    :ui/toggle-cards                 {:desc    "Toggle cards"
                                      :binding "t c"
                                      :fn      ui-handler/toggle-cards!}
-  ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
+   ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
 
    :git/commit                      {:desc    "Git commit message"
                                      :binding "c"
@@ -499,6 +503,7 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
+                          :select-graph/open
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -680,6 +685,7 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
+    :select-graph/open
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index

@@ -44,7 +44,7 @@
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!))
 
-(defn- switch-repo-if-writes-finished?
+(defn switch-repo-if-writes-finished?
   [url]
   (if (outliner-file/writes-finished?)
     (open-repo-url url)

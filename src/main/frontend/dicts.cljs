@@ -390,7 +390,8 @@
 
         :tips/all-done "All Done"
 
-        :command-palette/prompt "Type a command"}
+        :command-palette/prompt "Type a command"
+        :select/prompt "Select one"}
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
@@ -1958,7 +1959,9 @@
         :user/delete-your-account "Eliminar su cuenta"
         :user/delete-account-notice "Todas sus páginas publicadas en Logseq serán eliminadas."
 
-        :help/shortcut-page-title "Atajos personalizados"}
+        :help/shortcut-page-title "Atajos personalizados"
+
+        :select/prompt "Seleccione uno"}
 
    :nb-NO {:on-boarding/title "Hei, og velkommen til Logseq!"
            :on-boarding/sharing "deling"
