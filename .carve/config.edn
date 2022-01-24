@@ -1,0 +1,5 @@
+{:paths ["src/main" "src/electron" "src/test"]
+ :api-namespaces [
+                  ;; Ignore b/c too many false positives
+                  frontend.db]
+ :report {:format :ignore}}
