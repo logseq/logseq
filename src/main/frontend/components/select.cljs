@@ -29,7 +29,7 @@
   (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
   {:will-unmount (fn [state]
-                   (state/set-state! [:ui/open-select] false)
+                   (state/set-state! [:ui/open-select] nil)
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder]
           :or {limit 100}}]
@@ -61,7 +61,8 @@
   * :items-fn - fn that returns items with a :value key that are used for the
     fuzzy search and selection. Items can have an optional :id and are displayed
     lightly for a given item.
-  * :on-chosen - fn that is given item when it is chosen."
+  * :on-chosen - fn that is given item when it is chosen.
+  * :empty-placeholder - Hiccup html to render if no matched graphs found"
   []
   {:select-graph
    {:items-fn (fn []
