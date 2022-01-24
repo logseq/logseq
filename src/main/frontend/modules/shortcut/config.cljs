@@ -182,13 +182,11 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :up)}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :down)}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"
@@ -225,13 +223,11 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!
-                                    :force?  true}
+                                    :fn      editor-handler/expand!}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!
-                                    :force?  true}
+                                    :fn      editor-handler/collapse!}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -316,8 +312,7 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
-                                    :force?   true}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
 
    :select-graph/open              {:desc    "Open select graph component"
                                     :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
