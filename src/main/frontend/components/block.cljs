@@ -639,6 +639,7 @@
 (declare block-parents)
 
 (rum/defc block-reference < rum/reactive
+  db-mixins/query
   [config id label]
   (when (and
          (not (string/blank? id))
