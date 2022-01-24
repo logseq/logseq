@@ -157,12 +157,11 @@
       understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
-  [t {:keys [id name title settings version url description author icon usf iir repo sponsors] :as item}
-   market? *search-key has-other-pending?
+  [t {:keys [id name title settings version url description author icon iir repo sponsors] :as item}
+   disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
-  (let [disabled (:disabled settings)
-        name (or title name "Untitled")
+  (let [name (or title name "Untitled")
         unpacked? (not iir)
         new-version (state/coming-update-new-version? coming-update)]
     [:div.cp__plugins-item-card
@@ -267,7 +266,7 @@
           ]
 
          [:div.r.flex.items-center
-          (when (and unpacked? (not disabled))
+          (when (and unpacked? (not disabled?))
             [:a.btn
              {:on-click #(js-invoke js/LSPluginCore "reload" id)}
              (t :plugin/reload)])
@@ -288,9 +287,9 @@
                   (t :plugin/check-update))
                 )]])
 
-          (ui/toggle (not disabled)
+          (ui/toggle (not disabled?)
                      (fn []
-                       (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
+                       (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
                        (page-handler/init-commands!))
                      true)]])]]))
 
@@ -517,8 +516,8 @@
              (rum/with-key
                (let [pid (keyword (:id item))
                      stat (:stat item)]
-                 (plugin-item-card t
-                                   item true *search-key installing
+                 (plugin-item-card t item
+                                   (get-in item [:settings :disabled]) true *search-key installing
                                    (and installing (= (keyword (:id installing)) pid))
                                    (contains? installed-plugins pid) stat nil))
                (:id item)))]])])))
@@ -529,7 +528,7 @@
     (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
     (rum/local :plugins ::category)
   [state]
-  (let [installed-plugins (state/sub :plugin/installed-plugins)
+  (let [installed-plugins (state/sub [:plugin/installed-plugins])
         installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
         develop-mode? (state/sub :ui/developer-mode?)
@@ -586,8 +585,8 @@
         (for [item sorted-plugins]
           (rum/with-key
             (let [pid (keyword (:id item))]
-              (plugin-item-card t
-                                item false *search-key updating
+              (plugin-item-card t item
+                                (get-in item [:settings :disabled]) false *search-key updating
                                 (and updating (= (keyword (:id updating)) pid))
                                 true nil (get coming-updates pid)))
             (:id item)))]])))

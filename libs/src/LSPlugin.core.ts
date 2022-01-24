@@ -455,7 +455,7 @@ class PluginLocal
           // Enable plugin
           const [, freshSettings] = await loadFreshSettings()
           freshSettings.disabled = false
-          a = deepMerge(a, freshSettings)
+          a = Object.assign(a, freshSettings)
           settings.settings = a
           await this.load()
         }
@@ -464,7 +464,7 @@ class PluginLocal
           // Disable plugin
           const [, freshSettings] = await loadFreshSettings()
           freshSettings.disabled = true
-          a = deepMerge(a, freshSettings)
+          a = Object.assign(a, freshSettings)
           await this.unload()
         }
 

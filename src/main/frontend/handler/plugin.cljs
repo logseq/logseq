@@ -304,9 +304,13 @@
         (and theme-mode (state/set-theme! (if (= theme-mode "light") "white" theme-mode)))
         (js/LSPluginCore.selectTheme (bean/->js theme))))))
 
-(defn update-plugin-settings
+(defn update-plugin-settings-state
   [id settings]
-  (swap! state/state update-in [:plugin/installed-plugins id] assoc :settings settings))
+  (state/set-state! [:plugin/installed-plugins id :settings]
+                    ;; TODO: force settings related ui reactive
+                    ;; Sometimes toggle to `disable` not working
+                    ;; But related-option data updated?
+                    (assoc settings :disabled (boolean (:disabled settings)))))
 
 (defn open-settings-file-in-default-app!
   [id-or-plugin]
@@ -493,7 +497,7 @@
                                           (let [id (keyword id)]
                                             (when (and settings
                                                        (contains? (:plugin/installed-plugins @state/state) id))
-                                              (update-plugin-settings id (bean/->clj settings)))))))
+                                              (update-plugin-settings-state id (bean/->clj settings)))))))
 
             default-plugins (get-user-default-plugins)
 

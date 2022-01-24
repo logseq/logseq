@@ -576,6 +576,8 @@
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
+        _installed-plugins (state/sub :plugin/installed-plugins)
+        plugins-of-settings (and plugin-handler/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         switch-theme (if dark? "white" "dark")
         *active (::active state)]
 
@@ -596,7 +598,7 @@
                  (when-not (mobile-util/is-native-platform?)
                    [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                  [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
-                 (when plugin-handler/lsp-enabled?
+                 (when plugins-of-settings
                    [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
             (when label
@@ -614,9 +616,8 @@
          (case (first @*active)
 
            :plugins-setting
-           (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)
-                 label (second @*active)]
-             (state/pub-event! [:go/plugins-settings (:id (first plugins))])
+           (let [label (second @*active)]
+             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
              (reset! *active [label label])
              nil)
 

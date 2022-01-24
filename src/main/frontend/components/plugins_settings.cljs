@@ -95,7 +95,7 @@
       [:div.cp__plugins-settings-inner
        ;; settings.json
        [:span.edit-file
-        (edit-settings-file pid)]
+        (edit-settings-file pid nil)]
 
        ;; render items
        (for [desc schema
