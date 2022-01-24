@@ -122,3 +122,10 @@
     (if (and model landscape?)
       20
       (:statusbar (model @idevice-info)))))
+
+(defn icloud-sync!
+  []
+  (let [f (fn []
+            (.downloadFilesFromiCloud download-icloud-files))]
+    (f)
+    (js/setInterval f 300000)))
