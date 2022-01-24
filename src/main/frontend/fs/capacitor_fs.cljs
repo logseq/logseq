@@ -239,7 +239,7 @@
           (fn [error]
             (log/error :rename-file-failed error)))))
   (stat [_this dir path]
-    (let [path (str dir path)]
+    (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
