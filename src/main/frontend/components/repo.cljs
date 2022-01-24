@@ -12,7 +12,6 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.notification :as notification]
@@ -20,7 +19,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.fs :as fs]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
             [frontend.modules.outliner.file :as outliner-file]
@@ -28,26 +26,12 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]
             [promesa.core :as p]
-            [electron.ipc :as ipc]
-            [frontend.extensions.srs :as srs]))
-
-;; TODO: move to events
-(defn- open-repo-url [url]
-  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
-  (state/set-current-repo! url)
-  ;; load config
-  (common-handler/reset-config! url nil)
-  (shortcut/refresh!)
-  (when-not (= :draw (state/get-current-route))
-    (route-handler/redirect-to-home!))
-  (when-let [dir-name (config/get-repo-dir url)]
-    (fs/watch-dir! dir-name))
-  (srs/update-cards-due-count!))
+            [electron.ipc :as ipc]))
 
 (defn switch-repo-if-writes-finished?
   [url]
   (if (outliner-file/writes-finished?)
-    (open-repo-url url)
+    (state/pub-event! [:graph/switch url])
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))

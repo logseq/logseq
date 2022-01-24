@@ -21,6 +21,8 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.commands :as commands]
             [frontend.spec :as spec]
@@ -32,7 +34,8 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs :as fs]))
 
 ;; TODO: should we move all events here?
 
@@ -76,6 +79,18 @@
         ]
     (db/set-key-value repo :ast/version db-schema/ast-version)
     (srs/update-cards-due-count!)))
+
+(defmethod handle :graph/switch [[_ graph]]
+  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
+  (state/set-current-repo! graph)
+  ;; load config
+  (common-handler/reset-config! graph nil)
+  (st/refresh!)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (when-let [dir-name (config/get-repo-dir graph)]
+    (fs/watch-dir! dir-name))
+  (srs/update-cards-due-count!))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))

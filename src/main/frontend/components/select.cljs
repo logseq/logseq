@@ -12,7 +12,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc render-item
   [{:keys [id value]} chosen?]
@@ -29,7 +31,7 @@
   {:will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] false)
                    state)}
-  [state {:keys [items limit on-chosen]
+  [state {:keys [items limit on-chosen empty-placeholder]
           :or {limit 100}}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [input (::input state)]
@@ -49,9 +51,10 @@
           :class       "cp__select-results"
           :on-chosen   (fn [x]
                          (state/close-modal!)
-                         (on-chosen x))})]])))
+                         (on-chosen x))
+          :empty-placeholder empty-placeholder})]])))
 
-(def select-config
+(defn select-config
   "Config that supports multiple types (uses) of this component. To add a new
   type, add a key with the value being a map with the following keys:
 
@@ -59,19 +62,34 @@
     fuzzy search and selection. Items can have an optional :id and are displayed
     lightly for a given item.
   * :on-chosen - fn that is given item when it is chosen."
+  []
   {:select-graph
    {:items-fn (fn []
-                (map #(hash-map :value (second (util/get-dir-and-basename (:url %)))
-                                :id (:url %))
-                     (state/get-repos)))
-    :on-chosen #(repo/switch-repo-if-writes-finished? (:id %))}})
+                (->>
+                 (state/get-repos)
+                 (remove (fn [{:keys [url]}]
+                           (or (config/demo-graph? url)
+                               (= url (state/get-current-repo)))))
+                 (map (fn [{:keys [url]}]
+                        (hash-map :value (second (util/get-dir-and-basename url))
+                                  :id (config/get-repo-dir url)
+                                  :graph url)))))
+    :on-chosen #(repo/switch-repo-if-writes-finished? (:graph %))
+    :empty-placeholder [:div.px-4.py-2
+                        [:div.mb-2 "No matched graphs, do you want to add another one?"]
+                        (ui/button
+                          "Yes, add another graph"
+                          :href (rfe/href :repo-add)
+                          :on-click state/close-modal!)]}})
 
 (rum/defc select-modal < rum/reactive
   []
   (when-let [select-type (state/sub [:ui/open-select])]
-    (let [{:keys [on-chosen items-fn]} (select-config select-type)]
+    (let [{:keys [on-chosen items-fn empty-placeholder]} (get (select-config) select-type)]
       (state/set-modal!
-       #(select {:items (items-fn) :on-chosen on-chosen})
+       #(select {:items (items-fn)
+                 :on-chosen on-chosen
+                 :empty-placeholder empty-placeholder})
        {:fullscreen? false
         :close-btn?  false}))
     nil))
