@@ -229,8 +229,15 @@
                        (.stat Filesystem (clj->js {:path path}))
                        (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
-  (rename! [_this _repo _old-path _new-path]
-    nil)
+  (rename! [_this _repo old-path new-path]
+    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+      (p/catch
+          (p/let [_ (.rename Filesystem
+                             (clj->js
+                              {:from old-path
+                               :to new-path}))])
+          (fn [error]
+            (log/error :rename-file-failed error)))))
   (stat [_this dir path]
     (let [path (str dir path)]
       (p/let [result (.stat Filesystem (clj->js
