@@ -11,7 +11,7 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]))
 
-(def hiding-login&file-sync true)
+(def hiding-login&file-sync false)
 (def refresh-file-sync-component (atom false))
 
 (defn graph-txid-exists?
