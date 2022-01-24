@@ -35,7 +35,8 @@ in an optional string of options"
   [args]
   (let [default-opts (slurp ".carve/config.edn")
          opts (if-let [more-opts (first args)]
-                (pr-str (merge (edn/read-string default-opts) (edn/read-string more-opts)))
+                (pr-str (merge (select-keys (edn/read-string default-opts) [:paths :api-namespaces])
+                               (edn/read-string more-opts)))
                 default-opts)]
     (apply carve.main/-main ["--opts" opts])))
 

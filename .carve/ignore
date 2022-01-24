@@ -1,20 +1,10 @@
-electron.configs/del-item!
-electron.core/ROOT_PATH
+;; Used by shadow-cljs
 electron.core/main
 electron.core/start
 electron.core/stop
-electron.git/dot-git-exists?
-electron.search/error
+;; repl fn
 electron.search/query
 frontend.blob/blob
-frontend.commands/insert-before!
-frontend.commands/get-command-input
-frontend.components.block/selection-range-in-block?
-frontend.components.block/blocks-cp
-frontend.components.export/export-page
-frontend.components.page/get-page-format
-frontend.components.page/show-journal?
-frontend.components.settings/set-cors
 frontend.components.sidebar/nav-item
 frontend.components.svg/arrow-left
 frontend.components.svg/arrow-right

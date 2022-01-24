@@ -708,13 +708,6 @@
     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
       [:div.inline.mr-1 (map-inline {} inline-list)])))
 
-(defn selection-range-in-block? []
-  (and (= "Range" (. (js/window.getSelection) -type))
-       (-> (js/window.getSelection)
-           (.-anchorNode)
-           (.-parentNode)
-           (.closest ".block-content"))))
-
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
@@ -1339,8 +1332,6 @@
 
     :else
     ""))
-
-(declare blocks-cp)
 
 (rum/defc block-child
   [block]
