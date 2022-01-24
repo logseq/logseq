@@ -2,6 +2,7 @@
   (:require [cljs-http.client :as http]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
             [cljs.spec.alpha :as s]
             [clojure.set :as set]
@@ -409,17 +410,30 @@
 
   IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid]
-    (go
-      (let [r (<! (.request this "get_all_files" {:GraphUUID graph-uuid}))]
-        (if (instance? ExceptionInfo r)
-          r
-          (into #{} (map
-                     #(->FileMetadata (:Size %)
-                                      (:ETag %)
-                                      (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
-                                      (:LastModified %)
-                                      true nil))
-                (:Objects r))))))
+    (let [file-meta-list (transient #{})]
+      (go-loop [dir nil continuation-token nil]
+        (let [r (<! (.request this "get_all_files"
+                              (into
+                               {}
+                               (remove (comp nil? second)
+                                       {:GraphUUID graph-uuid :Dir dir :ContinuationToken continuation-token}))))]
+          (if (instance? ExceptionInfo r)
+            r
+            (let [next-dir (:NextDir r)
+                  next-continuation-token (:NextContinuationToken r)
+                  objs (:Objects r)]
+              (if (and (empty? next-dir)
+                       (empty? next-continuation-token))
+                (persistent! file-meta-list) ; finish
+                (do (apply conj! file-meta-list
+                           (map
+                            #(->FileMetadata (:Size %)
+                                             (:ETag %)
+                                             (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
+                                             (:LastModified %)
+                                             true nil)
+                            objs))
+                    (recur next-dir next-continuation-token)))))))))
 
   (get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
