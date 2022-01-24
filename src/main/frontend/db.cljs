@@ -35,10 +35,10 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
+  blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
-  get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
+  get-all-templates get-block-and-children sub-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-children-ids get-block-immediate-children get-block-page
   get-blocks-contents get-custom-css
@@ -56,7 +56,7 @@
  [frontend.db.react
   get-current-marker get-current-page get-current-priority set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
-  clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
+  clear-query-state-without-refs-and-embeds! kv q
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh!]
 
  [frontend.db.query-custom

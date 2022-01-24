@@ -579,7 +579,7 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
+  (let [blocks (db/sub-block-and-children (state/get-current-repo) id)]
     [:div.color-level.embed-block.bg-base-2
      {:style {:z-index 2}
       :on-double-click #(edit-parent-block % config)
@@ -694,7 +694,7 @@
                                                :max-height 600}}
                                       [(block-parents config repo block-id {:indent? true})
                                        (blocks-container
-                                        (db/get-block-and-children repo block-id)
+                                        (db/sub-block-and-children repo block-id)
                                         (assoc config :id (str id) :preview? true))]]
                         :interactive true
                         :delay       [1000, 100]} inner)

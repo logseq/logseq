@@ -14,7 +14,8 @@
             [frontend.util :as util :refer [react]]
             [frontend.util.marker :as marker]
             [frontend.db.rules :as rules]
-            [frontend.db-schema :as db-schema]))
+            [frontend.db-schema :as db-schema]
+            [frontend.date :as date]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -106,14 +107,6 @@
             [k new-components]))
         (keep identity)
         (into {}))))
-
-(defn get-page-blocks-cache-atom
-  [repo page-id]
-  (:result (get @query-state [repo :page/blocks page-id])))
-
-(defn get-block-blocks-cache-atom
-  [repo block-id]
-  (:result (get @query-state [repo :block/block block-id])))
 
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
@@ -216,106 +209,26 @@
         (and (marker/marker? page-name)
              (string/upper-case page-name))))))
 
-(defn get-related-keys
-  [{:keys [key data]}]
-  (cond
-    (coll? key)
-    [key]
-
-    :else
-    (case key
-      (:block/change :block/insert)
-      (when-let [blocks (seq data)]
-        (let [pre-block? (:block/pre-block? (first blocks))
-              current-priority (get-current-priority)
-              current-marker (get-current-marker)
-              current-page-id (:db/id (get-current-page))
-              related-keys (->>
-                            (util/concat-without-nil
-                             (mapcat
-                              (fn [block]
-                                (when-let [page-id (or (:db/id (:block/page block))
-                                                       (and (int? (:block/page block))
-                                                            (:block/page block)))]
-                                  [[:blocks (:block/uuid block)]
-                                   [:page/blocks page-id]
-                                   [:page/ref-pages page-id]]))
-                              blocks)
-
-                             (when pre-block?
-                               [[:contents]
-                                [:page/published]])
-
-                             ;; affected priority
-                             (when current-priority
-                               [[:priority/blocks current-priority]])
-
-                             (when current-marker
-                               [[:marker/blocks current-marker]])
-
-                             (when current-page-id
-                               [[:page/ref-pages current-page-id]
-                                [:page/mentioned-pages current-page-id]])
-
-                             (apply concat
-                               (for [{:block/keys [refs]} blocks]
-                                 (map (fn [ref]
-                                        (cond
-                                          (and (map? ref) (:block/name ref))
-                                          [:page/blocks (:db/id (db-utils/entity [:block/name (:block/name ref)]))]
-
-                                          (and (vector? ref) (= (first ref) :block/uuid))
-                                          [:block/refs-count (second ref)]
-
-                                          :else
-                                          nil))
-                                   refs))))
-                            (distinct))
-              refed-pages (map
-                           (fn [[k page-id]]
-                             (when (= k :block/refed-blocks)
-                               [:page/ref-pages page-id]))
-                            related-keys)
-              all-refed-blocks (get-current-repo-refs-keys {:key key
-                                                            :data data})
-              custom-queries (some->>
-                              (filter (fn [v]
-                                        (and (= (first v) (state/get-current-repo))
-                                             (= (second v) :custom)))
-                                      (keys @query-state))
-                              (map (fn [v]
-                                     (vec (drop 1 v)))))
-              block-blocks (some->>
-                            (filter (fn [v]
-                                      (and (= (first v) (state/get-current-repo))
-                                           (= (second v) :block/block)))
-                                    (keys @query-state))
-                            (map (fn [v]
-                                   (vec (drop 1 v)))))]
-          (->>
-           (util/concat-without-nil
-            related-keys
-            refed-pages
-            all-refed-blocks
-            custom-queries
-            block-blocks)
-           distinct)))
-      [[key]])))
-
 (defn- new-db
-  [result tx-data]
-  (let [result (util/remove-nils result)
-        db (-> (d/empty-db db-schema/schema)
-               (d/with result)
-               (:db-after))]
+  [cached-result tx-data old-db]
+  (let [cached-result (util/remove-nils cached-result)
+        db (or old-db
+               (-> (d/empty-db db-schema/schema)
+                   (d/with cached-result)
+                   (:db-after)))]
     (:db-after (d/with db tx-data))))
+
+(defonce current-page-db (atom nil))
 
 (defn refresh!
   [repo-url {:keys [tx-data tx-meta]}]
   (when (and repo-url
              (seq tx-data)
              (not (:skip-refresh? tx-meta)))
-    (let [db (conn/get-conn repo-url)]
+    (let [db (conn/get-conn repo-url)
+          current-page (or (state/get-current-page)
+                           (date/today))
+          current-page (db-utils/entity [:block/name (util/page-name-sanity-lc current-page)])]
       (doseq [[k cache] @query-state]
         (when (and (= (first k) repo-url) cache)
           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
@@ -323,9 +236,15 @@
               (try
                 (let [db (if (and (coll? @result)
                                   (:db/id (first @result)))
-                           (util/profile
-                            (str "Construct new db: " k)
-                            (new-db @result tx-data))
+                           (let [current-page? (and
+                                                (= :page/blocks (second k))
+                                                (= (:db/id current-page) (nth k 2)))
+                                 new-db (if current-page?
+                                          (new-db @result tx-data @current-page-db)
+                                          (new-db @result tx-data nil))]
+                             (when current-page?
+                               (reset! current-page-db new-db))
+                             new-db)
                            db)
                       new-result (util/profile (str "refresh: " (rest k))
                                                (->

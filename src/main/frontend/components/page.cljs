@@ -44,7 +44,7 @@
   [repo page-name block-id]
   (when page-name
     (if block-id
-      (db/get-block-and-children repo block-id)
+      (db/sub-block-and-children repo block-id)
       (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!

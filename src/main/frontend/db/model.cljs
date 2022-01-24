@@ -553,10 +553,10 @@
 
 (defn page-empty?
   [repo page-id]
-  (let [page-id (if (integer? page-id)
-                  page-id
-                  [:block/name (util/safe-page-name-sanity-lc page-id)])]
-    (empty? (:block/_parent (db-utils/entity repo page-id)))))
+  (let [page-id (if (string? page-id)
+                  [:block/name (util/safe-page-name-sanity-lc page-id)]
+                  page-id)]
+    (zero? (get-page-blocks-count repo page-id))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -635,9 +635,6 @@
                               '[:db/id :block/name :block/original-name]
                               ids))))))
 
-(defn block-and-children-transform
-  [result _repo-url _block-uuid]
-  (db-utils/seq-flatten result))
 
 (defn get-block-children-ids
   [repo block-uuid]
@@ -700,9 +697,23 @@
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))
   ([repo block-uuid use-cache?]
+   (some-> (d/q repo
+             '[:find [(pull ?block ?block-attrs) ...]
+               :in $ ?id ?block-attrs
+               :where
+               [?block :block/uuid ?id]]
+             (conn/get-conn repo)
+             block-uuid
+             block-attrs)
+           first
+           flatten-tree)))
+
+(defn sub-block-and-children
+  ([repo block-uuid]
+   (sub-block-and-children repo block-uuid true))
+  ([repo block-uuid use-cache?]
    (some-> (react/q repo [:block/block block-uuid]
-             {:use-cache? use-cache?
-              :transform-fn #(block-and-children-transform % repo block-uuid)}
+             {:use-cache? use-cache?}
              '[:find [(pull ?block ?block-attrs) ...]
                :in $ ?id ?block-attrs
                :where

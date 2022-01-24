@@ -125,7 +125,7 @@
 (defn save-tree-aux!
   [page-block tree]
   (let [page-block (db/pull (:db/id page-block))
-        new-content (tree->file-content tree {:init-level init-level})
+        new-content (util/profile "tree->file-content" (tree->file-content tree {:init-level init-level}))
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)
         _ (assert (string? file-path) "File path should satisfy string?")
