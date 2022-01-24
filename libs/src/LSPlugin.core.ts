@@ -11,7 +11,8 @@ import {
   getSDKPathRoot,
   PROTOCOL_FILE, URL_LSP,
   safetyPathJoin,
-  path, safetyPathNormalize, mergeSettingsWithSchema
+  path, safetyPathNormalize,
+  mergeSettingsWithSchema
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -19,7 +20,8 @@ import {
   LSPluginCaller,
   LSPMSG_READY, LSPMSG_SYNC,
   LSPMSG, LSPMSG_SETTINGS,
-  LSPMSG_ERROR_TAG, LSPMSG_BEFORE_UNLOAD, AWAIT_LSPMSGFn
+  LSPMSG_ERROR_TAG, LSPMSG_BEFORE_UNLOAD,
+  AWAIT_LSPMSGFn
 } from './LSPlugin.caller'
 import {
   ILSPluginThemeManager,

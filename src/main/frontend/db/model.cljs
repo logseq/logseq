@@ -20,7 +20,7 @@
             [frontend.db.default :as default-db]))
 
 ;; TODO: extract to specific models and move data transform logic to the
-;; correponding handlers.
+;; corresponding handlers.
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs

@@ -217,7 +217,9 @@
 
 (defmethod handle :go/plugins-settings [[_ pid]]
   (if pid
-    (plugin/open-focused-settings-modal!)
+    (do
+     (state/set-state! :plugin/focused-settings pid)
+     (plugin/open-focused-settings-modal!))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
 

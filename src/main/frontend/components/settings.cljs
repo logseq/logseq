@@ -13,6 +13,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
@@ -542,7 +543,7 @@
      :action (plugin-enabled-switcher t)}))
 
 (rum/defcs settings
-  < (rum/local :general ::active)
+  < (rum/local [:general :general] ::active)
   {:will-mount
    (fn [state]
      (state/load-app-user-cfgs)
@@ -594,13 +595,15 @@
                  [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
                  (when-not (mobile-util/is-native-platform?)
                    [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
+                 (when plugin-handler/lsp-enabled?
+                   [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
             (when label
               [:li
-               {:key text
-                :class    (util/classnames [{:active (= label @*active)}])
-                :on-click #(reset! *active label)}
+               {:key      text
+                :class    (util/classnames [{:active (= label (first @*active))}])
+                :on-click #(reset! *active [label (first @*active)])}
 
                [:a.flex.items-center
                 icon
@@ -608,7 +611,14 @@
 
         [:article
 
-         (case @*active
+         (case (first @*active)
+
+           :plugins-setting
+           (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)
+                 label (second @*active)]
+             (state/pub-event! [:go/plugins-settings (:id (first plugins))])
+             (reset! *active [label label])
+             nil)
 
            :general
            [:div.panel-wrap.is-general

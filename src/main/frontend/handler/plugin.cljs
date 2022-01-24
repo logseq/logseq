@@ -132,6 +132,15 @@
   (when (:plugin/updates-downloading? @state/state)
     (state/set-state! :plugin/updates-downloading? false)))
 
+(defn has-setting-schema?
+  [id]
+  (when-let [pl (and id (get-plugin-inst (name id)))]
+    (boolean (.-settingsSchema pl))))
+
+(defn get-enabled-plugins-if-setting-schema
+  []
+  (when-let [plugins (seq (state/get-enabled-installed-plugins false true))]
+    (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
   [t]
@@ -157,7 +166,7 @@
                                       (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
                                     (state/consume-updates-coming-plugin payload true))))
 
-                             (do    ;; register new
+                             (do                            ;; register new
                                (p/then
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                  (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
@@ -298,6 +307,20 @@
 (defn update-plugin-settings
   [id settings]
   (swap! state/state update-in [:plugin/installed-plugins id] assoc :settings settings))
+
+(defn open-settings-file-in-default-app!
+  [id-or-plugin]
+  (when-let [plugin (if (coll? id-or-plugin)
+                      id-or-plugin (state/get-plugin-by-id id-or-plugin))]
+    (when-let [file-path (:usf plugin)]
+      (js/apis.openPath file-path))))
+
+(defn open-plugin-settings!
+  [id]
+  (when-let [plugin (and id (state/get-plugin-by-id id))]
+    (if (has-setting-schema? id)
+      (state/pub-event! [:go/plugins-settings id])
+      (open-settings-file-in-default-app! plugin))))
 
 (defn parse-user-md-content
   [content {:keys [url]}]

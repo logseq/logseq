@@ -191,6 +191,7 @@ export type SettingSchemaDesc = {
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
+  inputAs?: 'color' | 'date' | 'datetime-local' | 'range'
   enumChoices?: Array<string>
   enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
 }

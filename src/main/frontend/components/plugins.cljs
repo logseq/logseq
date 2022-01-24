@@ -245,7 +245,7 @@
           [:div.de
            [:strong (ui/icon "settings")]
            [:ul.menu-list
-            [:li {:on-click #(when usf (js/apis.openPath usf))} (t :plugin/open-settings)]
+            [:li {:on-click #(plugin-handler/open-plugin-settings! id)} (t :plugin/open-settings)]
             [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
             [:li {:on-click
                   #(let [confirm-fn
@@ -759,7 +759,7 @@
 
        [:div.cp__settings-inner.md:flex
         [:aside.md:w-64 {:style {:min-width "10rem"}}
-         (let [plugins (state/get-enabled-installed-plugins false true)]
+         (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
            [:ul
             (for [{:keys [id name title icon]} plugins]
               [:li
@@ -774,8 +774,10 @@
         [:article
          [:div.panel-wrap
           (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
-            (plugins-settings/settings-container
-              (bean/->clj (.-settingsSchema pl)) pl))
+            (ui/catch-error
+              [:p.warning.text-lg.mt-5 "Settings schema Error!"]
+              (plugins-settings/settings-container
+                (bean/->clj (.-settingsSchema pl)) pl)))
           ]]]])))
 
 (rum/defc custom-js-installer

@@ -1682,6 +1682,11 @@
   []
   (:ui/visual-viewport-state @state))
 
+(defn get-plugin-by-id
+  [id]
+  (when-let [id (and id (keyword id))]
+    (get-in @state [:plugin/installed-plugins id])))
+
 (defn get-enabled-installed-plugins
   ([theme?] (get-enabled-installed-plugins theme? false))
   ([theme? include-unpacked?]
