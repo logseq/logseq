@@ -75,6 +75,8 @@
                                (= url (state/get-current-repo)))))
                  (map (fn [{:keys [url]}]
                         {:value (text/get-graph-name-from-path
+                                 ;; TODO: Use helper when a common one is refactored
+                                 ;; from components.repo
                                  (if (config/local-db? url)
                                    (config/get-local-dir url)
                                    (db/get-repo-path url)))
