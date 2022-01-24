@@ -58,6 +58,14 @@
     (f)
     (js/setInterval f 5000)))
 
+(defn- icloud-sync!
+  []
+  (let [f (fn []
+            (when (state/get-current-repo)
+              (.downloadFilesFromiCloud mobile-util/download-icloud-files)))]
+    (f)
+    (js/setInterval f 300000)))
+
 (defn- instrument!
   []
   (let [total (srs/get-srs-cards-total)]
@@ -130,6 +138,8 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
+                            (when (mobile-util/native-ios?)
+                              (icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
