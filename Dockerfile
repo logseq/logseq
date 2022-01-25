@@ -19,7 +19,7 @@ WORKDIR /src/
 #get dependencies
 COPY package.json .
 COPY yarn.lock .
-COPY static .
+COPY static/yarn.lock static/yarn.lock
 RUN yarn install
 
 # copy everything else & run release
