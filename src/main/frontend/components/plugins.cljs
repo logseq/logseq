@@ -157,7 +157,7 @@
       understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
-  [t {:keys [id name title settings version url description author icon iir repo sponsors] :as item}
+  [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
@@ -698,7 +698,7 @@
                                                         - :toolbar
                                                         - :pagebar
                                                      "
-  [state type]
+  [_state type]
   (when (state/sub [:plugin/installed-ui-items])
     (let [items (state/get-plugins-ui-items-with-type type)]
       (when (seq items)

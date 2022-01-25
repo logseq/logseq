@@ -1,6 +1,5 @@
 (ns frontend.components.plugins-settings
   (:require [rum.core :as rum]
-            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.ui :as ui]
             [frontend.handler.plugin :as plugin-handler]
@@ -65,15 +64,14 @@
        ]]]))
 
 (rum/defc render-item-object
-  [val {:keys [key title description default]} pid]
+  [_val {:keys [key title description _default]} pid]
 
-  (let [val (js/JSON.stringify (bean/->js (or val default)) nil 2)]
-    [:div.desc-item.as-object
-     [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
+  [:div.desc-item.as-object
+   [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
-     [:div.form-control
-      [:small.pl-1.flex-1 description]
-      [:div.pl-1 (edit-settings-file pid nil)]]]))
+   [:div.form-control
+    [:small.pl-1.flex-1 description]
+    [:div.pl-1 (edit-settings-file pid nil)]]])
 
 (rum/defc settings-container
   [schema ^js pl]
