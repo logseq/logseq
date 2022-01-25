@@ -74,11 +74,17 @@
       margin-bottom: -17px;
     }
 
+    &.no-aside {
+      > article {
+        padding-left: 0;
+      }
+    }
+
     .panel-wrap {
       padding: 12px;
 
       @screen sm {
-        width: 600px;
+        min-width: 600px;
       }
 
       > .it {

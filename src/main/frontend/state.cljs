@@ -173,6 +173,7 @@
       :plugin/updates-coming                 {}
       :plugin/updates-downloading?           false
       :plugin/updates-unchecked              #{}
+      :plugin/navs-settings?                 true
       :plugin/focused-settings               nil            ;; plugin id
 
       ;; pdf
@@ -1687,12 +1688,12 @@
   (when-let [id (and id (keyword id))]
     (get-in @state [:plugin/installed-plugins id])))
 
-(defn get-enabled-installed-plugins
-  ([theme?] (get-enabled-installed-plugins theme? false))
-  ([theme? include-unpacked?]
+(defn get-enabled?-installed-plugins
+  ([theme?] (get-enabled?-installed-plugins theme? true false))
+  ([theme? enabled? include-unpacked?]
    (filterv
      #(and (if include-unpacked? true (:iir %))
-           (not (get-in % [:settings :disabled]))
+           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
            (= (boolean theme?) (:theme %)))
      (vals (:plugin/installed-plugins @state)))))
 

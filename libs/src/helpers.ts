@@ -3,6 +3,7 @@ import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
+import { merge } from 'lodash-es'
 
 interface IObject {
   [key: string]: any;
@@ -48,47 +49,7 @@ export function isObject (item: any) {
   return (item === Object(item) && !Array.isArray(item))
 }
 
-export function deepMerge (
-  target: IObject,
-  ...sources: Array<IObject>
-) {
-  // return the target if no sources passed
-  if (!sources.length) {
-    return target
-  }
-
-  const result: IObject = target
-
-  if (isObject(result)) {
-    const len: number = sources.length
-
-    for (let i = 0; i < len; i += 1) {
-      const elm: any = sources[i]
-
-      if (isObject(elm)) {
-        for (const key in elm) {
-          if (elm.hasOwnProperty(key)) {
-            if (isObject(elm[key])) {
-              if (!result[key] || !isObject(result[key])) {
-                result[key] = {}
-              }
-              deepMerge(result[key], elm[key])
-            } else {
-              if (Array.isArray(result[key]) && Array.isArray(elm[key])) {
-                // concatenate the two arrays and remove any duplicate primitive values
-                result[key] = Array.from(new Set(result[key].concat(elm[key])))
-              } else {
-                result[key] = elm[key]
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return result
-}
+export const deepMerge = merge
 
 export function genID () {
   // Math.random should be unique because of its seeding algorithm.

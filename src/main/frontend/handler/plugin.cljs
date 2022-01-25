@@ -139,7 +139,7 @@
 
 (defn get-enabled-plugins-if-setting-schema
   []
-  (when-let [plugins (seq (state/get-enabled-installed-plugins false true))]
+  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true))]
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
@@ -320,11 +320,12 @@
       (js/apis.openPath file-path))))
 
 (defn open-plugin-settings!
-  [id]
-  (when-let [plugin (and id (state/get-plugin-by-id id))]
-    (if (has-setting-schema? id)
-      (state/pub-event! [:go/plugins-settings id])
-      (open-settings-file-in-default-app! plugin))))
+  ([id] (open-plugin-settings! id false))
+  ([id nav?]
+   (when-let [plugin (and id (state/get-plugin-by-id id))]
+     (if (has-setting-schema? id)
+       (state/pub-event! [:go/plugins-settings id nav? (or (:name plugin) (:title plugin))])
+       (open-settings-file-in-default-app! plugin)))))
 
 (defn parse-user-md-content
   [content {:keys [url]}]
@@ -414,7 +415,7 @@
   (let [pending? (seq (:plugin/updates-pending @state/state))]
     (when-let [plugins (and (not pending?)
                             ;; TODO: too many requests may be limited by Github api
-                            (seq (take 32 (state/get-enabled-installed-plugins theme?))))]
+                            (seq (take 32 (state/get-enabled?-installed-plugins theme?))))]
       (state/set-state! :plugin/updates-pending
                         (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))

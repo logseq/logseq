@@ -215,11 +215,12 @@
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
-(defmethod handle :go/plugins-settings [[_ pid]]
+(defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
      (state/set-state! :plugin/focused-settings pid)
-     (plugin/open-focused-settings-modal!))
+     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+     (plugin/open-focused-settings-modal! title))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
 

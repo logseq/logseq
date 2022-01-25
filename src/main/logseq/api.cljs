@@ -633,8 +633,9 @@
 
 (defn ^:export set_focused_settings
   [pid]
-  (state/set-state! :plugin/focused-settings pid)
-  (state/pub-event! [:go/plugins-settings pid]))
+  (when-let [plugin (state/get-plugin-by-id pid)]
+    (state/set-state! :plugin/focused-settings pid)
+    (state/pub-event! [:go/plugins-settings pid false (or (:name plugin) (:title plugin))])))
 
 (defn ^:export force_save_graph
   []

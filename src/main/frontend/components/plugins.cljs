@@ -244,7 +244,7 @@
           [:div.de
            [:strong (ui/icon "settings")]
            [:ul.menu-list
-            [:li {:on-click #(plugin-handler/open-plugin-settings! id)} (t :plugin/open-settings)]
+            [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
             [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
             [:li {:on-click
                   #(let [confirm-fn
@@ -746,29 +746,32 @@
 
 (rum/defcs focused-settings-content
   < rum/reactive
-  [_state]
+  [_state title]
   (let [focused (state/sub :plugin/focused-settings)
+        nav? (state/sub :plugin/navs-settings?)
         _ (state/sub :plugin/installed-plugins)]
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
       [:div.cp__plugins-settings.cp__settings-main
        [:header
-        [:h1.title (t :settings-of-plugins)]]
+        [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
 
        [:div.cp__settings-inner.md:flex
-        [:aside.md:w-64 {:style {:min-width "10rem"}}
-         (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
-           [:ul
-            (for [{:keys [id name title icon]} plugins]
-              [:li
-               {:class (util/classnames [{:active (= id focused)}])}
-               [:a.flex.items-center
-                {:on-click #(do (state/set-state! :plugin/focused-settings id))}
-                (if (and icon (not (string/blank? icon)))
-                  [:img.icon {:src icon}]
-                  svg/folder)
-                [:strong.flex-1 (or title name)]]])])]
+        {:class (util/classnames [{:no-aside (not nav?)}])}
+        (when nav?
+          [:aside.md:w-64 {:style {:min-width "10rem"}}
+           (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
+             [:ul
+              (for [{:keys [id name title icon]} plugins]
+                [:li
+                 {:class (util/classnames [{:active (= id focused)}])}
+                 [:a.flex.items-center
+                  {:on-click #(do (state/set-state! :plugin/focused-settings id))}
+                  (if (and icon (not (string/blank? icon)))
+                    [:img.icon {:src icon}]
+                    svg/folder)
+                  [:strong.flex-1 (or title name)]]])])])
 
         [:article
          [:div.panel-wrap
@@ -803,10 +806,10 @@
     {:center? true}))
 
 (defn open-focused-settings-modal!
-  []
+  [title]
   (state/set-sub-modal!
     (fn [_close!]
       [:div.settings-modal.of-plugins
-       (focused-settings-content)])
+       (focused-settings-content title)])
     {:center? false
      :id      "ls-focused-settings-modal"}))
