@@ -250,7 +250,7 @@
                   (.pickFolder mobile-util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
-            _ (when (mobile-util/native-ios?) (.downloadFilesFromiCloud mobile-util/download-icloud-files))
+            _ (when (mobile-util/native-ios?) (mobile-util/sync-icloud-repo path))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
