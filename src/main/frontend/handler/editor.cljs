@@ -2002,7 +2002,7 @@
         label (or label "")]
     (case (keyword format)
       :markdown (util/format "![%s](%s)" label link)
-      :org (util/format "[[%s]]"))))
+      :org (util/format "[[%s][%s]]" link lable))))
 
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
