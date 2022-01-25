@@ -19,49 +19,62 @@ public class DownloadiCloudFiles: CAPPlugin,  UIDocumentPickerDelegate  {
         return fileManager.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents")
     }
     
-    @objc func downloadFilesFromiCloud(_ call: CAPPluginCall) {
+    var isDirectory: ObjCBool = false
+    var downloaded = false
+    
+    @objc func syncGraph(_ call: CAPPluginCall) {
         
-        self._call = call
+        guard let graph = call.options["graph"] as? String else {
+            call.reject("Missing graph name")
+            return
+        }
+ 
+        let ignores = [".git", ".trash", "bak", ".recycle"]
         
-        var downloaded = false
-        
-        if let url = self.containerUrl, fileManager.fileExists(atPath: url.path) {
-            
+        if let url = self.containerUrl?.appendingPathComponent(graph) {
             do {
-                print("Download started!")
-                downloaded = try self.downloadAllFilesFromCloud(at: url)
-                print("All files has been downloaded!", downloaded)
+                downloaded = try self.downloadAllFilesFromCloud(at: url, ignorePattern: ignores)
             } catch {
-                print("Can't download logseq's files from iCloud to local device.")
+                print(error.localizedDescription)
+            }
+        }
+        call.resolve(["success": downloaded])
+    }
+    
+    @objc func iCloudSync(_ call: CAPPluginCall) {
+
+        if let url = self.containerUrl, fileManager.fileExists(atPath: url.path) {
+            do {
+                downloaded = try self.downloadAllFilesFromCloud(at: url, ignorePattern: [".git", ".Trash", "bak", ".recycle"])
+            } catch {
                 print(error.localizedDescription)
             }
         }
         
-        self._call?.resolve(["success": downloaded])
+        call.resolve(["success": downloaded])
     }
     
-    func downloadAllFilesFromCloud(at url: URL) throws -> Bool {
+    func downloadAllFilesFromCloud(at url: URL, ignorePattern ignores: [String] = []) throws -> Bool {
 
-        guard url.hasDirectoryPath else { return true }
         let files = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil, options: [])
 
-        var completed = false
-        
         for file in files {
             if file.pathExtension.lowercased() == "icloud" {
-                
                 do {
                     try fileManager.startDownloadingUbiquitousItem(at: file)
                 } catch {
                     print("Unexpected error: \(error).")
                 }
-
             } else {
-                if try downloadAllFilesFromCloud(at: file) {
-                    completed = true
+                if fileManager.fileExists(atPath: file.path, isDirectory:&isDirectory) {
+                    if isDirectory.boolValue && !ignores.contains(file.lastPathComponent) {
+                        if try downloadAllFilesFromCloud(at: file, ignorePattern: ignores) {
+                            downloaded = true
+                        }
+                    }
                 }
             }
         }
-        return completed
+        return downloaded
     }
 }
