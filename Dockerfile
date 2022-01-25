@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install ca-certificates && \
     apt-get update && \
     apt-get install -y yarn
 
+RUN echo ${VERSION} > /version.txt
+
 WORKDIR /src/
 #get dependencies
 COPY package.json .
@@ -26,7 +28,7 @@ RUN yarn release
 
 # Web App Runner image
 FROM nginx:stable-alpine
-RUN echo ${VERSION} > /usr/share/nginx/html/version.txt
+COPY --from=builder /version.txt /usr/share/nginx/html/
 COPY --from=builder /src/public/index.html /usr/share/nginx/html/
 COPY --from=builder /src/static /usr/share/nginx/html
 
