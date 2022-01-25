@@ -307,8 +307,10 @@
 (defonce local-repo "local")
 
 (defn demo-graph?
-  []
-  (= (state/get-current-repo) local-repo))
+  ([]
+   (demo-graph? (state/get-current-repo)))
+  ([graph]
+   (= graph local-repo)))
 
 (defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
