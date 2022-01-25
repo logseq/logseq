@@ -1,17 +1,36 @@
 name: Build-Docker
 
 on:
-  workflow_dispatch:
-  workflow_call:
-
-env:
-  CLOJURE_VERSION: '1.10.1.727'
+  release:
+    types: [created]
+  push:
+    branches: [ master ]
 
 jobs:
+
+  tagger:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tagger.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Find Tag
+        id: tagger
+        uses: jimschubert/query-tag-action@v2
+        with:
+          include: '*'
+          commit-ish: 'HEAD'
+          abbrev: false
+
+      - name: Show Tag
+        id: display
+        run: |
+          echo 'Output from Find Tag: ${{steps.tagger.outputs.tag}}'
 
   build-docker:
     runs-on: ubuntu-latest
 
+    needs: [tagger]
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -19,16 +38,23 @@ jobs:
           fetch-depth: 1
           submodules: 'true'
 
-      - name: Build Docker
-        run: |
-          docker build -t ghcr.io/logseq/logseq-webapp:latest .
-
       - name: Docker Login
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ghcr.io/logseq/logseq-webapp:${{needs.tagger.outputs.tag}}
+          build-args: VERSION=${{needs.tagger.outputs.tag}}
+
+      - name: Mark Image as latest
+        run: docker image tag ghcr.io/logseq/logseq-webapp:${{needs.tagger.outputs.tag}} ghcr.io/logseq/logseq-webapp:latest
 
       - name: Publish Docker Image
         run: docker push ghcr.io/logseq/logseq-webapp:latest
