@@ -130,6 +130,9 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
+                            (when (and (state/get-current-repo)
+                                       (mobile-util/native-ios?))
+                              (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))

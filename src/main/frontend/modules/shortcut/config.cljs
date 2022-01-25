@@ -18,7 +18,7 @@
             [medley.core :as medley]))
 
 ;; Note – when you change this file, you will need to do a hard reset.
-;; The commands are registered when the Clojurescript code runs for the fir
+;; The commands are registered when the Clojurescript code runs for the first time
 (defonce all-default-keyboard-shortcuts
   {:date-picker/complete         {:desc    "Date picker: Choose selected day"
                                   :binding "enter"
@@ -182,13 +182,11 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :up)}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :down)}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"
@@ -225,13 +223,11 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!
-                                    :force?  true}
+                                    :fn      editor-handler/expand!}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!
-                                    :force?  true}
+                                    :fn      editor-handler/collapse!}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -316,8 +312,11 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
-                                    :force?   true}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+
+   :select-graph/open              {:desc    "Open select graph component"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
+                                    :binding "mod+shift+g"}
 
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
@@ -406,6 +405,11 @@
                                        :binding false
                                        :fn      page-handler/open-file-in-directory})
 
+   :editor/copy-current-file        (when (util/electron?)
+                                      {:desc    "Copy current file"
+                                       :binding false
+                                       :fn      page-handler/copy-current-file})
+
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
                                      :binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
@@ -427,7 +431,7 @@
    :ui/toggle-cards                 {:desc    "Toggle cards"
                                      :binding "t c"
                                      :fn      ui-handler/toggle-cards!}
-  ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
+   ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
 
    :git/commit                      {:desc    "Git commit message"
                                      :binding "c"
@@ -494,6 +498,7 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
+                          :select-graph/open
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -559,6 +564,7 @@
                           :ui/open-new-window
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
+                          :editor/copy-current-file
                           :ui/toggle-wide-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
@@ -674,6 +680,7 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
+    :select-graph/open
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index

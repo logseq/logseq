@@ -1304,46 +1304,76 @@
         (let [repo (state/get-current-repo)]
           (delete-blocks! repo blocks))))))
 
-(defn- get-nearest-page
-  "Return the nearset page-name (not dereferenced, may be an alias)"
+(def url-regex
+  "Didn't use link/plain-link as it is incorrectly detects words as urls."
+  #"[^\s\(\[]+://[^\s\)\]]+")
+
+(defn extract-nearest-link-from-text
+  [text pos & additional-patterns]
+  (let [page-pattern #"\[\[([^\]]+)]]"
+        block-pattern #"\(\(([^\)]+)\)\)"
+        tag-pattern #"#\S+"
+        page-matches (util/re-pos page-pattern text)
+        block-matches (util/re-pos block-pattern text)
+        tag-matches (util/re-pos tag-pattern text)
+        additional-matches (mapcat #(util/re-pos % text) additional-patterns)
+        matches (->> (concat page-matches block-matches tag-matches additional-matches)
+                     (remove nil?))
+        [_ match] (first (sort-by
+                          (fn [[start-pos content]]
+                            (let [end-pos (+ start-pos (count content))]
+                              (cond
+                                (< pos start-pos)
+                                (- pos start-pos)
+
+                                (> pos end-pos)
+                                (- end-pos pos)
+
+                                :else
+                                0)))
+                          >
+                          matches))]
+    (when match
+      (cond
+        (some #(re-find % match) additional-patterns)
+        match
+        (string/starts-with? match "#")
+        (subs match 1 (count match))
+        :else
+        (subs match 2 (- (count match) 2))))))
+
+(defn- get-nearest-page-or-url
+  "Return the nearest page-name (not dereferenced, may be an alias), block, tag or url"
   []
   (when-let [block (state/get-edit-block)]
     (when (:block/uuid block)
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
           (when-let [pos (cursor/pos input)]
-            (let [value (gobj/get input "value")
-                  page-pattern #"\[\[([^\]]+)]]"
-                  block-pattern #"\(\(([^\)]+)\)\)"
-                  page-matches (util/re-pos page-pattern value)
-                  block-matches (util/re-pos block-pattern value)
-                  matches (->> (concat page-matches block-matches)
-                               (remove nil?))
-                  [_ page] (first (sort-by
-                                   (fn [[start-pos content]]
-                                     (let [end-pos (+ start-pos (count content))]
-                                       (cond
-                                         (< pos start-pos)
-                                         (- pos start-pos)
+            (let [value (gobj/get input "value")]
+              (extract-nearest-link-from-text value pos url-regex))))))))
 
-                                         (> pos end-pos)
-                                         (- end-pos pos)
-
-                                         :else
-                                         0)))
-                                   >
-                                   matches))]
-              (when page
-                (subs page 2 (- (count page) 2))))))))))
+(defn- get-nearest-page
+  "Return the nearest page-name (not dereferenced, may be an alias), block or tag"
+  []
+  (when-let [block (state/get-edit-block)]
+    (when (:block/uuid block)
+      (when-let [edit-id (state/get-edit-input-id)]
+        (when-let [input (gdom/getElement edit-id)]
+          (when-let [pos (cursor/pos input)]
+            (let [value (gobj/get input "value")]
+              (extract-nearest-link-from-text value pos))))))))
 
 (defn follow-link-under-cursor!
   []
-  (when-let [page (get-nearest-page)]
+  (when-let [page (get-nearest-page-or-url)]
     (when-not (string/blank? page)
-      (let [page-name (db-model/get-redirect-page-name page)]
-        (state/clear-edit!)
-        (insert-first-page-block-if-not-exists! page-name)
-        (route-handler/redirect-to-page! page-name)))))
+      (if (re-find url-regex page)
+        (js/window.open page)
+        (let [page-name (db-model/get-redirect-page-name page)]
+          (state/clear-edit!)
+          (insert-first-page-block-if-not-exists! page-name)
+          (route-handler/redirect-to-page! page-name))))))
 
 (defn open-link-in-sidebar!
   []
