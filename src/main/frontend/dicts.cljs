@@ -1101,6 +1101,7 @@
            :remove-orphaned-pages "删除空页面"
            :my-publishing "我的发布"
            :settings "设置"
+           :settings-of-plugins "插件设置"
            :plugins "插件"
            :themes "主题"
            :developer-mode-alert "如果希望插件功能立刻生效, 请重启应用。是否现在重启?"

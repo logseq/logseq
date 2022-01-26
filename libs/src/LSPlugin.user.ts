@@ -12,7 +12,7 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc
+  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc, IUserOffHook
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -358,6 +358,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   updateSettings (attrs: Record<string, any>) {
     this.caller.call('settings:update', attrs)
     // TODO: update associated baseInfo settings
+  }
+
+  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook {
+    const type = 'settings:changed'
+    this.on(type, cb)
+    return () => this.off(type, cb)
   }
 
   showSettingsUI () {

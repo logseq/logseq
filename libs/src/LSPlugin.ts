@@ -650,6 +650,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   updateSettings (attrs: Record<string, any>): void
 
+  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook
+
   showSettingsUI (): void
 
   hideSettingsUI (): void
