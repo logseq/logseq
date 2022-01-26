@@ -13,7 +13,7 @@ body:
   - type: textarea
     id: repoduce
     attributes:
-      label: Reporduce the bug
+      label: Reporduce the Bug
       description: |
         Please tell us about the steps to reporduct the bug as mush as you can?
       value: |
@@ -26,7 +26,7 @@ body:
   - type: textarea
     id: excepted
     attributes:
-      label: Excepted behavior
+      label: Excepted Behavior
       description: |
         Please tell us what's the behavior you except?
     validations:
@@ -55,7 +55,7 @@ body:
   - type: textarea
     id: mobile 
     attributes:
-      label: Mobile Platform information
+      label: Mobile Platform Information
       description: |
         Would you mind to tell use the system information about your mobile platform?
       value: |
@@ -68,7 +68,7 @@ body:
   - type: textarea
     id: additional
     attributes:
-      label: Additional context
+      label: Additional Context
       description: |
         If applicable, add additional context to help explain your problem.
     validations:
