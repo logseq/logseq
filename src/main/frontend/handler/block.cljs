@@ -4,18 +4,6 @@
             [frontend.db :as db]
             [frontend.format.block :as block]))
 
-(defn get-block-ids
-  [block]
-  (let [ids (atom [])
-        _ (walk/prewalk
-           (fn [form]
-             (when (map? form)
-               (when-let [id (:block/uuid form)]
-                 (swap! ids conj id)))
-             form)
-           block)]
-    @ids))
-
 (defn get-block-refs-with-children
   [block]
   (->>

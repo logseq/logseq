@@ -230,10 +230,6 @@
     (util/react (rum/cursor-in state ks))
     (util/react (rum/cursor state ks))))
 
-(defn sub-current-route
-  []
-  (get-in (sub :route-match) [:data :name]))
-
 (defn get-route-match
   []
   (:route-match @state))
@@ -454,10 +450,6 @@
     "LATER"
     "TODO"))
 
-(defn hide-file?
-  []
-  (:hide-file-in-page? (get-config)))
-
 (defn page-name-order
   "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
   name unless it is missing."
@@ -512,22 +504,6 @@
   (when (= (get-current-repo) (:url repo))
     (set-current-repo! (:url (first (get-repos))))))
 
-(defn next-collapse-mode
-  []
-  (case (:ui/cycle-collapse @state)
-    :show-all
-    :hide-block-body
-
-    :hide-block-body
-    :hide-block-children
-
-    :hide-block-children
-    :show-all))
-
-(defn cycle-collapse!
-  []
-  (set-state! :ui/cycle-collapse (next-collapse-mode)))
-
 (defn set-timestamp-block!
   [value]
   (set-state! :editor/set-timestamp-block value))
@@ -563,10 +539,6 @@
   []
   (when-let [id (get-edit-input-id)]
     (gdom/getElement id)))
-
-(defn get-last-edit-input-id
-  []
-  (:editor/last-edit-block-input-id @state))
 
 (defn editing?
   []
@@ -661,11 +633,6 @@
   [value]
   (set-state! :editor/show-zotero value))
 
-(defn get-editor-show-zotero
-  []
-  (get @state :editor/show-zotero))
-
-
 (defn set-edit-input-id!
   [input-id]
   (swap! state update :editor/editing?
@@ -705,10 +672,6 @@
          :selection/mode false
          :selection/blocks nil
          :selection/direction :down))
-
-(defn clear-selection-blocks!
-  []
-  (swap! state assoc :selection/blocks nil))
 
 (defn get-selection-blocks
   []
@@ -754,17 +717,6 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
-
-(defn set-github-token!
-  [repo token-result]
-  (when token-result
-    (let [{:keys [token expires_at]} token-result]
-      (swap! state update-in [:me :repos]
-             (fn [repos]
-               (map (fn [r]
-                      (if (= repo (:url r))
-                        (merge r {:token token :expires_at expires_at})
-                        repo)) repos))))))
 
 (defn set-github-installation-tokens!
   [tokens]
@@ -834,10 +786,6 @@
 (defn sidebar-block-exists?
   [idx]
   (some #(= (second %) idx) (:sidebar/blocks @state)))
-
-(defn get-sidebar-blocks
-  []
-  (:sidebar/blocks @state))
 
 (defn clear-sidebar-blocks!
   []
@@ -977,12 +925,6 @@
         theme' (if (= theme "dark") "white" "dark")]
     (use-theme-mode! theme')))
 
-(defn update-sync-status!
-  [status]
-  (when (seq status)
-    (when-let [current-repo (get-current-repo)]
-      (set-state! [:repo/sync-status current-repo] status))))
-
 (defn set-root-component!
   [component]
   (set-state! :ui/root-component component))
@@ -1096,10 +1038,6 @@
   []
   (some? (get-name)))
 
-(defn set-draw!
-  [value]
-  (set-state! :draw? value))
-
 (defn in-draw-mode?
   []
   (:draw? @state))
@@ -1117,33 +1055,6 @@
              (first)
              :branch)
     "master"))
-
-(defn get-current-project
-  []
-  (when-let [project (get-in (get-config) [:project :name])]
-    (when-not (string/blank? project)
-      project)))
-
-(defn update-current-project
-  [& kv]
-  {:pre [(even? (count kv))]}
-  (when-let [current-repo (get-current-repo)]
-    (let [new-kvs (apply array-map (vec kv))
-          projects (:projects (get-me))
-          new-projects (reduce (fn [acc project]
-                                 (if (= (:repo project) current-repo)
-                                   (conj acc (merge project new-kvs))
-                                   (conj acc project)))
-                               []
-                               projects)]
-      (set-state! [:me :projects] new-projects))))
-
-(defn remove-current-project
-  []
-  (when-let [current-repo (get-current-repo)]
-    (update-state! [:me :projects]
-                   (fn [projects]
-                     (remove #(= (:repo %) current-repo) projects)))))
 
 (defn set-indexedb-support!
   [value]

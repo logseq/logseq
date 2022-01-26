@@ -16,7 +16,6 @@
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
-            [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
@@ -255,16 +254,6 @@
                          (drawer/remove-logbook))]
          (clear-selection!)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
-
-(defn edit-last-block-for-new-page!
-  [last-block pos]
-  (when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
-    (edit-block!
-     last-block
-     pos
-     (string/replace (gobj/get first-block "id")
-                     "ls-block"
-                     "edit-block"))))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -1445,18 +1434,6 @@
   (let [block (state/drop-last-selection-block!)]
     (util/select-unhighlight! [block])))
 
-(defn input-start-or-end?
-  ([input]
-   (input-start-or-end? input nil))
-  ([input up?]
-   (let [value (gobj/get input "value")
-         start (util/get-selection-start input)
-         end (util/get-selection-end input)]
-     (if (nil? up?)
-       (or (= start 0) (= end (count value)))
-       (or (and (= start 0) up?)
-           (and (= end (count value)) (not up?)))))))
-
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (state/get-selection-start-block)]
@@ -1773,10 +1750,6 @@
          "$" "$"
          ":" ":"))
 
-(def reversed-delete-map
-  (zipmap (vals delete-map)
-          (keys delete-map)))
-
 (defn autopair
   [input-id prefix _format _option]
   (let [value (get autopair-map prefix)
@@ -1899,22 +1872,6 @@
       (state/get-editor-show-template-search?)
       (state/get-editor-show-date-picker?)))
 
-(defn get-previous-input-char
-  [input]
-  (when-let [pos (cursor/pos input)]
-    (let [value (gobj/get input "value")]
-      (when (and (>= (count value) pos)
-                 (>= pos 1))
-        (util/nth-safe value (- pos 1))))))
-
-(defn get-previous-input-chars
-  [input length]
-  (when-let [pos (cursor/pos input)]
-    (let [value (gobj/get input "value")]
-      (when (and (>= (count value) pos)
-                 (>= pos 1))
-        (subs value (- pos length) pos)))))
-
 (defn get-current-input-char
   [input]
   (when-let [pos (cursor/pos input)]
@@ -1922,15 +1879,6 @@
       (when (and (>= (count value) (inc pos))
                  (>= pos 1))
         (util/nth-safe value pos)))))
-
-(defn append-paste-doc!
-  [format event]
-  (let [[html text] (util/get-clipboard-as-html event)]
-    (when-not (util/starts-with? (string/trim text) "http")
-      (let [doc-text (html-parser/parse format html)]
-        (when-not (string/blank? doc-text)
-          (util/stop event)
-          (state/append-current-edit-content! doc-text))))))
 
 (defn- reorder-selected-blocks
   [blocks]
@@ -2066,14 +2014,6 @@
           (state/set-editor-show-block-search! false)
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
-
-(defn save!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (save-current-block!)
-
-    (when (string/starts-with? repo "https://") ; git repo
-      (repo-handler/auto-push!))))
 
 (defn resize-image!
   [block-id metadata full_text size]
@@ -3665,23 +3605,6 @@
   ([block-id]
    (let [blocks (all-blocks-with-level {:root-block block-id})]
      (set-blocks-collapsed! (map :block/uuid blocks) false))))
-
-(defn- get-block-with-its-children
-  [block-uuid]
-  (let [repo (state/get-current-repo)
-        children (db/get-block-children repo block-uuid)
-        block (db/pull [:block/uuid block-uuid])]
-    (cons block (seq children))))
-
-(defn expand-all?
-  [block-uuid]
-  (let [blocks (get-block-with-its-children block-uuid)]
-    (some util/collapsed? blocks)))
-
-(defn collapse-all?
-  [block-uuid]
-  (let [blocks (get-block-with-its-children block-uuid)]
-    (some #(collapsable? (:block/uuid %)) blocks)))
 
 (defn toggle-open! []
   (let [all-collapsed?

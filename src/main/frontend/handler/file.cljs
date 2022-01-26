@@ -16,7 +16,6 @@
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
@@ -233,18 +232,6 @@
   [repo path new-content]
   (alter-file repo path new-content {:reset? false
                                      :re-render-root? false}))
-
-(defn create!
-  ([path]
-   (create! path ""))
-  ([path content]
-   (when-let [repo (state/get-current-repo)]
-     (when (and path content)
-       (p/let [_ (alter-file repo path content {:reset? false
-                                                :re-render-root? false
-                                                :update-status? true})]
-         (route-handler/redirect! {:to :file
-                                   :path-params {:path path}}))))))
 
 (defn alter-files
   [repo files {:keys [reset? update-db?]

@@ -72,58 +72,20 @@ frontend.external.roam/reset-state!
 frontend.format.mldoc/ast-export-markdown
 ;; Protocol fn wrapper that could be used
 frontend.fs/readdir
-frontend.git/commit-non-empty
-frontend.git/add-commit
-frontend.git/find-common-base
-frontend.git/read-blob
-frontend.github/get-repo-permission
-frontend.handler.block/get-block-ids
-frontend.handler.editor/edit-last-block-for-new-page!
-frontend.handler.editor/input-start-or-end?
-frontend.handler.editor/reversed-delete-map
-frontend.handler.editor/get-previous-input-char
-frontend.handler.editor/get-previous-input-chars
-frontend.handler.editor/append-paste-doc!
-frontend.handler.editor/save!
-frontend.handler.editor/expand-all?
-frontend.handler.editor/collapse-all?
-frontend.handler.export/export-repo-as-json!
-frontend.handler.export/export-git-repo-as-zip!
-frontend.handler.export/convert-page-markdown-unordered-list-or-heading!
-frontend.handler.file/create!
+;; Referenced in TODO
 frontend.handler.metadata/update-properties!
-frontend.handler.notification/clear-all!
-frontend.handler.repo/get-repo-name
 frontend.handler.route/toggle-between-page-and-file!
 frontend.handler.shell/run-pandoc-command!
-frontend.handler.ui/hide-right-sidebar
-frontend.handler.ui/show-right-sidebar
 frontend.image/get-orientation
-frontend.mixins/resize-layout
-frontend.mixins/will-mount-effect
+;; For debugging
 frontend.mixins/perf-measure-mixin
-frontend.mobile.util/is-plugin-available?
+;; Previously useful fn
 frontend.mobile.util/get-idevice-statusbar-height
+;; Used in macro
 frontend.modules.outliner.datascript/transact!
-frontend.modules.outliner.utils/->db-id
-frontend.modules.shortcut.before/only-enable-when-dev!
 frontend.page/route-view
+;; placeholder fn
 frontend.publishing/stop
-frontend.rum/use-atom-in
-frontend.search.db/empty?
-frontend.state/sub-current-route
-frontend.state/hide-file?
-frontend.state/cycle-collapse!
-frontend.state/get-last-edit-input-id
-frontend.state/get-editor-show-zotero
-frontend.state/clear-selection-blocks!
-frontend.state/set-github-token!
-frontend.state/get-sidebar-blocks
-frontend.state/update-sync-status!
-frontend.state/set-draw!
-frontend.state/get-current-project
-frontend.state/update-current-project
-frontend.state/remove-current-project
 frontend.state/get-changed-files
 frontend.state/online?
 frontend.state/reset-published-pages

@@ -1112,16 +1112,6 @@
        s
        (url-encode s))))
 
-#?(:cljs
-   (defn get-clipboard-as-html
-     [event]
-     (if-let [c (gobj/get event "clipboardData")]
-       [(.getData c "text/html") (.getData c "text")]
-       (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
-         [(.getData c "text/html") (.getData c "text")]
-         (when-let [c (gobj/get js/window "clipboardData")]
-           [(.getData c "Text") (.getData c "Text")])))))
-
 (defn pp-str [x]
   #_:clj-kondo/ignore
   (with-out-str (clojure.pprint/pprint x)))
