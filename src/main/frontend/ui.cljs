@@ -420,7 +420,7 @@
    {:keys [on-chosen
            on-shift-chosen
            get-group-name
-           empty-div
+           empty-placeholder
            item-render
            class]}]
   (let [current-idx (get state ::current-idx)]
@@ -452,8 +452,8 @@
                  item-cp)
 
                item-cp))])]
-       (when empty-div
-         empty-div))]))
+       (when empty-placeholder
+         empty-placeholder))]))
 
 (def datepicker frontend.ui.date-picker/date-picker)
 
