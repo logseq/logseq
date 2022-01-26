@@ -136,37 +136,17 @@
                (util/uuid-string? block-id))
       block-id)))
 
-;; FIXME:
-(defn extract-title
-  [block]
-  (-> (:title (second block))
-      first
-      second))
-
 (defn paragraph-block?
   [block]
   (and
    (vector? block)
    (= "Paragraph" (first block))))
 
-(defn hiccup-block?
-  [block]
-  (and
-   (vector? block)
-   (= "Hiccup" (first block))))
-
 (defn timestamp-block?
   [block]
   (and
    (vector? block)
    (= "Timestamp" (first block))))
-
-(defn definition-list-block?
-  [block]
-  (and
-   (vector? block)
-   (= "List" (first block))
-   (:name (first (second block)))))
 
 ;; TODO: we should move this to mldoc
 (defn extract-properties
@@ -417,10 +397,6 @@
                               (let [tag (text/page-ref-un-brackets! tag)]
                                 [:block/name (util/page-name-sanity-lc tag)])) tags))
     block))
-
-(defn src-block?
-  [block]
-  (some (fn [x] (and (vector? x) (= "Src" (first x)))) (:body block)))
 
 (defn- get-block-content
   [utf8-content block format block-content]

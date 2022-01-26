@@ -5,7 +5,6 @@ electron.core/stop
 ;; repl fn
 electron.search/query
 frontend.blob/blob
-frontend.components.sidebar/nav-item
 frontend.components.svg/arrow-left
 frontend.components.svg/arrow-right
 frontend.components.svg/big-arrow-right
@@ -48,62 +47,31 @@ frontend.components.svg/icon-editor
 frontend.components.svg/icon-cli
 frontend.components.svg/settings
 frontend.components.svg/arrow-expand
-frontend.config/git-repo-status-secs
-frontend.config/get-subscript
-frontend.config/get-superscript
-frontend.config/properties-wrapper
-frontend.config/get-file-format
-frontend.config/default-empty-block
-frontend.config/with-code-wrapper
-frontend.context.i18n/use-tongue
+;; Used by shadow-cljs
 frontend.core/stop
-frontend.date/ISO-string
-frontend.date/get-local-date-time-string
-frontend.date/get-month-last-day
-frontend.date/int->local-time
-frontend.db.debug/qb
-frontend.db.debug/check-left-id-conflicts
-frontend.db.debug/block-uuid-nil?
-frontend.db.model/get-file-by-path
-frontend.db.model/get-page-ids-by-names
-frontend.db.model/remove-children!
 frontend.db.model/with-children-refs
-frontend.db.model/db-graph?
-frontend.db.model/remove-all-aliases!
 frontend.db.model/get-latest-changed-pages
-frontend.db.model/remove-orphaned-pages!
-frontend.db.outliner/save-block
-frontend.db.outliner/remove-non-existed-refs!
-frontend.db.react/add-rules-to-inputs
+;; For repl
 frontend.db.utils/q
+;; For debugging
 frontend.debug/defn
 frontend.debug/print
+;; Left as an example
 frontend.diff/diffs
-frontend.diff/get-patches
-frontend.diff/apply-patches!
-frontend.extensions.age-encryption/keygen
-frontend.extensions.age-encryption/encrypt-with-x25519
-frontend.extensions.age-encryption/decrypt-with-x25519
-frontend.extensions.age-encryption/encrypt-with-user-passphrase
-frontend.extensions.age-encryption/decrypt-with-user-passphrase
+;; Lazily loaded
 frontend.extensions.code/editor
-frontend.extensions.excalidraw/*bounding-width
+;; Lazily loaded
 frontend.extensions.excalidraw/draw
-frontend.extensions.graph/reset-graph!
-frontend.extensions.graph.pixi/*dark?
-frontend.extensions.pdf.assets/*asset-uploading?
+;; Referenced in TODO
 frontend.extensions.pdf.utils/get-page-bounding
-frontend.extensions.pdf.utils/gen-id
+;; For repl
 frontend.extensions.zotero.api/item
+;; For repl
 frontend.external.roam/reset-state!
-frontend.format.block/extract-title
-frontend.format.block/hiccup-block?
-frontend.format.block/definition-list-block?
-frontend.format.block/src-block?
+;; For repl
 frontend.format.mldoc/ast-export-markdown
+;; Protocol fn wrapper that could be used
 frontend.fs/readdir
-frontend.git/log
-frontend.git/pull
 frontend.git/commit-non-empty
 frontend.git/add-commit
 frontend.git/find-common-base
@@ -212,5 +180,5 @@ frontend.util.cursor/move-cursor-to-beginning
 frontend.util.pool/terminate-parser-pool!
 frontend.util.property/goto-properties-beginning
 frontend.util.property/add-page-properties
+;; Used by shadow
 frontend.worker.parser/init
-frontend.react/auto-clean-state

@@ -20,17 +20,6 @@
   [s1 s2]
   (.diff_main dmp s1 s2 true))
 
-(defn get-patches
-  [s1 s2 diffs]
-  (.patch_make dmp s1 s2 diffs))
-
-(defn apply-patches!
-  [text patches]
-  (if (seq patches)
-    (let [result (.patch_apply dmp patches text)]
-      (nth result 0))
-    text))
-
 (def inline-special-chars
   #{\* \_ \/ \` \+ \^ \~ \$})
 

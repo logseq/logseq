@@ -65,20 +65,6 @@
   (js/window.workerThread.checkout (config/get-repo-dir repo-url)
                                    (state/get-default-branch repo-url)))
 
-(defn log
-  [repo-url depth]
-  (js/window.workerThread.log (config/get-repo-dir repo-url)
-                              (state/get-default-branch repo-url)
-                              depth))
-
-(defn pull
-  [repo-url token]
-  (js/window.workerThread.pull (config/get-repo-dir repo-url)
-                               (get-cors-proxy repo-url)
-                               (state/get-default-branch repo-url)
-                               (get-username)
-                               token))
-
 (defn add
   [repo-url file]
   (when js/window.git

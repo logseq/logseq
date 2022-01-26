@@ -1,5 +1,9 @@
 {:paths ["src/main" "src/electron" "src/test"]
  :api-namespaces [
                   ;; Ignore b/c too many false positives
-                  frontend.db]
+                  frontend.db
+                  ;; Used for debugging
+                  frontend.db.debug
+                  ;; namespace fns are lazily loaded
+                  frontend.extensions.age-encryption]
  :report {:format :ignore}}
