@@ -62,7 +62,7 @@
 
 (defn git-repo-status-secs
   []
-  (or 10 (get-in @state/state [:config :git-push-secs])))
+  (or 10 (get-in @state/state [:config :git-status-secs])))
 
 (defn text-formats
   []
@@ -115,7 +115,6 @@
     (case format
       :org
       "*"
-
       "-")))
 
 (defn get-hr
@@ -217,7 +216,7 @@
   [format label link]
   (case format
     :org
-    [(util/format "[[%s][label]]" link label)
+    [(util/format "[[%s][%s]]" link label)
      (+ 4 (count link) (count label))]
     :markdown
     [(util/format "[%s](%s)" label link)
@@ -255,15 +254,6 @@
     :markdown
     "md"
     (name format)))
-
-(defn get-file-format
-  [extension]
-  (case (keyword extension)
-    :markdown
-    :markdown
-    :md
-    :markdown
-    (keyword extension)))
 
 (defn default-empty-block
   ([format]
