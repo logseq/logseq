@@ -189,7 +189,7 @@
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
     (row-with-button-action
-     {:left-label   "Custom configuration"
+     {:left-label   (t :settings-page/custom-configuration)
       :button-label (t :settings-page/edit-config-edn)
       :href         (rfe/href :file {:path (config/get-config-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
@@ -198,7 +198,7 @@
 (defn edit-custom-css []
   (rum/with-context [[t] i18n/*tongue-context*]
     (row-with-button-action
-     {:left-label   "Custom theme"
+     {:left-label   (t :settings-page/custom-theme)
       :button-label (t :settings-page/edit-custom-css)
       :href         (rfe/href :file {:path (config/get-custom-css-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
