@@ -1,0 +1,75 @@
+name: Bug Report
+description: Report a bug encountered while operating Kubernetes
+labels: awaiting-response
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: |
+        Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
+    validations:
+      required: true
+  - type: textarea
+    id: repoduce
+    attributes:
+      label: Reporduce the bug
+      description: |
+        Please tell us about the steps to reporduct the bug as mush as you can?
+      value: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: excepted
+    attributes:
+      label: Excepted behavior
+      description: |
+        Please tell us what's the behavior you except?
+    validations:
+      required: false
+  - type: textarea
+    id: Screenshots
+    attributes:
+      label: Screenshots
+      description: |
+        If applicable, add screenshots to help explain your problem.
+    validations:
+      required: false
+  - type: textarea
+    id: desktop 
+    attributes:
+      label: Desktop Platform Information
+      description: |
+        Would you mind to tell use the system information about your desktop platform?
+      value: |
+        - OS: [e.g. iOS]
+        - Browser [e.g. chrome, safari]
+        - Version [e.g. 22]
+    validations:
+      required: true
+    
+  - type: textarea
+    id: mobile 
+    attributes:
+      label: Mobile Platform information
+      description: |
+        Would you mind to tell use the system information about your mobile platform?
+      value: |
+        - Device: [e.g. iPhone6]
+        - OS: [e.g. iOS8.1]
+        - Browser [e.g. stock browser, safari]
+        - Version [e.g. 22]
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: |
+        If applicable, add additional context to help explain your problem.
+    validations:
+      required: false
