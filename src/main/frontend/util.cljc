@@ -4,6 +4,7 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
@@ -132,12 +133,14 @@
 #?(:cljs
    (defn set-theme-light
      []
-     (utils/setStatusBarStyleLight)))
+     (p/do!
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
 
 #?(:cljs
    (defn set-theme-dark
      []
-     (utils/setStatusBarStyleDark)))
+     (p/do!
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
 (defn indexed
   [coll]
@@ -1566,23 +1569,6 @@
 #?(:cljs
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
-
-;; TODO: share with electron
-(defn ignored-path?
-  [dir path]
-  (when (string? path)
-    (or
-     (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "assets" "node_modules"])
-     (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "assets" "node_modules"])
-     ;; hidden directory or file
-     (re-find #"/\.[^.]+" path)
-     (re-find #"^\.[^.]+" path)
-     (let [path (string/lower-case path)]
-       (not
-        (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".js" ".css" ".png" ".jpg" ".jpeg"]))))))
 
 (defn wrapped-by-quotes?
   [v]

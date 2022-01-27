@@ -16,6 +16,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
@@ -27,7 +28,7 @@
                         (let [path (:file/path f)]
                           (or (string/starts-with? path ".git/")
                               (string/includes? path ".git/")
-                              (and (util/ignored-path? "" path)
+                              (and (util-fs/ignored-path? "" path)
                                    (not= (:file/name f) ".gitignore")))))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
