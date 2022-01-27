@@ -4,6 +4,8 @@ This page describes development practices for this codebase.
 
 ## Linting
 
+### Clojure code
+
 To lint:
 ```
 clojure -M:clj-kondo --lint src
@@ -15,6 +17,27 @@ There are outstanding linting items that are currently ignored to allow linting 
 
 * Comments starting with `TODO:lint`
 * Code marked with `#_:clj-kondo/ignore` require a good understanding of the context to address as they usually involve something with a side effect or require changing multiple fns up the call stack.
+
+### Unused vars
+
+We use https://github.com/borkdude/carve to detect unused vars in our codebase.
+Before running it, please install https://github.com/babashka/babashka.
+
+To run this linter:
+```
+scripts/carve.clj
+```
+
+By default, the script runs in CI mode which prints unused vars if they are
+found. The script can be run in an interactive mode which prompts for keeping
+(ignoring) an unused var or removing it. Run this mode with:
+
+```
+scripts/carve.clj '{:interactive true}'
+```
+
+When a var is ignored, it is added to `.carve/ignore`. Please add a comment for
+why a var is ignored to help others understand why it's unused.
 
 ## Testing
 
