@@ -1,0 +1,10 @@
+{:paths ["scripts/src"]
+ :tasks
+ {lang:list
+  logseq.tasks.lang/lang-list
+
+  lang:missing
+  logseq.tasks.lang/lang-missing
+
+  lang:invalid
+  logseq.tasks.lang/lang-invalid}}
