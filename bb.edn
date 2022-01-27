@@ -1,13 +1,13 @@
 {:paths ["scripts/src"]
  :tasks
  {lang:list
-  logseq.tasks.lang/lang-list
+  logseq.tasks.lang/list-langs
 
   lang:missing
-  logseq.tasks.lang/lang-missing
+  logseq.tasks.lang/list-missing
 
-  lang:invalid
-  logseq.tasks.lang/lang-invalid
+  lang:invalid-dicts
+  logseq.tasks.lang/invalid-dicts
 
   dev:watch
   logseq.tasks.dev/watch

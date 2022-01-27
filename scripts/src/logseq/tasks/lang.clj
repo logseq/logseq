@@ -13,7 +13,7 @@
   []
   (rewrite-clj/var-sexp ["languages" "src/main/frontend/dicts.cljs"]))
 
-(defn lang-list
+(defn list-langs
   "List translated langagues with their number of translations"
   []
   (let [dicts (get-dicts)
@@ -34,7 +34,7 @@
     s
     (str (subs s 0 length) "...")))
 
-(defn lang-missing
+(defn list-missing
   "List missing translations for a given language"
   [& args]
   (let [lang (or (keyword (first args))
@@ -55,16 +55,22 @@
                    :string-to-translate (shorten v 50)}))
            task-util/print-table))))
 
-(defn lang-invalid
+(defn invalid-dicts
   "Lists translation keys that are invalid"
   []
   (let [dicts (get-dicts)
         ;; For now defined as :en but clj-kondo analysis would be more thorough
-        valid-keys (set (keys (dicts :en)))]
-    (->> (dissoc dicts :en)
-         (mapcat (fn [[lang get-dicts]]
-                   (map
-                    #(hash-map :language lang :invalid-key %)
-                    (set/difference (set (keys get-dicts))
-                                    valid-keys))))
-         task-util/print-table)))
+        valid-keys (set (keys (dicts :en)))
+        invalid-dicts
+        (->> (dissoc dicts :en)
+             (mapcat (fn [[lang get-dicts]]
+                       (map
+                        #(hash-map :language lang :invalid-key %)
+                        (set/difference (set (keys get-dicts))
+                                        valid-keys)))))]
+    (if (empty? invalid-dicts)
+      (println "All dicts have valid keys!")
+      (do
+        (println "Invalid dict keys found:")
+        (task-util/print-table invalid-dicts)
+        (System/exit 1)))))

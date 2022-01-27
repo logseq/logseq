@@ -17,6 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
+  BABASHKA_VERSION: '0.7.3'
 
 jobs:
 
@@ -74,6 +75,22 @@ jobs:
         run: |
           yarn cljs:test
           node static/tests.js
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.3.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+
+      - name: Lint invalid dictionary keys
+        run: bb lang:invalid-dicts
+
 
   e2e-test:
     runs-on: ubuntu-latest
