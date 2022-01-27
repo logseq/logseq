@@ -7,4 +7,16 @@
   logseq.tasks.lang/lang-missing
 
   lang:invalid
-  logseq.tasks.lang/lang-invalid}}
+  logseq.tasks.lang/lang-invalid
+
+  dev:watch
+  logseq.tasks.dev/watch
+
+  dev:open-dev-electron-app
+  logseq.tasks.dev/open-dev-electron-app
+
+  -dev:electron-dev
+  {:depends [dev:watch dev:open-dev-electron-app]}
+
+  dev:electron-dev
+  logseq.tasks.dev/electron-dev}}
