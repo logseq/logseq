@@ -249,16 +249,6 @@
   [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
    (merge {:type "checkbox"} option)])
 
-(defn badge
-  [text option]
-  [:span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.leading-4.bg-purple-100.text-purple-800
-   option
-   text])
-
-;; scroll
-(defn get-doc-scroll-top []
-  (.-scrollTop js/document.documentElement))
-
 (defn main-node
   []
   (gdom/getElement "main-content-container"))
@@ -493,7 +483,6 @@
         binding         (or custom-binding default-binding)]
     (shortcut-helper/decorate-binding binding)))
 
-(defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state close-fn]
   [:div.ui__modal-overlay

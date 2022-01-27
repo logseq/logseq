@@ -1230,10 +1230,6 @@
   [repo changed-files]
   (set-state! [:repo/changed-files repo] changed-files))
 
-(defn get-changed-files
-  []
-  (get-in @state [:repo/changed-files (get-current-repo)]))
-
 (defn get-wide-mode?
   []
   (:ui/wide-mode? @state))
@@ -1245,10 +1241,6 @@
 (defn set-online!
   [value]
   (set-state! :network/online? value))
-
-(defn online?
-  []
-  (:network/online? @state))
 
 (defn get-commands
   []
@@ -1309,15 +1301,6 @@
   ;; THINK: new block, indent/outdent, drag && drop, etc.
   (set-editor-last-input-time! repo time))
 
-(defn set-published-pages
-  [pages]
-  (when-let [repo (get-current-repo)]
-    (set-state! [:me :published-pages repo] pages)))
-
-(defn reset-published-pages
-  []
-  (set-published-pages []))
-
 (defn set-db-persisted!
   [repo value]
   (swap! state assoc-in [:db/persisted? repo] value))
@@ -1342,30 +1325,6 @@
 (defn set-last-persist-transact-id!
   [_repo files? id]
   (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
-
-(defn get-last-persist-transact-id
-  [_repo files?]
-  (get-in @state [:db/last-persist-transact-ids :repo files?]))
-
-(defn persist-transaction!
-  [repo files? tx-id tx-data]
-  (when (seq tx-data)
-    (let [latest-txs (:db/latest-txs @state)
-          last-persist-tx-id (get-last-persist-transact-id repo files?)
-          latest-txs (if last-persist-tx-id
-                       (update-in latest-txs [repo files?]
-                                  (fn [result]
-                                    (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
-                       latest-txs)
-          new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                        (vec (conj result {:tx-id   tx-id
-                                                                           :tx-data tx-data}))))]
-      (storage/set-transit! :db/latest-txs new-txs)
-      (set-state! :db/latest-txs new-txs))))
-
-(defn get-repo-latest-txs
-  [repo file?]
-  (get-in (:db/latest-txs @state) [repo file?]))
 
 (defn set-nfs-refreshing!
   [value]
@@ -1542,10 +1501,6 @@
   [value]
   (set-state! [:view/components :editor] value))
 
-(defn get-editor-cp
-  []
-  (get-in @state [:view/components :editor]))
-
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
@@ -1555,10 +1510,6 @@
    (clear-edit!)
    (set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
-
-(defn get-favorites-name
-  []
-  (or (:name/favorites (get-config)) "Favorites"))
 
 (defn add-watch-state [key f]
   (add-watch state key f))

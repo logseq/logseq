@@ -86,61 +86,23 @@ frontend.modules.outliner.datascript/transact!
 frontend.page/route-view
 ;; placeholder fn
 frontend.publishing/stop
-frontend.state/get-changed-files
-frontend.state/online?
-frontend.state/reset-published-pages
+;; comment?
 frontend.state/set-db-persisted!
-frontend.state/persist-transaction!
-frontend.state/get-repo-latest-txs
-frontend.state/get-editor-cp
-frontend.state/get-favorites-name
+;; repl fn
 frontend.state/remove-watch-state
+;; Future use?
 frontend.state/get-visual-viewport-state
-frontend.storage/get-json
-frontend.storage/set-json
-frontend.text/remove-lines-level-spaces
-frontend.tools.html-export/export-page
+;; Future use?
 frontend.ui/reset-ios-whole-page-offset!
-frontend.ui/badge
-frontend.ui/get-doc-scroll-top
-frontend.ui/modal-show?
-frontend.ui.date-picker/date-format
-frontend.ui.date-picker/iso8601->date
-frontend.utf8/delete!
-frontend.util/indexed
-frontend.util/dissoc-in
-frontend.util/remove-nils-or-empty
-frontend.util/index-by
-frontend.util/patch
-frontend.util/minimize-html
-frontend.util/speed
-frontend.util/moving-frequency
-frontend.util/lock-global-scroll
-frontend.util/scroll-to-element-v2
-frontend.util/scroll-to-bottom
-frontend.util/drop-first-line
-frontend.util/safe-split-first
-frontend.util/trim-only-newlines
-frontend.util/join-newline
-frontend.util/replace-first-ignore-case
-frontend.util/node-in-viewpoint?
-frontend.util/input-selected?
-frontend.util/extract-uuid
-frontend.util/file-page?
+;; For debugging
 frontend.util/d
-frontend.util/get-prev-block-with-same-level
-frontend.util/get-next-block-with-same-level
-frontend.util/sort-by-value
-frontend.util/encode-str
-frontend.util/->system-modifier
+;; Future use?
 frontend.util/safe-search-normalize
-frontend.util/get-element-width
+;; For debugging
 frontend.util/trace!
-frontend.util/unquote-string-if-wrapped
-frontend.util.cursor/end-of-line?
-frontend.util.cursor/move-cursor-to-beginning
-frontend.util.pool/terminate-parser-pool!
-frontend.util.property/goto-properties-beginning
+;; Repl fn
+frontend.util.pool/terminate-pool!
+;; Repl fn
 frontend.util.property/add-page-properties
 ;; Used by shadow
 frontend.worker.parser/init
