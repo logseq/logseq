@@ -49,7 +49,9 @@ frontend.components.svg/settings
 frontend.components.svg/arrow-expand
 ;; Used by shadow-cljs
 frontend.core/stop
+;; Referenced in comment
 frontend.db.model/with-children-refs
+;; Referenced in comment
 frontend.db.model/get-latest-changed-pages
 ;; For repl
 frontend.db.utils/q
@@ -62,7 +64,7 @@ frontend.diff/diffs
 frontend.extensions.code/editor
 ;; Lazily loaded
 frontend.extensions.excalidraw/draw
-;; Referenced in TODO
+;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
 ;; For repl
 frontend.extensions.zotero.api/item
@@ -74,8 +76,11 @@ frontend.format.mldoc/ast-export-markdown
 frontend.fs/readdir
 ;; Referenced in TODO
 frontend.handler.metadata/update-properties!
+;; Referenced in comment
 frontend.handler.route/toggle-between-page-and-file!
+;; Referenced in comment
 frontend.handler.shell/run-pandoc-command!
+;; Referenced in comment
 frontend.image/get-orientation
 ;; For debugging
 frontend.mixins/perf-measure-mixin
@@ -83,10 +88,11 @@ frontend.mixins/perf-measure-mixin
 frontend.mobile.util/get-idevice-statusbar-height
 ;; Used in macro
 frontend.modules.outliner.datascript/transact!
+;; Referenced in comment
 frontend.page/route-view
 ;; placeholder fn
 frontend.publishing/stop
-;; comment?
+;; Referenced in comment
 frontend.state/set-db-persisted!
 ;; repl fn
 frontend.state/remove-watch-state
