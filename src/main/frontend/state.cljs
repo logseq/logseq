@@ -1216,7 +1216,8 @@
            :modal/label ""
            :modal/show? false
            :modal/fullscreen? false
-           :modal/panel-content nil)))
+           :modal/panel-content nil
+           :ui/open-select nil)))
 
 (defn get-db-batch-txs-chan
   []

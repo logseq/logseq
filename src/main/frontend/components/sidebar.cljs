@@ -10,6 +10,7 @@
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -545,6 +546,7 @@
         (ui/modal)
         (ui/sub-modal)
         (command-palette/command-palette-modal)
+        (select/select-modal)
         (custom-context-menu)
         (plugins/custom-js-installer {:t t
                                       :current-repo current-repo

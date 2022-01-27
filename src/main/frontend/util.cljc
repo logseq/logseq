@@ -4,6 +4,7 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             [camel-snake-kebab.core :as csk]
@@ -132,12 +133,14 @@
 #?(:cljs
    (defn set-theme-light
      []
-     (utils/setStatusBarStyleLight)))
+     (p/do!
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
 
 #?(:cljs
    (defn set-theme-dark
      []
-     (utils/setStatusBarStyleDark)))
+     (p/do!
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
 (defn indexed
   [coll]
