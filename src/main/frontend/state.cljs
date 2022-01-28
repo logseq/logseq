@@ -23,190 +23,186 @@
                        (when graph (ipc/ipc "setCurrentGraph" graph))
                        graph)]
    (atom
-     {:route-match                           nil
-      :today                                 nil
-      :system/events                         (async/chan 100)
-      :db/batch-txs                          (async/chan 100)
-      :file/writes                           (async/chan 100)
-      :notification/show?                    false
-      :notification/content                  nil
-      :repo/cloning?                         false
-      :repo/loading-files?                   {}
-      :repo/importing-to-db?                 nil
-      :repo/sync-status                      {}
-      :repo/changed-files                    nil
-      :nfs/user-granted?                     {}
-      :nfs/refreshing?                       nil
-      :instrument/disabled?                  (storage/get "instrument-disabled")
-      ;; TODO: how to detect the network reliably?
-      :network/online?                       true
-      :indexeddb/support?                    true
-      :me                                    nil
-      :git/current-repo                      current-graph
-      :git/status                            {}
-      :format/loading                        {}
-      :draw?                                 false
-      :db/restoring?                         nil
+    {:route-match                           nil
+     :today                                 nil
+     :system/events                         (async/chan 100)
+     :db/batch-txs                          (async/chan 100)
+     :file/writes                           (async/chan 100)
+     :notification/show?                    false
+     :notification/content                  nil
+     :repo/cloning?                         false
+     :repo/loading-files?                   {}
+     :repo/importing-to-db?                 nil
+     :repo/changed-files                    nil
+     :nfs/user-granted?                     {}
+     :nfs/refreshing?                       nil
+     :instrument/disabled?                  (storage/get "instrument-disabled")
+     ;; TODO: how to detect the network reliably?
+     :network/online?                       true
+     :indexeddb/support?                    true
+     :me                                    nil
+     :git/current-repo                      current-graph
+     :git/status                            {}
+     :format/loading                        {}
+     :draw?                                 false
+     :db/restoring?                         nil
 
-      :journals-length                       2
+     :journals-length                       2
 
-      :search/q                              ""
-      :search/mode                           :global
-      :search/result                         nil
-      :search/graph-filters                  []
+     :search/q                              ""
+     :search/mode                           :global
+     :search/result                         nil
+     :search/graph-filters                  []
 
-      ;; modals
-      :modal/label                           ""
-      :modal/show?                           false
-      :modal/panel-content                   nil
-      :modal/fullscreen?                     false
-      :modal/close-btn?                      nil
-      :modal/subsets                         []
+     ;; modals
+     :modal/label                           ""
+     :modal/show?                           false
+     :modal/panel-content                   nil
+     :modal/fullscreen?                     false
+     :modal/close-btn?                      nil
+     :modal/subsets                         []
 
-      ;; right sidebar
-      :ui/fullscreen?                        false
-      :ui/settings-open?                     false
-      :ui/sidebar-open?                      false
-      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-      :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
-      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-      :ui/wide-mode?                         false
-      ;; :show-all, :hide-block-body, :hide-block-children
-      :ui/cycle-collapse                     :show-all
+     ;; right sidebar
+     :ui/fullscreen?                        false
+     :ui/settings-open?                     false
+     :ui/sidebar-open?                      false
+     :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
+     :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+     :ui/wide-mode?                         false
 
-      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
-      ;; 1. right sidebar
-      ;; 2. zoom-in view
-      ;; 3. queries
-      ;; 4. references
-      ;; graph => {:block-id bool}
-      :ui/collapsed-blocks                   {}
-      :ui/sidebar-collapsed-blocks           {}
-      :ui/root-component                     nil
-      :ui/file-component                     nil
-      :ui/custom-query-components            {}
-      :ui/show-recent?                       false
-      :ui/command-palette-open?              false
-      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
-                                                 false)
-      ;; remember scroll positions of visited paths
-      :ui/paths-scroll-positions             {}
-      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
-                                               false
-                                               true)
-      :ui/visual-viewport-pending?           false
-      :ui/visual-viewport-state              nil
+     ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
+     ;; 1. right sidebar
+     ;; 2. zoom-in view
+     ;; 3. queries
+     ;; 4. references
+     ;; graph => {:block-id bool}
+     :ui/collapsed-blocks                   {}
+     :ui/sidebar-collapsed-blocks           {}
+     :ui/root-component                     nil
+     :ui/file-component                     nil
+     :ui/custom-query-components            {}
+     :ui/show-recent?                       false
+     :ui/command-palette-open?              false
+     :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
+                                                false)
+     ;; remember scroll positions of visited paths
+     :ui/paths-scroll-positions             {}
+     :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
+                                              false
+                                              true)
+     :ui/visual-viewport-pending?           false
+     :ui/visual-viewport-state              nil
 
-      :document/mode?                        document-mode?
+     :document/mode?                        document-mode?
 
-      :github/contents                       {}
-      :config                                {}
-      :block/component-editing-mode?         false
-      :editor/draw-mode?                     false
-      :editor/show-page-search?              false
-      :editor/show-page-search-hashtag?      false
-      :editor/show-date-picker?              false
-      ;; With label or other data
-      :editor/show-input                     nil
-      :editor/show-zotero                    false
-      :editor/last-saved-cursor              nil
-      :editor/editing?                       nil
-      :editor/last-edit-block-input-id       nil
-      :editor/in-composition?                false
-      :editor/content                        {}
-      :editor/block                          nil
-      :editor/block-dom-id                   nil
-      :editor/set-timestamp-block            nil
-      :editor/last-input-time                nil
-      :editor/pos                            nil
-      :editor/document-mode?                 document-mode?
-      :editor/args                           nil
-      :editor/on-paste?                      false
-      :editor/last-key-code                  nil
+     :github/contents                       {}
+     :config                                {}
+     :block/component-editing-mode?         false
+     :editor/draw-mode?                     false
+     :editor/show-page-search?              false
+     :editor/show-page-search-hashtag?      false
+     :editor/show-date-picker?              false
+     ;; With label or other data
+     :editor/show-input                     nil
+     :editor/show-zotero                    false
+     :editor/last-saved-cursor              nil
+     :editor/editing?                       nil
+     ;; This key is not currently used but may be useful later?
+     :editor/last-edit-block-input-id       nil
+     :editor/in-composition?                false
+     :editor/content                        {}
+     :editor/block                          nil
+     :editor/block-dom-id                   nil
+     :editor/set-timestamp-block            nil
+     :editor/last-input-time                nil
+     :editor/pos                            nil
+     :editor/document-mode?                 document-mode?
+     :editor/args                           nil
+     :editor/on-paste?                      false
+     :editor/last-key-code                  nil
 
-      :db/last-transact-time                 {}
-      :db/last-persist-transact-ids          {}
-      ;; whether database is persisted
-      :db/persisted?                         {}
-      :db/latest-txs                         (or (storage/get-transit :db/latest-txs) {})
-      :cursor-range                          nil
+     :db/last-transact-time                 {}
+     ;; whether database is persisted
+     :db/persisted?                         {}
+     :cursor-range                          nil
 
-      :selection/mode                        false
-      :selection/blocks                      []
-      :selection/start-block                 nil
-      ;; either :up or :down, defaults to down
-      ;; used to determine selection direction when two or more blocks are selected
-      :selection/direction                   :down
-      :custom-context-menu/show?             false
-      :custom-context-menu/links             nil
+     :selection/mode                        false
+     :selection/blocks                      []
+     :selection/start-block                 nil
+     ;; either :up or :down, defaults to down
+     ;; used to determine selection direction when two or more blocks are selected
+     :selection/direction                   :down
+     :custom-context-menu/show?             false
+     :custom-context-menu/links             nil
 
-      ;; pages or blocks in the right sidebar
-      ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
-      :sidebar/blocks                        '()
+     ;; pages or blocks in the right sidebar
+     ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
+     :sidebar/blocks                        '()
 
-      :preferred-language                    (storage/get :preferred-language)
+     :preferred-language                    (storage/get :preferred-language)
 
-      ;; electron
-      :electron/auto-updater-downloaded      false
-      :electron/updater-pending?             false
-      :electron/updater                      {}
-      :electron/user-cfgs                    nil
+     ;; electron
+     :electron/auto-updater-downloaded      false
+     :electron/updater-pending?             false
+     :electron/updater                      {}
+     :electron/user-cfgs                    nil
 
-      ;; plugin
-      :plugin/enabled                        (and (util/electron?)
-                                                  ;; true false :theme-only
-                                                  ((fnil identity true) (storage/get :lsp-core-enabled)))
-      :plugin/indicator-text                 nil
-      :plugin/installed-plugins              {}
-      :plugin/installed-themes               []
-      :plugin/installed-commands             {}
-      :plugin/installed-ui-items             {}
-      :plugin/simple-commands                {}
-      :plugin/selected-theme                 nil
-      :plugin/selected-unpacked-pkg          nil
-      :plugin/marketplace-pkgs               nil
-      :plugin/marketplace-stats              nil
-      :plugin/installing                     nil
-      :plugin/active-readme                  nil
-      :plugin/updates-pending                {}
-      :plugin/updates-coming                 {}
-      :plugin/updates-downloading?           false
-      :plugin/updates-unchecked              #{}
+     ;; plugin
+     :plugin/enabled                        (and (util/electron?)
+                                                 ;; true false :theme-only
+                                                 ((fnil identity true) (storage/get :lsp-core-enabled)))
+     :plugin/indicator-text                 nil
+     :plugin/installed-plugins              {}
+     :plugin/installed-themes               []
+     :plugin/installed-commands             {}
+     :plugin/installed-ui-items             {}
+     :plugin/simple-commands                {}
+     :plugin/selected-theme                 nil
+     :plugin/selected-unpacked-pkg          nil
+     :plugin/marketplace-pkgs               nil
+     :plugin/marketplace-stats              nil
+     :plugin/installing                     nil
+     :plugin/active-readme                  nil
+     :plugin/updates-pending                {}
+     :plugin/updates-coming                 {}
+     :plugin/updates-downloading?           false
+     :plugin/updates-unchecked              #{}
 
-      ;; pdf
-      :pdf/current                           nil
-      :pdf/ref-highlight                     nil
+     ;; pdf
+     :pdf/current                           nil
+     :pdf/ref-highlight                     nil
 
-      ;; all notification contents as k-v pairs
-      :notification/contents                 {}
-      :graph/syncing?                        false
+     ;; all notification contents as k-v pairs
+     :notification/contents                 {}
+     :graph/syncing?                        false
 
-      ;; copied blocks
-      :copy/blocks                           {:copy/content nil :copy/block-tree nil}
+     ;; copied blocks
+     :copy/blocks                           {:copy/content nil :copy/block-tree nil}
 
-      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
-                                                 "dashes")
-      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
-                                                 #{})
-      :date-picker/date                      nil
+     :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
+                                                "dashes")
+     :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
+                                                #{})
+     :date-picker/date                      nil
 
-      :youtube/players                       {}
+     :youtube/players                       {}
 
-      ;; command palette
-      :command-palette/commands              []
+     ;; command palette
+     :command-palette/commands              []
 
-      :view/components                       {}
+     :view/components                       {}
 
-      :debug/write-acks                      {}
+     :debug/write-acks                      {}
 
-      :encryption/graph-parsing?             false
+     :encryption/graph-parsing?             false
 
-      :favorites/dragging                    nil
+     :favorites/dragging                    nil
 
-      :srs/mode?                             false
+     :srs/mode?                             false
 
-      :srs/cards-due-count                   nil
-      })))
+     :srs/cards-due-count                   nil
+     })))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))

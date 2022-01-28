@@ -78,7 +78,7 @@
                                            (db/filter-only-public-pages-and-blocks db))
           db-str       (db/db->string db)
           state        (select-keys @state/state
-                                    [:ui/theme :ui/cycle-collapse
+                                    [:ui/theme
                                      :ui/sidebar-collapsed-blocks
                                      :ui/show-recent?
                                      :config])

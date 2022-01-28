@@ -88,6 +88,8 @@ frontend.page/route-view
 frontend.publishing/stop
 ;; Referenced in comment
 frontend.state/set-db-persisted!
+;; Future use
+frontend.storage/get-transit
 ;; repl fn
 frontend.state/remove-watch-state
 ;; Future use?
