@@ -42,9 +42,7 @@
        (fn [{:keys [toggle-fn]}]
          [:a.button.text-sm.font-medium.block {:on-click toggle-fn}
           [:span (t :login)]])
-       (let [list [;; {:title (t :login-google)
-                   ;;  :url (str config/website "/login/google")}
-                   {:title (t :login-github)
+       (let [list [{:title (t :login-github)
                     :url (str config/website "/login/github")}]]
          (mapv
           (fn [{:keys [title url]}]
