@@ -1322,10 +1322,6 @@
       ;; not in editing mode
       (not (get-edit-input-id)))))
 
-(defn set-last-persist-transact-id!
-  [_repo files? id]
-  (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
-
 (defn set-nfs-refreshing!
   [value]
   (set-state! :nfs/refreshing? value))
@@ -1496,10 +1492,6 @@
 (defn get-page-blocks-cp
   []
   (get-in @state [:view/components :page-blocks]))
-
-(defn set-editor-cp!
-  [value]
-  (set-state! [:view/components :editor] value))
 
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]

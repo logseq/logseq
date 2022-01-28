@@ -49,17 +49,11 @@ frontend.components.svg/settings
 frontend.components.svg/arrow-expand
 ;; Used by shadow-cljs
 frontend.core/stop
-;; Referenced in comment
-frontend.db.model/with-children-refs
-;; Referenced in comment
-frontend.db.model/get-latest-changed-pages
 ;; For repl
 frontend.db.utils/q
 ;; For debugging
 frontend.debug/defn
 frontend.debug/print
-;; Left as an example
-frontend.diff/diffs
 ;; Lazily loaded
 frontend.extensions.code/editor
 ;; Lazily loaded

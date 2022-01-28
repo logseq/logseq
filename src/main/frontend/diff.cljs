@@ -1,24 +1,16 @@
 (ns frontend.diff
   (:require [clojure.string :as string]
             ["diff" :as jsdiff]
-            ["diff-match-patch" :as diff-match-patch]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             [frontend.text :as text]))
 
-;; TODO: replace with diff-match-patch
 (defn diff
   [s1 s2]
   (-> ((gobj/get jsdiff "diffLines") s1 s2)
       bean/->clj))
-
-(defonce dmp (diff-match-patch.))
-
-(defn diffs
-  [s1 s2]
-  (.diff_main dmp s1 s2 true))
 
 (def inline-special-chars
   #{\* \_ \/ \` \+ \^ \~ \$})

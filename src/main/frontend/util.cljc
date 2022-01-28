@@ -1025,12 +1025,6 @@
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-#?(:cljs
-   (defn safe-search-normalize
-  [s]
-  (if (string? s)
-        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
-
 (defn page-name-sanity
   "Sanitize the page-name for file name (strict), for file writting"
   ([page-name]
@@ -1364,12 +1358,6 @@
 (defn unquote-string
   [v]
   (string/trim (subs v 1 (dec (count v)))))
-
-(defn unquote-string-if-wrapped
-  [v]
-  (if (wrapped-by-quotes? v)
-    (unquote-string v)
-    v))
 
 #?(:cljs
    (defn right-click?

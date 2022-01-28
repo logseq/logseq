@@ -15,7 +15,6 @@
             [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [medley.core :as medley]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]))
 
@@ -930,27 +929,6 @@
        (let [result (d/datoms db :avet :block/parent (:db/id block))]
          (boolean (seq result)))))))
 
-;; TODO: improve perf
-(defn with-children-refs
-  [repo blocks]
-  (when-let [conn (conn/get-conn repo)]
-    (when (seq blocks)
-      (let [block-ids (set (map :db/id blocks))
-            refs (d/q
-                  '[:find ?p ?ref
-                    :in $ % ?block-ids
-                    :where
-                    (parent ?p ?b)
-                    [(contains? ?block-ids ?p)]
-                    [?b :block/refs ?ref]]
-                  conn
-                  rules
-                  block-ids)
-            refs (->> (group-by first refs)
-                      (medley/map-vals #(set (map (fn [[_ id]] {:db/id id}) %))))]
-        (map (fn [block] (assoc block :block/children-refs
-                                (get refs (:db/id block)))) blocks)))))
-
 (defn get-page-referenced-blocks-no-cache
   [page-id]
   (when-let [repo (state/get-current-repo)]
@@ -1000,7 +978,6 @@
                          (sort-by-left-recursive)
                          (remove (fn [block]
                                    (= page-id (:db/id (:block/page block)))))
-                         ;; (with-children-refs repo)
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
                                 (let [k (if (contains? aliases (:db/id k))
@@ -1482,18 +1459,6 @@
                               '[:db/id :block/name :block/original-name
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
-
-(defn get-latest-changed-pages
-  [repo]
-  (->>
-   (d/q
-     '[:find [(pull ?page [:block/name :block/file :block/updated-at]) ...]
-       :where
-       [?page :block/name]]
-     (conn/get-conn repo))
-   (filter :block/file)
-   (sort-by :block/updated-at >)
-   (take 200)))
 
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
