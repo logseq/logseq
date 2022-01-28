@@ -750,9 +750,7 @@
      (if @lite-mode?
        [:div
         [:img.w-full.h-full.absolute
-         {:src (if (util/electron?)
-                 (str (config/get-static-path) "img/tutorial-thumb.jpg")
-                 "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
+         {:src "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg"}]
         [:button
          {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
           :on-click (fn [_] (swap! lite-mode? not))}
@@ -1760,46 +1758,54 @@
          [:div.my-4
           (datetime-comp/date-picker nil nil ts)]))]))
 
+(defn- target-forbidden-edit?
+  [target]
+  (or
+   (d/has-class? target "forbid-edit")
+   (d/has-class? target "bullet")
+   (d/has-class? target "logbook")
+   (util/link? target)
+   (util/time? target)
+   (util/input? target)
+   (util/details-or-summary? target)
+   (and (util/sup? target)
+        (d/has-class? target "fn"))
+   (d/has-class? target "image-resize")))
+
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
   (.stopPropagation e)
   (let [target (gobj/get e "target")
-        button (gobj/get e "buttons")]
+        button (gobj/get e "buttons")
+        shift? (gobj/get e "shiftKey")]
     (when (contains? #{1 0} button)
-      (when-not (or
-                 (d/has-class? target "forbid-edit")
-                 (d/has-class? target "bullet")
-                 (d/has-class? target "logbook")
-                 (util/link? target)
-                 (util/time? target)
-                 (util/input? target)
-                 (util/details-or-summary? target)
-                 (and (util/sup? target)
-                      (d/has-class? target "fn"))
-                 (d/has-class? target "image-resize"))
-        (editor-handler/clear-selection!)
-        (editor-handler/unhighlight-blocks!)
-        (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                       cursor-range (util/caret-range (gdom/getElement block-id))
-                       {:block/keys [content format]} block
-                       content (->> content
-                                    (property/remove-built-in-properties format)
-                                    (drawer/remove-logbook))]
-                   ;; save current editing block
-                   (let [{:keys [value] :as state} (editor-handler/get-state)]
-                     (editor-handler/save-block! state value))
-                   (state/set-editing!
-                    edit-input-id
-                    content
-                    block
-                    cursor-range
-                    false))]
-          ;; wait a while for the value of the caret range
-          (if (util/ios?)
-            (f)
-            (js/setTimeout f 5)))
+      (when-not (target-forbidden-edit? target)
+        (if (and shift? (state/get-selection-start-block))
+          (editor-handler/highlight-selection-area! block-id)
+          (do
+            (editor-handler/clear-selection!)
+            (editor-handler/unhighlight-blocks!)
+            (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                           cursor-range (util/caret-range (gdom/getElement block-id))
+                           {:block/keys [content format]} block
+                           content (->> content
+                                        (property/remove-built-in-properties format)
+                                        (drawer/remove-logbook))]
+                       ;; save current editing block
+                       (let [{:keys [value] :as state} (editor-handler/get-state)]
+                         (editor-handler/save-block! state value))
+                       (state/set-editing!
+                        edit-input-id
+                        content
+                        block
+                        cursor-range
+                        false))]
+              ;; wait a while for the value of the caret range
+              (if (util/ios?)
+                (f)
+                (js/setTimeout f 5))
 
-        (when block-id (state/set-selection-start-block! block-id))))))
+              (when block-id (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -1868,14 +1874,19 @@
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :on-mouse-up (fn [_e]
+              :on-mouse-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
-                                    (not (string/includes? content "```")))
+                                    (not (string/includes? content "```"))
+                                    (not (gobj/get e "shiftKey")))
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+
+       ;; not playwright ci
+       (not js/window.navigator.webdriver)
+       (assoc :class "select-none"))
 
      [:span
       [:div.flex.flex-row.justify-between

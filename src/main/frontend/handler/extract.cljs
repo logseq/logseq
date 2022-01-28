@@ -18,33 +18,28 @@
             [frontend.mobile.util :as mobile]))
 
 (defn get-page-name
-  [file ast properties]
-  (cond
-    ;; FIXME: case-sensitivity?
-    (or (string/ends-with? file "pages/contents.md")
-        (string/ends-with? file "pages/contents.org"))
-    "Contents"
-
-    ;; Properties are already preprocessed
-    (:title properties)
-    (:title properties)
-
-    ;; Handle :page-name-order, use #() anonymous function to do lazy calculation
-    :else
-    (let [first-block-name #(let [first-block (last (first (filter block/heading-block? ast)))
-                                  title (last (first (:title first-block)))]
-                              (and first-block
-                                   (string? title)
-                                   title))
-          ;; FIXME: How to handle bare `.md`?
-          file-name #(when-let [file-name (last (string/split file #"/"))]
-                       (let [result (first (util/split-last "." file-name))]
-                         (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
-                           (string/replace result "." "/")
-                           result)))]
-      (if (= (state/page-name-order) "heading")
-        (or (first-block-name) (file-name))
-        (or (file-name) (first-block-name))))))
+  [file ast]
+  ;; headline
+  (let [ast (map first ast)]
+    (if (string/includes? file "pages/contents.")
+      "Contents"
+      (let [first-block (last (first (filter block/heading-block? ast)))
+            property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
+                                     (not (string/blank? (:title (last (first ast))))))
+                            (:title (last (first ast))))
+            first-block-name (let [title (last (first (:title first-block)))]
+                               (and first-block
+                                    (string? title)
+                                    title))
+            file-name (when-let [file-name (last (string/split file #"/"))]
+                        (let [result (first (util/split-last "." file-name))]
+                          (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
+                            (string/replace result "." "/")
+                            result)))]
+        (or property-name
+            (if (= (state/page-name-order) "heading")
+              (or first-block-name file-name)
+              (or file-name first-block-name)))))))
 
 
 ;; TODO: performance improvement
@@ -52,7 +47,7 @@
   #_:clj-kondo/ignore
   [repo-url format ast properties file content _utf8-content _journal?]
   (try
-    (let [page (get-page-name file ast properties)
+    (let [page (get-page-name file ast)
           [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
           blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
@@ -82,37 +77,37 @@
                           (assoc
                            (block/page-name->map page false)
                            :block/file {:file/path (util/path-normalize file)}))
-                          (seq properties)
-                          (assoc :block/properties properties)
+                         (seq properties)
+                         (assoc :block/properties properties)
 
-                          aliases
-                          (assoc :block/alias
-                                 (map
-                                  (fn [alias]
-                                    (let [page-name (util/page-name-sanity-lc alias)
-                                          aliases (distinct
-                                                   (conj
-                                                    (remove #{alias} aliases)
-                                                    page))
-                                          aliases (when (seq aliases)
-                                                    (map
-                                                     (fn [alias]
-                                                       {:block/name (util/page-name-sanity-lc alias)})
-                                                     aliases))]
-                                      (if (seq aliases)
-                                        {:block/name page-name
-                                         :block/alias aliases}
-                                        {:block/name page-name})))
-                                  aliases))
+                         aliases
+                         (assoc :block/alias
+                                (map
+                                 (fn [alias]
+                                   (let [page-name (util/page-name-sanity-lc alias)
+                                         aliases (distinct
+                                                  (conj
+                                                   (remove #{alias} aliases)
+                                                   page))
+                                         aliases (when (seq aliases)
+                                                   (map
+                                                    (fn [alias]
+                                                      {:block/name (util/page-name-sanity-lc alias)})
+                                                    aliases))]
+                                     (if (seq aliases)
+                                       {:block/name page-name
+                                        :block/alias aliases}
+                                       {:block/name page-name})))
+                                 aliases))
 
-                          (:tags properties)
-                          (assoc :block/tags (let [tags (:tags properties)
-                                                   tags (if (string? tags) [tags] tags)
-                                                   tags (remove string/blank? tags)]
-                                               (swap! ref-tags set/union (set tags))
-                                               (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
-                                                               :block/original-name tag})
-                                                    tags)))))
+                         (:tags properties)
+                         (assoc :block/tags (let [tags (:tags properties)
+                                                  tags (if (string? tags) [tags] tags)
+                                                  tags (remove string/blank? tags)]
+                                              (swap! ref-tags set/union (set tags))
+                                              (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
+                                                              :block/original-name tag})
+                                                   tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
                               (->> (util/split-namespace-pages page)
@@ -210,15 +205,15 @@
   [repo-url files metadata refresh?]
   (when (seq files)
     (-> (p/all (map
-                (fn [{:file/keys [path content]}]
-                  (when content
-                    (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
-                          content (if org?
-                                    content
-                                    (text/scheduled-deadline-dash->star content))
-                          utf8-content (utf8/encode content)]
-                      (extract-blocks-pages repo-url path content utf8-content))))
-                files))
+                 (fn [{:file/keys [path content]}]
+                   (when content
+                     (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
+                           content (if org?
+                                     content
+                                     (text/scheduled-deadline-dash->star content))
+                           utf8-content (utf8/encode content)]
+                       (extract-blocks-pages repo-url path content utf8-content))))
+                 files))
         (p/then (fn [result]
                   (let [result (remove empty? result)]
                     (when (seq result)
@@ -236,7 +231,7 @@
                                             (if (seq properties)
                                               (assoc block :block/properties properties)
                                               (dissoc block :block/properties))))
-                                        blocks)
+                                     blocks)
                             ;; To prevent "unique constraint" on datascript
                             pages-index (map #(select-keys % [:block/name]) pages)
                             block-ids-set (set (map (fn [uuid] [:block/uuid uuid]) block-ids))

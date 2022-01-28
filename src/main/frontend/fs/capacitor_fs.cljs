@@ -2,7 +2,6 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
@@ -159,6 +158,19 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
+(defn- get-file-path [dir path]
+  (let [[dir path'] (map #(-> (when %
+                                (string/replace % "///" "/"))
+                              js/decodeURI)
+                         [dir path])
+        path (if (string/starts-with? path' dir)
+               path
+               (-> (str dir path)
+                   (string/replace "//" "/")))]
+    (if (mobile-util/native-ios?)
+      (js/encodeURI (js/decodeURI path))
+      path)))
+
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -177,7 +189,7 @@
                              :recursive true}))]
       (js/console.log result)
       result))
-  (readdir [_this dir]                   ; recursive
+  (readdir [_this dir]                  ; recursive
     (readdir dir))
   (unlink! [_this _repo _path _opts]
     nil)
@@ -200,16 +212,7 @@
        (p/catch (fn [error]
                   (js/alert error))))))
   (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
-    (let [path (cond
-                 (= (mobile-util/platform) "ios")
-                 (js/encodeURI (js/decodeURI path))
-
-                 (string/starts-with? path (config/get-repo-dir repo))
-                 path
-
-                 :else
-                 (-> (str dir "/" path)
-                     (string/replace "//" "/")))]
+    (let [path (get-file-path dir path)]
       (p/catch
           (p/let [result (.deleteFile Filesystem
                                       (clj->js
@@ -221,24 +224,22 @@
               (error-handler error)
               (log/error :delete-file-failed error))))))
   (write-file! [this repo dir path content opts]
-    (let [path (cond
-                 (= (mobile-util/platform) "ios")
-                 (js/encodeURI (js/decodeURI path))
-
-                 (string/starts-with? path (config/get-repo-dir repo))
-                 path
-
-                 :else
-                 (-> (str dir "/" path)
-                     (string/replace "//" "/")))]
+    (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
                        (.stat Filesystem (clj->js {:path path}))
                        (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
-  (rename! [_this _repo _old-path _new-path]
-    nil)
+  (rename! [_this _repo old-path new-path]
+    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+      (p/catch
+          (p/let [_ (.rename Filesystem
+                             (clj->js
+                              {:from old-path
+                               :to new-path}))])
+          (fn [error]
+            (log/error :rename-file-failed error)))))
   (stat [_this dir path]
-    (let [path (str dir path)]
+    (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
