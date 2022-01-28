@@ -50,8 +50,7 @@ body:
         - Browser [e.g. chrome, safari]
         - Version [e.g. 22]
     validations:
-      required: true
-    
+      required: false
   - type: textarea
     id: mobile 
     attributes:
@@ -64,7 +63,7 @@ body:
         - Browser [e.g. stock browser, safari]
         - Version [e.g. 22]
     validations:
-      required: true
+      required: false
   - type: textarea
     id: additional
     attributes:
