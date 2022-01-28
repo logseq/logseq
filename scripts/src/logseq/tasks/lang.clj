@@ -42,7 +42,7 @@
         dicts (get-dicts)
         translated-language (dicts lang)
         _ (when-not translated-language
-            (println "Language" lang "does not have an entry in get-dicts.cljs")
+            (println "Language" lang "does not have an entry in dicts.cljs")
             (System/exit 1))
         missing (set/difference (set (keys (dicts :en)))
                                 (set (keys translated-language)))]
@@ -56,10 +56,10 @@
            task-util/print-table))))
 
 (defn invalid-dicts
-  "Lists translation keys that are invalid"
+  "Lists translation keys that don't exist in English"
   []
   (let [dicts (get-dicts)
-        ;; For now defined as :en but clj-kondo analysis would be more thorough
+        ;; For now defined as :en but clj-kondo analysis could be more thorough
         valid-keys (set (keys (dicts :en)))
         invalid-dicts
         (->> (dissoc dicts :en)
@@ -72,5 +72,28 @@
       (println "All dicts have valid keys!")
       (do
         (println "Invalid dict keys found:")
+        (task-util/print-table invalid-dicts)
+        (System/exit 1)))))
+
+(defn list-duplicates
+  "Lists translations that aren't any different than English"
+  [& args]
+  (let [dicts (get-dicts)
+        en-dicts (dicts :en)
+        lang (or (keyword (first args))
+                 (task-util/print-usage "LOCALE"))
+        lang-dicts (dicts lang)
+        invalid-dicts
+        (sort-by
+         :invalid-key
+         (keep
+          #(when (= (en-dicts %) (lang-dicts %))
+             {:invalid-key %
+              :repeat-value (shorten (lang-dicts %) 70)})
+          (keys lang-dicts)))]
+    (if (empty? invalid-dicts)
+      (println "No duplicated keys found!")
+      (do
+        (println "Keys with duplicate values found:")
         (task-util/print-table invalid-dicts)
         (System/exit 1)))))
