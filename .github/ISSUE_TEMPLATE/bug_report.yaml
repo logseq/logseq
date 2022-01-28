@@ -11,11 +11,11 @@ body:
     validations:
       required: true
   - type: textarea
-    id: repoduce
+    id: reproduce
     attributes:
-      label: Reporduce the Bug
+      label: Reproduce the Bug
       description: |
-        Please tell us about the steps to reporduct the bug as mush as you can?
+        Please tell us the steps to reproduce the bug.
       value: |
         1. Go to '...'
         2. Click on '....'
@@ -24,11 +24,11 @@ body:
     validations:
       required: true
   - type: textarea
-    id: excepted
+    id: expected
     attributes:
-      label: Excepted Behavior
+      label: Expected Behavior
       description: |
-        Please tell us what's the behavior you except?
+        Please tell us what's the behavior you expect.
     validations:
       required: false
   - type: textarea
@@ -40,11 +40,11 @@ body:
     validations:
       required: false
   - type: textarea
-    id: desktop 
+    id: desktop
     attributes:
       label: Desktop Platform Information
       description: |
-        Would you mind to tell use the system information about your desktop platform?
+        Would you mind to tell us the system information about your desktop platform?
       value: |
         - OS: [e.g. iOS]
         - Browser [e.g. chrome, safari]
@@ -52,11 +52,11 @@ body:
     validations:
       required: false
   - type: textarea
-    id: mobile 
+    id: mobile
     attributes:
       label: Mobile Platform Information
       description: |
-        Would you mind to tell use the system information about your mobile platform?
+        Would you mind to tell us the system information about your mobile platform?
       value: |
         - Device: [e.g. iPhone6]
         - OS: [e.g. iOS8.1]
