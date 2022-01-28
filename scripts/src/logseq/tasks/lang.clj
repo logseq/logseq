@@ -53,6 +53,7 @@
                   {:translation-key k
                    ;; Shorten values
                    :string-to-translate (shorten v 50)}))
+           (sort-by :translation-key)
            task-util/print-table))))
 
 (defn invalid-dicts
@@ -76,7 +77,7 @@
         (System/exit 1)))))
 
 (defn list-duplicates
-  "Lists translations that aren't any different than English"
+  "Lists translations that are the same as the one in English"
   [& args]
   (let [dicts (get-dicts)
         en-dicts (dicts :en)
@@ -85,11 +86,11 @@
         lang-dicts (dicts lang)
         invalid-dicts
         (sort-by
-         :invalid-key
+         :translation-key
          (keep
           #(when (= (en-dicts %) (lang-dicts %))
-             {:invalid-key %
-              :repeat-value (shorten (lang-dicts %) 70)})
+             {:translation-key %
+              :duplicate-value (shorten (lang-dicts %) 70)})
           (keys lang-dicts)))]
     (if (empty? invalid-dicts)
       (println "No duplicated keys found!")
