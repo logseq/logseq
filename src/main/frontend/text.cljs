@@ -369,7 +369,7 @@
         v (string/trim v)]
     (cond
       (contains? #{"title" "filters"} k)
-      (util/unquote-string-if-wrapped v)
+      v
 
       (= v "true")
       true
