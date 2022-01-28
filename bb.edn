@@ -15,8 +15,10 @@
   dev:open-dev-electron-app
   logseq.tasks.dev/open-dev-electron-app
 
-  -dev:electron-dev
+  -dev:electron-start
   {:depends [dev:watch dev:open-dev-electron-app]}
 
-  dev:electron-dev
-  logseq.tasks.dev/electron-dev}}
+  dev:electron-start
+  {:doc "Start electron dev by watching assets and opening dev app"
+   ;; Parallel execution - https://book.babashka.org/#parallel
+   :task (run '-dev:electron-start {:parallel true})}}}

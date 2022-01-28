@@ -24,10 +24,3 @@
                (shell "yarn dev-electron-app")
                (println "Waiting for app to build..."))
              (Thread/sleep 1000))))
-
-;; Thanks to https://gist.github.com/borkdude/35bc0a20bd4c112dec2c5645f67250e3
-;; for this idea
-(defn electron-dev
-  "Start electron dev that includes watching assets and opening dev app"
-  []
-  (shell "bb run --parallel -dev:electron-dev"))
