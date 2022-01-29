@@ -596,7 +596,7 @@
 (defn get-block-parents-v2
   [repo block-id]
   (d/pull (conn/get-conn repo)
-          '[:db/id :block/properties {:block/parent ...}]
+          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
 (defn parents-collapsed?

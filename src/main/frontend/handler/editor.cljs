@@ -3492,7 +3492,7 @@
         :skip-transact? false}
        (doseq [block-id block-ids]
          (when-let [block (db/entity [:block/uuid block-id])]
-          (let [current-value (boolean (util/collapsed? block))]
+           (let [current-value (:block/collapsed? block)]
             (when-not (= current-value value)
               (let [block (outliner-core/block {:block/uuid block-id
                                                 :block/collapsed? value})]
