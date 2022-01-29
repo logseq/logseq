@@ -2194,8 +2194,7 @@
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
-                                        :block/properties
-                                        :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
