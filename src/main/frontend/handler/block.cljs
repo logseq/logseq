@@ -4,6 +4,18 @@
             [frontend.db :as db]
             [frontend.format.block :as block]))
 
+;; lazy loading
+
+(def initial-blocks-length 200)
+
+(def step-loading-blocks 50)
+
+;;  Fns
+
+(defn long-page?
+  [repo page-id]
+  (>= (db/get-page-blocks-count repo page-id) initial-blocks-length))
+
 (defn get-block-ids
   [block]
   (let [ids (atom [])
