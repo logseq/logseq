@@ -1,7 +1,7 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
-            [clojure.string :as str]))
+            [clojure.string :as string]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -25,6 +25,14 @@
  (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles")))
 (when (native-ios?)
   (defonce ios-file-container (registerPlugin "FileContainer")))
+
+(defn sync-icloud-repo [repo-dir]
+  (let [repo-name (-> (string/split repo-dir "Documents/")
+                      last
+                      string/trim
+                      js/decodeURI)]
+    (.syncGraph download-icloud-files
+                       (clj->js {:graph repo-name}))))
 
 (defn hide-splash []
   (.hide SplashScreen))
@@ -98,18 +106,18 @@
 (defn native-iphone-without-notch?
   []
   (when-let [model (get-idevice-model)]
-    (str/starts-with? (first model) "iPhone8")))
+    (string/starts-with? (first model) "iPhone8")))
 
 (defn native-iphone?
   []
   (when-let [model (get-idevice-model)]
-    (and (str/starts-with? (first model) "iPhone")
-         (not (str/starts-with? (first model) "iPhone8")))))
+    (and (string/starts-with? (first model) "iPhone")
+         (not (string/starts-with? (first model) "iPhone8")))))
 
 (defn native-ipad?
   []
   (when-let [model (get-idevice-model)]
-    (str/starts-with? (first model) "iPad")))
+    (string/starts-with? (first model) "iPad")))
 
 (defn get-idevice-statusbar-height
   []
