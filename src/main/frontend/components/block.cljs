@@ -1891,11 +1891,7 @@
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs)
-
-       ;; not playwright ci
-       (not js/window.navigator.webdriver)
-       (assoc :class "select-none"))
+       (merge attrs))
 
      [:span
       [:div.flex.flex-row.justify-between
