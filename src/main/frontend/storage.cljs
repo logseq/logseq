@@ -20,22 +20,6 @@
   (when-not util/node-test?
     (dt/read-transit-str ^js (.getItem js/localStorage (name key)))))
 
-(defn set-transit!
-  [key value]
-  (when-not util/node-test?
-    (.setItem ^js js/localStorage (name key) (dt/write-transit-str value))))
-
-(defn get-json
-  [key]
-  (when-not util/node-test?
-    (when-let [value (.getItem js/localStorage (name key))]
-      (js/JSON.parse value))))
-
-(defn set-json
-  [key value]
-  (when-not util/node-test?
-    (.setItem ^js js/localStorage (name key) (js/JSON.stringify value))))
-
 (defn remove
   [key]
   (when-not util/node-test?

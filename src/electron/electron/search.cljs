@@ -3,12 +3,9 @@
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [electron.utils :refer [logger] :as utils]
             ["electron" :refer [app]]))
 
 (defonce version "0.0.1")
-
-(def error (partial (.-error logger) "[Search]"))
 
 (defonce databases (atom nil))
 

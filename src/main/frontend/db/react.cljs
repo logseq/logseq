@@ -12,8 +12,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.util.marker :as marker]
-            [frontend.db.rules :as rules]))
+            [frontend.util.marker :as marker]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -135,10 +134,6 @@
              result-atom (or result-atom (atom nil))]
          (set! (.-state result-atom) result)
          (add-q! k nil nil result-atom identity identity identity))))))
-
-(defn add-rules-to-inputs
-  [inputs]
-  (conj (vec inputs) rules/rules))
 
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]

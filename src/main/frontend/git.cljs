@@ -4,7 +4,6 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [clojure.string :as string]
-            [clojure.set :as set]
             [frontend.state :as state]
             [cljs-bean.core :as bean]))
 
@@ -65,20 +64,6 @@
   (js/window.workerThread.checkout (config/get-repo-dir repo-url)
                                    (state/get-default-branch repo-url)))
 
-(defn log
-  [repo-url depth]
-  (js/window.workerThread.log (config/get-repo-dir repo-url)
-                              (state/get-default-branch repo-url)
-                              depth))
-
-(defn pull
-  [repo-url token]
-  (js/window.workerThread.pull (config/get-repo-dir repo-url)
-                               (get-cors-proxy repo-url)
-                               (state/get-default-branch repo-url)
-                               (get-username)
-                               token))
-
 (defn add
   [repo-url file]
   (when js/window.git
@@ -131,16 +116,6 @@
                      (add repo-url file)))]
     changed-files))
 
-(defn commit-non-empty
-  "Equivalent to `git add --all` and then `git commit` without `--allow-empty`."
-  ([repo-url message]
-   (commit-non-empty repo-url message nil))
-  ([repo-url message parent]
-   (p/let [changed-files (add-all repo-url)]
-     (if (not-empty changed-files)
-       (commit repo-url message parent)
-       (p/resolved nil)))))
-
 (defn read-commit
   [repo-url oid]
   (js/window.workerThread.readCommit (config/get-repo-dir repo-url)
@@ -175,18 +150,6 @@
                                 (get-username)
                                 token)))
 
-(defn add-commit
-  [repo-url file message commit-ok-handler commit-error-handler]
-  (util/p-handle
-   (add repo-url file)
-   (fn [_]
-     (util/p-handle
-      (commit repo-url message)
-      (fn []
-        (commit-ok-handler))
-      (fn [error]
-        (commit-error-handler error))))))
-
 (defn get-diffs
   [repo-url hash-1 hash-2]
   (and js/window.git
@@ -198,30 +161,6 @@
                               (update diff :path #(subs % 1))) diffs)]
            diffs))))
 
-(defn find-common-base
-  ([repo-url remote-id local-id]
-   (find-common-base repo-url remote-id local-id (atom [local-id]) (atom [remote-id])))
-  ([repo-url remote-id local-id local-commits remote-commits]
-   ;; FIXME: p/plet not working
-   (p/let
-    [local-commit (read-commit repo-url local-id)]
-     (p/let [remote-commit (read-commit repo-url remote-id)]
-       (let [local-parent (first (get-in (bean/->clj local-commit) [:commit :parent]))
-
-             remote-parent (first (get-in (bean/->clj remote-commit) [:commit :parent]))]
-         (swap! local-commits conj local-parent)
-         (swap! remote-commits conj remote-parent)
-         (let [commons (set/intersection (set @local-commits)
-                                         (set @remote-commits))]
-           (if (seq commons)
-             (first commons)
-             (find-common-base repo-url local-parent remote-parent local-commits remote-commits))))))))
-
-(defn read-blob
-  [repo-url oid path]
-  (js/window.workerThread.readBlob (config/get-repo-dir repo-url)
-                                   oid
-                                   path))
 ;; (resolve-ref (state/get-current-repo) "refs/remotes/origin/master")
 (defn resolve-ref
   [repo-url ref]

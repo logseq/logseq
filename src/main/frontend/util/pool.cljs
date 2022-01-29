@@ -51,11 +51,6 @@
   (p/let [_ (.completed pool)]
     (.terminate pool)))
 
-(defn terminate-parser-pool!
-  []
-  (when-let [pool @parser-pool]
-    (terminate-pool! pool)))
-
 (defn add-parse-job!
   [content config]
   (when-let [pool @parser-pool]

@@ -650,11 +650,3 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
-
-(defn get-repo-name
-  [url]
-  (last (string/split url #"/")))
-
-(defn auto-push!
-  []
-  (git-commit-and-push! "Logseq auto save"))

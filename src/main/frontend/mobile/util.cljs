@@ -20,9 +20,6 @@
 (defn convert-file-src [path-str]
   (.convertFileSrc Capacitor path-str))
 
-(defn is-plugin-available? [name]
-  (.isPluginAvailable Capacitor name))
-
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
  (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles")))

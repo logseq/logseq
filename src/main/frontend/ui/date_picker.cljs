@@ -1,6 +1,6 @@
 (ns frontend.ui.date-picker
   (:require [cljs-time.core       :refer [after? before? day day-of-week days first-day-of-the-month minus month months plus year]]
-            [cljs-time.format     :refer [formatter formatters parse unparse]]
+            [cljs-time.format     :refer [formatter unparse]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.util  :as util    :refer [deref-or-value now->utc]]
@@ -17,12 +17,6 @@
 (def ^:const month-format (formatter "MMMM yyyy"))
 
 (def ^:const week-format (formatter "ww"))
-
-(def ^:const date-format (formatter "yyyy MMM dd"))
-
-(defn iso8601->date [iso8601]
-  (when (seq iso8601)
-    (parse (formatters :basic-date) iso8601)))
 
 (defn- month-label [date] (unparse month-format date))
 

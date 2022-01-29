@@ -142,27 +142,9 @@
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
-(defn indexed
-  [coll]
-  (map-indexed vector coll))
-
 (defn find-first
   [pred coll]
   (first (filter pred coll)))
-
-(defn dissoc-in
-  "Dissociates an entry from a nested associative structure returning a new
-  nested structure. keys is a sequence of keys. Any empty maps that result
-  will not be present in the new structure."
-  [m [k & ks]]
-  (if ks
-    (if-let [nextmap (get m k)]
-      (let [newmap (dissoc-in nextmap ks)]
-        (if (seq newmap)
-          (assoc m k newmap)
-          (dissoc m k)))
-      m)
-    (dissoc m k)))
 
 ;; (defn format
 ;;   [fmt & args]
@@ -193,24 +175,6 @@
 (defn remove-nils-non-nested
   [nm]
   (into {} (remove (comp nil? second)) nm))
-
-(defn remove-nils-or-empty
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (not-empty (into {} (remove (comp #(or
-                                           (nil? %)
-                                           (and (coll? %)
-                                                (empty? %))) second)) el))
-       el))
-   nm))
-
-(defn index-by
-  [col k]
-  (->> (map (fn [entry] [(get entry k) entry])
-            col)
-       (into {})))
 
 (defn ext-of-image? [s]
   (some #(string/ends-with? s %)
@@ -271,15 +235,6 @@
    (defn post
      [url body on-ok on-failed]
      (fetch url {:method "post"
-                 :headers {:Content-Type "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
-
-#?(:cljs
-   (defn patch
-     [url body on-ok on-failed]
-     (fetch url {:method "patch"
                  :headers {:Content-Type "application/json"}
                  :body (js/JSON.stringify (clj->js body))}
             on-ok
@@ -420,13 +375,6 @@
         last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
     (- pos last-newline-pos 1)))
 
-(defn minimize-html
-  [s]
-  (->> s
-       (string/split-lines)
-       (map string/trim)
-       (string/join "")))
-
 #?(:cljs
    (defn stop [e]
      (when e (doto e (.preventDefault) (.stopPropagation)))))
@@ -436,19 +384,9 @@
      (when e (.stopPropagation e))))
 
 
-(def speed 500)
-(def moving-frequency 15)
-
 #?(:cljs
    (defn cur-doc-top []
      (.. js/document -documentElement -scrollTop)))
-
-#?(:cljs
-   (defn lock-global-scroll
-     ([] (lock-global-scroll true))
-     ([v] (js-invoke (.-classList (app-scroll-container-node))
-                     (if v "add" "remove")
-                     "locked-scroll"))))
 
 #?(:cljs
    (defn element-top [elem top]
@@ -471,15 +409,6 @@
                                   0
                                   (- top 80)))
                          :behavior "smooth"}))))))
-
-#?(:cljs
-   (defn scroll-to-element-v2
-     [elem-id]
-     (when elem-id
-       (when-let [elem (gdom/getElement elem-id)]
-         (.scroll (app-scroll-container-node)
-                  #js {:top (element-top elem 0)
-                       :behavior "auto"})))))
 
 #?(:cljs
    (defn scroll-to
@@ -508,13 +437,6 @@
       (scroll-to (app-scroll-container-node) 0 false))
      ([animate?]
       (scroll-to (app-scroll-container-node) 0 animate?))))
-
-#?(:cljs
-   (defn scroll-to-bottom
-     [node]
-     (when-let [node ^js (or node (app-scroll-container-node))]
-       (let [bottom (.-scrollHeight node)]
-         (scroll-to node bottom false)))))
 
 #?(:cljs
    (defn url-encode
@@ -574,11 +496,6 @@
   [s substr]
   (string/starts-with? s substr))
 
-(defn drop-first-line
-  [s]
-  (let [lines (string/split-lines s)]
-    [(first lines)]))
-
 (defn distinct-by
   [f col]
   (reduce
@@ -608,12 +525,6 @@
   [repo-url]
   (take-last 2 (string/split repo-url #"/")))
 
-(defn safe-split-first [pattern s]
-  (if-let [first-index (string/index-of s pattern)]
-    [(subs s 0 first-index)
-     (subs s (+ first-index (count pattern)) (count s))]
-    [s ""]))
-
 (defn safe-lower-case
   [s]
   (if (string? s)
@@ -638,12 +549,6 @@
   [s]
   (.replace s #"[ \t\r]+$" ""))
 
-(defn trim-only-newlines
-  [s]
-  (-> s
-      (.replace #"[\n]+$" "")
-      (.replace #"^[\n]+" "")))
-
 (defn triml-without-newlines
   [s]
   (.replace s #"^[ \t\r]+" ""))
@@ -659,16 +564,6 @@
       (str left
            (when-not not-space? " ")
            (triml-without-newlines right)))))
-
-#?(:cljs
-   (defn join-newline
-     [& col]
-     (let [col (remove nil? col)]
-       (reduce (fn [acc s]
-                 (if (or (= acc "") (= "\n" (last acc)))
-                   (str acc s)
-                   (str acc "\n"
-                        (.replace s #"^[\n]+" "")))) "" col))))
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
@@ -698,16 +593,6 @@
                             old-value escape-chars)
                     old-value)]
     (string/replace s (re-pattern (str "(?i)" old-value)) new-value)))
-
-(defn replace-first-ignore-case
-  [s old-value new-value & [escape-chars]]
-  (let [escape-chars (or escape-chars default-escape-chars)
-        old-value (if (string? escape-chars)
-                    (reduce (fn [acc escape-char]
-                              (string/replace acc escape-char (str "\\" escape-char)))
-                            old-value escape-chars)
-                    old-value)]
-    (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value)))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -875,16 +760,6 @@
             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
 #?(:cljs
-   (defn node-in-viewpoint?
-     [node]
-     (let [rect (.getBoundingClientRect node)
-           height (or (.-innerHeight js/window)
-                      (.. js/document -documentElement -clientHeight))]
-       (and
-        (> (.-top rect) (.-clientHeight (d/by-id "head")))
-        (<= (.-bottom rect) height)))))
-
-#?(:cljs
    (defn get-blocks-noncollapse []
      (->> (d/by-class "ls-block")
           (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
@@ -918,12 +793,6 @@
          nil))))
 
 #?(:cljs
-   (defn input-selected?
-     [input]
-     (not= (get-selection-start input)
-           (get-selection-end input))))
-
-#?(:cljs
    (defn get-selected-text
      []
      (utils/getSelectionText)))
@@ -943,10 +812,6 @@
   [s]
   (safe-re-find exactly-uuid-pattern s))
 
-(defn extract-uuid
-  [s]
-  (safe-re-find (re-pattern uuid-pattern) s))
-
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
 
@@ -954,10 +819,6 @@
   (some->> (string/split s #" ")
            (map string/capitalize)
            (string/join " ")))
-
-(defn file-page?
-  [page-name]
-  (when page-name (safe-re-find #"\." page-name)))
 
 #?(:cljs
    (defn react
@@ -992,40 +853,6 @@
    (defn set-title!
      [title]
      (set! (.-title js/document) title)))
-
-#?(:cljs
-   (defn get-prev-block-with-same-level
-     [block]
-     (let [id (gobj/get block "id")
-           prefix (safe-re-find #"ls-block-[\d]+" id)]
-       (when-let [blocks (d/by-class "ls-block")]
-         (when-let [index (.indexOf blocks block)]
-           (let [level (d/attr block "level")]
-             (when (> index 0)
-               (loop [idx (dec index)]
-                 (if (>= idx 0)
-                   (let [block (nth blocks idx)
-                         prefix-match? (starts-with? (gobj/get block "id") prefix)]
-                     (if (and prefix-match?
-                              (= level (d/attr block "level")))
-                       block
-                       (recur (dec idx))))
-                   nil)))))))))
-
-#?(:cljs
-   (defn get-next-block-with-same-level
-     [block]
-     (when-let [blocks (d/by-class "ls-block")]
-       (when-let [index (.indexOf blocks block)]
-         (let [level (d/attr block "level")]
-           (when (> (count blocks) (inc index))
-             (loop [idx (inc index)]
-               (if (< idx (count blocks))
-                 (let [block (nth blocks idx)]
-                   (if (= level (d/attr block "level"))
-                     block
-                     (recur (inc idx))))
-                 nil))))))))
 
 #?(:cljs
    (defn get-block-container
@@ -1078,17 +905,6 @@
                  (recur (inc idx))
                  block))))))))
 
-(defn sort-by-value
-  [order m]
-  (into (sorted-map-by
-         (fn [k1 k2]
-           (let [v1 (get m k1)
-                 v2 (get m k2)]
-             (if (= order :desc)
-               (compare [v2 k2] [v1 k1])
-               (compare [v1 k1] [v2 k2])))))
-        m))
-
 (defn rand-str
   [n]
   #?(:cljs (-> (.toString (js/Math.random) 36)
@@ -1105,23 +921,6 @@
   [tag-name]
   (when (string? tag-name)
     (not (safe-re-find #"[# \t\r\n]+" tag-name))))
-
-#?(:cljs
-   (defn encode-str
-     [s]
-     (if (tag-valid? s)
-       s
-       (url-encode s))))
-
-#?(:cljs
-   (defn get-clipboard-as-html
-     [event]
-     (if-let [c (gobj/get event "clipboardData")]
-       [(.getData c "text/html") (.getData c "text")]
-       (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
-         [(.getData c "text/html") (.getData c "text")]
-         (when-let [c (gobj/get js/window "clipboardData")]
-           [(.getData c "Text") (.getData c "Text")])))))
 
 (defn pp-str [x]
   #_:clj-kondo/ignore
@@ -1169,14 +968,6 @@
        (js/window.apis.isAbsolutePath path)
        (catch js/Error _
          (utils/win32 path)))))
-
-(defn ->system-modifier
-  [keyboard-shortcut]
-  (if mac?
-    (-> keyboard-shortcut
-        (string/replace "ctrl" "meta")
-        (string/replace "alt" "meta"))
-    keyboard-shortcut))
 
 (defn default-content-with-title
   [text-format]
@@ -1233,12 +1024,6 @@
      "Normalize string for searching (loose)"
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
-
-#?(:cljs
-   (defn safe-search-normalize
-  [s]
-  (if (string? s)
-        (removeAccents (.normalize (string/lower-case s) "NFKC")) s)))
 
 (defn page-name-sanity
   "Sanitize the page-name for file name (strict), for file writting"
@@ -1402,11 +1187,6 @@
      []
      (contains? (set (system-locales)) "zh-CN")))
 
-#?(:cljs
-   (defn get-element-width
-     [id]
-     (when-let [element (gdom/getElement id)]
-       (gobj/get element "offsetWidth"))))
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")
@@ -1578,12 +1358,6 @@
 (defn unquote-string
   [v]
   (string/trim (subs v 1 (dec (count v)))))
-
-(defn unquote-string-if-wrapped
-  [v]
-  (if (wrapped-by-quotes? v)
-    (unquote-string v)
-    v))
 
 #?(:cljs
    (defn right-click?

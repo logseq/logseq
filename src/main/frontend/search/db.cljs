@@ -12,10 +12,6 @@
 
 (defonce indices (atom nil))
 
-(defn empty?
-  [repo]
-  (nil? (get @indices repo)))
-
 (defn block->content
   "Convert a block to the display contents for searching"
   [{:block/keys [content format]}]

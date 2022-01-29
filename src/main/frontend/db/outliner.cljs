@@ -1,8 +1,5 @@
 (ns frontend.db.outliner
-  (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
-            [frontend.util :as util]))
+  (:require [datascript.core :as d]))
 
 (defn get-by-id
   [conn id]
@@ -28,14 +25,6 @@
     :where
     [?a :block/parent ?id]])
 
-(defn save-block
-  [conn block-m]
-  (let [tx (-> (dissoc block-m :block/children :block/level :block/meta)
-             (util/remove-nils))
-        block-id (:block/uuid block-m)]
-    (d/transact! conn [tx])
-    (db-utils/pull [:block/uuid block-id])))
-
 (defn del-block
   [conn id-or-look-ref]
   (d/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))
@@ -53,7 +42,3 @@
                  [?a :block/journal? true]]
                @conn)]
     (flatten r)))
-
-(defn remove-non-existed-refs!
-  [refs]
-  (filter db/entity refs))

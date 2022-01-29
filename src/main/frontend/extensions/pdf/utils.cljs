@@ -113,10 +113,6 @@
   (when (sequential? its)
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
-(defn gen-id []
-  (str (.toString (js/Date.now) 36)
-       (.. (js/Math.random) (toString 36) (substr 2 4))))
-
 (defn gen-uuid []
   (front-db/new-block-id))
 

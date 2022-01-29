@@ -115,13 +115,6 @@
         (when-let [pre-char (subs content (dec pos) pos)]
           (= pre-char \newline)))))
 
-(defn end-of-line?
-  [input]
-  (let [[content pos] (get-input-content&pos input)]
-    (or (= pos (count content))
-        (when-let [next-char (subs content pos (inc pos))]
-          (= next-char \newline)))))
-
 (defn move-cursor-to-line-end
   [input]
   (move-cursor-to input (line-end-pos input)))
@@ -129,10 +122,6 @@
 (defn move-cursor-to-line-beginning
   [input]
   (move-cursor-to input (line-beginning-pos input)))
-
-(defn move-cursor-to-beginning
-  [input]
-  (move-cursor-to input 0))
 
 (defn move-cursor-to-end
   [input]
