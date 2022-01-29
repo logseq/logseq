@@ -1,6 +1,5 @@
 name: Bug Report
 description: Report a bug encountered while using Logseq
-labels: awaiting-response
 body:
   - type: textarea
     id: problem
