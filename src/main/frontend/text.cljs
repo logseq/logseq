@@ -370,7 +370,7 @@
       (= v "false")
       false
 
-      (util/safe-re-find #"^\d+$" v)
+      (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
       (util/safe-parse-int v)
 
       (util/wrapped-by-quotes? v) ; wrapped in ""

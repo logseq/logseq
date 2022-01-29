@@ -282,12 +282,14 @@
                                              (mapv (fn [attribute]
                                                      [:db/retract id attribute])
                                                    [:block/properties :block/tags :block/alias]))
+                        tags (->> (map str->page tags) (remove nil?))
+                        alias (->> (map str->page alias) (remove nil?))
                         tx (cond-> {:db/id id
                                     :block/properties page-properties}
                              (seq tags)
-                             (assoc :block/tags (map str->page tags))
+                             (assoc :block/tags tags)
                              (seq alias)
-                             (assoc :block/alias (map str->page alias)))]
+                             (assoc :block/alias alias))]
                     (conj retract-attributes tx))]
       (assoc block
              :block/refs refs
@@ -296,9 +298,11 @@
 
 (defn- remove-non-existed-refs!
   [refs]
-  (remove (fn [x] (and (vector? x)
-                       (= :block/uuid (first x))
-                       (nil? (db/entity x)))) refs))
+  (remove (fn [x] (or
+                   (and (vector? x)
+                        (= :block/uuid (first x))
+                        (nil? (db/entity x)))
+                   (nil? x))) refs))
 
 (defn- with-marker-time
   [content block format new-marker old-marker]
