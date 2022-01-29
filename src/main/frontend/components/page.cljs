@@ -44,7 +44,10 @@
   [repo page-name block-id]
   (when page-name
     (if block-id
-      (db/get-block-and-children repo block-id)
+      (when-let [root-block (db/pull [:block/uuid block-id])]
+        (let [blocks (-> (db/get-block-and-children repo block-id)
+                         (model/sort-blocks root-block {:block? true}))]
+          (cons root-block blocks)))
       (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!

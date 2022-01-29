@@ -3594,19 +3594,35 @@
                (doseq [{:block/keys [uuid]} blocks-to-collapse]
                  (collapse-block! uuid))))))))))
 
+(defn- zoom-in?
+  []
+  (let [page (state/get-current-page)]
+    (boolean
+     (and
+      (string? page)
+      (util/uuid-string? page)))))
+
 (defn collapse-all!
   ([]
    (collapse-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:expanded? true :root-block block-id})]
-     (set-blocks-collapsed! (map :block/uuid blocks) true))))
+   (let [blocks (all-blocks-with-level {:expanded? true :root-block block-id})
+         block-ids (map :block/uuid blocks)]
+     (if (zoom-in?)
+       (doseq [block-id block-ids]
+         (state/set-collapsed-block! block-id true))
+       (set-blocks-collapsed! block-ids true)))))
 
 (defn expand-all!
   ([]
    (expand-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:root-block block-id})]
-     (set-blocks-collapsed! (map :block/uuid blocks) false))))
+   (let [blocks (all-blocks-with-level {:root-block block-id})
+         block-ids (map :block/uuid blocks)]
+     (if (zoom-in?)
+       (doseq [block-id block-ids]
+         (state/set-collapsed-block! block-id false))
+       (set-blocks-collapsed! block-ids false)))))
 
 (defn toggle-open! []
   (let [all-collapsed?

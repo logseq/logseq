@@ -2173,7 +2173,7 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
-             (when (and (not (some? (state/sub-collapsed (:block/uuid block))))
+             (when (and (nil? (state/get-collapsed (:block/uuid block)))
                         (or (:ref? config) (:block? config)))
                (state/set-collapsed-block! (:block/uuid block)
                                            (editor-handler/block-default-collapsed? block config)))
@@ -2848,8 +2848,6 @@
       (rum/with-key (block-container config item)
         (str (:block/uuid item))))))
 
-(defonce ignore-scroll? (atom false))
-
 (defn- custom-query-or-ref?
   [config]
   (let [ref? (:ref? config)
@@ -2858,8 +2856,9 @@
 
 ;; TODO: virtual tree for better UX and memory usage reduce
 
+
 (defn- get-segment
-  [flat-blocks idx blocks->vec-tree]
+  [config flat-blocks idx blocks->vec-tree]
   (let [new-idx (if (< idx block-handler/initial-blocks-length)
                   block-handler/initial-blocks-length
                   (+ idx block-handler/step-loading-blocks))
@@ -2881,15 +2880,13 @@
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
-        [segment idx] (get-segment flat-blocks
+        [segment idx] (get-segment config
+                                   flat-blocks
                                    @*last-idx
                                    blocks->vec-tree)
         bottom-reached (fn []
-                         (reset! *last-idx idx)
-                         (reset! ignore-scroll? false))
-        has-more? (and (>= (count flat-blocks) (inc idx))
-                       (not (and (:block? config)
-                                 (state/sub-collapsed (uuid (:id config))))))]
+                         (reset! *last-idx idx))
+        has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
