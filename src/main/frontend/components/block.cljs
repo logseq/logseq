@@ -1882,11 +1882,7 @@
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs)
-
-       ;; not playwright ci
-       (not js/window.navigator.webdriver)
-       (assoc :class "select-none"))
+       (merge attrs))
 
      [:span
       [:div.flex.flex-row.justify-between
@@ -2861,16 +2857,13 @@
         custom-query? (:custom-query? config)]
     (or custom-query? ref?)))
 
-
 ;; TODO: virtual tree for better UX and memory usage reduce
-(def initial-blocks-length 200)
-(def step-loading-blocks 50)
 
 (defn- get-segment
   [flat-blocks idx blocks->vec-tree]
-  (let [new-idx (if (< idx initial-blocks-length)
-                  initial-blocks-length
-                  (+ idx step-loading-blocks))
+  (let [new-idx (if (< idx block-handler/initial-blocks-length)
+                  block-handler/initial-blocks-length
+                  (+ idx block-handler/step-loading-blocks))
         max-idx (count flat-blocks)
         idx (min max-idx new-idx)
         blocks (util/safe-subvec flat-blocks 0 idx)]
