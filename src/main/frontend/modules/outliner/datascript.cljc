@@ -34,15 +34,16 @@
      (pipelines/invoke-hooks tx-report)
      (undo-redo/listen-outliner-operation tx-report)))
 
-(defn- remove-nil-from-transaction
-  [txs]
-  (some->> (util/remove-nils txs)
-           (map (fn [x]
-                  (if (map? x)
-                    (medley/map-vals (fn [v] (if (vector? v)
-                                               (remove nil? v)
-                                               v)) x)
-                    x)))))
+#?(:cljs
+   (defn- remove-nil-from-transaction
+     [txs]
+     (some->> (util/remove-nils txs)
+              (map (fn [x]
+                     (if (map? x)
+                       (medley/map-vals (fn [v] (if (vector? v)
+                                                  (remove nil? v)
+                                                  v)) x)
+                       x))))))
 
 #?(:cljs
    (defn transact!
