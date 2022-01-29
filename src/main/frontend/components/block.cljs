@@ -708,13 +708,6 @@
     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
       [:div.inline.mr-1 (map-inline {} inline-list)])))
 
-(defn selection-range-in-block? []
-  (and (= "Range" (. (js/window.getSelection) -type))
-       (-> (js/window.getSelection)
-           (.-anchorNode)
-           (.-parentNode)
-           (.closest ".block-content"))))
-
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
@@ -1338,8 +1331,6 @@
     :else
     ""))
 
-(declare blocks-cp)
-
 (rum/defc block-child
   [block]
   block)
@@ -1891,11 +1882,7 @@
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs)
-
-       ;; not playwright ci
-       (not js/window.navigator.webdriver)
-       (assoc :class "select-none"))
+       (merge attrs))
 
      [:span
       [:div.flex.flex-row.justify-between
@@ -2194,8 +2181,7 @@
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
-                                        :block/properties
-                                        :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2871,16 +2857,13 @@
         custom-query? (:custom-query? config)]
     (or custom-query? ref?)))
 
-
 ;; TODO: virtual tree for better UX and memory usage reduce
-(def initial-blocks-length 200)
-(def step-loading-blocks 50)
 
 (defn- get-segment
   [flat-blocks idx blocks->vec-tree]
-  (let [new-idx (if (< idx initial-blocks-length)
-                  initial-blocks-length
-                  (+ idx step-loading-blocks))
+  (let [new-idx (if (< idx block-handler/initial-blocks-length)
+                  block-handler/initial-blocks-length
+                  (+ idx block-handler/step-loading-blocks))
         max-idx (count flat-blocks)
         idx (min max-idx new-idx)
         blocks (util/safe-subvec flat-blocks 0 idx)]

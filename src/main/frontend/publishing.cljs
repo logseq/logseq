@@ -12,7 +12,6 @@
             [reitit.frontend.easy :as rfe]
             [cljs.reader :as reader]
             [frontend.components.page :as component-page]
-            [frontend.components.editor :as component-editor]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.events :as events]))
 
@@ -62,8 +61,7 @@
 
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! component-page/page-blocks-cp)
-  (state/set-editor-cp! component-editor/box))
+  (state/set-page-blocks-cp! component-page/page-blocks-cp))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

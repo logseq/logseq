@@ -37,14 +37,6 @@
 
 (s/def :me/repos (s/* :repos/repo))
 
-
-;; project
-
-(s/def :projects/name string?)
-(s/def :projects/repo string?)
-(s/def :projects/project (s/keys :req-un [:projects/name :projects/repo]))
-(s/def :me/projects (s/* :projects/project))
-
 ;; me
 
 (s/def :me/name string?)
@@ -57,7 +49,7 @@
 
 ;; state
 
-(s/def :state/me (s/keys :req-un [:me/name :me/email :me/avatar :me/repos :me/projects :me/preferred_format
+(s/def :state/me (s/keys :req-un [:me/name :me/email :me/avatar :me/repos :me/preferred_format
                                   :me/preferred_workflow :me/cors_proxy]))
 
 

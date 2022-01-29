@@ -86,11 +86,6 @@
   [a]
   (use-atom-fn a identity (fn [_ v] v)))
 
-(defn use-atom-in
-  "(use-atom my-atom [:path :to :data])"
-  [a path]
-  (use-atom-fn a #(get-in % path) #(assoc-in %1 path %2)))
-
 (defn use-mounted
   []
   (let [*mounted (rum/use-ref false)]

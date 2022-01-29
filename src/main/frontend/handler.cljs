@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [electron.listener :as el]
-            [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -206,7 +205,6 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
-  (state/set-editor-cp! editor/box)
   (command-palette/register-global-shortcut-commands))
 
 (defn start!

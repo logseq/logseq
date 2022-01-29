@@ -416,26 +416,6 @@
     (when check-fn
       (check-fn new-value (dec (count prefix)) new-pos))))
 
-(defn insert-before!
-  [id value
-   {:keys [backward-pos forward-pos check-fn]
-    :as _option}]
-  (let [input (gdom/getElement id)
-        edit-content (gobj/get input "value")
-        current-pos (cursor/pos input)
-        suffix (subs edit-content 0 current-pos)
-        new-value (str value
-                       suffix
-                       (subs edit-content current-pos))
-        new-pos (- (+ (count suffix)
-                      (count value)
-                      (or forward-pos 0))
-                   (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when check-fn
-      (check-fn new-value (dec (count suffix)) new-pos))))
-
 (defn simple-replace!
   [id value selected
    {:keys [backward-pos forward-pos check-fn]
@@ -481,14 +461,6 @@
    (search/fuzzy-search commands text
                         :extract-fn first
                         :limit 50)))
-
-(defn get-command-input
-  [edit-content]
-  (when-not (string/blank? edit-content)
-    (let [result (last (util/split-last (state/get-editor-command-trigger) edit-content))]
-      (if (string/blank? result)
-        nil
-        result))))
 
 (defmulti handle-step first)
 

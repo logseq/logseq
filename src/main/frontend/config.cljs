@@ -60,10 +60,6 @@
   []
   (or 10 (get-in @state/state [:config :git-push-secs])))
 
-(defn git-repo-status-secs
-  []
-  (or 10 (get-in @state/state [:config :git-push-secs])))
-
 (defn text-formats
   []
   (let [config-formats (some->> (get-in @state/state [:config :text-formats])
@@ -185,14 +181,6 @@
       "`"
       "")))
 
-(defn get-subscript
-  [_format]
-  "_")
-
-(defn get-superscript
-  [_format]
-  "^")
-
 (defn get-empty-link-and-forward-pos
   [format]
   (case format
@@ -235,13 +223,6 @@
      (+ 3 (count label))]
     ["" 0]))
 
-(defn properties-wrapper
-  [format]
-  (case format
-    :markdown
-    "---\n\n---"
-    ""))
-
 (defn properties-wrapper-pattern
   [format]
   (case format
@@ -255,34 +236,6 @@
     :markdown
     "md"
     (name format)))
-
-(defn get-file-format
-  [extension]
-  (case (keyword extension)
-    :markdown
-    :markdown
-    :md
-    :markdown
-    (keyword extension)))
-
-(defn default-empty-block
-  ([format]
-   (default-empty-block format 2))
-  ([format n]
-   (let [block-pattern (get-block-pattern format)]
-     (apply str (repeat n block-pattern)))))
-
-(defn with-code-wrapper
-  [format mode code]
-  (let [mode (if-not (string/blank? mode)
-               (str mode " ")
-               "")]
-    (case format
-      :markdown
-      (util/format "```%s\n%s\n```" mode code)
-      :org
-      (util/format "#+BEGIN_SRC%s\n%s\n#+END_SRC" mode code)
-      code)))
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
@@ -436,9 +389,3 @@
 (defn get-block-hidden-properties
   []
   (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))
-
-(defn get-static-path
-  []
-  (if (and (util/electron?) dev?)
-    "static/"
-    ""))
