@@ -84,7 +84,7 @@
       padding: 12px;
 
       @screen sm {
-        min-width: 600px;
+        width: 600px;
       }
 
       > .it {
