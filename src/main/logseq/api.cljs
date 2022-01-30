@@ -208,29 +208,16 @@
         (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            exist? (fs/file-exists? path "settings")
-            _ (when-not exist? (fs/mkdir! (util/node-path.join path "settings")))
-            path (util/node-path.join path "settings" (str key ".json"))
-            _ (fs/create-if-not-exists repo "" path "{}")
-            json (fs/read-file "" path)]
-      [path (js/JSON.parse json)])))
+  ;; results [path data]
+  (plugin-handler/make-fn-to-load-dotdir-json "settings" "{}"))
 
 (def ^:export save_plugin_user_settings
   (fn [key ^js data]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+    ((plugin-handler/make-fn-to-save-dotdir-json "settings")
+     key (js/JSON.stringify data nil 2))))
 
 (def ^:export unlink_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/unlink! repo path nil))))
+  (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
 
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]

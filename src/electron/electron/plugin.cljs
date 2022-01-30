@@ -18,6 +18,10 @@
               (.. win -webContents
                   (send (name type) (bean/->js payload))))))
 
+(defn dotdir-file?
+  [file]
+  (and file (string/starts-with? (path/normalize file) cfgs/dot-root)))
+
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
 ;; Zipball https://api.github.com/repos/{owner}/{repo}/zipball

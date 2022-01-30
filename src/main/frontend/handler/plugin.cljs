@@ -7,6 +7,7 @@
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as md]
+            [frontend.fs :as fs]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -392,6 +393,37 @@
 (defn get-ls-dotdir-root
   []
   (ipc/ipc "getLogseqDotDirRoot"))
+
+(defn make-fn-to-load-dotdir-json
+  [dirname default]
+  (fn [key]
+    (when-let [key (and key (name key))]
+      (p/let [repo   ""
+              path   (get-ls-dotdir-root)
+              exist? (fs/file-exists? path dirname)
+              _      (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
+              path   (util/node-path.join path dirname (str key ".json"))
+              _      (fs/create-if-not-exists repo "" path (or default "{}"))
+              json   (fs/read-file "" path)]
+        [path (js/JSON.parse json)]))))
+
+(defn make-fn-to-save-dotdir-json
+  [dirname]
+  (fn [key content]
+    (when-let [key (and key (name key))]
+      (p/let [repo ""
+              path (get-ls-dotdir-root)
+              path (util/node-path.join path dirname (str key ".json"))]
+        (fs/write-file! repo "" path content {:skip-compare? true})))))
+
+(defn make-fn-to-unlink-dotdir-json
+  [dirname]
+  (fn [key]
+    (when-let [key (and key (name key))]
+      (p/let [repo ""
+              path (get-ls-dotdir-root)
+              path (util/node-path.join path dirname (str key ".json"))]
+        (fs/unlink! repo path nil)))))
 
 (defn show-themes-modal!
   []

@@ -652,10 +652,21 @@ class PluginLocal
     })
   }
 
-  _persistMainUILayoutData (e: { width: number, height: number, left: number, top: number }) {
-    const layouts = this.settings.get('layouts') || []
-    layouts[0] = e
-    this.settings.set('layout', layouts)
+  async _loadLayoutsData (): Promise<Record<string, any>> {
+    const key = this.id + '_layouts'
+    const [, layouts] = await invokeHostExportedApi('load_plugin_user_settings', key)
+    return layouts || {}
+  }
+
+  async _saveLayoutsData (data) {
+    const key = this.id + '_layouts'
+    await invokeHostExportedApi('save_plugin_user_settings', key, data)
+  }
+
+  async _persistMainUILayoutData (e: { width: number, height: number, left: number, top: number }) {
+    const layouts = await this._loadLayoutsData()
+    layouts.$$0 = e
+    await this._saveLayoutsData(layouts)
   }
 
   _setupDraggableContainer (

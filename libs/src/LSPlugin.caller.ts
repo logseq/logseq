@@ -213,8 +213,8 @@ class LSPluginCaller extends EventEmitter {
     cnt.id = id
 
     // TODO: apply any container layout data
-    {
-      const mainLayoutInfo = this._pluginLocal.settings.get('layout')?.[0]
+    try {
+      const mainLayoutInfo = (await this._pluginLocal._loadLayoutsData())?.$$0
       if (mainLayoutInfo) {
         cnt.dataset.inited_layout = 'true'
         const { width, height, left, top } = mainLayoutInfo
@@ -223,6 +223,8 @@ class LSPluginCaller extends EventEmitter {
           left: left + 'px', top: top + 'px'
         })
       }
+    } catch (e) {
+      console.error("[Restore Layout Error]", e)
     }
 
     document.body.appendChild(cnt)
