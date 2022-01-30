@@ -89,8 +89,7 @@
     (when conn
       (let [db (d/db conn)
             db-str (if db (db->string db) "")]
-        (p/let [_ (db-persist/save-graph! key db-str)]
-          (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))))
+        (p/let [_ (db-persist/save-graph! key db-str)])))))
 
 (defonce persistent-jobs (atom {}))
 

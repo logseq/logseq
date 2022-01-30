@@ -249,16 +249,6 @@
   [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
    (merge {:type "checkbox"} option)])
 
-(defn badge
-  [text option]
-  [:span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.leading-4.bg-purple-100.text-purple-800
-   option
-   text])
-
-;; scroll
-(defn get-doc-scroll-top []
-  (.-scrollTop js/document.documentElement))
-
 (defn main-node
   []
   (gdom/getElement "main-content-container"))
@@ -420,7 +410,7 @@
    {:keys [on-chosen
            on-shift-chosen
            get-group-name
-           empty-div
+           empty-placeholder
            item-render
            class]}]
   (let [current-idx (get state ::current-idx)]
@@ -452,8 +442,8 @@
                  item-cp)
 
                item-cp))])]
-       (when empty-div
-         empty-div))]))
+       (when empty-placeholder
+         empty-placeholder))]))
 
 (def datepicker frontend.ui.date-picker/date-picker)
 
@@ -493,7 +483,6 @@
         binding         (or custom-binding default-binding)]
     (shortcut-helper/decorate-binding binding)))
 
-(defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state close-fn]
   [:div.ui__modal-overlay

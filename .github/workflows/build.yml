@@ -17,6 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
+  BABASHKA_VERSION: '0.7.3'
 
 jobs:
 
@@ -60,12 +61,10 @@ jobs:
             ~/.gitlibs
           key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
+
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
-
-      - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --lint src
 
       - name: Fetch yarn deps
         run: yarn install
@@ -74,6 +73,35 @@ jobs:
         run: |
           yarn cljs:test
           node static/tests.js
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.3.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+
+      - name: Run clj-kondo lint
+        run: clojure -M:clj-kondo --parallel --lint src
+
+      - name: Carve lint for unused vars
+        run: scripts/carve.clj
 
   e2e-test:
     runs-on: ubuntu-latest

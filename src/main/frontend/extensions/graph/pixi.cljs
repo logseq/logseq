@@ -97,8 +97,6 @@
     (reset! *graph-instance nil)
     (reset! *simulation nil)))
 
-(defonce *dark? (atom nil))
-
 (defn- update-position!
   [node obj]
   (.updatePosition node #js {:x (.-x obj)

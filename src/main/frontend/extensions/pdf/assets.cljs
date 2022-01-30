@@ -14,8 +14,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(defonce *asset-uploading? (atom false))
-
 (defn hls-file?
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))

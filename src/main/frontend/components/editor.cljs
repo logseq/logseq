@@ -52,10 +52,10 @@
               [:div.has-help
                command-name
                (ui/tippy
-                 {:html doc
-                  :interactive true
-                  :fixed-position? true
-                  :position "right"}
+                {:html doc
+                 :interactive true
+                 :fixed-position? true
+                 :position "right"}
 
                 [:small (svg/help-circle)])]
 
@@ -148,7 +148,7 @@
                               :tippy-distance  24
                               :tippy-position  (if sidebar? "left" "right")}
                              page-name)])
-            :empty-div   [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+            :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
             :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
@@ -170,7 +170,7 @@
        result
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
-        :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+        :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
         :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                        (let [page (or (:block/original-name page)
                                       (:block/name page))
@@ -222,7 +222,7 @@
            matched-templates
            {:on-chosen   (editor-handler/template-on-chosen-handler id)
             :on-enter    non-exist-handler
-            :empty-div   [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+            :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
             :item-render (fn [[template _block-db-id]]
                            template)
             :class       "black"}))))))
@@ -441,23 +441,23 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                    {:key           (str "modal-input-" (name id))
-                     :id            (str "modal-input-" (name id))
-                     :type          (or type "text")
-                     :on-change     (fn [e]
-                                      (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                    placeholder
-                    (assoc :placeholder placeholder)
-                    autoFocus
-                    (assoc :auto-focus true))
+                  {:key           (str "modal-input-" (name id))
+                   :id            (str "modal-input-" (name id))
+                   :type          (or type "text")
+                   :on-change     (fn [e]
+                                    (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  placeholder
+                  (assoc :placeholder placeholder)
+                  autoFocus
+                  (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
-            "Submit"
-            :on-click
-            (fn [e]
-              (util/stop e)
-              (on-submit command @input-value pos)))])))))
+             "Submit"
+             :on-click
+             (fn [e]
+               (util/stop e)
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
@@ -501,7 +501,7 @@
               {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                :max-height to-max-height
                :max-width 700
-                ;; TODO: auto responsive fixed size
+               ;; TODO: auto responsive fixed size
                :width "fit-content"
                :z-index    11}
               (when set-default-width?

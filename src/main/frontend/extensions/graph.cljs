@@ -44,10 +44,6 @@
         (.unhoverNode ^js graph node)
         (route-handler/redirect-to-page! page-name)))))
 
-(defn reset-graph!
-  [^js graph]
-  (.resetView graph))
-
 (rum/defcs graph-2d <
   (rum/local nil :ref)
   {:did-update pixi/render!

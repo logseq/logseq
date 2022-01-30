@@ -77,14 +77,6 @@
     (catch js/Error _e
       nil)))
 
-(defn ISO-string
-  []
-  (.toISOString (js/Date.)))
-
-(defn get-local-date-time-string
-  []
-  (get-date-time-string (tl/local-now)))
-
 (def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
 (defn get-date-time-string-2 []
   (tf/unparse custom-formatter-2 (tl/local-now)))
@@ -144,12 +136,6 @@
 (defn yesterday
   []
   (journal-name (t/minus (t/today) (t/days 1))))
-
-(defn get-month-last-day
-  []
-  (let [today (js/Date.)
-        date (js/Date. (.getFullYear today) (inc (.getMonth today)) 0)]
-    (.getDate date)))
 
 (defn ymd
   ([]
@@ -248,10 +234,6 @@
 (defn journal-title->custom-format
   [journal-title]
   (journal-title-> journal-title format))
-
-(defn int->local-time
-  [n]
-  (get-date-time-string (t/to-default-time-zone (tc/from-long n))))
 
 (defn int->local-time-2
   [n]

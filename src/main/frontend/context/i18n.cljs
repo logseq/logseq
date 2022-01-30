@@ -38,9 +38,3 @@
       :ok)
     (rum/bind-context [*tongue-context* [t preferred-language set-preferred-language]]
                       children)))
-
-(rum/defc use-tongue []
-  (rum/with-context [value *tongue-context*]
-    (if (nil? value)
-      (throw "use-i18n must be used within a i18n-provider")
-      value)))

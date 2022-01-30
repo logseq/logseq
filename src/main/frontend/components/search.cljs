@@ -5,6 +5,7 @@
             [frontend.components.svg :as svg]
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -133,13 +134,15 @@
                                           :path-params {:path data}})
 
                         :block
-                        (let [block-uuid (uuid (:block/uuid data))
-                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)
-                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                        (let [repo (state/get-current-repo)
+                              block-uuid (uuid (:block/uuid data))
+                              collapsed? (db/parents-collapsed? repo block-uuid)
+                              page (:block/page (db/entity [:block/uuid block-uuid]))
+                              long-page? (block-handler/long-page? repo (:db/id page))]
                           (if page
-                            (if collapsed?
+                            (if (or collapsed? long-page?)
                              (route/redirect-to-page! block-uuid)
-                             (route/redirect-to-page! page (str "ls-block-" (:block/uuid data))))
+                             (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
                             ;; search indice outdated
                             (println "[Error] Block page missing: "
                                      {:block-id block-uuid

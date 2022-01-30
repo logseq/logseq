@@ -62,15 +62,3 @@
     id
 
     :else nil))
-
-(defn ->db-id
-  [x]
-  (cond
-    (map? x)
-    (:db/id x)
-
-    (number? x)
-    x
-
-    :else
-    (throw (js/Error. (util/format "Unknown db/id format: %s" x)))))

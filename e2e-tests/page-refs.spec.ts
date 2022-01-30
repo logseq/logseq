@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInnerBlock } from './utils'
 
-/*** 
+/***
  * Test alias features
  * Test search refering features
  * Consider diacritics
@@ -102,7 +102,7 @@ async function alias_test (page, page_name: string, search_kws: string[]){
     await page.waitForTimeout(500)
     page.click(":nth-match(.menu-link, 2)")
     await page.waitForNavigation()
-    await page.waitForTimeout(100)
+    await page.waitForTimeout(500)
     await lastInnerBlock(page)
     expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
     await page.keyboard.press(hotkeyBack)}

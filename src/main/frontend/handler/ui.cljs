@@ -22,14 +22,6 @@
   (when-let [elem (gdom/getElement "close-left-bar")]
     (.click elem)))
 
-(defn hide-right-sidebar
-  []
-  (state/hide-right-sidebar!))
-
-(defn show-right-sidebar
-  []
-  (state/open-right-sidebar!))
-
 (defn toggle-right-sidebar!
   []
   (state/toggle-sidebar-open?!))

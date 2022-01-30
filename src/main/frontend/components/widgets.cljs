@@ -172,7 +172,7 @@
 
                        :local
                        [(rum/with-key (android-permission-alert)
-                          "andoird-permission-alert")
+                          "android-permission-alert")
                         (rum/with-key (add-local-directory)
                           "add-local-directory")]
 

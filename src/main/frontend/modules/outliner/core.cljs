@@ -625,13 +625,15 @@
   [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
          (boolean? sibling?)]}
-  (let [target-node-id (tree/-get-id target-node)]
-    (when-not (or (and sibling?
-                       (= (tree/-get-left-id root) target-node-id)
-                       (not= (tree/-get-parent-id root) target-node-id))
-                  (and (not sibling?)
-                       (= (tree/-get-left-id root) target-node-id)
-                       (= (tree/-get-parent-id root) target-node-id)))
+  (if-let [target-node-id (tree/-get-id target-node)]
+    (when-not (and
+               (or (and sibling?
+                        (= (tree/-get-left-id root) target-node-id)
+                        (not= (tree/-get-parent-id root) target-node-id))
+                   (and (not sibling?)
+                        (= (tree/-get-left-id root) target-node-id)
+                        (= (tree/-get-parent-id root) target-node-id)))
+               (= target-node-id (tree/-get-id root)))
       (let [root-page (:db/id (:block/page (:data root)))
             target-page (:db/id (:block/page (:data target-node)))
             not-same-page? (not= root-page target-page)
@@ -649,7 +651,9 @@
            (let [new-root (first (if sibling?
                                    (insert-node-as-sibling txs-state root target-node)
                                    (insert-node-as-first-child txs-state root target-node)))]
-             (set-nodes-page new-root target-node txs-state))))))))
+             (when (not= root-page target-page)
+               (set-nodes-page new-root target-node txs-state)))))))
+    (js/console.trace)))
 
 (defn get-right-node
   [node]
