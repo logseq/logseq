@@ -10,6 +10,7 @@
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -32,20 +33,6 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]))
-
-(defn nav-item
-  [title href svg-d _active? close-modal-fn]
-  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
-   {:href href
-    :on-click close-modal-fn}
-   [:svg.mr-4.h-6.w-6.group-hover:text-gray-200.group-focus:text-gray-200.transition.ease-in-out.duration-150
-    {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-    [:path
-     {:d svg-d
-      :stroke-width "2"
-      :stroke-linejoin "round"
-      :stroke-linecap "round"}]]
-   title])
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -452,9 +439,10 @@
        "?"])))
 
 (defn- hide-context-menu-and-clear-selection
-  []
+  [e]
   (state/hide-custom-context-menu!)
-  (editor-handler/clear-selection!))
+  (when-not (gobj/get e "shiftKey")
+    (editor-handler/clear-selection!)))
 
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
@@ -467,7 +455,7 @@
                       (when (= 27 (.-keyCode e))
                         (if (state/modal-opened?)
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection)))))))
+                          (hide-context-menu-and-clear-selection e)))))))
   {:did-mount (fn [state]
                 (swipe/setup-listeners!)
                 state)}
@@ -545,6 +533,7 @@
         (ui/modal)
         (ui/sub-modal)
         (command-palette/command-palette-modal)
+        (select/select-modal)
         (custom-context-menu)
         (plugins/custom-js-installer {:t t
                                       :current-repo current-repo

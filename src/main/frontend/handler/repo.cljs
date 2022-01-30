@@ -29,7 +29,7 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [clojure.set :as set]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.db.persist :as db-persist]
             [electron.ipc :as ipc]))
 
@@ -632,10 +632,11 @@
   [nfs-rebuild-index! ok-handler]
   (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)]
+    (let [local? (config/local-db? repo)
+          repo-dir (config/get-repo-dir repo)]
       (if local?
-        (p/let [_ (when (mobile/native-ios?)
-                    (.downloadFilesFromiCloud mobile/download-icloud-files))
+        (p/let [_ (when (mobile-util/native-ios?)
+                    (mobile-util/sync-icloud-repo repo-dir))
                 _ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
@@ -649,11 +650,3 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
-
-(defn get-repo-name
-  [url]
-  (last (string/split url #"/")))
-
-(defn auto-push!
-  []
-  (git-commit-and-push! "Logseq auto save"))

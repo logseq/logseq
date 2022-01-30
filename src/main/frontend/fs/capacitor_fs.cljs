@@ -229,10 +229,17 @@
                        (.stat Filesystem (clj->js {:path path}))
                        (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
-  (rename! [_this _repo _old-path _new-path]
-    nil)
+  (rename! [_this _repo old-path new-path]
+    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+      (p/catch
+          (p/let [_ (.rename Filesystem
+                             (clj->js
+                              {:from old-path
+                               :to new-path}))])
+          (fn [error]
+            (log/error :rename-file-failed error)))))
   (stat [_this dir path]
-    (let [path (str dir path)]
+    (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
@@ -244,7 +251,7 @@
                   (.pickFolder mobile-util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
-            _ (when (mobile-util/native-ios?) (.downloadFilesFromiCloud mobile-util/download-icloud-files))
+            _ (when (mobile-util/native-ios?) (mobile-util/sync-icloud-repo path))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
