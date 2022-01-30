@@ -1319,7 +1319,7 @@
              :block/name "頁面名稱："
              :page/last-modified "最後更改於"
              :page/new-title "請輸入新頁面的名字:"
-             :page/earlier "載入更多"
+             :page/earlier "之前"
              :page/no-more-journals "沒有更多了"
              :publishing/pages "頁面"
              :publishing/page-name "頁面名稱"
