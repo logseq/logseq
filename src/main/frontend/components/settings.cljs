@@ -51,30 +51,6 @@
 
       [:span.pl-1.opacity-70 "Git commit requires the email address."]]]))
 
-(rum/defcs set-cors < (rum/local "" ::cors)
-  [state]
-  (let [cors (get state ::cors)]
-    [:div.p-8.flex.items-center.justify-center
-     [:div.w-full.mx-auto
-      [:div
-       [:div
-        [:h1.title.mb-1
-         "Your cors address:"]
-        [:div.mt-2.mb-4.relative.rounded-md.max-w-xs
-         [:input#.form-input.is-small
-          {:autoFocus true
-           :on-change (fn [e]
-                        (reset! cors (util/evalue e)))}]]]]
-      (ui/button
-       "Submit"
-       :on-click
-       (fn []
-         (user-handler/set-cors! @cors)))
-
-      [:hr]
-
-      [:span.pl-1.opacity-70 "Git commit requires the cors address."]]]))
-
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -190,7 +166,7 @@
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
     (row-with-button-action
-     {:left-label   "Custom configuration"
+     {:left-label   (t :settings-page/custom-configuration)
       :button-label (t :settings-page/edit-config-edn)
       :href         (rfe/href :file {:path (config/get-config-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
@@ -199,7 +175,7 @@
 (defn edit-custom-css []
   (rum/with-context [[t] i18n/*tongue-context*]
     (row-with-button-action
-     {:left-label   "Custom theme"
+     {:left-label   (t :settings-page/custom-theme)
       :button-label (t :settings-page/edit-custom-css)
       :href         (rfe/href :file {:path (config/get-custom-css-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))

@@ -16,7 +16,6 @@
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
@@ -234,18 +233,6 @@
   (alter-file repo path new-content {:reset? false
                                      :re-render-root? false}))
 
-(defn create!
-  ([path]
-   (create! path ""))
-  ([path content]
-   (when-let [repo (state/get-current-repo)]
-     (when (and path content)
-       (p/let [_ (alter-file repo path content {:reset? false
-                                                :re-render-root? false
-                                                :update-status? true})]
-         (route-handler/redirect! {:to :file
-                                   :path-params {:path path}}))))))
-
 (defn alter-files
   [repo files {:keys [reset? update-db?]
                :or {reset? false
@@ -388,14 +375,3 @@
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
         (set-file-content! repo path new-content)))))
-
-;; TODO:
-;; (defn compare-latest-pages
-;;   []
-;;   (when-let [repo (state/get-current-repo)]
-;;     (doseq [{:block/keys [file name]} (db/get-latest-changed-pages repo)]
-;;       (when-let [path (:file/path (db/pull (:db/id file)))]
-;;         (p/let [content (load-file repo path)]
-;;           (when (not= (string/trim content) (string/trim (or (db/get-file repo path) "")))
-;;             ;; notify
-;;             ))))))

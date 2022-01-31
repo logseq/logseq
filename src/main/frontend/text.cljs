@@ -221,12 +221,6 @@
        :else
        (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
 
-(defn remove-lines-level-spaces
-  [text format]
-  (->> (string/split-lines text)
-       (map #(remove-level-spaces (string/triml %) format true false))
-       (string/join "\n")))
-
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
@@ -376,7 +370,7 @@
       (= v "false")
       false
 
-      (util/safe-re-find #"^\d+$" v)
+      (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
       (util/safe-parse-int v)
 
       (util/wrapped-by-quotes? v) ; wrapped in ""

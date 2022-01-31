@@ -43,25 +43,6 @@
        [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
 
 
-(rum/defc export-page
-  []
-  #_:clj-kondo/ignore
-  (when-let [current-repo (state/get-current-repo)]
-    (when-let [page (state/get-current-page)]
-      (rum/with-context [[t] i18n/*tongue-context*]
-        [:div.export
-         [:h1.title "Export"]
-         [:ul.mr-1
-          [:li.mb-4
-           [:a.font-medium {:on-click #(export/export-page-as-markdown! page)}
-            (t :export-markdown)]]
-          [:li.mb-4
-           [:a.font-medium {:on-click #(export/export-page-as-opml! page)}
-            (t :export-opml)]]]
-         [:a#export-page-as-markdown.hidden]
-         [:a#export-page-as-opml.hidden]
-         [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))))
-
 (def *export-block-type (atom :text))
 
 (def text-indent-style-options [{:label "dashes"

@@ -3,7 +3,8 @@
             ["fs" :as fs]
             ["chokidar" :as watcher]
             [electron.utils :as utils]
-            ["electron" :refer [app]]))
+            ["electron" :refer [app]]
+            [frontend.util.fs :as util-fs]))
 
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw
@@ -31,7 +32,7 @@
     (let [watcher (.watch watcher dir
                           (clj->js
                            {:ignored (fn [path]
-                                       (utils/ignored-path? dir path))
+                                       (util-fs/ignored-path? dir path))
                             :ignoreInitial false
                             :ignorePermissionErrors true
                             :interval polling-interval

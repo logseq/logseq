@@ -78,15 +78,6 @@
 
 (declare page)
 
-(defn- get-page-format
-  [page-name]
-  (let [block? (util/uuid-string? page-name)
-        block-id (and block? (uuid page-name))
-        page (if block-id
-               (:block/name (:block/page (db/entity [:block/uuid block-id])))
-               page-name)]
-    (db/get-page-format page)))
-
 (rum/defc dummy-block
   [page-name]
   [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
@@ -340,8 +331,6 @@
                  (reference/unlinked-references route-page-name)])])])))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
-
-(defonce show-journal? (atom false))
 
 ;; scrollHeight
 (rum/defcs graph-filter-section < (rum/local false ::open?)

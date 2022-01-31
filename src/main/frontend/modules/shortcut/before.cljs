@@ -1,6 +1,5 @@
 (ns frontend.modules.shortcut.before
-  (:require [frontend.config :as config]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [frontend.util :as util]))
 
 ;; before function
@@ -32,7 +31,3 @@
   (fn [e]
     (when-not (state/block-component-editing?)
       (f e))))
-
-(defn only-enable-when-dev!
-  [_]
-  (boolean config/dev?))
