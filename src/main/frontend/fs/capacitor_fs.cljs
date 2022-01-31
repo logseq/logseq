@@ -159,13 +159,18 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn get-file-path [dir path]
-  (let [[dir path'] (map #(some-> %
+  (let [[dir' path'] (map #(some-> %
                                   (string/replace "///" "/")
                                   js/decodeURI)
                          [dir path])
-        path (if (string/starts-with? path' dir)
-               path
-               (-> (str dir path)
+        path (cond (nil? path)
+               dir
+
+               (string/starts-with? path' dir')
+               path'
+
+               :else
+               (-> (str dir' path)
                    (string/replace "//" "/")))]
     (if (mobile-util/native-ios?)
       (js/encodeURI (js/decodeURI path))
