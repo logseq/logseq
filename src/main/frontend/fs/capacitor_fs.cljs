@@ -158,7 +158,7 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
-(defn- get-file-path [dir path]
+(defn get-file-path [dir path]
   (let [[dir path'] (map #(some-> %
                                   (string/replace "///" "/")
                                   js/decodeURI)
