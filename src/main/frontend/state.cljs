@@ -55,6 +55,7 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
