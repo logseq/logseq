@@ -2,7 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
-            [datascript.core :as dc]
+            [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -73,7 +73,7 @@
   (let [path (get-path state)
         format (format/get-format path)
         original-name (db/get-file-page path)
-        random-id (str (dc/squuid))]
+        random-id (str (d/squuid))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-edit-wrapper-" random-id)}
        [:h1.title
