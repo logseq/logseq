@@ -569,6 +569,8 @@
 
     article .panel-wrap {
       padding: 0;
+      min-width: 600px;
+      width: 100%;
     }
   }
 }
