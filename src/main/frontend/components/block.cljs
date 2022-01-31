@@ -6,8 +6,8 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [datascript.core :as dc]
-            [dommy.core :as d]
+            [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -848,12 +848,12 @@
     ["Latex_Fragment" ["Displayed" s]]
     (if html-export?
       (latex/html-export s false true)
-      (latex/latex (str (dc/squuid)) s false true))
+      (latex/latex (str (d/squuid)) s false true))
 
     ["Latex_Fragment" ["Inline" s]]
     (if html-export?
       (latex/html-export s false true)
-      (latex/latex (str (dc/squuid)) s false false))
+      (latex/latex (str (d/squuid)) s false false))
 
     ["Target" s]
     [:a {:id s} s]
@@ -1761,16 +1761,16 @@
 (defn- target-forbidden-edit?
   [target]
   (or
-   (d/has-class? target "forbid-edit")
-   (d/has-class? target "bullet")
-   (d/has-class? target "logbook")
+   (dom/has-class? target "forbid-edit")
+   (dom/has-class? target "bullet")
+   (dom/has-class? target "logbook")
    (util/link? target)
    (util/time? target)
    (util/input? target)
    (util/details-or-summary? target)
    (and (util/sup? target)
-        (d/has-class? target "fn"))
-   (d/has-class? target "image-resize")))
+        (dom/has-class? target "fn"))
+   (dom/has-class? target "image-resize")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
@@ -1995,8 +1995,8 @@
 (defn non-dragging?
   [e]
   (and (= (gobj/get e "buttons") 1)
-       (not (d/has-class? (gobj/get e "target") "bullet-container"))
-       (not (d/has-class? (gobj/get e "target") "bullet"))
+       (not (dom/has-class? (gobj/get e "target") "bullet-container"))
+       (not (dom/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
 (rum/defc breadcrumb-fragment
@@ -2123,7 +2123,7 @@
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
-        (d/remove-class! node "hide-inner-bullet"))))
+        (dom/remove-class! node "hide-inner-bullet"))))
   (when (and
          (state/in-selection-mode?)
          (non-dragging? e))
@@ -2137,7 +2137,7 @@
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
-        (d/add-class! node "hide-inner-bullet"))))
+        (dom/add-class! node "hide-inner-bullet"))))
   (when (and (non-dragging? e)
              (not @*resizing-image?))
     (state/into-selection-mode!)))
@@ -2647,7 +2647,7 @@
                                   :data-lang language}
                                  code)
             [:div
-             (lazy-editor/editor config (str (dc/squuid)) attr code options)
+             (lazy-editor/editor config (str (d/squuid)) attr code options)
              (let [options (:options options)]
                (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
@@ -2728,7 +2728,7 @@
         ["Math" s]
         (if html-export?
           (latex/html-export s true true)
-          (latex/latex (str (dc/squuid)) s true true))
+          (latex/latex (str (d/squuid)) s true true))
         ["Example" l]
         [:pre.pre-wrap-white-space
          (join-lines l)]
@@ -2754,7 +2754,7 @@
         ["Export" "latex" _options content]
         (if html-export?
           (latex/html-export content true false)
-          (latex/latex (str (dc/squuid)) content true false))
+          (latex/latex (str (d/squuid)) content true false))
 
         ["Custom" "query" _options _result content]
         (try
@@ -2806,12 +2806,12 @@
         (let [content (latex-environment-content name option content)]
           (if html-export?
             (latex/html-export content true true)
-            (latex/latex (str (dc/squuid)) content true true)))
+            (latex/latex (str (d/squuid)) content true true)))
 
         ["Displayed_Math" content]
         (if html-export?
           (latex/html-export content true true)
-          (latex/latex (str (dc/squuid)) content true true))
+          (latex/latex (str (d/squuid)) content true true))
 
         ["Footnote_Definition" name definition]
         (let [id (util/url-encode name)]
