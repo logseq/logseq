@@ -610,6 +610,28 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
+;; git
+(defn ^:export git_exec_command
+  [^js args]
+  (when-let [args (and args (seq (bean/->clj args)))]
+    (shell/run-git-command! args)))
+
+(defn ^:export git_load_ignore_file
+  []
+  (when-let [repo (state/get-current-repo)]
+    (p/let [file ".gitignore"
+            dir (config/get-repo-dir repo)
+            _ (fs/create-if-not-exists repo dir file)
+            content (fs/read-file dir file)]
+      content)))
+
+(defn ^:export git_save_ignore_file
+  [content]
+  (when-let [repo (and (string? content) (state/get-current-repo))]
+    (p/let [file ".gitignore"
+            dir (config/get-repo-dir repo)
+            _ (fs/write-file! repo dir file content {:skip-compare? true})])))
+
 ;; helpers
 (defn ^:export show_msg
   ([content] (show_msg content :success))

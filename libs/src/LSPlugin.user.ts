@@ -12,13 +12,13 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc, IUserOffHook
+  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc, IUserOffHook, IGitProxy
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
-import { snakeCase } from 'snake-case'
 import EventEmitter from 'eventemitter3'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { snakeCase } from 'lodash-es'
 
 declare global {
   interface Window {
@@ -207,6 +207,7 @@ const editor: Partial<IEditorProxy> = {
 }
 
 const db: Partial<IDBProxy> = {}
+const git: Partial<IGitProxy> = {}
 
 type uiState = {
   key?: number,
@@ -439,7 +440,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    */
   _makeUserProxy (
     target: any,
-    tag?: 'app' | 'editor' | 'db'
+    tag?: 'app' | 'editor' | 'db' | 'git'
   ) {
     const that = this
     const caller = this.caller
@@ -470,9 +471,15 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
             }
           }
 
+          let method = propKey as string
+
+          if (tag === 'git') {
+            method = 'git_' + method
+          }
+
           // Call host
           return caller.callAsync(`api:call`, {
-            tag, method: propKey, args: args
+            tag, method, args: args
           })
         }
       }
@@ -501,7 +508,11 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   }
 
   get DB (): IDBProxy {
-    return this._makeUserProxy(db)
+    return this._makeUserProxy(db, 'db')
+  }
+
+  get Git (): IGitProxy {
+    return this._makeUserProxy(git, 'git')
   }
 
   get FileStorage (): LSPluginFileStorage {

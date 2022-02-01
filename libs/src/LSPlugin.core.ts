@@ -31,7 +31,7 @@ import {
   ThemeOptions, UIContainerAttrs,
   UIOptions
 } from './LSPlugin'
-import { snakeCase } from 'snake-case'
+import { snakeCase } from 'lodash-es'
 
 const debug = Debug('LSPlugin:core')
 const DIR_PLUGINS = 'plugins'
@@ -1247,11 +1247,11 @@ class LSPluginCore
   }
 
   hookApp (type: string, payload?: any, pid?: string) {
-    this._hook(`hook:app`, type, payload, pid)
+    return this._hook(`hook:app`, type, payload, pid)
   }
 
   hookEditor (type: string, payload?: any, pid?: string) {
-    this._hook(`hook:editor`, type, payload, pid)
+    return this._hook(`hook:editor`, type, payload, pid)
   }
 
   _execDirective (tag: string, ...params: any[]) {

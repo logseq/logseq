@@ -1,9 +1,8 @@
 import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
-import { snakeCase } from 'snake-case'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import { merge } from 'lodash-es'
+import { merge, snakeCase } from 'lodash-es'
 
 interface IObject {
   [key: string]: any;

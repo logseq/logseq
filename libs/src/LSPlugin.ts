@@ -539,6 +539,20 @@ export interface IDBProxy {
   datascriptQuery: <T = any>(query: string) => Promise<T>
 }
 
+/**
+ * Git related APIS
+ */
+export interface IGitProxy {
+  /**
+   * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
+   * @param args
+   */
+  execCommand: (args: string[]) => Promise<string>
+
+  loadIgnoreFile: () => Promise<string>
+  saveIgnoreFile: (content: string) => Promise<void>
+}
+
 export interface ILSPluginThemeManager extends EventEmitter {
   themes: Map<PluginLocalIdentity, Array<ThemeOptions>>
 
@@ -693,6 +707,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   App: IAppProxy & Record<string, any>
   Editor: IEditorProxy & Record<string, any>
   DB: IDBProxy
+  Git: IGitProxy
 
   FileStorage: LSPluginFileStorage
 }
