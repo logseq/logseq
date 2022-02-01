@@ -2,16 +2,16 @@
   (:require [cljs.test :refer [are deftest testing]]
             [frontend.handler.link :as link]))
 
-(deftest test-link?
+(deftest test-link
   (testing "non-link"
-    (are [x y] (= (link/link? x) y)
+    (are [x y] (= (link/link x) y)
       "google.com" nil
       "[[google.com][google]]" nil
       "[[google.com]]" nil
       "[google](google.com)" nil))
 
   (testing "plain links"
-    (are [x y] (= (link/link? x) y)
+    (are [x y] (= (link/link x) y)
       "http://www.google.com"
       {:type "plain-link" :url "http://www.google.com"}
 
@@ -19,7 +19,7 @@
       {:type "plain-link" :url "http://google.com"}))
 
   (testing "org links with labels"
-    (are [x y] (= (link/link? x) y)
+    (are [x y] (= (link/link x) y)
       "[[http://www.google.com][google]]"
       {:type "org-link" :url "http://www.google.com" :label "google"}
 
@@ -33,7 +33,7 @@
       {:type "org-link" :url "https://google.com" :label "google"}))
 
   (testing "org links without labels"
-    (are [x y] (= (link/link? x) y)
+    (are [x y] (= (link/link x) y)
       "[[http://www.google.com]]"
       {:type "org-link" :url "http://www.google.com" :label nil}
 
@@ -41,7 +41,7 @@
       {:type "org-link" :url "https://www.google.com" :label nil}))
 
   (testing "markdown links"
-    (are [x y] (= (link/link? x) y)
+    (are [x y] (= (link/link x) y)
       "[google](http://www.google.com)"
       {:type "markdown-link" :url "http://www.google.com" :label "google"}
 

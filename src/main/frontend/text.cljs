@@ -379,7 +379,7 @@
       (contains? @non-parsing-properties (string/lower-case k))
       v
 
-      (link/link? v)
+      (link/link v)
       v
 
       :else
