@@ -314,9 +314,17 @@
                                     :binding "mod+shift+p"
                                     :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
 
-   :select-graph/open              {:desc    "Open select graph component"
-                                    :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
+   :graph/open              {:desc    "Select graph to open"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-open))
                                     :binding "mod+shift+g"}
+
+   :graph/remove            {:desc    "Remove a graph"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-remove))
+                                    :binding false}
+
+   :graph/add                      {:desc "Add a graph"
+                                    :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+                                    :binding false}
 
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
@@ -498,7 +506,9 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
-                          :select-graph/open
+                          :graph/open
+                          :graph/remove
+                          :graph/add
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -680,7 +690,9 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
-    :select-graph/open
+    :graph/open
+    :graph/remove
+    :graph/add
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
