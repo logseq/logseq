@@ -1,4 +1,4 @@
-(ns frontend.handler.test-link
+(ns frontend.handler.link-test
   (:require [cljs.test :refer [are deftest testing]]
             [frontend.handler.link :as link]))
 
@@ -9,7 +9,7 @@
       "[[google.com][google]]" nil
       "[[google.com]]" nil
       "[google](google.com)" nil))
-  
+
   (testing "plain links"
     (are [x y] (= (link/link? x) y)
       "http://www.google.com"
@@ -18,7 +18,7 @@
       "http://google.com"
       {:type "plain-link" :url "http://google.com"}))
 
-  (testing "org links"
+  (testing "org links with labels"
     (are [x y] (= (link/link? x) y)
       "[[http://www.google.com][google]]"
       {:type "org-link" :url "http://www.google.com" :label "google"}
@@ -32,7 +32,7 @@
       "[[https://google.com][google]]"
       {:type "org-link" :url "https://google.com" :label "google"}))
 
-  (testing "org links"
+  (testing "org links without labels"
     (are [x y] (= (link/link? x) y)
       "[[http://www.google.com]]"
       {:type "org-link" :url "http://www.google.com" :label nil}
@@ -47,5 +47,3 @@
 
       "[google](https://www.google.com)"
       {:type "markdown-link" :url "https://www.google.com" :label "google"})))
-
-#_(cljs.test/test-ns 'frontend.test-link)

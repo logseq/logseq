@@ -1,7 +1,8 @@
 (ns frontend.handler.link
   (:require [frontend.util :as util]))
 
-(def plain-link "(\bhttps?://)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]")
+(def plain-link "(?:http://www\\.|https://www\\.|http://|https://){1}[a-z0-9]+(?:[\\-\\.]{1}[a-z0-9]+)*\\.[a-z]{2,5}(?:.*)*")
+;; Based on https://orgmode.org/manual/Link-Format.html#Link-Format
 (def org-link-re-1 (re-pattern (util/format "\\[\\[(%s)\\]\\[(.+)\\]\\]" plain-link)))
 (def org-link-re-2 (re-pattern (util/format "\\[\\[(%s)\\]\\]" plain-link)))
 (def markdown-link-re (re-pattern (util/format "^\\[(.+)\\]\\((%s)\\)" plain-link)))
@@ -21,8 +22,14 @@
      :url (nth matches 2)
      :label (second matches)}))
 
+(defn- plain-link?
+  [link]
+  (when (util/url? link)
+    {:type "plain-link"
+     :url link}))
+
 (defn link?
   [link]
-  (or (util/url? link)
+  (or (plain-link? link)
       (org-link? link)
       (markdown-link? link)))
