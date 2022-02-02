@@ -141,6 +141,7 @@
      l)
     @vars))
 
+;; TODO: Convert -> fns to rules
 (defn ->property-query
   ([k v]
    (->property-query k v '?v))
@@ -154,6 +155,16 @@
      [(list 'contains? sym v)]
      ;; For integer pages that aren't strings
      [(list 'contains? sym (str v))])]))
+
+(defn ->page-property-query
+  [k v]
+  [['?p :block/name]
+   ['?p :block/properties '?prop]
+   [(list 'get '?prop (keyword k)) '?v]
+   (list
+    'or
+    [(list '= '?v v)]
+    [(list 'contains? '?v v)])])
 
 (defn build-query
   ([repo e env]
@@ -354,15 +365,8 @@
              k (string/replace (name k) "_" "-")]
          (if-not (nil? v)
            (let [v (text/parse-property k v)
-                 v (if (coll? v) (first v) v)
-                 sym '?v]
-             [['?p :block/name]
-              ['?p :block/properties '?prop]
-              [(list 'get '?prop (keyword k)) sym]
-              (list
-               'or
-               [(list '= sym v)]
-               [(list 'contains? sym v)])])
+                 v (if (coll? v) (first v) v)]
+             (->page-property-query k v))
            [['?p :block/name]
             ['?p :block/properties '?prop]
             [(list 'get '?prop (keyword k)) '?prop-v]
