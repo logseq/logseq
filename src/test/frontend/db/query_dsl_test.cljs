@@ -24,6 +24,8 @@ created-at:: 1608968448113
 last-modified-at:: 1608968448113
 prop-a:: val-a
 prop-c:: [[page a]], [[page b]], [[page c]]
+prop-num:: 2000
+prop-linked-num:: [[3000]]
 - LATER 26-b2-modified-later [[page 2]] #tag1
 created-at:: 1608968448114
 last-modified-at:: 1608968448120
@@ -82,6 +84,9 @@ last-modified-at:: 1609084800002"}]]
 
 (defn q-count
   [s]
+  #_(let [db (frontend.db.conn/get-conn test-db)]
+    (prn :DB (d/q '[:find (pull ?b [*]) :where [?b :block/properties ?prop] [(get ?prop :prop-num)]]
+                db)))
   (let [{:keys [query result]} (q s)]
     {:query query
      :count (if result
@@ -93,6 +98,52 @@ last-modified-at:: 1609084800002"}]]
   (:count (q-count s)))
 
 (defonce empty-result {:query nil :result nil})
+
+(deftest block-property-queries
+  (are [x y] (= (q-count x) y)
+       "(property prop-a val-a)"
+       {:query (dsl/->property-query "prop-a" "val-a")
+        :count 2}
+
+       "(property prop-b val-b)"
+       {:query (dsl/->property-query "prop-b" "val-b")
+        :count 1}
+
+       "(and (property prop-b val-b))"
+       {:query '([?b :block/properties ?prop]
+                 [(missing? $ ?b :block/name)]
+                 [(get ?prop :prop-b) ?v]
+                 (or [(= ?v "val-b")] [(contains? ?v "val-b")] [(contains? ?v "val-b")]))
+        :count 1}
+
+       "(and (property prop-c \"page c\"))"
+       {:query (dsl/->property-query "prop-c" "page c")
+        :count 1}
+
+       ;; TODO: optimize
+       "(and (property prop-c \"page c\") (property prop-c \"page b\"))"
+       {:query '[[?b :block/properties ?prop]
+                 [(missing? $ ?b :block/name)]
+                 [(get ?prop :prop-c) ?v]
+                 (or [(= ?v "page c")] [(contains? ?v "page c")] [(contains? ?v "page c")])
+                 [(get ?prop :prop-c) ?v1]
+                 (or [(= ?v1 "page b")] [(contains? ?v1 "page b")] [(contains? ?v1 "page b")])]
+        :count 1}
+
+       "(or (property prop-c \"page c\") (property prop-b val-b))"
+       {:query '[[?b :block/content ?content]
+                 (or
+                  (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")] [(contains? ?v "page c")]))
+                  (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")] [(contains? ?v "val-b")])))]
+        :count 2}
+
+       "(property prop-num 2000)"
+       {:query (dsl/->property-query "prop-num" 2000)
+        :count 1}
+
+       "(property prop-linked-num 3000)"
+       {:query (dsl/->property-query "prop-linked-num" 3000)
+        :count 1}))
 
 (deftest test-parse
   []
@@ -117,43 +168,7 @@ last-modified-at:: 1609084800002"}]]
       {:query '[[?b :block/path-refs [:block/name "page 2"]]]
        :count 4}))
 
-  (testing "Block properties query"
-    (are [x y] (= (q-count x) y)
-      "(property prop-a val-a)"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-a) ?v] (or [(= ?v "val-a")] [(contains? ?v "val-a")])]
-       :count 2}
 
-      "(property prop-b val-b)"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")])]
-       :count 1}
-
-      "(and (property prop-b val-b))"
-      {:query '([?b :block/properties ?prop]
-                [(missing? $ ?b :block/name)]
-                [(get ?prop :prop-b) ?v]
-                (or [(= ?v "val-b")] [(contains? ?v "val-b")]))
-       :count 1}
-
-      "(and (property prop-c \"page c\"))"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")])]
-       :count 1}
-
-      ;; TODO: optimize
-      "(and (property prop-c \"page c\") (property prop-c \"page b\"))"
-      {:query '[[?b :block/properties ?prop]
-                [(missing? $ ?b :block/name)]
-                [(get ?prop :prop-c) ?v]
-                (or [(= ?v "page c")] [(contains? ?v "page c")])
-                [(get ?prop :prop-c) ?v1]
-                (or [(= ?v1 "page b")] [(contains? ?v1 "page b")])]
-       :count 1}
-
-      "(or (property prop-c \"page c\") (property prop-b val-b))"
-      {:query '[[?b :block/content ?content]
-                (or
-                 (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                 (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")])))]
-       :count 2}))
 
   (testing "task queries"
     (are [x y] (= (q-count x) y)
@@ -319,7 +334,7 @@ last-modified-at:: 1609084800002"}]]
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
                 (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 36}))
+       :count 37}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
@@ -367,7 +382,7 @@ last-modified-at:: 1609084800002"}]]
                   (and [?b :block/path-refs [:block/name "page 1"]])
                   (and [?b :block/path-refs [:block/name "page 2"]])
                   [?b])))
-       :count 39})
+       :count 40})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
