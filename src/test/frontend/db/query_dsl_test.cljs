@@ -17,7 +17,7 @@
                 :file/content "---
 title: Dec 26th, 2020
 tags: [[page-tag-1]], page-tag-2
-parent: [[child page 1]]
+parent: [[child page 1]], [[child-no-space]]
 ---
 - DONE 26-b1 [[page 1]]
 created-at:: 1608968448113
@@ -26,6 +26,7 @@ prop-a:: val-a
 prop-c:: [[page a]], [[page b]], [[page c]]
 prop-num:: 2000
 prop-linked-num:: [[3000]]
+prop-d:: [[no-space-link]]
 - LATER 26-b2-modified-later [[page 2]] #tag1
 created-at:: 1608968448114
 last-modified-at:: 1608968448120
@@ -84,9 +85,6 @@ last-modified-at:: 1609084800002"}]]
 
 (defn q-count
   [s]
-  #_(let [db (frontend.db.conn/get-conn test-db)]
-    (prn :DB (d/q '[:find (pull ?b [*]) :where [?b :block/properties ?prop] [(get ?prop :prop-num)]]
-                db)))
   (let [{:keys [query result]} (q s)]
     {:query query
      :count (if result
@@ -143,7 +141,52 @@ last-modified-at:: 1609084800002"}]]
 
        "(property prop-linked-num 3000)"
        {:query (dsl/->property-query "prop-linked-num" 3000)
+        :count 1}
+
+       "(property prop-d no-space-link)"
+       {:query (dsl/->property-query "prop-d" "no-space-link")
         :count 1}))
+
+(deftest page-property-queries
+  (are [x y] (= (q-count x) y)
+       "(page-property parent)"
+       {:query '[[?p :block/name]
+                 [?p :block/properties ?prop]
+                 [(get ?prop :parent) ?prop-v]
+                 [true]], :count 3}
+
+       "(page-property parent [[child page 1]])"
+       {:query (dsl/->page-property-query "parent" "child page 1")
+        :count 2}
+
+       "(page-property parent [[child-no-space]])"
+       {:query (dsl/->page-property-query "parent" "child-no-space")
+        :count 1}
+
+       "(page-property parent \"child page 1\")"
+       {:query (dsl/->page-property-query "parent" "child page 1") 
+        :count 2}
+
+       "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
+       {:query '([?p :block/name]
+                 [?p :block/properties ?prop]
+                 [(get ?prop :parent) ?v]
+                 (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
+                 (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
+        :count 1}
+
+       "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
+       {:query '(or (and
+                     [?p :block/name]
+                     [?p :block/properties ?prop]
+                     [(get ?prop :parent) ?v]
+                     (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
+                    (and
+                     [?p :block/name]
+                     [?p :block/properties ?prop]
+                     [(get ?prop :parent) ?v]
+                     (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
+        :count 3}))
 
 (deftest test-parse
   []
@@ -262,50 +305,7 @@ last-modified-at:: 1609084800002"}]]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}))
 
-  (testing "page-property queries"
-    (are [x y] (= (q-count x) y)
-      "(page-property parent)"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?prop-v]
-                [true]], :count 3}
 
-      "(page-property parent [[child page 1]])"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])]
-       :count 2}
-
-      "(page-property parent \"child page 1\")"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or
-                 [(= ?v "child page 1")]
-                 [(contains? ?v "child page 1")])]
-       :count 2}
-
-      "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '([?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
-                (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
-       :count 1}
-
-      "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '(or (and
-                    [?p :block/name]
-                    [?p :block/properties ?prop]
-                    [(get ?prop :parent) ?v]
-                    (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
-                   (and
-                    [?p :block/name]
-                    [?p :block/properties ?prop]
-                    [(get ?prop :parent) ?v]
-                    (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
-       :count 3}))
 
   ;; boolean queries
   (testing "AND queries"
@@ -334,7 +334,7 @@ last-modified-at:: 1609084800002"}]]
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
                 (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 37}))
+       :count 39}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
@@ -382,7 +382,7 @@ last-modified-at:: 1609084800002"}]]
                   (and [?b :block/path-refs [:block/name "page 1"]])
                   (and [?b :block/path-refs [:block/name "page 2"]])
                   [?b])))
-       :count 40})
+       :count 42})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
