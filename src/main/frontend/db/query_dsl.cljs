@@ -141,6 +141,20 @@
      l)
     @vars))
 
+(defn ->property-query
+  ([k v]
+   (->property-query k v '?v))
+  ([k v sym]
+   [['?b :block/properties '?prop]
+    [(list 'missing? '$ '?b :block/name)]
+    [(list 'get '?prop (keyword k)) sym]
+    (list
+     'or
+     [(list '= sym v)]
+     [(list 'contains? sym v)]
+     ;; For integer pages that aren't strings
+     [(list 'contains? sym (str v))])]))
+
 (defn build-query
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
@@ -269,13 +283,7 @@
              sym (if (= current-filter 'or)
                    '?v
                    (uniq-symbol counter "?v"))]
-         [['?b :block/properties '?prop]
-          [(list 'missing? '$ '?b :block/name)]
-          [(list 'get '?prop (keyword k)) sym]
-          (list
-           'or
-           [(list '= sym v)]
-           [(list 'contains? sym v)])])
+         (->property-query k v sym))
 
        (and (= 'property fe)
             (= 2 (count e)))
