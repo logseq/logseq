@@ -3,7 +3,7 @@
             [shadow.resource :as rc]
             [tongue.core :as tongue]))
 
-(def dicts
+(def ^:large-vars/data-var dicts
   {:en {:tutorial/text (rc/inline "tutorial-en.md")
         :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
         :on-boarding/title "Hi, welcome to Logseq!"

@@ -2,7 +2,7 @@
   (:require [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.macro :refer [shortcut-dict]]))
 
-(def dict
+(def ^:large-vars/data-var dict
   (shortcut-dict
    (dh/desc-helper)
    (dh/category-helper)
