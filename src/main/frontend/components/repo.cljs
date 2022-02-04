@@ -185,23 +185,24 @@
     (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
       (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
+(defn- get-repo-name [repo]
+  (cond
+    (mobile-util/is-native-platform?)
+    (text/get-graph-name-from-path repo)
+
+    (config/local-db? repo)
+    (config/get-local-dir repo)
+
+    :else
+    (db/get-repo-path repo)))
+
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
   [state]
   (let [multiple-windows? (::electron-multiple-windows? state)]
     (when-let [current-repo (state/sub :git/current-repo)]
       (rum/with-context [[t] i18n/*tongue-context*]
-        (let [get-repo-name (fn [repo]
-                              (cond
-                                (mobile-util/is-native-platform?)
-                                (text/get-graph-name-from-path repo)
-
-                                (config/local-db? repo)
-                                (config/get-local-dir repo)
-
-                                :else
-                                (db/get-repo-path repo)))
-              repos (state/sub [:me :repos])
+        (let [repos (state/sub [:me :repos])
               repos (remove (fn [r] (= config/local-repo (:url r))) repos)
               switch-repos (remove (fn [repo]
                                      (= current-repo (:url repo)))

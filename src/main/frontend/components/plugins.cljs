@@ -155,7 +155,7 @@
       Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
       understand the source code."]))
 
-(rum/defc plugin-item-card < rum/static
+(rum/defc ^:large-vars/cleanup-todo plugin-item-card < rum/static
   [{:keys [id name title settings version url description author icon usf iir repo sponsors] :as item}
    market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
@@ -295,7 +295,7 @@
                          (page-handler/init-commands!))
                        true)]])]])))
 
-(rum/defc panel-control-tabs
+(rum/defc ^:large-vars/cleanup-todo panel-control-tabs
   < rum/static
   [t search-key *search-key category *category
    sort-or-filter-by *sort-or-filter-by selected-unpacked-pkg

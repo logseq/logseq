@@ -146,7 +146,7 @@
                     (reset! edit? true))}
        "Make template"))))
 
-(rum/defc block-context-menu-content
+(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id]
 
   (let [*el-ref (rum/use-ref nil)]

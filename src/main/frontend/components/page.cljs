@@ -359,7 +359,7 @@
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 
-(rum/defc graph-filters < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages?]
          :or {orphan-pages? true}} settings
@@ -662,7 +662,7 @@
                       (notification/show! (str (t :tips/all-done) "!") :success)
                       (js/setTimeout #(refresh-fn) 200)))]])))
 
-(rum/defcs all-pages < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo all-pages < rum/reactive
   (rum/local nil ::pages)
   (rum/local nil ::search-key)
   (rum/local nil ::results-all)

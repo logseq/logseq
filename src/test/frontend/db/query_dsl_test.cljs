@@ -94,7 +94,7 @@ last-modified-at:: 1609084800002"}]]
 
 (defonce empty-result {:query nil :result nil})
 
-(deftest test-parse
+(deftest ^:large-vars/cleanup-todo test-parse
   []
   (testing "nil or blank strings should be ignored"
     (are [x y] (= (q x) y)

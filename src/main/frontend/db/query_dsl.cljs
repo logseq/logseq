@@ -141,7 +141,7 @@
      l)
     @vars))
 
-(defn build-query
+(defn ^:large-vars/cleanup-todo build-query
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
   ([repo e {:keys [sort-by blocks? sample counter current-filter vars] :as env} level]

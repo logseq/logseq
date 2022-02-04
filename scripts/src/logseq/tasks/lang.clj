@@ -31,7 +31,7 @@
 
 (defn- get-en-categories
   []
-  (->> (rewrite-clj/var-sexp
+  (->> (rewrite-clj/metadata-var-sexp
         "src/main/frontend/modules/shortcut/config.cljs"
         "category")
        (map (fn [[k v]] (vector k (:doc (meta v)))))

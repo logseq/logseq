@@ -20,7 +20,7 @@
 
                (str (hiccup-without-style hiccup))))
 
-(defn hiccup->doc-inner
+(defn ^:large-vars/cleanup-todo hiccup->doc-inner
   [format hiccup]
   (let [transform-fn (fn [hiccup]
                        (hiccup->doc-inner format hiccup))

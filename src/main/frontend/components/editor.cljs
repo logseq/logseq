@@ -227,7 +227,7 @@
                            template)
             :class       "black"}))))))
 
-(rum/defc mobile-bar < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo mobile-bar < rum/reactive
   [_parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)

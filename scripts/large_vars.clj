@@ -4,6 +4,7 @@
   "This script detects vars that are too large and that make it difficult for
   the team to maintain and understand them."
   (:require [babashka.pods :as pods]
+            [clojure.pprint :as pprint]
             [clojure.set :as set]))
 
 (pods/load-pod 'clj-kondo/clj-kondo "2021.12.19")
@@ -14,7 +15,11 @@
   {:max-lines-count 100
    ;; Vars with these metadata flags are allowed. Name should indicate the reason
    ;; it is allowed
-   :metadata-exceptions #{::data-var}})
+   :metadata-exceptions #{::data-var
+                          ;; TODO: Address vars tagged with cleanup-todo. These
+                          ;; are left mostly because they are not high priority
+                          ;; or not well understood
+                          ::cleanup-todo}})
 
 (defn -main
   [args]
@@ -34,7 +39,10 @@
                                :filename (:filename m)}))))
                   (sort-by :lines-count (fn [x y] (compare y x))))]
     (if (seq vars)
-      (do (prn vars)
+      (do
+        (println (format "The following vars exceed the line count max of %s:"
+                         (:max-lines-count config)))
+        (pprint/print-table vars)
         (System/exit 1))
       (println "All vars are below the max size!"))))
 

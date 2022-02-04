@@ -817,7 +817,7 @@
     (page-cp config {:block/name namespace})]
    (namespace-hierarchy-aux config namespace children)])
 
-(defn inline
+(defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
     ["Plain" s]
@@ -2171,7 +2171,7 @@
      children)
     (distinct @refs)))
 
-(rum/defcs block-container < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
              (when (and (not (some? (state/sub-collapsed (:block/uuid block))))
@@ -2468,7 +2468,7 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defcs custom-query < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo custom-query < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -2652,7 +2652,7 @@
                (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
 
-(defn markup-element-cp
+(defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
   (let [format (or (:block/format config)
                    :markdown)]

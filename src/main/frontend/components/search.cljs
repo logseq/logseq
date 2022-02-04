@@ -80,7 +80,7 @@
 
 (defonce search-timeout (atom nil))
 
-(rum/defc search-auto-complete
+(rum/defc ^:large-vars/cleanup-todo search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [pages (when-not all? (map (fn [page]

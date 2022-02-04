@@ -501,7 +501,7 @@
         blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
     (with-path-refs blocks)))
 
-(defn extract-blocks
+(defn ^:large-vars/cleanup-todo extract-blocks
   [blocks content with-id? format]
   (try
     (let [encoded-content (utf8/encode content)
