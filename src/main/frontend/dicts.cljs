@@ -575,7 +575,7 @@
         :yes "Ja"
         :submit "Senden"
         :cancel "Abbrechen"
-        :re-index "Neu-Indizieren"
+        :re-index "Neu indizieren"
         :export-json "Als JSON exportieren"
         :unlink "Verknüpfung aufheben"
         :search (if config/publishing?
