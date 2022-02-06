@@ -292,6 +292,7 @@ export interface IAppProxy {
   openExternalLink: (url: string) => Promise<void>
 
   /**
+   * @deprecated Using `logseq.Git.execCommand`
    * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
    * @param args
    */

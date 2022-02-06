@@ -614,7 +614,7 @@
 (defn ^:export git_exec_command
   [^js args]
   (when-let [args (and args (seq (bean/->clj args)))]
-    (shell/run-git-command! args)))
+    (shell/run-git-command2! args)))
 
 (defn ^:export git_load_ignore_file
   []

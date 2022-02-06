@@ -12,6 +12,10 @@
   [command]
   (ipc/ipc "runGit" command))
 
+(defn run-git-command2!
+  [command]
+  (ipc/ipc "runGitWithinCurrentGraph" command))
+
 ;; TODO: export to pdf/html/word
 (defn run-pandoc-command!
   [command]

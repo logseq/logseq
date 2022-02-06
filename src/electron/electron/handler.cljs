@@ -311,6 +311,10 @@
   (when (seq args)
     (git/raw! args)))
 
+(defmethod handle :runGitWithinCurrentGraph [_ [_ args]]
+  (when (seq args)
+    (git/run-git2! (clj->js args))))
+
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
 
