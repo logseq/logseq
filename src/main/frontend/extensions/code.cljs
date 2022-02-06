@@ -126,6 +126,7 @@
             ["codemirror/mode/yaml-frontmatter/yaml-frontmatter"]
             ["codemirror/mode/yaml/yaml"]
             ["codemirror/mode/z80/z80"]
+            ["codemirror-mode-elixir/dist/codemirror-mode-elixir"]
             [frontend.commands :as commands]
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
