@@ -15,7 +15,7 @@ body:
       label: Reproduce the Bug
       description: |
         Please tell us the steps to reproduce the bug.
-      value: |
+      placeholder: |
         1. Go to '...'
         2. Click on '....'
         3. Scroll down to '....'
