@@ -96,6 +96,8 @@ export type BlockUUIDTuple = ['uuid', BlockUUID]
 export type IEntityID = { id: EntityID }
 export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
+export type IGitResult = { stdout: string, stderr: string, exitCode: number }
+
 export interface AppUserInfo {
   [key: string]: any
 }
@@ -548,7 +550,7 @@ export interface IGitProxy {
    * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
    * @param args
    */
-  execCommand: (args: string[]) => Promise<string>
+  execCommand: (args: string[]) => Promise<IGitResult>
 
   loadIgnoreFile: () => Promise<string>
   saveIgnoreFile: (content: string) => Promise<void>
