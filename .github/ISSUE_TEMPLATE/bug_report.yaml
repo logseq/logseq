@@ -44,10 +44,7 @@ body:
       label: Desktop Platform Information
       description: |
         Would you mind to tell us the system information about your desktop platform?
-      value: |
-        - OS: [e.g. iOS]
-        - Browser [e.g. chrome, safari]
-        - Version [e.g. 22]
+      placeholder: "example: MacOS 12.2 Logseq Desktop v0.5.9"
     validations:
       required: false
   - type: textarea
@@ -56,11 +53,7 @@ body:
       label: Mobile Platform Information
       description: |
         Would you mind to tell us the system information about your mobile platform?
-      value: |
-        - Device: [e.g. iPhone6]
-        - OS: [e.g. iOS8.1]
-        - Browser [e.g. stock browser, safari]
-        - Version [e.g. 22]
+      placeholder: "example: Android App v0.5.9"
     validations:
       required: false
   - type: textarea
