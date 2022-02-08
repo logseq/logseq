@@ -1,5 +1,4 @@
 (ns frontend.search.db
-  (:refer-clojure :exclude [empty?])
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -8,10 +7,6 @@
             ["fuse.js" :as fuse]))
 
 (defonce indices (atom nil))
-
-(defn empty?
-  [repo]
-  (nil? (get @indices repo)))
 
 (defn block->index
   "Convert a block to the index for searching"
