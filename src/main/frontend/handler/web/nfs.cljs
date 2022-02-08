@@ -174,14 +174,14 @@
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                            (p/let [_ (repo-handler/load-repo-to-db! repo
                                                                     {:first-clone? true
+                                                                     :new-graph?   true
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
                              (state/set-loading-files! repo false)
-                             (and ok-handler (ok-handler))
+                             (when ok-handler (ok-handler))
                              (when (util/electron?)
                                (fs/watch-dir! dir-name))
-                             (state/pub-event! [:graph/added repo])
-                             (db/persist! repo)))))
+                             (db/persist-if-idle! repo)))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))

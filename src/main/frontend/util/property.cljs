@@ -36,8 +36,9 @@
 
 (defn contains-properties?
   [content]
-  (and (string/includes? content properties-start)
-       (util/safe-re-find properties-end-pattern content)))
+  (when content
+    (and (string/includes? content properties-start)
+         (util/safe-re-find properties-end-pattern content))))
 
 (defn remove-empty-properties
   [content]
