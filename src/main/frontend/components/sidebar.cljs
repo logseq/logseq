@@ -424,7 +424,6 @@
 (rum/defc help-button < rum/reactive
   []
   (when-not (state/sub :ui/sidebar-open?)
-    ;; TODO: remove with-context usage
     [:div.cp__sidebar-help-btn
      {:title (t :help-shortcut-title)
       :on-click (fn []

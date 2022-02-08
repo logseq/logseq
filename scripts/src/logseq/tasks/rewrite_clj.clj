@@ -1,4 +1,4 @@
-(ns logseq.rewrite-clj
+(ns logseq.tasks.rewrite-clj
   "Rewrite-clj fns"
   (:require [rewrite-clj.zip :as z]))
 
@@ -10,6 +10,6 @@
       z/sexpr))
 
 (defn var-sexp
-  [[string-var file]]
+  [file string-var]
   (let [zloc (z/of-string (slurp file))]
     (find-symbol-first-right-sexpr zloc (symbol string-var))))

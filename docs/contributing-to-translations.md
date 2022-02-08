@@ -29,23 +29,22 @@ language has compared to others:
 ```sh
 $ bb lang:list
 
+
 |  :locale | :percent-translated | :translation-count |              :language |
 |----------+---------------------+--------------------+------------------------|
-|      :en |                 100 |                383 |                English |
-|   :nb-NO |                  99 |                381 |         Norsk (bokmål) |
-|   :zh-CN |                  96 |                367 |                   简体中文 |
-|      :ru |                  94 |                359 |                Русский |
-|   :pt-BR |                  83 |                319 | Português (Brasileiro) |
-|   :pt-PT |                  81 |                310 |    Português (Europeu) |
-|      :es |                  75 |                286 |                Español |
-| :zh-Hant |                  65 |                250 |                   繁體中文 |
-|      :af |                  60 |                230 |              Afrikaans |
-|      :de |                  56 |                215 |                Deutsch |
-|      :fr |                  45 |                172 |               Français |
+|      :en |                 100 |                494 |                English |
+|   :nb-NO |                  90 |                445 |         Norsk (bokmål) |
+|   :zh-CN |                  87 |                432 |                   简体中文 |
+|      :ru |                  85 |                422 |                Русский |
+|   :pt-BR |                  77 |                382 | Português (Brasileiro) |
+|   :pt-PT |                  76 |                373 |    Português (Europeu) |
+|      :es |                  71 |                349 |                Español |
+| :zh-Hant |                  55 |                272 |                   繁體中文 |
+|      :af |                  51 |                253 |              Afrikaans |
+|      :de |                  48 |                238 |                Deutsch |
+|      :fr |                  39 |                195 |               Français |
 Total: 11
 ```
-
-_Note_: This is only showing `frontend/dicts.cljs` translations for now.
 
 Let's try to get your language translated as close to 100% as you can!
 
@@ -65,8 +64,6 @@ $ bb lang:missing
 |                       :open-new-window |                                            New window |
 ...
 ```
-
-_Note_: This is only showing `frontend/dicts.cljs` translations for now.
 
 Now, add keys for your language, save and rerun the above command. Over time
 you're hoping to have this list drop to zero.
