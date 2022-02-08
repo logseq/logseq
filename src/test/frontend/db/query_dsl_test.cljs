@@ -164,7 +164,7 @@ last-modified-at:: 1609084800002"}]]
         :count 1}
 
        "(page-property parent \"child page 1\")"
-       {:query (dsl/->page-property-query "parent" "child page 1") 
+       {:query (dsl/->page-property-query "parent" "child page 1")
         :count 2}
 
        "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
@@ -476,7 +476,7 @@ last-modified-at:: 1609084800002"}]]
                       (done))))
    :after config/destroy-test-db!})
 
-#_(run-tests)
+#_(cljs.test/run-tests)
 
 (comment
   (require '[clojure.pprint :as pprint])

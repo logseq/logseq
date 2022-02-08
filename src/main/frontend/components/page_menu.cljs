@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]))

@@ -1,7 +1,6 @@
 (ns frontend.context.i18n
   (:require [frontend.dicts :as dicts]
             [frontend.modules.shortcut.dict :as shortcut-dict]
-            [rum.core :as rum]
             [medley.core :refer [deep-merge]]
             [frontend.state :as state]))
 
