@@ -18,7 +18,6 @@
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
-            [frontend.search.db :as search-db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -177,8 +176,7 @@
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)
                              block (db-model/query-block-by-uuid uuid)
-                             content (search-db/block->content block)]
-
+                             content (:block/content block)]
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
 

@@ -141,6 +141,31 @@
      l)
     @vars))
 
+;; TODO: Convert -> fns to rules
+(defn ->property-query
+  ([k v]
+   (->property-query k v '?v))
+  ([k v sym]
+   [['?b :block/properties '?prop]
+    [(list 'missing? '$ '?b :block/name)]
+    [(list 'get '?prop (keyword k)) sym]
+    (list
+     'or
+     [(list '= sym v)]
+     [(list 'contains? sym v)]
+     ;; For integer pages that aren't strings
+     [(list 'contains? sym (str v))])]))
+
+(defn ->page-property-query
+  [k v]
+  [['?p :block/name]
+   ['?p :block/properties '?prop]
+   [(list 'get '?prop (keyword k)) '?v]
+   (list
+    'or
+    [(list '= '?v v)]
+    [(list 'contains? '?v v)])])
+
 (defn build-query
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
@@ -269,13 +294,7 @@
              sym (if (= current-filter 'or)
                    '?v
                    (uniq-symbol counter "?v"))]
-         [['?b :block/properties '?prop]
-          [(list 'missing? '$ '?b :block/name)]
-          [(list 'get '?prop (keyword k)) sym]
-          (list
-           'or
-           [(list '= sym v)]
-           [(list 'contains? sym v)])])
+         (->property-query k v sym))
 
        (and (= 'property fe)
             (= 2 (count e)))
@@ -346,15 +365,8 @@
              k (string/replace (name k) "_" "-")]
          (if-not (nil? v)
            (let [v (text/parse-property k v)
-                 v (if (coll? v) (first v) v)
-                 sym '?v]
-             [['?p :block/name]
-              ['?p :block/properties '?prop]
-              [(list 'get '?prop (keyword k)) sym]
-              (list
-               'or
-               [(list '= sym v)]
-               [(list 'contains? sym v)])])
+                 v (if (coll? v) (first v) v)]
+             (->page-property-query k v))
            [['?p :block/name]
             ['?p :block/properties '?prop]
             [(list 'get '?prop (keyword k)) '?prop-v]

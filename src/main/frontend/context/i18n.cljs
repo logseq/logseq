@@ -15,26 +15,16 @@
 (defn fetch-local-language []
   (.. js/window -navigator -language))
 
-(rum/defcontext *tongue-context*)
+(defonce translate-dicts (atom {}))
 
-;; FIXME: reactive
-(defonce t
+(defn t
+  [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))
-        set-preferred-language state/set-preferred-language!
-        all-dicts (deep-merge dicts/dicts shortcut-dict/dict)
-        t (partial (dicts/translate all-dicts) preferred-language)]
-    (if (nil? preferred-language)
-      (set-preferred-language (fetch-local-language))
-      :ok)
-    t))
-
-(rum/defc tongue-provider [children]
-  (let [preferred-language (keyword (state/sub :preferred-language))
-        set-preferred-language state/set-preferred-language!
-        all-dicts (deep-merge dicts/dicts shortcut-dict/dict)
-        t (partial (dicts/translate all-dicts) preferred-language)]
-    (if (nil? preferred-language)
-      (set-preferred-language (fetch-local-language))
-      :ok)
-    (rum/bind-context [*tongue-context* [t preferred-language set-preferred-language]]
-                      children)))
+        _ (when (nil? preferred-language)
+            (state/set-preferred-language! (fetch-local-language)))
+        dicts (or (get @translate-dicts preferred-language)
+                  (let [result (some-> (deep-merge dicts/dicts shortcut-dict/dict)
+                                       dicts/translate)]
+                    (swap! translate-dicts assoc preferred-language result)
+                    result))]
+    (apply (partial dicts preferred-language) args)))
