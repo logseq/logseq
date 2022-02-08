@@ -62,8 +62,6 @@
             [frontend.components.query-table :as query-table]
             [frontend.mobile.util :as mobile-util]))
 
-;; TODO: remove rum/with-context because it'll make reactive queries not working
-
 (defn safe-read-string
   ([s]
    (safe-read-string s true))
