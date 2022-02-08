@@ -70,26 +70,29 @@
     (when (:block/uuid block)
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
-          {:selection-start (util/get-selection-start input)
-           :selection-end (util/get-selection-end input)
-           :format (:block/format block)
-           :value (gobj/get input "value")
-           :block block
-           :edit-id edit-id
-           :input input})))))
-
-(defn- format-new-selection
-  [{:keys [selection-start selection-end value]}]
-  (let [selected (subs value selection-start selection-end)]
-    [(+ selection-start (count (take-while #(= " " %) selected)))
-     (- selection-end (count (take-while #(= " " %) (reverse selected))))]))
+          (let [selection-start (util/get-selection-start input)
+                selection-end (util/get-selection-end input)
+                value (gobj/get input "value")
+                selection (when (not= selection-start selection-end)
+                            (subs value selection-start selection-end))
+                selection-start (+ selection-start
+                                   (count (take-while #(= " " %) selection)))
+                selection-end (- selection-end
+                                 (count (take-while #(= " " %) (reverse selection))))]
+            {:selection-start selection-start
+             :selection-end selection-end
+             :selection (some-> selection
+                                string/trim)
+             :format (:block/format block)
+             :value value
+             :block block
+             :edit-id edit-id
+             :input input}))))))
 
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
-    (let [{:keys [format value edit-id input]} m
-          [selection-start selection-end] (format-new-selection m)
-          empty-selection? (= selection-start selection-end)
+    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           pattern (pattern-fn format)
           pattern-count (count pattern)
           pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
@@ -101,14 +104,14 @@
           postfix (if already-wrapped?
                     (subs value (+ selection-end pattern-count))
                     (subs value selection-end))
-          inner-value (cond-> (subs value selection-start selection-end)
+          inner-value (cond-> selection
                         (not already-wrapped?)
                         (#(str pattern % pattern)))
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
         already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
-        empty-selection? (cursor/move-cursor-to input (+ selection-end pattern-count))
+        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
         :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
 
 (defn bold-format! []
@@ -130,10 +133,9 @@
    (html-link-format! nil))
   ([link]
    (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format value edit-id input]} m
+    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           cur-pos (cursor/pos input)
           empty-selection? (= selection-start selection-end)
-          selection (subs value selection-start selection-end)
           selection-link? (and selection (or (util/starts-with? selection "http://")
                                              (util/starts-with? selection "https://")))
           [content forward-pos] (cond
@@ -2511,10 +2513,10 @@
                                         (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
-              {:keys [selection-start selection-end value]} selection]
-          (if (not= selection-start selection-end)
+              {:keys [selection-start selection-end selection]} selection]
+          (if selection
             (do (delete-and-update input selection-start selection-end)
-                (insert (util/format "[[%s]]" value)))
+                (insert (util/format "[[%s]]" selection)))
             (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
               (let [{:keys [raw-content start end]} embed-ref]
                 (delete-and-update input start end)
