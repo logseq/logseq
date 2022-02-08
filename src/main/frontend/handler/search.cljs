@@ -61,9 +61,12 @@
      (state/set-search-mode! :global))))
 
 (defn rebuild-indices!
-  []
-  (println "Starting to rebuild search indices!")
-  (p/let [_ (search/rebuild-indices!)]
-    (notification-handler/show!
-     "Search indices rebuilt successfully!"
-     :success)))
+  ([]
+   (rebuild-indices! false))
+  ([notice?]
+   (println "Starting to rebuild search indices!")
+   (p/let [_ (search/rebuild-indices!)]
+     (when notice?
+       (notification-handler/show!
+        "Search indices rebuilt successfully!"
+        :success)))))

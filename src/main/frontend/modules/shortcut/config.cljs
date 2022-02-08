@@ -295,7 +295,7 @@
 
    :search/re-index                {:desc    "Rebuild search index"
                                     :binding "mod+c mod+s"
-                                    :fn      search-handler/rebuild-indices!}
+                                    :fn      (fn [_] (search-handler/rebuild-indices! true))}
 
    :sidebar/open-today-page        {:desc    "Open today's page in the right sidebar"
                                     :binding (if mac? "mod+shift+j" "alt+shift+j")
