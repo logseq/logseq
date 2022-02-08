@@ -198,7 +198,7 @@
         (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-importing-to-db! false)
+    (state/set-parsing-files! false)
     (state/pub-event! [:graph/added repo-url])))
 
 (defn- parse-files-and-create-default-files!
@@ -212,26 +212,34 @@
       (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))
     (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))
 
+(defn- update-parsing-state!
+  [repo-url refresh?]
+  (state/set-loading-files! repo-url false)
+  (when-not refresh? (state/set-parsing-files! true)))
+
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts refresh?] :as opts
                    :or {re-render? true}}]
-  (state/set-loading-files! repo-url false)
-  (when-not refresh? (state/set-importing-to-db! true))
-  (let [file-paths (map :file/path files)
-        metadata-file (config/get-metadata-path)
-        metadata-content (some #(when (= (:file/path %) metadata-file)
-                                  (:file/content %)) files)
-        metadata (when metadata-content
-                   (common-handler/read-metadata! metadata-content))
-        db-encrypted? (:db/encrypted? metadata)
-        db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
-    (if db-encrypted?
-      (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
-        (state/set-state! :encryption/graph-parsing? true)
-        (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
-                           db-encrypted-secret
-                           close-fn]))
-      (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))
+  (update-parsing-state! repo-url refresh?)
+  ;; TODO: parsing rotating ui will be not refreshed without setTimeout
+  (js/setTimeout
+   (fn []
+     (let [file-paths (map :file/path files)
+           metadata-file (config/get-metadata-path)
+           metadata-content (some #(when (= (:file/path %) metadata-file)
+                                     (:file/content %)) files)
+           metadata (when metadata-content
+                      (common-handler/read-metadata! metadata-content))
+           db-encrypted? (:db/encrypted? metadata)
+           db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
+       (if db-encrypted?
+         (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
+           (state/set-state! :encryption/graph-parsing? true)
+           (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                              db-encrypted-secret
+                              close-fn]))
+         (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))
+   100))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]}]

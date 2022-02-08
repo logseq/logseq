@@ -15,7 +15,7 @@
             [frontend.mixins :as mixins]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
             [frontend.modules.shortcut.core :as shortcut]
@@ -85,146 +85,145 @@
 
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [pages (when-not all? (map (fn [page]
-                                      (let [alias (model/get-redirect-page-name page)]
-                                        (cond->
-                                          {:type :page
-                                           :data page}
-                                          (and alias
-                                               (not= (util/page-name-sanity-lc page)
-                                                     (util/page-name-sanity-lc alias)))
-                                          (assoc :alias alias))))
-                                 (remove nil? pages)))
-          files (when-not all? (map (fn [file] {:type :file :data file}) files))
-          blocks (map (fn [block] {:type :block :data block}) blocks)
-          search-mode (state/sub :search/mode)
-          new-page (if (or
-                        (and (seq pages)
-                             (= (util/safe-page-name-sanity-lc search-q)
-                                (util/safe-page-name-sanity-lc (:data (first pages)))))
-                        (nil? result)
-                        all?)
-                     []
-                     [{:type :new-page}])
-          result (if config/publishing?
-                   (concat pages files blocks)
-                   (concat new-page pages files blocks))
-          result (if (= search-mode :graph)
-                   [{:type :graph-add-filter}]
-                   result)
-          repo (state/get-current-repo)]
-      [:div
-       (ui/auto-complete
-        result
-        {:class "search-results"
-         :on-chosen (fn [{:keys [type data alias]}]
-                      (search-handler/add-search-to-recent! repo search-q)
-                      (search-handler/clear-search!)
-                      (case type
-                        :graph-add-filter
-                        (state/add-graph-search-filter! search-q)
+  (let [pages (when-not all? (map (fn [page]
+                                    (let [alias (model/get-redirect-page-name page)]
+                                      (cond->
+                                        {:type :page
+                                         :data page}
+                                        (and alias
+                                             (not= (util/page-name-sanity-lc page)
+                                                   (util/page-name-sanity-lc alias)))
+                                        (assoc :alias alias))))
+                               (remove nil? pages)))
+        files (when-not all? (map (fn [file] {:type :file :data file}) files))
+        blocks (map (fn [block] {:type :block :data block}) blocks)
+        search-mode (state/sub :search/mode)
+        new-page (if (or
+                      (and (seq pages)
+                           (= (util/safe-page-name-sanity-lc search-q)
+                              (util/safe-page-name-sanity-lc (:data (first pages)))))
+                      (nil? result)
+                      all?)
+                   []
+                   [{:type :new-page}])
+        result (if config/publishing?
+                 (concat pages files blocks)
+                 (concat new-page pages files blocks))
+        result (if (= search-mode :graph)
+                 [{:type :graph-add-filter}]
+                 result)
+        repo (state/get-current-repo)]
+    [:div
+     (ui/auto-complete
+      result
+      {:class "search-results"
+       :on-chosen (fn [{:keys [type data alias]}]
+                    (search-handler/add-search-to-recent! repo search-q)
+                    (search-handler/clear-search!)
+                    (case type
+                      :graph-add-filter
+                      (state/add-graph-search-filter! search-q)
 
-                        :new-page
-                        (page-handler/create! search-q)
+                      :new-page
+                      (page-handler/create! search-q)
 
-                        :page
-                        (let [data (or alias data)]
-                          (route/redirect-to-page! data))
+                      :page
+                      (let [data (or alias data)]
+                        (route/redirect-to-page! data))
 
-                        :file
-                        (route/redirect! {:to :file
-                                          :path-params {:path data}})
+                      :file
+                      (route/redirect! {:to :file
+                                        :path-params {:path data}})
 
-                        :block
-                        (let [repo (state/get-current-repo)
-                              block-uuid (uuid (:block/uuid data))
-                              collapsed? (db/parents-collapsed? repo block-uuid)
-                              page (:block/page (db/entity [:block/uuid block-uuid]))
-                              long-page? (block-handler/long-page? repo (:db/id page))]
-                          (if page
-                            (if (or collapsed? long-page?)
-                             (route/redirect-to-page! block-uuid)
-                             (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
-                            ;; search indice outdated
-                            (println "[Error] Block page missing: "
-                                     {:block-id block-uuid
-                                      :block (db/pull [:block/uuid block-uuid])})))
-                        nil)
-                      (state/close-modal!))
-         :on-shift-chosen (fn [{:keys [type data alias]}]
-                            (search-handler/add-search-to-recent! repo search-q)
-                            (case type
-                              :page
-                              (let [data (or alias data)
-                                    page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))]
-                                (when page
-                                  (state/sidebar-add-block!
-                                   (state/get-current-repo)
-                                   (:db/id page)
-                                   :page
-                                   {:page page})))
-
-                              :block
-                              (let [block-uuid (uuid (:block/uuid data))
-                                    block (db/entity [:block/uuid block-uuid])]
+                      :block
+                      (let [repo (state/get-current-repo)
+                            block-uuid (uuid (:block/uuid data))
+                            collapsed? (db/parents-collapsed? repo block-uuid)
+                            page (:block/page (db/entity [:block/uuid block-uuid]))
+                            long-page? (block-handler/long-page? repo (:db/id page))]
+                        (if page
+                          (if (or collapsed? long-page?)
+                            (route/redirect-to-page! block-uuid)
+                            (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+                          ;; search indice outdated
+                          (println "[Error] Block page missing: "
+                                   {:block-id block-uuid
+                                    :block (db/pull [:block/uuid block-uuid])})))
+                      nil)
+                    (state/close-modal!))
+       :on-shift-chosen (fn [{:keys [type data alias]}]
+                          (search-handler/add-search-to-recent! repo search-q)
+                          (case type
+                            :page
+                            (let [data (or alias data)
+                                  page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))]
+                              (when page
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
-                                 (:db/id block)
-                                 :block
-                                 block))
+                                 (:db/id page)
+                                 :page
+                                 {:page page})))
 
-                              :new-page
-                              (page-handler/create! search-q)
+                            :block
+                            (let [block-uuid (uuid (:block/uuid data))
+                                  block (db/entity [:block/uuid block-uuid])]
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id block)
+                               :block
+                               block))
 
-                              :file
-                              (route/redirect! {:to :file
-                                                :path-params {:path data}})
+                            :new-page
+                            (page-handler/create! search-q)
 
-                              nil)
-                            (state/close-modal!))
-         :item-render (fn [{:keys [type data alias]}]
-                        (let [search-mode (state/get-search-mode)
-                              data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
-                          [:div {:class "py-2"} (case type
-                                                  :graph-add-filter
-                                                  [:b search-q]
+                            :file
+                            (route/redirect! {:to :file
+                                              :path-params {:path data}})
 
-                                                  :new-page
-                                                  [:div.text.font-bold (str (t :new-page) ": ")
-                                                   [:span.ml-1 (str "\"" search-q "\"")]]
+                            nil)
+                          (state/close-modal!))
+       :item-render (fn [{:keys [type data alias]}]
+                      (let [search-mode (state/get-search-mode)
+                            data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
+                        [:div {:class "py-2"} (case type
+                                                :graph-add-filter
+                                                [:b search-q]
 
-                                                  :page
-                                                  [:span {:data-page-ref data}
-                                                   (when alias
-                                                     (let [target-original-name (model/get-page-original-name alias)]
-                                                       [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-                                                   (search-result-item "Page" (highlight-exact-query data search-q))]
+                                                :new-page
+                                                [:div.text.font-bold (str (t :new-page) ": ")
+                                                 [:span.ml-1 (str "\"" search-q "\"")]]
 
-                                                  :file
-                                                  (search-result-item "File" (highlight-exact-query data search-q))
+                                                :page
+                                                [:span {:data-page-ref data}
+                                                 (when alias
+                                                   (let [target-original-name (model/get-page-original-name alias)]
+                                                     [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
+                                                 (search-result-item "Page" (highlight-exact-query data search-q))]
 
-                                                  :block
-                                                  (let [{:block/keys [page uuid]} data  ;; content here is normalized
-                                                        page (util/get-page-original-name page)
-                                                        repo (state/sub :git/current-repo)
-                                                        format (db/get-page-format page)
-                                                        block (model/query-block-by-uuid uuid)
-                                                        content (:block/content block)]
-                                                    [:span {:data-block-ref uuid}
-                                                      (search-result-item "Block"
-                                                        (block-search-result-item repo uuid format content search-q search-mode))])
+                                                :file
+                                                (search-result-item "File" (highlight-exact-query data search-q))
 
-                                                  nil)]))})
-       (when (and has-more? (util/electron?) (not all?))
-         [:div.px-2.py-4.search-more
-          [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
-                                   :on-click (fn []
-                                               (when-not (string/blank? search-q)
-                                                 (search-handler/search (state/get-current-repo) search-q {:limit 1000
-                                                                                                           :more? true})
-                                                 (search-handler/clear-search!)))}
-           (t :more)]])])))
+                                                :block
+                                                (let [{:block/keys [page uuid]} data  ;; content here is normalized
+                                                      page (util/get-page-original-name page)
+                                                      repo (state/sub :git/current-repo)
+                                                      format (db/get-page-format page)
+                                                      block (model/query-block-by-uuid uuid)
+                                                      content (:block/content block)]
+                                                  [:span {:data-block-ref uuid}
+                                                   (search-result-item "Block"
+                                                                       (block-search-result-item repo uuid format content search-q search-mode))])
+
+                                                nil)]))})
+     (when (and has-more? (util/electron?) (not all?))
+       [:div.px-2.py-4.search-more
+        [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
+                                 :on-click (fn []
+                                             (when-not (string/blank? search-q)
+                                               (search-handler/search (state/get-current-repo) search-q {:limit 1000
+                                                                                                         :more? true})
+                                               (search-handler/clear-search!)))}
+         (t :more)]])]))
 
 (rum/defc recent-search-and-pages
   [in-page-search?]
@@ -313,58 +312,56 @@
         search-mode (state/sub :search/mode)
         timeout 300
         in-page-search? (= search-mode :page)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.cp__palette.cp__palette-main
-       (when (mobile-util/is-native-platform?)
-         {:style {:min-height "50vh"}})
+    [:div.cp__palette.cp__palette-main
+     (when (mobile-util/is-native-platform?)
+       {:style {:min-height "50vh"}})
 
-       [:div.input-wrap
-        [:input.cp__palette-input.w-full
-         {:type          "text"
-          :auto-focus    true
-          :placeholder   (case search-mode
-                           :graph
-                           (t :graph-search)
-                           :page
-                           (t :page-search)
-                           (t :search))
-          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-          :value         search-q
-          :on-change     (fn [e]
-                           (when @search-timeout
-                             (js/clearTimeout @search-timeout))
-                           (let [value (util/evalue e)
-                                 is-composing? (util/onchange-event-is-composing? e)] ;; #3199
-                             (if (and (string/blank? value) (not is-composing?))
-                               (search-handler/clear-search! false)
-                               (let [search-mode (state/get-search-mode)
-                                     opts (if (= :page search-mode)
-                                            (when-let [current-page (or (state/get-current-page)
-                                                                        (date/today))]
-                                              {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
-                                            {})]
-                                 (state/set-q! value)
-                                 (reset! search-timeout
-                                         (js/setTimeout
-                                          (fn []
-                                            (if (= :page search-mode)
-                                              (search-handler/search (state/get-current-repo) value opts)
-                                              (search-handler/search (state/get-current-repo) value)))
-                                          timeout))))))}]]
-       [:div.search-results-wrap
-        (if (seq search-result)
-          (search-auto-complete search-result search-q false)
-          (recent-search-and-pages in-page-search?))]])))
+     [:div.input-wrap
+      [:input.cp__palette-input.w-full
+       {:type          "text"
+        :auto-focus    true
+        :placeholder   (case search-mode
+                         :graph
+                         (t :graph-search)
+                         :page
+                         (t :page-search)
+                         (t :search))
+        :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+        :value         search-q
+        :on-change     (fn [e]
+                         (when @search-timeout
+                           (js/clearTimeout @search-timeout))
+                         (let [value (util/evalue e)
+                               is-composing? (util/onchange-event-is-composing? e)] ;; #3199
+                           (if (and (string/blank? value) (not is-composing?))
+                             (search-handler/clear-search! false)
+                             (let [search-mode (state/get-search-mode)
+                                   opts (if (= :page search-mode)
+                                          (when-let [current-page (or (state/get-current-page)
+                                                                      (date/today))]
+                                            {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
+                                          {})]
+                               (state/set-q! value)
+                               (reset! search-timeout
+                                       (js/setTimeout
+                                        (fn []
+                                          (if (= :page search-mode)
+                                            (search-handler/search (state/get-current-repo) value opts)
+                                            (search-handler/search (state/get-current-repo) value)))
+                                        timeout))))))}]]
+     [:div.search-results-wrap
+      (if (seq search-result)
+        (search-auto-complete search-result search-q false)
+        (recent-search-and-pages in-page-search?))]]))
 
 (rum/defc more < rum/reactive
   [route]
   (let [search-q (get-in route [:path-params :q])
         search-result (state/sub :search/more-result)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#search.flex-1.flex
-       [:div.inner
-        [:h1.title (t :search/result-for) [:i search-q]]
-        [:p.font-medium.tx-sm (str (count (:blocks search-result)) " " (t :search/items))]
-        [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
-         (when-not (string/blank? search-q)
-           (search-auto-complete search-result search-q true))]]])))
+    [:div#search.flex-1.flex
+     [:div.inner
+      [:h1.title (t :search/result-for) [:i search-q]]
+      [:p.font-medium.tx-sm (str (count (:blocks search-result)) " " (t :search/items))]
+      [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
+       (when-not (string/blank? search-q)
+         (search-auto-complete search-result search-q true))]]]))

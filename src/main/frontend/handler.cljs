@@ -26,7 +26,6 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [frontend.util.pool :as pool]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -237,7 +236,6 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (pool/init-parser-pool!)
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)
