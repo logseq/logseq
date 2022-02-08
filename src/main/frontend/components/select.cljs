@@ -4,7 +4,7 @@
   new select-type, set :ui/open-select to the select-type. See
   :graph/open command for an example."
   (:require [frontend.modules.shortcut.core :as shortcut]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -35,26 +35,25 @@
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])}}]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [input (::input state)]
-      [:div.cp__select.cp__select-main
-       [:div.input-wrap
-        [:input.cp__select-input.w-full
-         {:type        "text"
-          :placeholder (t prompt-key)
-          :auto-focus  true
-          :value       @input
-          :on-change   (fn [e] (reset! input (util/evalue e)))}]]
+  (let [input (::input state)]
+    [:div.cp__select.cp__select-main
+     [:div.input-wrap
+      [:input.cp__select-input.w-full
+       {:type        "text"
+        :placeholder (t prompt-key)
+        :auto-focus  true
+        :value       @input
+        :on-change   (fn [e] (reset! input (util/evalue e)))}]]
 
-       [:div.item-results-wrap
-        (ui/auto-complete
-         (search/fuzzy-search items @input :limit limit :extract-fn :value)
-         {:item-render render-item
-          :class       "cp__select-results"
-          :on-chosen   (fn [x]
-                         (state/close-modal!)
-                         (on-chosen x))
-          :empty-placeholder (empty-placeholder t)})]])))
+     [:div.item-results-wrap
+      (ui/auto-complete
+       (search/fuzzy-search items @input :limit limit :extract-fn :value)
+       {:item-render render-item
+        :class       "cp__select-results"
+        :on-chosen   (fn [x]
+                       (state/close-modal!)
+                       (on-chosen x))
+        :empty-placeholder (empty-placeholder t)})]]))
 
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new

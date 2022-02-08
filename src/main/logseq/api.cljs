@@ -507,7 +507,7 @@
                         ;; attached shallow children
                         (assoc block :block/children
                           (map #(list :uuid (get-in % [:data :block/uuid]))
-                            (outliner/get-children uuid))))]
+                            (db/get-block-immediate-children repo uuid))))]
             (bean/->js (normalize-keyword-for-json block))))))))
 
 (def ^:export get_current_block

@@ -3120,8 +3120,7 @@
   [block id search-timeout]
   (fn [e]
     (if (state/sub :editor/show-block-search?)
-      (let [blocks-count (or (db/blocks-count) 0)
-            timeout (if (> blocks-count 2000) 300 100)]
+      (let [timeout 300]
         (when @search-timeout
           (js/clearTimeout @search-timeout))
         (reset! search-timeout

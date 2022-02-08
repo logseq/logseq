@@ -143,7 +143,7 @@
       :tags "foo" "foo"
       :tags "foo, bar" #{"foo" "bar"}
       :tags "foo,bar" #{"foo" "bar"}
-      :tags "[[foo]]" "[[foo]]"
+      :tags "[[foo]]" #{"foo"}
       :tags "[[foo]] [[bar]]" #{"foo" "bar"}
       :tags "[[foo]], [[bar]]" #{"foo" "bar"}
       :tags "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
