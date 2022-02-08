@@ -253,10 +253,6 @@
   [path]
   (util/starts-with? path default-draw-directory))
 
-(defn journal?
-  [path]
-  (string/includes? path (str (get-journals-directory) "/")))
-
 (defonce local-repo "local")
 
 (defn demo-graph?

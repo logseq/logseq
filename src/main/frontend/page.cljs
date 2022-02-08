@@ -3,8 +3,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.components.sidebar :as sidebar]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.context.i18n :as i18n]))
+            [frontend.handler.plugin :as plugin-handler]))
 
 (rum/defc route-view
   [view route-match]
@@ -32,14 +31,13 @@
                      (teardown)))}
   []
   (when-let [route-match (state/sub :route-match)]
-    (i18n/tongue-provider
-     (let [route-name (get-in route-match [:data :name])]
-       (when-let [view (:view (:data route-match))]
-         (if (= :draw route-name)
-           (view route-match)
-           (sidebar/sidebar
-            route-match
-            (view route-match))))))))
+    (let [route-name (get-in route-match [:data :name])]
+      (when-let [view (:view (:data route-match))]
+        (if (= :draw route-name)
+          (view route-match)
+          (sidebar/sidebar
+           route-match
+           (view route-match)))))))
 
         ;; FIXME: disable for now
         ;; (let [route-name (get-in route-match [:data :name])
