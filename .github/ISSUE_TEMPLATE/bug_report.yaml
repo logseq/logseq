@@ -55,7 +55,9 @@ body:
       label: Mobile Platform Information
       description: |
         Would you mind to tell us the system information about your mobile platform?
-      placeholder: "example: Android App v0.5.9"
+      placeholder: |
+        Device, OS version, Browser or App, Logseq App version
+        example: iPhone6, iOS8.1, App, v0.5.9
     validations:
       required: false
   - type: textarea
