@@ -44,7 +44,9 @@ body:
       label: Desktop Platform Information
       description: |
         Would you mind to tell us the system information about your desktop platform?
-      placeholder: "example: MacOS 12.2 Logseq Desktop v0.5.9"
+      placeholder: |
+        OS version, Browser or App, Logseq App version
+        example: MacOS 12.2, App, v0.5.9
     validations:
       required: false
   - type: textarea
