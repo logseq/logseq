@@ -97,7 +97,7 @@
                                                      (.stopPropagation e))}
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
-          [:div.extensions__code-calc-output-line {:key i}
+          [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
            [:span (cond
                     (nil? line)           ""
                     (failure? line) "?"
