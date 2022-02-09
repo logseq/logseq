@@ -1418,7 +1418,6 @@
                     has-children-blocks?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
-        block? (:block? config)
         empty-content? (block-content-empty? block)]
     [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
@@ -1430,7 +1429,7 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (if (or ref? block?)
+                     (if ref?
                        (state/toggle-collapsed-block! uuid)
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
@@ -2170,13 +2169,27 @@
      children)
     (distinct @refs)))
 
+(defn- root-block?
+  [config block]
+  (and (:block? config)
+       (util/collapsed? block)
+       (= (:id config)
+          (str (:block/uuid block)))))
+
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
-           (let [[config block] (:rum/args state)]
-             (when (and (nil? (state/get-collapsed (:block/uuid block)))
-                        (or (:ref? config) (:block? config)))
-               (state/set-collapsed-block! (:block/uuid block)
-                                           (editor-handler/block-default-collapsed? block config)))
+           (let [[config block] (:rum/args state)
+                 block-id (:block/uuid block)]
+             (cond
+               (:ref? config)
+               (state/set-collapsed-block! block-id
+                                           (editor-handler/block-default-collapsed? block config))
+
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
+               :else
+               nil)
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
@@ -2201,11 +2214,14 @@
                  config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        ref? (boolean (:ref? config))
-        block? (boolean (:block? config))
-        collapsed? (if (or ref? block?)
+        ref? (:ref? config)
+        db-collapsed? (util/collapsed? block)
+        collapsed? (cond
+                     (or ref? (root-block? config block))
                      (state/sub-collapsed uuid)
-                     (util/collapsed? block))
+
+                     :else
+                     db-collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2858,7 +2874,7 @@
 
 
 (defn- get-segment
-  [config flat-blocks idx blocks->vec-tree]
+  [_config flat-blocks idx blocks->vec-tree]
   (let [new-idx (if (< idx block-handler/initial-blocks-length)
                   block-handler/initial-blocks-length
                   (+ idx block-handler/step-loading-blocks))

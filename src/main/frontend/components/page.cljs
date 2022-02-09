@@ -46,7 +46,7 @@
     (if block-id
       (when-let [root-block (db/pull [:block/uuid block-id])]
         (let [blocks (-> (db/get-block-and-children repo block-id)
-                         (model/sort-blocks root-block {:block? true}))]
+                         (model/sort-blocks root-block {}))]
           (cons root-block blocks)))
       (db/get-page-blocks repo page-name))))
 
@@ -65,11 +65,7 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:init (fn [state]
-           (when-let [block-id (last (:rum/args state))]
-             (state/set-collapsed-block! block-id false))
-           state)
-   :did-mount  open-first-block!
+  {:did-mount  open-first-block!
    :did-update open-first-block!}
   [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
@@ -259,78 +255,78 @@
                    (db/get-page-format page))
           journal? (db/journal-page? page-name)
           fmt-journal? (boolean (date/journal-title->int page-name))
-          sidebar? (:sidebar? option)]
-      (let [route-page-name path-page-name
-            page (if block?
-                   (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
-                        (db/entity repo))
-                   (do
-                     (when-not (db/entity repo [:block/name page-name])
-                       (let [m (format-block/page-name->map path-page-name true)]
-                         (db/transact! repo [m])))
-                     (db/pull [:block/name page-name])))
-            {:keys [icon]} (:block/properties page)
-            page-name (:block/name page)
-            page-original-name (:block/original-name page)
-            title (or page-original-name page-name)
-            icon (or icon "")
-            today? (and
-                    journal?
-                    (= page-name (util/page-name-sanity-lc (date/journal-name))))]
-        [:div.flex-1.page.relative
-         (merge (if (seq (:block/tags page))
-                  (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                    {:data-page-tags (text/build-data-value page-names)})
-                  {})
+          sidebar? (:sidebar? option)
+          route-page-name path-page-name
+          page (if block?
+                 (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
+                      (db/entity repo))
+                 (do
+                   (when-not (db/entity repo [:block/name page-name])
+                     (let [m (format-block/page-name->map path-page-name true)]
+                       (db/transact! repo [m])))
+                   (db/pull [:block/name page-name])))
+          {:keys [icon]} (:block/properties page)
+          page-name (:block/name page)
+          page-original-name (:block/original-name page)
+          title (or page-original-name page-name)
+          icon (or icon "")
+          today? (and
+                  journal?
+                  (= page-name (util/page-name-sanity-lc (date/journal-name))))]
+      [:div.flex-1.page.relative
+       (merge (if (seq (:block/tags page))
+                (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
+                  {:data-page-tags (text/build-data-value page-names)})
+                {})
 
-                {:key path-page-name
-                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+              {:key path-page-name
+               :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
-         [:div.relative
-          (when (and (not sidebar?)
-                     (not block?))
-            [:div.flex.flex-row.space-between
-             [:div.flex-1.flex-row
-              (page-title page-name icon title format fmt-journal?)]
-             (when (not config/publishing?)
-               [:div.flex.flex-row
-                (when plugin-handler/lsp-enabled?
-                  (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar))])])
-          [:div
-           (when (and block? (not sidebar?))
-             (let [config {:id "block-parent"
-                           :block? true}]
-               [:div.mb-4
-                (block/block-parents config repo block-id {:level-limit 3})]))
+       [:div.relative
+        (when (and (not sidebar?)
+                   (not block?))
+          [:div.flex.flex-row.space-between
+           [:div.flex-1.flex-row
+            (page-title page-name icon title format fmt-journal?)]
+           (when (not config/publishing?)
+             [:div.flex.flex-row
+              (when plugin-handler/lsp-enabled?
+                (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                (plugins/hook-ui-items :pagebar))])])
+        [:div
+         (when (and block? (not sidebar?))
+           (let [config {:id "block-parent"
+                         :block? true}]
+             [:div.mb-4
+              (block/block-parents config repo block-id {:level-limit 3})]))
 
-           ;; blocks
-           (let [page (if block?
-                        (db/entity repo [:block/uuid block-id])
-                        page)]
-             (page-blocks-cp repo page {:sidebar? sidebar?}))]]
+         ;; blocks
+         (let [page (if block?
+                      (db/entity repo [:block/uuid block-id])
+                      page)]
+           (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
-         (when-not block?
-           (today-queries repo today? sidebar?))
+       (when-not block?
+         (today-queries repo today? sidebar?))
 
-         (when-not block?
-           (tagged-pages repo page-name))
+       (when-not block?
+         (tagged-pages repo page-name))
 
-         ;; referenced blocks
-         [:div {:key "page-references"}
-          (rum/with-key
-            (reference/references route-page-name false)
-            (str route-page-name "-refs"))]
+       ;; referenced blocks
+       [:div {:key "page-references"}
+        (rum/with-key
+          (reference/references route-page-name false)
+          (str route-page-name "-refs"))]
 
-         (when-not block?
-           [:div
-            (when (not journal?)
-              (hierarchy/structures route-page-name))
+       (when-not block?
+         [:div
+          (when (not journal?)
+            (hierarchy/structures route-page-name))
 
-            ;; TODO: or we can lazy load them
-            (when-not sidebar?
-              [:div {:key "page-unlinked-references"}
-               (reference/unlinked-references route-page-name)])])]))))
+          ;; TODO: or we can lazy load them
+          (when-not sidebar?
+            [:div {:key "page-unlinked-references"}
+             (reference/unlinked-references route-page-name)])])])))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
