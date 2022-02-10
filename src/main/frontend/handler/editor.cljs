@@ -3116,6 +3116,18 @@
     (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
 
+(defn editor-on-height-change!
+  [id]
+  (fn [row-height]
+    (let [input (gdom/getElement id)
+          top (gobj/get (.getBoundingClientRect input) "top")
+          cursor-y (+ top row-height)
+          vw-height (.-height js/window.visualViewport)]
+      (when (<  vw-height (+ cursor-y 40))
+        (let [main-node (gdom/getElement "main-content-container")
+              scroll-top (.-scrollTop main-node)]
+          (set! (.-scrollTop main-node) (+ scroll-top 24)))))))
+
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
