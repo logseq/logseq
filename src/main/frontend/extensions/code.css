@@ -27,6 +27,7 @@
     text-align: right;
 
     &-output-line {
+      height: 1.45em;
       word-break: normal;
     }
   }
@@ -43,6 +44,7 @@
     max-width: var(--ls-main-content-max-width-wide);
     border-radius: 2px;
     line-height: 1.45em;
+    overflow-x: auto;
 
     &:not(.CodeMirror-focused) {
       .CodeMirror-activeline-background {
