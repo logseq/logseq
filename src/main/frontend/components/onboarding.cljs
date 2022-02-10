@@ -5,7 +5,7 @@
             [rum.core :as rum]
             [frontend.ui :as ui]))
 
-(rum/defc intro
+(rum/defc ^:large-vars/cleanup-todo intro
   []
   [:div#logseq-intro.pl-1
    [:div.flex-1

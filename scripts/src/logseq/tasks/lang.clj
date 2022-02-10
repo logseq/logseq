@@ -6,12 +6,13 @@
 
 (defn- get-dicts
   []
-  (dissoc (rewrite-clj/var-sexp "src/main/frontend/dicts.cljs" "dicts")
+  (dissoc (rewrite-clj/metadata-var-sexp "src/main/frontend/dicts.cljs" "dicts")
           :tongue/fallback))
 
 (defn- get-non-en-shortcuts
   []
-  (nth (rewrite-clj/var-sexp "src/main/frontend/modules/shortcut/dict.cljs" "dict")
+  (nth (rewrite-clj/metadata-var-sexp "src/main/frontend/modules/shortcut/dict.cljs"
+                                      "dict")
        3))
 
 ;; unnecessary complexity :(
@@ -22,7 +23,7 @@
 
 (defn- get-en-shortcut-dicts
   []
-  (->> (rewrite-clj/var-sexp
+  (->> (rewrite-clj/metadata-var-sexp
         "src/main/frontend/modules/shortcut/config.cljs"
         "all-default-keyboard-shortcuts")
        (map (fn [[k v]] (vector (decorate-namespace k) (:desc v))))
@@ -30,7 +31,7 @@
 
 (defn- get-en-categories
   []
-  (->> (rewrite-clj/var-sexp
+  (->> (rewrite-clj/metadata-var-sexp
         "src/main/frontend/modules/shortcut/config.cljs"
         "category")
        (map (fn [[k v]] (vector k (:doc (meta v)))))
@@ -55,14 +56,14 @@
         en-count (count (dicts :en))
         langs (get-languages)]
     (->> dicts
-           (map (fn [[locale dicts]]
-                  [locale
-                   (Math/round (* 100.0 (/ (count dicts) en-count)))
-                   (count dicts)
-                   (langs locale)]))
-           (sort-by #(nth % 2) >)
-           (map #(zipmap [:locale :percent-translated :translation-count :language] %))
-           task-util/print-table)))
+         (map (fn [[locale dicts]]
+                [locale
+                 (Math/round (* 100.0 (/ (count dicts) en-count)))
+                 (count dicts)
+                 (langs locale)]))
+         (sort-by #(nth % 2) >)
+         (map #(zipmap [:locale :percent-translated :translation-count :language] %))
+         task-util/print-table)))
 
 (defn- shorten [s length]
   (if (< (count s) length)

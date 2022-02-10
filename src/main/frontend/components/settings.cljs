@@ -514,7 +514,7 @@
     {:left-label "Plug-in system"
      :action (plugin-enabled-switcher t)}))
 
-(rum/defcs settings
+(rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local :general ::active)
   {:will-mount
    (fn [state]

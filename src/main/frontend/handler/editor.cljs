@@ -3003,7 +3003,7 @@
         :else
         nil))))
 
-(defn keyup-handler
+(defn ^:large-vars/cleanup-todo keyup-handler
   [_state input input-id search-timeout]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
