@@ -714,6 +714,7 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
+       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

@@ -3116,6 +3116,20 @@
     (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
 
+(defn editor-on-height-change!
+  [id]
+  (fn [row-height]
+    (let [input (gdom/getElement id)
+          top (gobj/get (.getBoundingClientRect input) "top")
+          cursor-y (+ top row-height)
+          vw-height (.-height js/window.visualViewport)]
+      ;; 40 is mobile toolbar height
+      (when (<  vw-height (+ cursor-y 40))
+        (let [main-node (gdom/getElement "main-content-container")
+              scroll-top (.-scrollTop main-node)]
+          ;; 24 is default line height
+          (set! (.-scrollTop main-node) (+ scroll-top 24)))))))
+
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
