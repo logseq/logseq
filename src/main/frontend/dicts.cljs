@@ -2812,7 +2812,15 @@
            :settings-page/enable-shortcut-tooltip "Habilitar dicas de atalho"
            :tips/all-done "Tudo certo"
            :updater/new-version-install "Uma nova versão foi baixada"
-           :updater/quit-and-install "Reinicie para instalar"}
+           :updater/quit-and-install "Reinicie para instalar"
+           :paginates/pages "Total de {1} paginas"
+           :plugin/open-package "Abrir pacote"
+           :plugin/reload "Reiniciar"
+           :plugin/unpacked "Descompactado"
+           :settings-page/auto-updater "Auto atualizar"
+           :settings-page/custom-configuration "Configuração personalizada"
+           :settings-page/custom-theme "Tema personalizado"
+           :settings-page/edit-custom-css "Editar custom.css"}
 
    :pt-PT {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "partilhar"
