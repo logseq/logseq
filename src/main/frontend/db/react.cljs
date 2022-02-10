@@ -296,6 +296,7 @@
            distinct)))
       [[key]])))
 
+;; TODO: incremental or delayed queries (e.g. only run custom queries when idle)
 (defn refresh!
   [repo-url handler-opts]
   (let [related-keys (get-related-keys handler-opts)

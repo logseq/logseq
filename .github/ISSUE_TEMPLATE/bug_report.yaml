@@ -15,7 +15,7 @@ body:
       label: Reproduce the Bug
       description: |
         Please tell us the steps to reproduce the bug.
-      value: |
+      placeholder: |
         1. Go to '...'
         2. Click on '....'
         3. Scroll down to '....'
@@ -44,10 +44,9 @@ body:
       label: Desktop Platform Information
       description: |
         Would you mind to tell us the system information about your desktop platform?
-      value: |
-        - OS: [e.g. iOS]
-        - Browser [e.g. chrome, safari]
-        - Version [e.g. 22]
+      placeholder: |
+        OS version, Browser or App, Logseq App version
+        example: MacOS 12.2, App, v0.5.9
     validations:
       required: false
   - type: textarea
@@ -56,11 +55,9 @@ body:
       label: Mobile Platform Information
       description: |
         Would you mind to tell us the system information about your mobile platform?
-      value: |
-        - Device: [e.g. iPhone6]
-        - OS: [e.g. iOS8.1]
-        - Browser [e.g. stock browser, safari]
-        - Version [e.g. 22]
+      placeholder: |
+        Device, OS version, Browser or App, Logseq App version
+        example: iPhone6, iOS8.1, App, v0.5.9
     validations:
       required: false
   - type: textarea

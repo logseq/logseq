@@ -17,7 +17,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(defonce state
+(defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
        current-graph (let [graph (storage/get :git/current-repo)]
                        (when graph (ipc/ipc "setCurrentGraph" graph))
@@ -31,8 +31,9 @@
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
+     ;; :repo/loading-files? is only for github repos
      :repo/loading-files?                   {}
-     :repo/importing-to-db?                 nil
+     :repo/parsing-files?                   nil
      :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
@@ -1291,9 +1292,9 @@
   [repo]
   (get-in @state [:repo/loading-files? repo]))
 
-(defn set-importing-to-db!
+(defn set-parsing-files!
   [value]
-  (set-state! :repo/importing-to-db? value))
+  (set-state! :repo/parsing-files? value))
 
 (defn set-editor-last-input-time!
   [repo time]

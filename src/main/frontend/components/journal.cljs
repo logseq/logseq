@@ -19,7 +19,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
@@ -43,14 +43,13 @@
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
     (if (and (mobile-util/is-native-platform?) intro?)
-      (rum/with-context [[t] i18n/*tongue-context*]
-        [:div
-         [:h1.title
-          (t :new-graph)]
+      [:div
+       [:h1.title
+        (t :new-graph)]
 
-         (ui/button
-           (t :open-a-directory)
-           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
+       (ui/button
+         (t :open-a-directory)
+         :on-click #(page-handler/ls-dir-files! shortcut/refresh!))]
       [:div.flex-1.journal.page (cond->
                                   {:class (if intro? "logseq-intro" "")}
                                   data-page-tags

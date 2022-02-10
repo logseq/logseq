@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
             [frontend.search :as search]
@@ -51,31 +51,28 @@
         themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
         _ (reset! *total (count themes))]
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
-
-      [:div.cp__themes-installed
-       {:tab-index -1}
-       [:h1.mb-4.text-2xl.p-1 (t :themes)]
-       (map-indexed
-         (fn [idx opt]
-           (let [current-selected (:selected opt)
-                 plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
-             [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
-              {:key      (str idx (:url opt))
-               :title    (when current-selected "Cancel selected theme")
-               :class    (util/classnames
-                           [{:is-selected current-selected
-                             :is-active   (= idx @*cursor)}])
-               :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
-                              (state/close-modal!))}
-              [:section
-               [:strong.block
-                [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
-                (:name opt)]]
-              [:small.flex-shrink-0.flex.items-center.opacity-10
-               (when current-selected (ui/icon "check"))]]))
-         themes)])))
+    [:div.cp__themes-installed
+     {:tab-index -1}
+     [:h1.mb-4.text-2xl.p-1 (t :themes)]
+     (map-indexed
+       (fn [idx opt]
+         (let [current-selected (:selected opt)
+               plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+           [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
+            {:key      (str idx (:url opt))
+             :title    (when current-selected "Cancel selected theme")
+             :class    (util/classnames
+                         [{:is-selected current-selected
+                           :is-active   (= idx @*cursor)}])
+             :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
+                            (state/close-modal!))}
+            [:section
+             [:strong.block
+              [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
+              (:name opt)]]
+            [:small.flex-shrink-0.flex.items-center.opacity-10
+             (when current-selected (ui/icon "check"))]]))
+       themes)]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -483,44 +480,41 @@
                                [@*sort-by #(compare %2 %1)])
                              filtered-pkgs))]
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div.cp__plugins-marketplace
 
-      [:div.cp__plugins-marketplace
+     (panel-control-tabs
+       t
+       @*search-key *search-key
+       @*category *category
+       @*sort-by *sort-by nil true
+       develop-mode? (::reload state))
 
-       (panel-control-tabs
-         t
-         @*search-key *search-key
-         @*category *category
-         @*sort-by *sort-by nil true
-         develop-mode? (::reload state))
+     (cond
+       (not online?)
+       [:p.flex.justify-center.pt-20.opacity-50
+        (svg/offline 30)]
 
-       (cond
-         (not online?)
-         [:p.flex.justify-center.pt-20.opacity-50
-          (svg/offline 30)]
+       @*fetching
+       [:p.flex.justify-center.pt-20
+        svg/loading]
 
-         @*fetching
-         [:p.flex.justify-center.pt-20
-          svg/loading]
+       @*error
+       [:p.flex.justify-center.pt-20.opacity-50
+        "Remote error: " (.-message @*error)]
 
-         @*error
-         [:p.flex.justify-center.pt-20.opacity-50
-          "Remote error: " (.-message @*error)]
-
-         :else
-         [:div.cp__plugins-marketplace-cnt
-          {:class (util/classnames [{:has-installing (boolean installing)}])}
-          [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-           (for [item sorted-pkgs]
-             (rum/with-key
-               (let [pid (keyword (:id item))
-                     stat (:stat item)]
-                 (plugin-item-card t item
-                                   (get-in item [:settings :disabled]) true *search-key installing
-                                   (and installing (= (keyword (:id installing)) pid))
-                                   (contains? installed-plugins pid) stat nil))
-               (:id item)))]])])))
+       :else
+       [:div.cp__plugins-marketplace-cnt
+        {:class (util/classnames [{:has-installing (boolean installing)}])}
+        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
+         (for [item sorted-pkgs]
+           (rum/with-key
+             (let [pid (keyword (:id item))
+                   stat (:stat item)]
+               (plugin-item-card t item
+                                 (get-in item [:settings :disabled]) true *search-key installing
+                                 (and installing (= (keyword (:id installing)) pid))
+                                 (contains? installed-plugins pid) stat nil))
+             (:id item)))]])]))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
@@ -568,28 +562,25 @@
                               (#(update % 0 (fn [coll] (sort-by :iir coll))))
                               (flatten))
                          filtered-plugins)]
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div.cp__plugins-installed
 
-      [:div.cp__plugins-installed
+     (panel-control-tabs
+       t
+       @*search-key *search-key
+       @*category *category
+       @*filter-by *filter-by
+       selected-unpacked-pkg
+       false develop-mode? nil)
 
-       (panel-control-tabs
-         t
-         @*search-key *search-key
-         @*category *category
-         @*filter-by *filter-by
-         selected-unpacked-pkg
-         false develop-mode? nil)
-
-       [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-        (for [item sorted-plugins]
-          (rum/with-key
-            (let [pid (keyword (:id item))]
-              (plugin-item-card t item
-                                (get-in item [:settings :disabled]) false *search-key updating
-                                (and updating (= (keyword (:id updating)) pid))
-                                true nil (get coming-updates pid)))
-            (:id item)))]])))
+     [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
+      (for [item sorted-plugins]
+        (rum/with-key
+          (let [pid (keyword (:id item))]
+            (plugin-item-card t item
+                              (get-in item [:settings :disabled]) false *search-key updating
+                              (and updating (= (keyword (:id updating)) pid))
+                              true nil (get coming-updates pid)))
+          (:id item)))]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -719,30 +710,27 @@
          (js/setTimeout (fn [] (.focus el)) 100))
       [])
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div.cp__plugins-page
+     {:ref       *el-ref
+      :tab-index "-1"}
+     [:h1 (t :plugins)]
+     (security-warning)
+     [:hr]
 
-      [:div.cp__plugins-page
-       {:ref       *el-ref
-        :tab-index "-1"}
-       [:h1 (t :plugins)]
-       (security-warning)
-       [:hr]
+     [:div.tabs.flex.items-center.justify-center
+      [:div.tabs-inner.flex.items-center
+       (ui/button [:span.it (t :plugin/installed)]
+                  :on-click #(set-active! :installed)
+                  :intent "logseq" :class (if-not market? "active" ""))
 
-       [:div.tabs.flex.items-center.justify-center
-        [:div.tabs-inner.flex.items-center
-         (ui/button [:span.it (t :plugin/installed)]
-                    :on-click #(set-active! :installed)
-                    :intent "logseq" :class (if-not market? "active" ""))
+       (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
+                  :on-click #(set-active! :marketplace)
+                  :intent "logseq" :class (if market? "active" ""))]]
 
-         (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
-                    :on-click #(set-active! :marketplace)
-                    :intent "logseq" :class (if market? "active" ""))]]
-
-       [:div.panels
-        (if market?
-          (marketplace-plugins)
-          (installed-plugins))]])))
+     [:div.panels
+      (if market?
+        (marketplace-plugins)
+        (installed-plugins))]]))
 
 (rum/defcs focused-settings-content
   < rum/reactive
@@ -751,36 +739,34 @@
         nav? (state/sub :plugin/navs-settings?)
         _ (state/sub :plugin/installed-plugins)]
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
-      [:div.cp__plugins-settings.cp__settings-main
-       [:header
-        [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
+    [:div.cp__plugins-settings.cp__settings-main
+     [:header
+      [:h1.title (ui/icon "puzzle") (str " " (or title (t :settings-of-plugins)))]]
 
-       [:div.cp__settings-inner.md:flex
-        {:class (util/classnames [{:no-aside (not nav?)}])}
-        (when nav?
-          [:aside.md:w-64 {:style {:min-width "10rem"}}
-           (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
-             [:ul
-              (for [{:keys [id name title icon]} plugins]
-                [:li
-                 {:class (util/classnames [{:active (= id focused)}])}
-                 [:a.flex.items-center
-                  {:on-click #(do (state/set-state! :plugin/focused-settings id))}
-                  (if (and icon (not (string/blank? icon)))
-                    [:img.icon {:src icon}]
-                    svg/folder)
-                  [:strong.flex-1 (or title name)]]])])])
+     [:div.cp__settings-inner.md:flex
+      {:class (util/classnames [{:no-aside (not nav?)}])}
+      (when nav?
+        [:aside.md:w-64 {:style {:min-width "10rem"}}
+         (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
+           [:ul
+            (for [{:keys [id name title icon]} plugins]
+              [:li
+               {:class (util/classnames [{:active (= id focused)}])}
+               [:a.flex.items-center
+                {:on-click #(do (state/set-state! :plugin/focused-settings id))}
+                (if (and icon (not (string/blank? icon)))
+                  [:img.icon {:src icon}]
+                  svg/folder)
+                [:strong.flex-1 (or title name)]]])])])
 
-        [:article
-         [:div.panel-wrap
-          (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
-            (ui/catch-error
-              [:p.warning.text-lg.mt-5 "Settings schema Error!"]
-              (plugins-settings/settings-container
-                (bean/->clj (.-settingsSchema pl)) pl)))
-          ]]]])))
+      [:article
+       [:div.panel-wrap
+        (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
+          (ui/catch-error
+            [:p.warning.text-lg.mt-5 "Settings schema Error!"]
+            (plugins-settings/settings-container
+              (bean/->clj (.-settingsSchema pl)) pl)))
+        ]]]]))
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]

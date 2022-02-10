@@ -19,7 +19,7 @@
 
 ;; Note – when you change this file, you will need to do a hard reset.
 ;; The commands are registered when the Clojurescript code runs for the first time
-(defonce all-default-keyboard-shortcuts
+(defonce ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:desc    "Date picker: Choose selected day"
                                   :binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -295,7 +295,7 @@
 
    :search/re-index                {:desc    "Rebuild search index"
                                     :binding "mod+c mod+s"
-                                    :fn      search-handler/rebuild-indices!}
+                                    :fn      (fn [_] (search-handler/rebuild-indices! true))}
 
    :sidebar/open-today-page        {:desc    "Open today's page in the right sidebar"
                                     :binding (if mac? "mod+shift+j" "alt+shift+j")
@@ -314,9 +314,17 @@
                                     :binding "mod+shift+p"
                                     :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
 
-   :select-graph/open              {:desc    "Open select graph component"
-                                    :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
+   :graph/open              {:desc    "Select graph to open"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-open))
                                     :binding "mod+shift+g"}
+
+   :graph/remove            {:desc    "Remove a graph"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-remove))
+                                    :binding false}
+
+   :graph/add                      {:desc "Add a graph"
+                                    :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+                                    :binding false}
 
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
@@ -441,7 +449,7 @@
   (reduce into {}
           (map (fn [sym] {sym (get all-default-keyboard-shortcuts sym)}) symbols)))
 
-(defonce config
+(defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker
     (build-category-map [:date-picker/complete
@@ -498,7 +506,9 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
-                          :select-graph/open
+                          :graph/open
+                          :graph/remove
+                          :graph/add
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -574,7 +584,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; Categories for docs purpose
-(def category
+(def ^:large-vars/data-var category
   {:shortcut.category/basics
    ^{:doc "Basics"}
    [:editor/new-block
@@ -680,7 +690,9 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
-    :select-graph/open
+    :graph/open
+    :graph/remove
+    :graph/add
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
