@@ -2977,7 +2977,9 @@
         hashtag?
         (do
           (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (cursor/pos input))
+          (if (= key "#")
+            (state/set-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
+            (state/set-last-pos! (cursor/pos input)))
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (let [sym "$"]
