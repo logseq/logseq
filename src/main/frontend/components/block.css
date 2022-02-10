@@ -386,6 +386,10 @@ html.is-native-android {
   margin: 1.67em 0;
 }
 
+.document-mode .block-children {
+    border-left: 0px solid;
+}
+
 .document-mode .ls-block {
     margin-bottom: 1rem;
 }

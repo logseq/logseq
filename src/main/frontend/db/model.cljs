@@ -15,7 +15,6 @@
             [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [medley.core :as medley]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]))
 
@@ -256,12 +255,6 @@
       conn)
      (flatten))))
 
-(defn get-file-by-path
-  [file-path]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [conn (conn/get-conn repo)]
-      (d/pull conn '[*] [:file/path file-path]))))
-
 (defn get-file
   ([path]
    (get-file (state/get-current-repo) path))
@@ -334,16 +327,6 @@
    (when repo
      (->> (db-utils/pull-many repo '[:block/name] ids)
           (map :block/name)))))
-
-(defn get-page-ids-by-names
-  ([names]
-   (get-page-ids-by-names (state/get-current-repo) names))
-  ([repo names]
-   (when repo
-     (let [lookup-refs (map (fn [name]
-                              [:block/name (util/page-name-sanity-lc name)]) names)]
-       (->> (db-utils/pull-many repo '[:db/id] lookup-refs)
-            (mapv :db/id))))))
 
 (defn get-page-alias-names
   [repo page-name]
@@ -599,7 +582,7 @@
 (defn get-block-parents-v2
   [repo block-id]
   (d/pull (conn/get-conn repo)
-          '[:db/id :block/properties {:block/parent ...}]
+          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
 (defn parents-collapsed?
@@ -664,18 +647,6 @@
           conn
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
-
-(defn get-blocks-by-page
-  [repo id-or-lookup-ref]
-  (when-let [conn (conn/get-conn repo)]
-    (->
-     (d/q
-      '[:find (pull ?block [*])
-        :in $ ?page
-        :where
-        [?block :block/page ?page]]
-      conn id-or-lookup-ref)
-     flatten)))
 
 (defn get-block-children
   "Including nested children."
@@ -933,15 +904,6 @@
                                db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-(defn remove-children!
-  [blocks]
-  (let [parents (->> (mapcat :block/parent blocks)
-                     (map :db/id)
-                     (set))]
-    (if (seq parents)
-      (filter (fn [block] (contains? parents (:db/id block))) blocks)
-      blocks)))
-
 (defn has-children?
   ([block-id]
    (has-children? (state/get-current-repo) block-id))
@@ -951,27 +913,6 @@
        ;; perf: early stop
        (let [result (d/datoms db :avet :block/parent (:db/id block))]
          (boolean (seq result)))))))
-
-;; TODO: improve perf
-(defn with-children-refs
-  [repo blocks]
-  (when-let [conn (conn/get-conn repo)]
-    (when (seq blocks)
-      (let [block-ids (set (map :db/id blocks))
-            refs (d/q
-                  '[:find ?p ?ref
-                    :in $ % ?block-ids
-                    :where
-                    (parent ?p ?b)
-                    [(contains? ?block-ids ?p)]
-                    [?b :block/refs ?ref]]
-                  conn
-                  rules
-                  block-ids)
-            refs (->> (group-by first refs)
-                      (medley/map-vals #(set (map (fn [[_ id]] {:db/id id}) %))))]
-        (map (fn [block] (assoc block :block/children-refs
-                                (get refs (:db/id block)))) blocks)))))
 
 (defn get-page-referenced-blocks-no-cache
   [page-id]
@@ -1022,7 +963,6 @@
                          (sort-by-left-recursive)
                          (remove (fn [block]
                                    (= page-id (:db/id (:block/page block)))))
-                         ;; (with-children-refs repo)
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
                                 (let [k (if (contains? aliases (:db/id k))
@@ -1224,11 +1164,6 @@
   [repo]
   (db-utils/get-key-value repo :db/type))
 
-(defn db-graph?
-  "Is current graph a database graph instead of a graph on plain-text files?"
-  []
-  (= :database (get-db-type (state/get-current-repo))))
-
 (defn get-public-pages
   [db]
   (-> (d/q
@@ -1308,12 +1243,6 @@
        (let [n (count (d/datoms conn :avet :block/uuid))]
          (reset! blocks-count-cache n)
          n)))))
-
-(defn get-all-block-uuids
-  []
-  (when-let [conn (conn/get-conn)]
-    (->> (d/datoms conn :avet :block/uuid)
-         (map :v))))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents
@@ -1433,19 +1362,6 @@
     (when (seq pages)
       (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map util/page-name-sanity-lc pages)))))
 
-(defn remove-all-aliases!
-  [repo]
-  (let [page-ids (->>
-                  (d/q '[:find ?e
-                         :where
-                         [?e :block/alias]]
-                       (conn/get-conn repo))
-                  (apply concat)
-                  (distinct))
-        tx-data (map (fn [page-id] [:db/retract page-id :block/alias]) page-ids)]
-    (when (seq tx-data)
-      (db-utils/transact! repo tx-data))))
-
 (defn set-file-content!
   [repo path content]
   (when (and repo path)
@@ -1520,18 +1436,6 @@
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
 
-(defn get-latest-changed-pages
-  [repo]
-  (->>
-   (d/q
-     '[:find [(pull ?page [:block/name :block/file :block/updated-at]) ...]
-       :where
-       [?page :block/name]]
-     (conn/get-conn repo))
-   (filter :block/file)
-   (sort-by :block/updated-at >)
-   (take 200)))
-
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
           :or {repo (state/get-current-repo)
@@ -1564,12 +1468,6 @@
                         (remove false?)
                         (remove nil?))]
     orphaned-pages))
-
-(defn remove-orphaned-pages!
-  ([repo] (remove-orphaned-pages! repo (get-orphaned-pages {})))
-  ([repo orphaned-pages]
-   (let [transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
-     (db-utils/transact! repo transaction))))
 
 (defn get-block-last-direct-child
   [db-id]

@@ -13,7 +13,6 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.util.marker :as marker]
-            [frontend.db.rules :as rules]
             [frontend.db-schema :as db-schema]
             [frontend.date :as date]))
 
@@ -130,10 +129,6 @@
          (set! (.-state result-atom) result)
          (add-q! k nil nil result-atom identity identity identity))))))
 
-(defn add-rules-to-inputs
-  [inputs]
-  (conj (vec inputs) rules/rules))
-
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
@@ -220,6 +215,7 @@
 
 (defonce current-page-db (atom nil))
 
+;; TODO: incremental or delayed queries (e.g. only run custom queries when idle)
 (defn refresh!
   [repo-url {:keys [tx-data tx-meta]}]
   (when (and repo-url

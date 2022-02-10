@@ -90,15 +90,17 @@
 (defn transact!
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
-  ([repo tx-data]
-   (transact! repo tx-data nil))
+  ([repo-url tx-data]
+   (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
    (when-not config/publishing?
      (let [tx-data (->> (util/remove-nils tx-data)
                         (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (conn/get-conn repo-url false)]
-           (d/transact! conn (vec tx-data) tx-meta)))))))
+           (if tx-meta
+             (d/transact! conn (vec tx-data) tx-meta)
+             (d/transact! conn (vec tx-data)))))))))
 
 (defn get-key-value
   ([key]

@@ -6,15 +6,15 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [datascript.core :as dc]
-            [dommy.core :as d]
+            [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
@@ -61,8 +61,6 @@
             [shadow.loader :as loader]
             [frontend.components.query-table :as query-table]
             [frontend.mobile.util :as mobile-util]))
-
-;; TODO: remove rum/with-context because it'll make reactive queries not working
 
 (defn safe-read-string
   ([s]
@@ -178,78 +176,77 @@
                    (reset! *resizing-image? false)
                    state)}
   [state config title src metadata full_text local?]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [size (get state ::size)]
-      (ui/resize-provider
-       (ui/resize-consumer
-        (cond->
-          {:className "resize image-resize"
-           :onSizeChanged (fn [value]
-                            (when (and (not @*resizing-image?)
-                                       (some? @size)
-                                       (not= value @size))
-                              (reset! *resizing-image? true))
-                            (reset! size value))
-           :onMouseUp (fn []
-                        (when (and @size @*resizing-image?)
-                          (when-let [block-id (:block/uuid config)]
-                            (let [size (bean/->clj @size)]
-                              (editor-handler/resize-image! block-id metadata full_text size))))
-                        (when @*resizing-image?
-                          ;; TODO: need a better way to prevent the clicking to edit current block
-                          (js/setTimeout #(reset! *resizing-image? false) 200)))
-           :onClick (fn [e]
-                      (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
-        [:div.asset-container
-         [:img.rounded-sm.shadow-xl.relative
-          (merge
-           {:loading "lazy"
-            :src     src
-            :title   title}
-           metadata)]
-         [:span.ctl
-          [:a.delete
-           {:title "Delete this image"
-            :on-click
-            (fn [e]
-              (when-let [block-id (:block/uuid config)]
-                (let [confirm-fn (ui/make-confirm-modal
-                                  {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                   :sub-title     (if local? :asset/physical-delete "")
-                                   :sub-checkbox? local?
-                                   :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                    (close-fn)
-                                                    (editor-handler/delete-asset-of-block!
-                                                     {:block-id    block-id
-                                                      :local?      local?
-                                                      :delete-local? (first sub-selected)
-                                                      :repo        (state/get-current-repo)
-                                                      :href        src
-                                                      :title       title
-                                                      :full-text   full_text}))})]
-                  (state/set-modal! confirm-fn)
-                  (util/stop e))))}
-           svg/trash-sm]
+  (let [size (get state ::size)]
+    (ui/resize-provider
+     (ui/resize-consumer
+      (cond->
+        {:className "resize image-resize"
+         :onSizeChanged (fn [value]
+                          (when (and (not @*resizing-image?)
+                                     (some? @size)
+                                     (not= value @size))
+                            (reset! *resizing-image? true))
+                          (reset! size value))
+         :onMouseUp (fn []
+                      (when (and @size @*resizing-image?)
+                        (when-let [block-id (:block/uuid config)]
+                          (let [size (bean/->clj @size)]
+                            (editor-handler/resize-image! block-id metadata full_text size))))
+                      (when @*resizing-image?
+                        ;; TODO: need a better way to prevent the clicking to edit current block
+                        (js/setTimeout #(reset! *resizing-image? false) 200)))
+         :onClick (fn [e]
+                    (when @*resizing-image? (util/stop e)))}
+        (and (:width metadata) (not (util/mobile?)))
+        (assoc :style {:width (:width metadata)}))
+      [:div.asset-container
+       [:img.rounded-sm.shadow-xl.relative
+        (merge
+         {:loading "lazy"
+          :src     src
+          :title   title}
+         metadata)]
+       [:span.ctl
+        [:a.delete
+         {:title "Delete this image"
+          :on-click
+          (fn [e]
+            (when-let [block-id (:block/uuid config)]
+              (let [confirm-fn (ui/make-confirm-modal
+                                {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                 :sub-title     (if local? :asset/physical-delete "")
+                                 :sub-checkbox? local?
+                                 :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                  (close-fn)
+                                                  (editor-handler/delete-asset-of-block!
+                                                   {:block-id    block-id
+                                                    :local?      local?
+                                                    :delete-local? (first sub-selected)
+                                                    :repo        (state/get-current-repo)
+                                                    :href        src
+                                                    :title       title
+                                                    :full-text   full_text}))})]
+                (state/set-modal! confirm-fn)
+                (util/stop e))))}
+         svg/trash-sm]
 
-          [:a.delete.ml-1
-           {:title    "maximize image"
-            :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                        images (to-array images)
-                                        images (if-not (= (count images) 1)
-                                                 (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (. _image querySelector "img")]
-                                                   (cons image (remove #(= image %) images)))
-                                                 images)
-                                        images (for [^js it images] {:src (.-src it)
-                                                                     :w (.-naturalWidth it)
-                                                                     :h (.-naturalHeight it)})]
+        [:a.delete.ml-1
+         {:title    "maximize image"
+          :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
+                                      images (to-array images)
+                                      images (if-not (= (count images) 1)
+                                               (let [^js _image (.closest (.-target e) ".asset-container")
+                                                     image (. _image querySelector "img")]
+                                                 (cons image (remove #(= image %) images)))
+                                               images)
+                                      images (for [^js it images] {:src (.-src it)
+                                                                   :w (.-naturalWidth it)
+                                                                   :h (.-naturalHeight it)})]
 
-                                    (when (seq images)
-                                      (lightbox/preview-images! images))))}
+                                  (when (seq images)
+                                    (lightbox/preview-images! images))))}
 
-           (svg/maximize)]]])))))
+         (svg/maximize)]]]))))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -649,7 +646,7 @@
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
-      (if block
+      (if (and block (:block/content block))
         (let [title [:span {:class "block-ref"}
                      (block-content (assoc config :block-ref? true)
                                     block nil (:block/uuid block)
@@ -709,13 +706,6 @@
     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
       [:div.inline.mr-1 (map-inline {} inline-list)])))
 
-(defn selection-range-in-block? []
-  (and (= "Range" (. (js/window.getSelection) -type))
-       (-> (js/window.getSelection)
-           (.-anchorNode)
-           (.-parentNode)
-           (.closest ".block-content"))))
-
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
@@ -758,9 +748,7 @@
      (if @lite-mode?
        [:div
         [:img.w-full.h-full.absolute
-         {:src (if (util/electron?)
-                 (str (config/get-static-path) "img/tutorial-thumb.jpg")
-                 "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
+         {:src "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg"}]
         [:button
          {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
           :on-click (fn [_] (swap! lite-mode? not))}
@@ -858,12 +846,12 @@
     ["Latex_Fragment" ["Displayed" s]]
     (if html-export?
       (latex/html-export s false true)
-      (latex/latex (str (dc/squuid)) s false true))
+      (latex/latex (str (d/squuid)) s false true))
 
     ["Latex_Fragment" ["Inline" s]]
     (if html-export?
       (latex/html-export s false true)
-      (latex/latex (str (dc/squuid)) s false false))
+      (latex/latex (str (d/squuid)) s false false))
 
     ["Target" s]
     [:a {:id s} s]
@@ -1341,8 +1329,6 @@
     :else
     ""))
 
-(declare blocks-cp)
-
 (rum/defc block-child
   [block]
   block)
@@ -1770,46 +1756,54 @@
          [:div.my-4
           (datetime-comp/date-picker nil nil ts)]))]))
 
+(defn- target-forbidden-edit?
+  [target]
+  (or
+   (dom/has-class? target "forbid-edit")
+   (dom/has-class? target "bullet")
+   (dom/has-class? target "logbook")
+   (util/link? target)
+   (util/time? target)
+   (util/input? target)
+   (util/details-or-summary? target)
+   (and (util/sup? target)
+        (dom/has-class? target "fn"))
+   (dom/has-class? target "image-resize")))
+
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
   (.stopPropagation e)
   (let [target (gobj/get e "target")
-        button (gobj/get e "buttons")]
+        button (gobj/get e "buttons")
+        shift? (gobj/get e "shiftKey")]
     (when (contains? #{1 0} button)
-      (when-not (or
-                 (d/has-class? target "forbid-edit")
-                 (d/has-class? target "bullet")
-                 (d/has-class? target "logbook")
-                 (util/link? target)
-                 (util/time? target)
-                 (util/input? target)
-                 (util/details-or-summary? target)
-                 (and (util/sup? target)
-                      (d/has-class? target "fn"))
-                 (d/has-class? target "image-resize"))
-        (editor-handler/clear-selection!)
-        (editor-handler/unhighlight-blocks!)
-        (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                       cursor-range (util/caret-range (gdom/getElement block-id))
-                       {:block/keys [content format]} block
-                       content (->> content
-                                    (property/remove-built-in-properties format)
-                                    (drawer/remove-logbook))]
-                   ;; save current editing block
-                   (let [{:keys [value] :as state} (editor-handler/get-state)]
-                     (editor-handler/save-block! state value))
-                   (state/set-editing!
-                    edit-input-id
-                    content
-                    block
-                    cursor-range
-                    false))]
-          ;; wait a while for the value of the caret range
-          (if (util/ios?)
-            (f)
-            (js/setTimeout f 5)))
+      (when-not (target-forbidden-edit? target)
+        (if (and shift? (state/get-selection-start-block))
+          (editor-handler/highlight-selection-area! block-id)
+          (do
+            (editor-handler/clear-selection!)
+            (editor-handler/unhighlight-blocks!)
+            (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                           cursor-range (util/caret-range (gdom/getElement block-id))
+                           {:block/keys [content format]} block
+                           content (->> content
+                                        (property/remove-built-in-properties format)
+                                        (drawer/remove-logbook))]
+                       ;; save current editing block
+                       (let [{:keys [value] :as state} (editor-handler/get-state)]
+                         (editor-handler/save-block! state value))
+                       (state/set-editing!
+                        edit-input-id
+                        content
+                        block
+                        cursor-range
+                        false))]
+              ;; wait a while for the value of the caret range
+              (if (util/ios?)
+                (f)
+                (js/setTimeout f 5))
 
-        (when block-id (state/set-selection-start-block! block-id))))))
+              (when block-id (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -1878,10 +1872,11 @@
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :on-mouse-up (fn [_e]
+              :on-mouse-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
-                                    (not (string/includes? content "```")))
+                                    (not (string/includes? content "```"))
+                                    (not (gobj/get e "shiftKey")))
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
@@ -1998,8 +1993,8 @@
 (defn non-dragging?
   [e]
   (and (= (gobj/get e "buttons") 1)
-       (not (d/has-class? (gobj/get e "target") "bullet-container"))
-       (not (d/has-class? (gobj/get e "target") "bullet"))
+       (not (dom/has-class? (gobj/get e "target") "bullet-container"))
+       (not (dom/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
 (rum/defc breadcrumb-fragment
@@ -2126,7 +2121,7 @@
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
-        (d/remove-class! node "hide-inner-bullet"))))
+        (dom/remove-class! node "hide-inner-bullet"))))
   (when (and
          (state/in-selection-mode?)
          (non-dragging? e))
@@ -2140,7 +2135,7 @@
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
-        (d/add-class! node "hide-inner-bullet"))))
+        (dom/add-class! node "hide-inner-bullet"))))
   (when (and (non-dragging? e)
              (not @*resizing-image?))
     (state/into-selection-mode!)))
@@ -2184,8 +2179,7 @@
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
-                                        :block/properties
-                                        :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2651,7 +2645,7 @@
                                   :data-lang language}
                                  code)
             [:div
-             (lazy-editor/editor config (str (dc/squuid)) attr code options)
+             (lazy-editor/editor config (str (d/squuid)) attr code options)
              (let [options (:options options)]
                (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
@@ -2732,7 +2726,7 @@
         ["Math" s]
         (if html-export?
           (latex/html-export s true true)
-          (latex/latex (str (dc/squuid)) s true true))
+          (latex/latex (str (d/squuid)) s true true))
         ["Example" l]
         [:pre.pre-wrap-white-space
          (join-lines l)]
@@ -2758,7 +2752,7 @@
         ["Export" "latex" _options content]
         (if html-export?
           (latex/html-export content true false)
-          (latex/latex (str (dc/squuid)) content true false))
+          (latex/latex (str (d/squuid)) content true false))
 
         ["Custom" "query" _options _result content]
         (try
@@ -2810,12 +2804,12 @@
         (let [content (latex-environment-content name option content)]
           (if html-export?
             (latex/html-export content true true)
-            (latex/latex (str (dc/squuid)) content true true)))
+            (latex/latex (str (d/squuid)) content true true)))
 
         ["Displayed_Math" content]
         (if html-export?
           (latex/html-export content true true)
-          (latex/latex (str (dc/squuid)) content true true))
+          (latex/latex (str (d/squuid)) content true true))
 
         ["Footnote_Definition" name definition]
         (let [id (util/url-encode name)]
@@ -2861,16 +2855,13 @@
         custom-query? (:custom-query? config)]
     (or custom-query? ref?)))
 
-
 ;; TODO: virtual tree for better UX and memory usage reduce
-(def initial-blocks-length 200)
-(def step-loading-blocks 50)
 
 (defn- get-segment
   [flat-blocks idx blocks->vec-tree]
-  (let [new-idx (if (< idx initial-blocks-length)
-                  initial-blocks-length
-                  (+ idx step-loading-blocks))
+  (let [new-idx (if (< idx block-handler/initial-blocks-length)
+                  block-handler/initial-blocks-length
+                  (+ idx block-handler/step-loading-blocks))
         max-idx (count flat-blocks)
         idx (min max-idx new-idx)
         blocks (util/safe-subvec flat-blocks 0 idx)]

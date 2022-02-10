@@ -5,7 +5,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.svg :as svg]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -247,8 +247,7 @@
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen
-       {:class (if sidebar-open? "open" "closed")}
-       (when sidebar-open?
-         (sidebar-inner repo t blocks))])))
+    [:div#right-sidebar.cp__right-sidebar.h-screen
+     {:class (if sidebar-open? "open" "closed")}
+     (when sidebar-open?
+       (sidebar-inner repo t blocks))]))

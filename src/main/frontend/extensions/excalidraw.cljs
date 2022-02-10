@@ -27,8 +27,6 @@
          (util/format "Could not load this invalid excalidraw file")
          :error)))))
 
-(defonce *bounding-width (atom nil))
-
 (defn- update-draw-content-width
   [state]
   (let [el ^js (rum/dom-node state)

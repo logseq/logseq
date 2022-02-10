@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [electron.listener :as el]
-            [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -27,7 +26,6 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [frontend.util.pool :as pool]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -130,6 +128,9 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
+                            (when (and (state/get-current-repo)
+                                       (mobile-util/native-ios?))
+                              (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
@@ -203,7 +204,6 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
-  (state/set-editor-cp! editor/box)
   (command-palette/register-global-shortcut-commands))
 
 (defn start!
@@ -236,7 +236,6 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (pool/init-parser-pool!)
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)

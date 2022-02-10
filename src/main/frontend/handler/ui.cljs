@@ -22,14 +22,6 @@
   (when-let [elem (gdom/getElement "close-left-bar")]
     (.click elem)))
 
-(defn hide-right-sidebar
-  []
-  (state/hide-right-sidebar!))
-
-(defn show-right-sidebar
-  []
-  (state/open-right-sidebar!))
-
 (defn toggle-right-sidebar!
   []
   (state/toggle-sidebar-open?!))
@@ -123,7 +115,7 @@
 
 (defn exec-js-if-exists-&-allowed!
   [t]
-  (when-not mobile/is-native-platform?
+  (when-not (mobile/is-native-platform?)
     (when-let [href (or
                      (state/get-custom-js-link)
                      (config/get-custom-js-path))]

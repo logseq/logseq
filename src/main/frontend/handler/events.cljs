@@ -20,8 +20,12 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
+            [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
@@ -32,7 +36,8 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs :as fs]))
 
 ;; TODO: should we move all events here?
 
@@ -70,12 +75,27 @@
     close-fn)))
 
 (defmethod handle :graph/added [[_ repo]]
-  ;; TODO: add ast/version to db
-  (let [_conn (conn/get-conn repo false)
-        ; ast-version (d/datoms @conn :aevt :ast/version)
-        ]
-    (db/set-key-value repo :ast/version db-schema/ast-version)
-    (srs/update-cards-due-count!)))
+  (db/set-key-value repo :ast/version db-schema/ast-version)
+  (search-handler/rebuild-indices!))
+
+(defn- graph-switch [graph]
+  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
+  (state/set-current-repo! graph)
+  ;; load config
+  (common-handler/reset-config! graph nil)
+  (st/refresh!)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (when-let [dir-name (config/get-repo-dir graph)]
+    (fs/watch-dir! dir-name))
+  (srs/update-cards-due-count!))
+
+(defmethod handle :graph/switch [[_ graph]]
+  (if (outliner-file/writes-finished?)
+    (graph-switch graph)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
@@ -176,7 +196,8 @@
   (when-let [repo (state/get-current-repo)]
     (when (and disk-content db-content
                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
-      (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
+      (state/set-modal! #(diff/local-file repo path disk-content db-content)
+                        {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
   (p/let [content (when content (encrypt/decrypt content))]

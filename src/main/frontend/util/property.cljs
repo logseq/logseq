@@ -36,8 +36,9 @@
 
 (defn contains-properties?
   [content]
-  (and (string/includes? content properties-start)
-       (util/safe-re-find properties-end-pattern content)))
+  (when content
+    (and (string/includes? content properties-start)
+         (util/safe-re-find properties-end-pattern content))))
 
 (defn remove-empty-properties
   [content]
@@ -121,11 +122,6 @@
   [format content key]
   (let [key (string/upper-case key)]
     (contains? (set (util/remove-first #{key} (get-property-keys format content))) key)))
-
-(defn goto-properties-beginning
-  [_format input]
-  (cursor/move-cursor-to-thing input properties-start 0)
-  (cursor/move-cursor-forward input (count properties-start)))
 
 (defn goto-properties-end
   [_format input]

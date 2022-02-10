@@ -12,7 +12,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [promesa.core :as p]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.config :as config]))
 
 (defn init!
   []
@@ -50,12 +51,16 @@
   (when (mobile-util/is-native-platform?)
     (.addEventListener js/window "statusTap"
                        #(util/scroll-to-top true))
-    
+
     (.addListener App "appStateChange"
                   (fn [^js state]
                     (when-let [repo (state/get-current-repo)]
-                      (let [is-active? (.-isActive state)]
+                      (let [is-active? (.-isActive state)
+                            repo-dir (config/get-repo-dir repo)]
                         (if is-active?
-                          (p/do! (nfs-handler/refresh! repo repo/refresh-cb)
-                                 (notification/show! "Notes updated!" :success true))
+                          (p/do!
+                           (when (mobile-util/native-ios?)
+                               (mobile-util/sync-icloud-repo repo-dir))
+                           (nfs-handler/refresh! repo repo/refresh-cb)
+                           (notification/show! "Notes updated!" :success true))
                           (editor-handler/save-current-block!))))))))

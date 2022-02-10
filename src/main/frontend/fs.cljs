@@ -113,7 +113,12 @@
     (p/resolved nil)
 
     :else
-    (protocol/rename! (get-fs old-path) repo old-path new-path)))
+    (let [[old-path new-path]
+        (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
+                %
+                (str (config/get-repo-dir repo) "/" %))
+             [old-path new-path])]
+     (protocol/rename! (get-fs old-path) repo old-path new-path))))
 
 (defn stat
   [dir path]

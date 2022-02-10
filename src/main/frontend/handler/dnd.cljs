@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-
 (defn- moveable?
   [current-block target-block]
   (let [current-block-uuid (:block/uuid current-block)]
@@ -27,9 +26,7 @@
   2. Move a block between two different files.
 
   Notes:
-  1. Those two blocks might have different formats, e.g. one is `org` and another is `markdown`,
-     we don't handle this now. TODO: transform between different formats in mldoc.
-  2. Sometimes we might need to move a parent block to it's own child.
+  Sometimes we might need to move a parent block to it's own child.
   "
   [^js event current-block target-block move-to]
   (let [top? (= move-to :top)
@@ -37,6 +34,12 @@
         alt-key? (and event (.-altKey event))
         repo (state/get-current-repo)]
     (cond
+      (not= (:block/format current-block) (:block/format target-block))
+      (state/pub-event! [:notification/show
+                         {:content [:div "Those two pages have different formats."]
+                          :status :warning
+                          :clear? true}])
+
       alt-key?
       (do
         (editor-handler/set-block-property! (:block/uuid current-block)

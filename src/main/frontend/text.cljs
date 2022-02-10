@@ -221,12 +221,6 @@
        :else
        (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
 
-(defn remove-lines-level-spaces
-  [text format]
-  (->> (string/split-lines text)
-       (map #(remove-level-spaces (string/triml %) format true false))
-       (string/join "\n")))
-
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
@@ -236,14 +230,6 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
-
-(defn scheduled-deadline-dash->star
-  [content]
-  (-> content
-      (string/replace "- TODO -> DONE [" "* TODO -> DONE [")
-      (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
-      (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
-      (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))
 
 (defn remove-indentation-spaces
   [s level remove-first-line?]
@@ -376,7 +362,7 @@
       (= v "false")
       false
 
-      (util/safe-re-find #"^\d+$" v)
+      (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
       (util/safe-parse-int v)
 
       (util/wrapped-by-quotes? v) ; wrapped in ""
@@ -385,7 +371,7 @@
       (contains? @non-parsing-properties (string/lower-case k))
       v
 
-      (link/link? v)
+      (link/link v)
       v
 
       :else

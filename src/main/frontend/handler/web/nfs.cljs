@@ -16,6 +16,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
@@ -27,7 +28,7 @@
                         (let [path (:file/path f)]
                           (or (string/starts-with? path ".git/")
                               (string/includes? path ".git/")
-                              (and (util/ignored-path? "" path)
+                              (and (util-fs/ignored-path? "" path)
                                    (not= (:file/name f) ".gitignore")))))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
@@ -124,9 +125,7 @@
         *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
-     (p/let [_ (when (mobile-util/native-ios?)
-                    (.downloadFilesFromiCloud mobile-util/download-icloud-files))
-             result (fs/open-dir (fn [path handle]
+     (p/let [result (fs/open-dir (fn [path handle]
                                    (when nfs?
                                      (swap! path-handles assoc path handle))))
              root-handle (first result)
@@ -175,14 +174,14 @@
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                            (p/let [_ (repo-handler/load-repo-to-db! repo
                                                                     {:first-clone? true
+                                                                     :new-graph?   true
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
                              (state/set-loading-files! repo false)
-                             (and ok-handler (ok-handler))
+                             (when ok-handler (ok-handler))
                              (when (util/electron?)
                                (fs/watch-dir! dir-name))
-                             (state/pub-event! [:graph/added repo])
-                             (db/persist! repo)))))
+                             (db/persist-if-idle! repo)))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))

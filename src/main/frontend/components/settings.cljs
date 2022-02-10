@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
@@ -49,30 +49,6 @@
       [:hr]
 
       [:span.pl-1.opacity-70 "Git commit requires the email address."]]]))
-
-(rum/defcs set-cors < (rum/local "" ::cors)
-  [state]
-  (let [cors (get state ::cors)]
-    [:div.p-8.flex.items-center.justify-center
-     [:div.w-full.mx-auto
-      [:div
-       [:div
-        [:h1.title.mb-1
-         "Your cors address:"]
-        [:div.mt-2.mb-4.relative.rounded-md.max-w-xs
-         [:input#.form-input.is-small
-          {:autoFocus true
-           :on-change (fn [e]
-                        (reset! cors (util/evalue e)))}]]]]
-      (ui/button
-       "Submit"
-       :on-click
-       (fn []
-         (user-handler/set-cors! @cors)))
-
-      [:hr]
-
-      [:span.pl-1.opacity-70 "Git commit requires the cors address."]]]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -133,22 +109,21 @@
 
 (rum/defc delete-account-confirm
   [close-fn]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
-     (ui/admonition
-      :important
-      [:p.text-gray-700 (t :user/delete-account-notice)])
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click user-handler/delete-account!}
-        (t :user/delete-account)]]
-      [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click close-fn}
-        "Cancel"]]]]))
+  [:div
+   (ui/admonition
+    :important
+    [:p.text-gray-700 (t :user/delete-account-notice)])
+   [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+    [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
+     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+      {:type     "button"
+       :on-click user-handler/delete-account!}
+      (t :user/delete-account)]]
+    [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
+     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+      {:type     "button"
+       :on-click close-fn}
+      "Cancel"]]]])
 
 (rum/defc outdenting-hint
   []
@@ -187,22 +162,20 @@
 
 
 (defn edit-config-edn []
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (row-with-button-action
-     {:left-label   "Custom configuration"
-      :button-label (t :settings-page/edit-config-edn)
-      :href         (rfe/href :file {:path (config/get-config-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for         "config_edn"})))
+  (row-with-button-action
+   {:left-label   (t :settings-page/custom-configuration)
+    :button-label (t :settings-page/edit-config-edn)
+    :href         (rfe/href :file {:path (config/get-config-path)})
+    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+    :-for         "config_edn"}))
 
 (defn edit-custom-css []
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (row-with-button-action
-     {:left-label   "Custom theme"
-      :button-label (t :settings-page/edit-custom-css)
-      :href         (rfe/href :file {:path (config/get-custom-css-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for         "customize_css"})))
+  (row-with-button-action
+   {:left-label   (t :settings-page/custom-theme)
+    :button-label (t :settings-page/edit-custom-css)
+    :href         (rfe/href :file {:path (config/get-custom-css-path)})
+    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+    :-for         "customize_css"}))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -578,137 +551,134 @@
         switch-theme (if dark? "white" "dark")
         *active (::active state)]
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div#settings.cp__settings-main
+     [:header
+      [:h1.title (t :settings)]]
 
-      [:div#settings.cp__settings-main
-       [:header
-        [:h1.title (t :settings)]]
+     [:div.cp__settings-inner.md:flex
 
-       [:div.cp__settings-inner.md:flex
+      [:aside.md:w-64 {:style {:min-width "10rem"}}
+       [:ul
+        (for [[label text icon]
+              [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+               [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+               (when-not (mobile-util/is-native-platform?)
+                 [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
+               [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
-        [:aside.md:w-64 {:style {:min-width "10rem"}}
-         [:ul
-          (for [[label text icon]
-                [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                 [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                 (when-not (mobile-util/is-native-platform?)
-                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+          (when label
+            [:li
+             {:key text
+              :class    (util/classnames [{:active (= label @*active)}])
+              :on-click #(reset! *active label)}
 
-            (when label
-              [:li
-               {:key text
-                :class    (util/classnames [{:active (= label @*active)}])
-                :on-click #(reset! *active label)}
+             [:a.flex.items-center
+              icon
+              [:strong text]]]))]]
 
-               [:a.flex.items-center
-                icon
-                [:strong text]]]))]]
+      [:article
 
-        [:article
+       (case @*active
 
-         (case @*active
+         :general
+         [:div.panel-wrap.is-general
+          (when-not (mobile-util/is-native-platform?)
+            (version-row t version))
+          (language-row t preferred-language)
+          (theme-modes-row t switch-theme system-theme? dark?)
+          (when current-repo (edit-config-edn))
+          (when current-repo (edit-custom-css))
+          (keyboard-shortcuts-row t)]
 
-           :general
-           [:div.panel-wrap.is-general
-            (when-not (mobile-util/is-native-platform?)
-              (version-row t version))
-            (language-row t preferred-language)
-            (theme-modes-row t switch-theme system-theme? dark?)
-            (when current-repo (edit-config-edn))
-            (when current-repo (edit-custom-css))
-            (keyboard-shortcuts-row t)]
+         :editor
+         [:div.panel-wrap.is-editor
+          (file-format-row t preferred-format)
+          (date-format-row t preferred-date-format)
+          (workflow-row t preferred-workflow)
+          ;; (enable-block-timestamps-row t enable-block-timestamps?)
+          (show-brackets-row t show-brackets?)
+          (when (util/electron?) (switch-spell-check-row t))
+          (outdenting-row t logical-outdenting?)
+          (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+            (shortcut-tooltip-row t enable-shortcut-tooltip?)
+            (tooltip-row t enable-tooltip?))
+          (timetracking-row t enable-timetracking?)
+          (journal-row t enable-journals?)
+          (encryption-row t enable-encryption?)
+          (enable-all-pages-public-row t enable-all-pages-public?)
+          (zotero-settings-row t)
+          (auto-push-row t current-repo enable-git-auto-push?)]
 
-           :editor
-           [:div.panel-wrap.is-editor
-            (file-format-row t preferred-format)
-            (date-format-row t preferred-date-format)
-            (workflow-row t preferred-workflow)
-            ;; (enable-block-timestamps-row t enable-block-timestamps?)
-            (show-brackets-row t show-brackets?)
-            (when (util/electron?) (switch-spell-check-row t))
-            (outdenting-row t logical-outdenting?)
-            (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
-              (shortcut-tooltip-row t enable-shortcut-tooltip?)
-              (tooltip-row t enable-tooltip?))
-            (timetracking-row t enable-timetracking?)
-            (journal-row t enable-journals?)
-            (encryption-row t enable-encryption?)
-            (enable-all-pages-public-row t enable-all-pages-public?)
-            (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)]
+         :git
+         [:div.panel-wrap
+          [:div.text-sm.my-4
+           [:span.text-sm.opacity-50.my-4
+            "You can view a page's edit history by clicking the three vertical dots "
+            "in the top-right corner and selecting \"Check page's history\". "
+            "Logseq uses "]
+           [:a {:href "https://git-scm.com/" :target "_blank"}
+            "Git"]
+           [:span.text-sm.opacity-50.my-4
+            " for version control."]]
+          [:br]
+          (switch-git-auto-commit-row t)
+          (git-auto-commit-seconds t)
 
-           :git
-           [:div.panel-wrap
-            [:div.text-sm.my-4
-             [:span.text-sm.opacity-50.my-4
-              "You can view a page's edit history by clicking the three vertical dots "
-              "in the top-right corner and selecting \"Check page's history\". "
-              "Logseq uses "]
-             [:a {:href "https://git-scm.com/" :target "_blank"}
-              "Git"]
-             [:span.text-sm.opacity-50.my-4
-              " for version control."]]
-            [:br]
-            (switch-git-auto-commit-row t)
-            (git-auto-commit-seconds t)
+          (ui/admonition
+           :warning
+           [:p (t :settings-page/git-confirm)])]
 
-            (ui/admonition
-             :warning
-             [:p (t :settings-page/git-confirm)])]
+         :advanced
+         [:div.panel-wrap.is-advanced
+          (when (and util/mac? (util/electron?)) (app-auto-update-row t))
+          (usage-diagnostics-row t instrument-disabled?)
+          (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+          (when (util/electron?) (plugin-system-switcher-row t))
+          (clear-cache-row t)
 
-           :advanced
-           [:div.panel-wrap.is-advanced
-            (when (and util/mac? (util/electron?)) (app-auto-update-row t))
-            (usage-diagnostics-row t instrument-disabled?)
-            (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
-            (when (util/electron?) (plugin-system-switcher-row t))
-            (clear-cache-row t)
+          (ui/admonition
+           :warning
+           [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
 
-            (ui/admonition
-             :warning
-             [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
+          (when logged?
+            [:div
+             [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+              [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
+               {:for "cors"}
+               (t :settings-page/custom-cors-proxy-server)]
+              [:div.mt-1.sm:mt-0.sm:col-span-2
+               [:div.max-w-lg.rounded-md.sm:max-w-xs
+                [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
+                 {:default-value cors-proxy
+                  :on-blur       (fn [event]
+                                   (when-let [server (util/evalue event)]
+                                     (user-handler/set-cors! server)
+                                     (notification/show! "Custom CORS proxy updated successfully!" :success)))
+                  :on-key-press  (fn [event]
+                                   (let [k (gobj/get event "key")]
+                                     (when (= "Enter" k)
+                                       (when-let [server (util/evalue event)]
+                                         (user-handler/set-cors! server)
+                                         (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+             (ui/admonition
+              :important
+              [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+               [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
+                    :target "_blank"}
+                "https://github.com/isomorphic-git/cors-proxy"]])])
 
-            (when logged?
-              [:div
-               [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-                [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
-                 {:for "cors"}
-                 (t :settings-page/custom-cors-proxy-server)]
-                [:div.mt-1.sm:mt-0.sm:col-span-2
-                 [:div.max-w-lg.rounded-md.sm:max-w-xs
-                  [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
-                   {:default-value cors-proxy
-                    :on-blur       (fn [event]
-                                     (when-let [server (util/evalue event)]
-                                       (user-handler/set-cors! server)
-                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))
-                    :on-key-press  (fn [event]
-                                     (let [k (gobj/get event "key")]
-                                       (when (= "Enter" k)
-                                         (when-let [server (util/evalue event)]
-                                           (user-handler/set-cors! server)
-                                           (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-               (ui/admonition
-                :important
-                [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-                 [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                      :target "_blank"}
-                  "https://github.com/isomorphic-git/cors-proxy"]])])
+          (when logged?
+            [:div
+             [:hr]
+             [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+              [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
+               {:for "delete account"}
+               (t :user/delete-account)]
+              [:div.mt-1.sm:mt-0.sm:col-span-2
+               [:div.max-w-lg.rounded-md.sm:max-w-xs
+                (ui/button (t :user/delete-your-account)
+                  :on-click (fn []
+                              (ui-handler/toggle-settings-modal!)
+                              (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
 
-            (when logged?
-              [:div
-               [:hr]
-               [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-                [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
-                 {:for "delete account"}
-                 (t :user/delete-account)]
-                [:div.mt-1.sm:mt-0.sm:col-span-2
-                 [:div.max-w-lg.rounded-md.sm:max-w-xs
-                  (ui/button (t :user/delete-your-account)
-                             :on-click (fn []
-                                         (ui-handler/toggle-settings-modal!)
-                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
-
-           nil)]]])))
+         nil)]]]))

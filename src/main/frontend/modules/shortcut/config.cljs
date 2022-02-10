@@ -182,13 +182,11 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :up)}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)
-                                    :force?  true}
+                                    :fn      (editor-handler/shortcut-up-down :down)}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"
@@ -225,13 +223,11 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!
-                                    :force?  true}
+                                    :fn      editor-handler/expand!}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!
-                                    :force?  true}
+                                    :fn      editor-handler/collapse!}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -299,7 +295,7 @@
 
    :search/re-index                {:desc    "Rebuild search index"
                                     :binding "mod+c mod+s"
-                                    :fn      search-handler/rebuild-indices!}
+                                    :fn      (fn [_] (search-handler/rebuild-indices! true))}
 
    :sidebar/open-today-page        {:desc    "Open today's page in the right sidebar"
                                     :binding (if mac? "mod+shift+j" "alt+shift+j")
@@ -316,8 +312,19 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
-                                    :force?   true}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+
+   :graph/open              {:desc    "Select graph to open"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-open))
+                                    :binding "mod+shift+g"}
+
+   :graph/remove            {:desc    "Remove a graph"
+                                    :fn      (fn [] (state/set-state! :ui/open-select :graph-remove))
+                                    :binding false}
+
+   :graph/add                      {:desc "Add a graph"
+                                    :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+                                    :binding false}
 
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
@@ -432,7 +439,7 @@
    :ui/toggle-cards                 {:desc    "Toggle cards"
                                      :binding "t c"
                                      :fn      ui-handler/toggle-cards!}
-  ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
+   ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
 
    :git/commit                      {:desc    "Git commit message"
                                      :binding "c"
@@ -499,6 +506,9 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
+                          :graph/open
+                          :graph/remove
+                          :graph/add
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -680,6 +690,9 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
+    :graph/open
+    :graph/remove
+    :graph/add
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index

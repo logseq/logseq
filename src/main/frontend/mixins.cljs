@@ -77,12 +77,6 @@
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
 
-(defn resize-layout
-  [state ref]
-  (listen state js/window "resize"
-          (fn [_e]
-            (reset! ref [js/window.innerWidth js/window.innerHeight]))))
-
 (defn on-enter
   [state & {:keys [on-enter node]}]
   (let [node (or node (rum/dom-node state))]
@@ -156,12 +150,6 @@
                          (reset! open? true))
               :toggle-fn (fn []
                            (swap! open? not)))))))
-
-(defn will-mount-effect
-  [handler]
-  {:will-mount (fn [state]
-                 (handler (:rum/args state))
-                 state)})
 
 (def component-editing-mode
   {:will-mount
