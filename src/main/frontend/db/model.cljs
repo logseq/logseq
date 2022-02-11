@@ -657,19 +657,17 @@
     [blocks-tree]))
 
 (defn get-block-and-children
-  ([repo block-uuid]
-   (get-block-and-children repo block-uuid true))
-  ([repo block-uuid use-cache?]
-   (some-> (d/q repo
-             '[:find [(pull ?block ?block-attrs) ...]
-               :in $ ?id ?block-attrs
-               :where
-               [?block :block/uuid ?id]]
-             (conn/get-conn repo)
-             block-uuid
-             block-attrs)
-           first
-           flatten-tree)))
+  [repo block-uuid]
+  (some-> (d/q
+            '[:find [(pull ?block ?block-attrs) ...]
+              :in $ ?id ?block-attrs
+              :where
+              [?block :block/uuid ?id]]
+            (conn/get-conn repo)
+            block-uuid
+            block-attrs)
+          first
+          flatten-tree))
 
 (defn sub-block-and-children
   ([repo block-uuid]
