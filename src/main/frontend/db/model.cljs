@@ -533,8 +533,9 @@
                     [:block/name (util/safe-page-name-sanity-lc page-id)]
                     page-id)
           page (d/entity db page-id)]
-      (when page
-        (zero? (get-page-blocks-count repo (:db/id page)))))))
+      (if page
+        (zero? (get-page-blocks-count repo (:db/id page)))
+        true))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
