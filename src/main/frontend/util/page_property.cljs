@@ -1,7 +1,6 @@
 (ns frontend.util.page-property
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]

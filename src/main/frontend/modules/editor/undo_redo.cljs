@@ -2,7 +2,6 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
-            [frontend.db :as db]
             [frontend.state :as state]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.pipeline :as pipelines]))
@@ -108,7 +107,7 @@
   []
   (let [[e prev-e] (pop-undo)]
     (when e
-      (let [{:keys [blocks txs]} e
+      (let [{:keys [txs]} e
             new-txs (get-txs false txs)
             editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
                                  (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
@@ -122,7 +121,7 @@
 
 (defn redo
   []
-  (when-let [{:keys [blocks txs]:as e} (pop-redo)]
+  (when-let [{:keys [txs]:as e} (pop-redo)]
     (let [new-txs (get-txs true txs)]
       (push-undo e)
       (transact! new-txs)

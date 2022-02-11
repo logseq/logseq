@@ -6,15 +6,13 @@
   "
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.util.marker :as marker]
-            [frontend.db-schema :as db-schema]
-            [frontend.date :as date]))
+            [frontend.db-schema :as db-schema]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
