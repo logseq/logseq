@@ -1239,12 +1239,6 @@
          (reset! blocks-count-cache n)
          n)))))
 
-(defn get-all-block-uuids
-  []
-  (when-let [conn (conn/get-conn)]
-    (->> (d/datoms conn :avet :block/uuid)
-         (map :v))))
-
 ;; block/uuid and block/content
 (defn get-all-block-contents
   []

@@ -2977,7 +2977,9 @@
         hashtag?
         (do
           (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (cursor/pos input))
+          (if (= key "#")
+            (state/set-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
+            (state/set-last-pos! (cursor/pos input)))
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (let [sym "$"]
@@ -3003,7 +3005,7 @@
         :else
         nil))))
 
-(defn keyup-handler
+(defn ^:large-vars/cleanup-todo keyup-handler
   [_state input input-id search-timeout]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
@@ -3115,6 +3117,20 @@
   (fn [_e]
     (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
+
+(defn editor-on-height-change!
+  [id]
+  (fn [row-height]
+    (let [input (gdom/getElement id)
+          top (gobj/get (.getBoundingClientRect input) "top")
+          cursor-y (+ top row-height)
+          vw-height (.-height js/window.visualViewport)]
+      ;; 40 is mobile toolbar height
+      (when (<  vw-height (+ cursor-y 40))
+        (let [main-node (gdom/getElement "main-content-container")
+              scroll-top (.-scrollTop main-node)]
+          ;; 24 is default line height
+          (set! (.-scrollTop main-node) (+ scroll-top 24)))))))
 
 (defn editor-on-change!
   [block id search-timeout]

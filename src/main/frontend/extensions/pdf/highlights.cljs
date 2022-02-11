@@ -196,7 +196,7 @@
            :data-color color}])
        rects)]))
 
-(rum/defc pdf-highlight-area-region
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
   [^js viewer vw-hl hl
    {:keys [show-ctx-tip! upd-hl!]}]
 
@@ -311,7 +311,7 @@
          (:id hl))
        ))])
 
-(rum/defc pdf-highlight-area-selection
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-tip!]}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
@@ -436,7 +436,7 @@
      (when (and start-coord end-coord)
        [:div.shadow-rect {:style (calc-pos start-coord end-coord)}])]))
 
-(rum/defc pdf-highlights
+(rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
   (let [^js doc (.-ownerDocument el)
@@ -788,7 +788,7 @@
   (fn [close-fn!]
     (docinfo-display info close-fn!)))
 
-(rum/defc pdf-toolbar
+(rum/defc ^:large-vars/cleanup-todo pdf-toolbar
   [^js viewer]
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)

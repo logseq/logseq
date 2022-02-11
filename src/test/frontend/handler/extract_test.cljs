@@ -73,4 +73,4 @@
      - line4"
    [[1 "line1"] [2 "line2"] [3 "line3"] [3 "line4"]]))
 
-#_(run-tests)
+#_(cljs.test/run-tests)

@@ -32,4 +32,4 @@
     [["foo" "#bar, #baz"]] ["bar" "baz"]
     [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test"]))
 
-#_(run-tests)
+#_(cljs.test/run-tests)

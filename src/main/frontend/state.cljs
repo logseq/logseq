@@ -17,7 +17,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(defonce state
+(defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
        current-graph (let [graph (storage/get :git/current-repo)]
                        (when graph (ipc/ipc "setCurrentGraph" graph))

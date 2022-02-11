@@ -67,7 +67,8 @@
           page-entity (let [alias (:alias properties)
                             alias (if (string? alias) [alias] alias)
                             aliases (and alias
-                                         (seq (remove #(= page-name (util/page-name-sanity-lc %))
+                                         (seq (remove #(or (= page-name (util/page-name-sanity-lc %))
+                                                           (string/blank? %)) ;; disable blank alias
                                                       alias)))
                             aliases (->>
                                      (map

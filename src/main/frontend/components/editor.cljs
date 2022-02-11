@@ -1,5 +1,6 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
+            [goog.string :as gstring]
             [frontend.commands :as commands
              :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
             [frontend.components.block :as block]
@@ -97,7 +98,7 @@
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
-  "Editor embedded page searching"
+  "Embedded page searching popup"
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -119,20 +120,23 @@
                               (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
+                              (string/blank? q)
+                              nil
+
                               (empty? matched-pages)
-                              matched-pages
+                              (cons (str "New page: " q) matched-pages)
 
                               ;; reorder, shortest and starts-with first.
                               :else
                               (let [matched-pages (remove nil? matched-pages)
                                     matched-pages (sort-by
                                                    (fn [m]
-                                                     [(not (string/starts-with? m q)) (count m)])
+                                                     [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
                                                    matched-pages)]
-                                (cons (first matched-pages)
-                                      (cons
-                                       (str "New page: " q)
-                                       (rest matched-pages)))))]
+                                (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                                  (cons (first matched-pages)
+                                        (cons  (str "New page: " q) (rest matched-pages)))
+                                  (cons (str "New page: " q) matched-pages))))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -225,7 +229,7 @@
                            template)
             :class       "black"}))))))
 
-(rum/defc mobile-bar < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo mobile-bar < rum/reactive
   [_parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)
@@ -714,6 +718,7 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
+       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

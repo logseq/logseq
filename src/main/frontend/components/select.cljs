@@ -2,7 +2,7 @@
   "Generic component for fuzzy searching items to select an item. See
   select-config to add a new use or select-type for this component. To use the
   new select-type, set :ui/open-select to the select-type. See
-  :select-graph/open command for an example."
+  :graph/open command for an example."
   (:require [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
@@ -13,6 +13,7 @@
             [frontend.text :as text]
             [rum.core :as rum]
             [frontend.config :as config]
+            [frontend.handler.repo :as repo-handler]
             [reitit.frontend.easy :as rfe]))
 
 (rum/defc render-item
@@ -32,7 +33,8 @@
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder prompt-key]
           :or {limit 100
-               prompt-key :select/default-prompt}}]
+               prompt-key :select/default-prompt
+               empty-placeholder (fn [_t] [:div])}}]
   (let [input (::input state)]
     [:div.cp__select.cp__select-main
      [:div.input-wrap
@@ -61,11 +63,12 @@
     fuzzy search and selection. Items can have an optional :id and are displayed
     lightly for a given item.
   * :on-chosen - fn that is given item when it is chosen.
-  * :empty-placeholder - fn that returns hiccup html to render if no matched graphs found.
-  * :prompt-key - dictionary keyword that prompts when components is first open.
-    Defaults to :select/default-prompt."
+  * :empty-placeholder (optional) - fn that returns hiccup html to render if no
+    matched graphs found.
+  * :prompt-key (optional) - dictionary keyword that prompts when components is
+    first open. Defaults to :select/default-prompt."
   []
-  {:select-graph
+  {:graph-open
    {:items-fn (fn []
                 (->>
                  (state/get-repos)
@@ -89,7 +92,23 @@
                           (ui/button
                            (t :select.graph/add-graph)
                            :href (rfe/href :repo-add)
-                           :on-click state/close-modal!)])}})
+                           :on-click state/close-modal!)])}
+   :graph-remove
+   {:items-fn (fn []
+                (->> (state/get-repos)
+                     (remove (fn [{:keys [url]}]
+                               (config/demo-graph? url)))
+                     (map (fn [{:keys [url] :as original-graph}]
+                            {:value (text/get-graph-name-from-path
+                                     ;; TODO: Use helper when a common one is refactored
+                                     ;; from components.repo
+                                     (if (config/local-db? url)
+                                       (config/get-local-dir url)
+                                       (db/get-repo-path url)))
+                             :id (config/get-repo-dir url)
+                             :graph url
+                             :original-graph original-graph}))))
+    :on-chosen #(repo-handler/remove-repo! (:original-graph %))}})
 
 (rum/defc select-modal < rum/reactive
   []

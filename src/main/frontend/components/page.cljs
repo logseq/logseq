@@ -173,6 +173,7 @@
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
+          input-ref (rum/create-ref)
           repo (state/get-current-repo)
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
@@ -180,25 +181,38 @@
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
-                       (let [merge? (and (not= (util/page-name-sanity-lc page-name)
+                       (let [new-page-name (string/trim @*title-value)
+                             merge? (and (not= (util/page-name-sanity-lc page-name)
                                                (util/page-name-sanity-lc @*title-value))
                                          (page-handler/page-exists? page-name)
                                          (page-handler/page-exists? @*title-value))]
                          (ui/make-confirm-modal
                           {:title         (if merge?
-                                            (str "Page \"" @*title-value "\" already exists, merge them?")
-                                            "Do you really want to change the page name?")
+                                            (str "Page “" @*title-value "” already exists, merge to it?")
+                                            (str "Do you really want to change the page name to “" new-page-name "”?"))
                            :on-confirm    (fn [_e {:keys [close-fn]}]
                                             (close-fn)
                                             (page-handler/rename! (or title page-name) @*title-value)
                                             (reset! *edit? false))
                            :on-cancel     (fn []
                                             (reset! *title-value old-name)
+                                            (gobj/set (rum/deref input-ref) "value" old-name)
                                             (reset! *edit? true))})))
+          rollback-fn #(do
+                         (reset! *title-value old-name)
+                         (gobj/set (rum/deref input-ref) "value" old-name)
+                         (reset! *edit? false)
+                         (notification/show! "Illegal page name, can not rename!" :warning))
           blur-fn (fn [e]
+                    (when (util/wrapped-by-quotes? @*title-value)
+                      (swap! *title-value util/unquote-string)
+                      (gobj/set (rum/deref input-ref) "value" @*title-value))
                     (cond
                       (= old-name @*title-value)
                       nil
+
+                      (string/blank? @*title-value)
+                      (rollback-fn)
 
                       :else
                       (state/set-modal! (confirm-fn)))
@@ -207,6 +221,7 @@
         [:h1.title {:style {:margin-left -2}}
          [:input.w-full
           {:type          "text"
+           :ref           input-ref
            :auto-focus    true
            :style         {:outline "none"
                            :font-weight 600}
@@ -214,8 +229,7 @@
            :default-value old-name
            :on-change     (fn [e]
                             (let [value (util/evalue e)]
-                              (when-not (string/blank? value)
-                                (reset! *title-value (string/trim value)))))
+                              (reset! *title-value (string/trim value))))
            :on-blur       blur-fn
            :on-key-down   (fn [e]
                             (when (= (gobj/get e "key") "Enter")
@@ -357,7 +371,7 @@
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 
-(rum/defc graph-filters < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings n-hops]
   (let [{:keys [journal? orphan-pages? builtin-pages?]
          :or {orphan-pages? true}} settings
@@ -655,7 +669,7 @@
                     (notification/show! (str (t :tips/all-done) "!") :success)
                     (js/setTimeout #(refresh-fn) 200)))]]))
 
-(rum/defcs all-pages < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo all-pages < rum/reactive
   (rum/local nil ::pages)
   (rum/local nil ::search-key)
   (rum/local nil ::results-all)
