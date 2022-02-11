@@ -63,7 +63,7 @@
         (= (string/trim decrypted-content) (string/trim db-content)))
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
-(defrecord Nfs []
+(defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
   (mkdir! [_this dir]
     (let [parts (->> (string/split dir "/")

@@ -103,6 +103,12 @@ jobs:
       - name: Carve lint for unused vars
         run: scripts/carve.clj
 
+      - name: Lint for vars that are too large
+        run: scripts/large_vars.clj
+
+      - name: Lint invalid translation entries
+        run: bb lang:invalid-translations
+
   e2e-test:
     runs-on: ubuntu-latest
 
