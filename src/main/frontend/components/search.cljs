@@ -83,7 +83,7 @@
 
 (defonce search-timeout (atom nil))
 
-(rum/defc search-auto-complete
+(rum/defc ^:large-vars/cleanup-todo search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]

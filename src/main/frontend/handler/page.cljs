@@ -660,7 +660,7 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
-              chosen (if (string/starts-with? chosen "New page: ")
+              chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
@@ -677,7 +677,7 @@
                                           (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern last-pattern
-                                           :end-pattern "]]"
+                                           :end-pattern (when wrapped? "]]")
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)

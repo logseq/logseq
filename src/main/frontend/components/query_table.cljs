@@ -54,6 +54,28 @@
       (map #(medley/dissoc-in % ks) result)
       result)))
 
+(defn- sort-by-fn [sort-by-item item]
+  (case sort-by-item
+    :created-at
+    (:block/created-at item)
+    :updated-at
+    (:block/updated-at item)
+    :block
+    (:block/content item)
+    :page
+    (:block/name item)
+    (get-in item [:block/properties key])))
+
+(defn- desc?
+  [*desc? p-desc?]
+  (cond
+    (some? @*desc?)
+    @*desc?
+    (some? p-desc?)
+    p-desc?
+    :else
+    true))
+
 (rum/defcs result-table < rum/reactive
   (rum/local nil ::sort-by-item)
   (rum/local nil ::desc?)
@@ -66,13 +88,6 @@
           *sort-by-item (get state ::sort-by-item)
           *desc? (get state ::desc?)
           sort-by-item (or @*sort-by-item (some-> p-sort-by keyword) :updated-at)
-          desc? (cond
-                  (some? @*desc?)
-                  @*desc?
-                  (some? p-desc?)
-                  p-desc?
-                  :else
-                  true)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
           result (if page? result (attach-clock-property result))
@@ -91,19 +106,9 @@
                           (filter included-keys keys)
                           included-keys)
                   keys))
-          sort-by-fn (fn [item]
-                       (let [key sort-by-item]
-                         (case key
-                           :created-at
-                           (:block/created-at item)
-                           :updated-at
-                           (:block/updated-at item)
-                           :block
-                           (:block/content item)
-                           :page
-                           (:block/name item)
-                           (get-in item [:block/properties key]))))
-          result (sort-result-by sort-by-fn desc? result)]
+          result (sort-result-by (partial sort-by-fn sort-by-item)
+                                 (desc? *desc? p-desc?)
+                                 result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}}
        [:table.table-auto

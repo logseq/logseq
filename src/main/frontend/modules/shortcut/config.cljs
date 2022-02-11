@@ -19,7 +19,7 @@
 
 ;; Note – when you change this file, you will need to do a hard reset.
 ;; The commands are registered when the Clojurescript code runs for the first time
-(defonce all-default-keyboard-shortcuts
+(defonce ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:desc    "Date picker: Choose selected day"
                                   :binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -449,7 +449,7 @@
   (reduce into {}
           (map (fn [sym] {sym (get all-default-keyboard-shortcuts sym)}) symbols)))
 
-(defonce config
+(defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker
     (build-category-map [:date-picker/complete
@@ -584,7 +584,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; Categories for docs purpose
-(def category
+(def ^:large-vars/data-var category
   {:shortcut.category/basics
    ^{:doc "Basics"}
    [:editor/new-block
