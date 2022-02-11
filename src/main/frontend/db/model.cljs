@@ -528,10 +528,13 @@
 
 (defn page-empty?
   [repo page-id]
-  (let [page-id (if (string? page-id)
-                  [:block/name (util/safe-page-name-sanity-lc page-id)]
-                  page-id)]
-    (zero? (get-page-blocks-count repo page-id))))
+  (when-let [db (conn/get-conn repo)]
+    (let [page-id (if (string? page-id)
+                    [:block/name (util/safe-page-name-sanity-lc page-id)]
+                    page-id)
+          page (d/entity db page-id)]
+      (when page
+        (zero? (get-page-blocks-count repo (:db/id page)))))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
