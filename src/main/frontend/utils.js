@@ -1,4 +1,5 @@
 import path from 'path/path.js'
+import { StatusBar, Style } from '@capacitor/status-bar'
 
 if (typeof window === 'undefined') {
   global.window = {}

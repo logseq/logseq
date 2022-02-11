@@ -16,7 +16,8 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as utils]
+            ["electron-context-menu" :as init-context-menu]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -24,14 +25,16 @@
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
-(def ROOT_PATH (path/join js/__dirname ".."))
-
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
+
+(defn setup-context-menu
+  []
+  (init-context-menu #js {:showSaveImageAs true :showInspectElement false}))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -216,11 +219,12 @@
                         (fn []
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
-                                t3 (handler/set-ipc-handler! win)
+                                t3 (setup-context-menu)
+                                t4 (handler/set-ipc-handler! win)
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
                                         (and f (f)))))))
 
                ;; setup effects

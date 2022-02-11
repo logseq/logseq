@@ -67,10 +67,3 @@
           [key & body]
           `(binding [*with-key* ~key]
              ~@body)))
-
-#?(:clj (defmacro auto-clean-state
-          [& body]
-          `(do (reset! react-components {})
-               (let [result# ~@body]
-                 (reset! react-components {})
-                 result#))))

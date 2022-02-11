@@ -153,16 +153,6 @@
         parts (concat (butlast result) [new-file])]
     (string/join "/" parts)))
 
-(defn- rename-file-aux!
-  [repo old-path new-path]
-  (fs/rename! repo
-              (if (util/electron?)
-                old-path
-                (str (config/get-repo-dir repo) "/" old-path))
-              (if (util/electron?)
-                new-path
-                (str (config/get-repo-dir repo) "/" new-path))))
-
 (defn rename-file!
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
@@ -173,7 +163,7 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (rename-file-aux! repo old-path new-path)
+     (p/let [_ (fs/rename! repo old-path new-path)
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)
@@ -670,7 +660,7 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
-              chosen (if (string/starts-with? chosen "New page: ")
+              chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
@@ -687,7 +677,7 @@
                                           (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern last-pattern
-                                           :end-pattern "]]"
+                                           :end-pattern (when wrapped? "]]")
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
@@ -721,9 +711,7 @@
                         (config/get-file-extension format))
               file-path (str "/" path)
               repo-dir (config/get-repo-dir repo)]
-          (p/let [_ (when (mobile-util/native-ios?)
-                      (.downloadFilesFromiCloud mobile-util/download-icloud-files))
-                  file-exists? (fs/file-exists? repo-dir file-path)
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
@@ -755,6 +743,10 @@
 (defn open-file-in-default-app []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.openPath file-path)))
+
+(defn copy-current-file []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (util/copy-to-clipboard! file-path)))
 
 (defn open-file-in-directory []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]

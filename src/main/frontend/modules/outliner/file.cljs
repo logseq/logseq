@@ -25,7 +25,7 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        blocks (model/get-blocks-by-page repo page-db-id)]
+        blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))

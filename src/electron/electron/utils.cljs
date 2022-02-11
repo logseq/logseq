@@ -42,14 +42,16 @@
                   (map #(path/join plugins-root (.-name %))))]
     dirs))
 
+;; keep same as ignored-path? in src/main/frontend/util/fs.cljs
+;; TODO: merge them
 (defn ignored-path?
   [dir path]
   (when (string? path)
     (or
      (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "assets" "node_modules"])
+           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
      (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "assets" "node_modules"])
+           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
      (string/ends-with? path ".DS_Store")
      ;; hidden directory or file
      (let [relpath (path/relative dir path)]

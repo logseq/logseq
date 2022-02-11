@@ -1,5 +1,6 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
+            [goog.string :as gstring]
             [frontend.commands :as commands
              :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
             [frontend.components.block :as block]
@@ -18,7 +19,6 @@
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
-            [frontend.search.db :as search-db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -52,10 +52,10 @@
               [:div.has-help
                command-name
                (ui/tippy
-                 {:html doc
-                  :interactive true
-                  :fixed-position? true
-                  :position "right"}
+                {:html doc
+                 :interactive true
+                 :fixed-position? true
+                 :position "right"}
 
                 [:small (svg/help-circle)])]
 
@@ -98,7 +98,7 @@
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
-  "Editor embedded page searching"
+  "Embedded page searching popup"
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -120,20 +120,23 @@
                               (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
+                              (string/blank? q)
+                              nil
+
                               (empty? matched-pages)
-                              matched-pages
+                              (cons (str "New page: " q) matched-pages)
 
                               ;; reorder, shortest and starts-with first.
                               :else
                               (let [matched-pages (remove nil? matched-pages)
                                     matched-pages (sort-by
                                                    (fn [m]
-                                                     [(not (string/starts-with? m q)) (count m)])
+                                                     [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
                                                    matched-pages)]
-                                (cons (first matched-pages)
-                                      (cons
-                                       (str "New page: " q)
-                                       (rest matched-pages)))))]
+                                (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                                  (cons (first matched-pages)
+                                        (cons  (str "New page: " q) (rest matched-pages)))
+                                  (cons (str "New page: " q) matched-pages))))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -148,7 +151,7 @@
                               :tippy-distance  24
                               :tippy-position  (if sidebar? "left" "right")}
                              page-name)])
-            :empty-div   [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+            :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
             :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
@@ -170,15 +173,14 @@
        result
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
-        :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+        :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
         :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
                        (let [page (or (:block/original-name page)
                                       (:block/name page))
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)
                              block (db-model/query-block-by-uuid uuid)
-                             content (search-db/block->content block)]
-
+                             content (:block/content block)]
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
 
@@ -222,12 +224,12 @@
            matched-templates
            {:on-chosen   (editor-handler/template-on-chosen-handler id)
             :on-enter    non-exist-handler
-            :empty-div   [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+            :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
             :item-render (fn [[template _block-db-id]]
                            template)
             :class       "black"}))))))
 
-(rum/defc mobile-bar < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo mobile-bar < rum/reactive
   [_parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)
@@ -441,23 +443,23 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                    {:key           (str "modal-input-" (name id))
-                     :id            (str "modal-input-" (name id))
-                     :type          (or type "text")
-                     :on-change     (fn [e]
-                                      (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                    placeholder
-                    (assoc :placeholder placeholder)
-                    autoFocus
-                    (assoc :auto-focus true))
+                  {:key           (str "modal-input-" (name id))
+                   :id            (str "modal-input-" (name id))
+                   :type          (or type "text")
+                   :on-change     (fn [e]
+                                    (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  placeholder
+                  (assoc :placeholder placeholder)
+                  autoFocus
+                  (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
-            "Submit"
-            :on-click
-            (fn [e]
-              (util/stop e)
-              (on-submit command @input-value pos)))])))))
+             "Submit"
+             :on-click
+             (fn [e]
+               (util/stop e)
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
@@ -501,7 +503,7 @@
               {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
                :max-height to-max-height
                :max-width 700
-                ;; TODO: auto responsive fixed size
+               ;; TODO: auto responsive fixed size
                :width "fit-content"
                :z-index    11}
               (when set-default-width?
@@ -716,6 +718,7 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
+       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

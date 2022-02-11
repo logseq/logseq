@@ -1,0 +1,27 @@
+{:paths ["scripts/src"]
+ :tasks
+ {dev:watch
+  logseq.tasks.dev/watch
+
+  dev:open-dev-electron-app
+  logseq.tasks.dev/open-dev-electron-app
+
+  -dev:electron-start
+  {:depends [dev:watch dev:open-dev-electron-app]}
+
+  dev:electron-start
+  {:doc "Start electron dev by watching assets and opening dev app"
+   ;; Parallel execution - https://book.babashka.org/#parallel
+   :task (run '-dev:electron-start {:parallel true})}
+
+  lang:list
+  logseq.tasks.lang/list-langs
+
+  lang:missing
+  logseq.tasks.lang/list-missing
+
+  lang:duplicates
+  logseq.tasks.lang/list-duplicates
+
+  lang:invalid-translations
+  logseq.tasks.lang/invalid-translations}}

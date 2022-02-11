@@ -20,11 +20,6 @@
       (. fs ensureDirSync dir)
       dir)))
 
-(defn dot-git-exists?
-  []
-  (let [p (.join path (state/get-graph-path) ".git")]
-    (fs/existsSync p)))
-
 (defn run-git!
   [commands]
   (when-let [path (state/get-graph-path)]

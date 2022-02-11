@@ -9,9 +9,7 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
-            [linked.core :as linked]
-            [promesa.core :as p]
-            [frontend.util.pool :as pool]))
+            [linked.core :as linked]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -36,9 +34,10 @@
 (defn default-config
   ([format]
    (default-config format {:export-heading-to-list? false}))
-  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options]}]
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
+           :parse_outline_only (or parse_outline_only? false)
            :heading_number false
            :keep_line_break true
            :format format
@@ -197,29 +196,6 @@
         (js/console.error e)
         []))
     (log/error :edn/wrong-content-type content)))
-
-(defn ->edn-async
-  ([content config]
-   (->edn-async nil content config))
-  ([file content config]
-   (if util/node-test?
-     (p/resolved (->edn content config))
-     (try
-       (if (string/blank? content)
-         (p/resolved [])
-         (p/let [v (pool/add-parse-job! content config)]
-           (try
-             (-> v
-                 (util/json->clj)
-                 (update-src-full-content content)
-                 (collect-page-properties))
-             (catch js/Error e
-               (println :parser/failed file)
-               (js/console.error e)
-               (p/resolved [])))))
-       (catch js/Error e
-         (log/error :parser/failed e)
-         (p/resolved []))))))
 
 (defn opml->edn
   [content]

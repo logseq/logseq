@@ -2,13 +2,13 @@ import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInnerBlock } from './utils'
 
-/*** 
+/***
  * Test alias features
  * Test search refering features
  * Consider diacritics
  ***/
 
-async function alias_test (page, page_name: string, search_kws: string[]){
+async function alias_test(page, page_name: string, search_kws: string[]) {
   let hotkeyOpenLink = 'Control+o'
   let hotkeyBack = 'Control+['
   if (IsMac) {
@@ -69,7 +69,7 @@ async function alias_test (page, page_name: string, search_kws: string[]){
   // TODO: test alias from graph clicking
 
   // test alias from search
-  for (let kw of search_kws){
+  for (let kw of search_kws) {
     let kw_name = kw + ' alias ' + rand
 
     await page.click('#search-button')
@@ -102,10 +102,11 @@ async function alias_test (page, page_name: string, search_kws: string[]){
     await page.waitForTimeout(500)
     page.click(":nth-match(.menu-link, 2)")
     await page.waitForNavigation()
-    await page.waitForTimeout(100)
+    await page.waitForTimeout(500)
     await lastInnerBlock(page)
     expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
-    await page.keyboard.press(hotkeyBack)}
+    await page.keyboard.press(hotkeyBack)
+  }
 
   // TODO: search clicking (alias property)
 }
@@ -117,4 +118,26 @@ async function alias_test (page, page_name: string, search_kws: string[]){
 
 test('page diacritic alias', async ({ page }) => {
   await alias_test(page, "ü", ["ü", "ü", "Ü"])
+})
+
+test('hashtag and quare brackets in same line #4178', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.type(':nth-match(textarea, 1)', '#foo bar')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.type(':nth-match(textarea, 1)', 'bar [[blah]]')
+  for (let i = 0; i < 12; i++) {
+    await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+  }
+  await page.type(':nth-match(textarea, 1)', ' ')
+  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+
+  await page.type(':nth-match(textarea, 1)', '#')
+  await page.waitForSelector('text="Search for a page"', { 'state': 'visible' })
+
+  await page.type(':nth-match(textarea, 1)', 'fo')
+
+  await page.click('.absolute >> text=' + 'foo')
+
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('#foo bar [[blah]]')
 })

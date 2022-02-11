@@ -32,12 +32,6 @@
         cfg (assoc cfg k v)]
     (write-cfg! cfg)))
 
-(defn del-item!
-  [k]
-  (when-let [cfg (and k (ensure-cfg))]
-    (let [cfg (dissoc cfg k)]
-      (write-cfg! cfg))))
-
 (defn get-item
   [k]
   (when-let [cfg (and k (ensure-cfg))]

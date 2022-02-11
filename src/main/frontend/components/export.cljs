@@ -4,63 +4,43 @@
             [frontend.util :as util]
             [frontend.handler.export :as export]
             [frontend.state :as state]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.export
-       [:h1.title "Export"]
+    [:div.export
+     [:h1.title "Export"]
 
-       [:ul.mr-1
-        (when (util/electron?)
-          [:li.mb-4
-           [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
-            (t :export-public-pages)]])
+     [:ul.mr-1
+      (when (util/electron?)
         [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]]
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
-          (t :export-opml)]]
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
-          (t :export-edn)]]
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
-          (t :export-json)]]
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-          (t :export-roam-json)]]]
-       [:a#download-as-edn-v2.hidden]
-       [:a#download-as-json-v2.hidden]
-       [:a#download-as-roam-json.hidden]
-       [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]
-       [:a#export-as-markdown.hidden]
-       [:a#export-as-opml.hidden]
-       [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
+         [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
+          (t :export-public-pages)]])
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
+        (t :export-markdown)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
+        (t :export-opml)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
+        (t :export-edn)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
+        (t :export-json)]]
+      [:li.mb-4
+       [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
+        (t :export-roam-json)]]]
+     [:a#download-as-edn-v2.hidden]
+     [:a#download-as-json-v2.hidden]
+     [:a#download-as-roam-json.hidden]
+     [:a#download-as-html.hidden]
+     [:a#download-as-zip.hidden]
+     [:a#export-as-markdown.hidden]
+     [:a#export-as-opml.hidden]
+     [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))
 
-
-(rum/defc export-page
-  []
-  #_:clj-kondo/ignore
-  (when-let [current-repo (state/get-current-repo)]
-    (when-let [page (state/get-current-page)]
-      (rum/with-context [[t] i18n/*tongue-context*]
-        [:div.export
-         [:h1.title "Export"]
-         [:ul.mr-1
-          [:li.mb-4
-           [:a.font-medium {:on-click #(export/export-page-as-markdown! page)}
-            (t :export-markdown)]]
-          [:li.mb-4
-           [:a.font-medium {:on-click #(export/export-page-as-opml! page)}
-            (t :export-opml)]]]
-         [:a#export-page-as-markdown.hidden]
-         [:a#export-page-as-opml.hidden]
-         [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))))
 
 (def *export-block-type (atom :text))
 
