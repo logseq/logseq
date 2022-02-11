@@ -28,7 +28,7 @@
 
     &-output-line {
       height: 1.7em;
-      word-break: normal;
+      white-space: pre;
       font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     }
   }
