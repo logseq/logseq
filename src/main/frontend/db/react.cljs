@@ -71,7 +71,6 @@
        (keys @query-state))
      (remove nil?))))
 
-;; TODO: Add components which subscribed to a specific query
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
@@ -204,16 +203,21 @@
 
 (defn- new-db
   [cached-result tx-data old-db]
-  (let [cached-result (util/remove-nils cached-result)
-        db (or old-db
-               (-> (d/empty-db db-schema/schema)
-                   (d/with cached-result)
-                   (:db-after)))]
-    (:db-after (d/with db tx-data))))
+  (try
+    (let [db (or old-db
+                 (let [cached-result (util/remove-nils cached-result)]
+                   (-> (d/empty-db db-schema/schema)
+                       (d/with cached-result)
+                       (:db-after))))]
+      (:db-after (d/with db tx-data)))
+    (catch js/Error e
+      (js/console.error e)
+      old-db)))
 
-(defonce current-page-db (atom nil))
-
-;; TODO: incremental or delayed queries (e.g. only run custom queries when idle)
+;; TODO: incremental or delayed queries (e.g. only run custom queries when idle).
+;; Only the current page's db will be cached at this moment.
+;; TODO: pre-compute long page's db once loaded, this can avoid the first input lag
+;; when writing.
 (defn refresh!
   [repo-url {:keys [tx-data tx-meta]}]
   (when (and repo-url
@@ -233,35 +237,37 @@
                            (let [current-page? (and
                                                 (= :page/blocks (second k))
                                                 (= (:db/id current-page) (nth k 2)))
+                                 page-id (:db/id current-page)
+                                 *current-page-db (state/get-reactive-current-page-db)
                                  new-db (if current-page?
-                                          (new-db @result tx-data @current-page-db)
+                                          (new-db @result tx-data (get-in @*current-page-db [repo-url page-id]))
                                           (new-db @result tx-data nil))]
                              (when current-page?
-                               (reset! current-page-db new-db))
+                               ;; TODO: lru cache to support multiple pages or queries
+                               (reset! *current-page-db {repo-url {page-id new-db}}))
                              new-db)
                            db)
-                      new-result (util/profile (str "refresh: " (rest k))
-                                               (->
-                                                (cond
-                                                  query-fn
-                                                  (let [result (query-fn db)]
-                                                    (if (coll? result)
-                                                      (doall result)
-                                                      result))
+                      new-result (->
+                                  (cond
+                                    query-fn
+                                    (let [result (query-fn db)]
+                                      (if (coll? result)
+                                        (doall result)
+                                        result))
 
-                                                  inputs-fn
-                                                  (let [inputs (inputs-fn)]
-                                                    (apply d/q query db inputs))
+                                    inputs-fn
+                                    (let [inputs (inputs-fn)]
+                                      (apply d/q query db inputs))
 
-                                                  (keyword? query)
-                                                  (db-utils/get-key-value repo-url query)
+                                    (keyword? query)
+                                    (db-utils/get-key-value repo-url query)
 
-                                                  (seq inputs)
-                                                  (apply d/q query db inputs)
+                                    (seq inputs)
+                                    (apply d/q query db inputs)
 
-                                                  :else
-                                                  (d/q query db))
-                                                transform-fn))]
+                                    :else
+                                    (d/q query db))
+                                  transform-fn)]
                   (when-not (= new-result result)
                     (set-new-result! k new-result)))
                 (catch js/Error e

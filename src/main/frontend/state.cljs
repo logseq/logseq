@@ -203,7 +203,8 @@
      :srs/mode?                             false
 
      :srs/cards-due-count                   nil
-     })))
+
+     :reactive/current-page-db              (atom {})})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -1605,3 +1606,7 @@
 (defn sub-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+
+(defn get-reactive-current-page-db
+  []
+  (:reactive/current-page-db @state))
