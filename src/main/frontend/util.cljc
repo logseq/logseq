@@ -1448,6 +1448,4 @@
 
 (defn collapsed?
   [block]
-  (or (:block/collapsed? block)
-      ;; for backward compatiblity
-      (get-in block [:properties :collapsed])))
+  (:block/collapsed? block))

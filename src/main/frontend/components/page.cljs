@@ -44,7 +44,10 @@
   [repo page-name block-id]
   (when page-name
     (if block-id
-      (db/get-block-and-children repo block-id)
+      (when-let [root-block (db/pull [:block/uuid block-id])]
+        (let [blocks (-> (db/get-block-and-children repo block-id)
+                         (model/sort-blocks root-block {}))]
+          (cons root-block blocks)))
       (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!
@@ -62,11 +65,7 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:init (fn [state]
-           (when-let [block-id (last (:rum/args state))]
-             (state/set-collapsed-block! block-id false))
-           state)
-   :did-mount  open-first-block!
+  {:did-mount  open-first-block!
    :did-update open-first-block!}
   [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
