@@ -92,9 +92,9 @@
   [latest-journals]
   [:div#journals
    (ui/infinite-list "main-content-container"
-                     (for [[journal-name format] latest-journals]
-                       [:div.journal-item.content {:key journal-name}
-                        (journal-cp [journal-name format])])
+                     (for [{:block/keys [name format]} latest-journals]
+                       [:div.journal-item.content {:key name}
+                        (journal-cp [name format])])
                      {:has-more (page-handler/has-more-journals?)
                       :more-class "text-4xl"
                       :on-top-reached page-handler/create-today-journal!

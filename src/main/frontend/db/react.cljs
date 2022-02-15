@@ -54,23 +54,6 @@
                    (into {}))]
     (reset! query-state state)))
 
-(defn get-current-repo-refs-keys
-  [{:keys [data]}]
-  (when-let [current-repo (state/get-current-repo)]
-    (->>
-     (map (fn [[repo k id]]
-            (when (and (= repo current-repo)
-                       (contains? #{:block/refed-blocks :block/unlinked-refs} k))
-              (if (= k :block/refed-blocks)
-                (if (every? (fn [m]
-                              (when (map? m)
-                                (= id (:db/id (:block/page m))))) data)
-                  nil
-                  [k id])
-                [k id])))
-       (keys @query-state))
-     (remove nil?))))
-
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
@@ -83,7 +66,8 @@
 
 (defn remove-q!
   [k]
-  (swap! query-state dissoc k))
+  (swap! query-state dissoc k)
+  (state/delete-reactive-query-db! k))
 
 (defn add-query-component!
   [key component]
@@ -202,7 +186,7 @@
              (string/upper-case page-name))))))
 
 (defn- new-db
-  [cached-result tx-data old-db]
+  [cached-result tx-data old-db k]
   (try
     (let [db (or old-db
                  (let [cached-result (util/remove-nils cached-result)]
@@ -211,42 +195,93 @@
                        (:db-after))))]
       (:db-after (d/with db tx-data)))
     (catch js/Error e
+      (prn "New db: " {:k k
+                       :old-db old-db
+                       :cached-result cached-result})
       (js/console.error e)
       old-db)))
 
-;; TODO: incremental or delayed queries (e.g. only run custom queries when idle).
-;; Only the current page's db will be cached at this moment.
+(defn get-affected-queries-keys
+  "Get affected queries through transaction datoms."
+  [{:keys [tx-data]}]
+  (def tx-data tx-data)
+  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent} (:a datom))) tx-data)
+                    (map :v)
+                    (distinct))
+        refs (->> (filter (fn [datom] (= :block/refs (:a datom))) tx-data)
+                  (map :v)
+                  (distinct))
+        other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
+                          (map :e))
+        blocks (-> (concat blocks other-blocks) distinct)
+        affected-keys (concat
+                       (mapcat
+                        (fn [block-id]
+                          (let [id (if (and (string? block-id) (util/uuid-string? block-id))
+                                     [:block/uuid block-id]
+                                     block-id)]
+                            (when-let [block (db-utils/entity block-id)]
+                              (let [page-id (:db/id (:block/page block))
+                                    blocks [[:blocks (:block/uuid block)]]
+                                    others (when page-id
+                                             [[:page/blocks page-id]
+                                              [:page/ref-pages page-id]])]
+                                (concat blocks others)))))
+                        blocks)
+
+                       (when-let [current-page-id (:db/id (get-current-page))]
+                         [[:page/ref-pages current-page-id]
+                          [:page/mentioned-pages current-page-id]])
+
+                       (map (fn [ref]
+                              (let [entity (db-utils/entity ref)]
+                                (if (:block/name entity) ; page
+                                  [:page/blocks ref]
+                                  [:block/refs-count ref])))
+                         refs))
+        others (some->>
+                (filter (fn [ks]
+                          (contains? #{:block/block :block/refed-blocks :block/unlinked-refs} (second ks)))
+                        (keys @query-state))
+                (map (fn [v] (vec (rest v)))))
+        refed-pages (map
+                      (fn [[k page-id]]
+                        (when (and page-id (= k :block/refed-blocks))
+                          [:page/ref-pages page-id]))
+                      affected-keys)]
+    (->>
+     (util/concat-without-nil
+      affected-keys
+      refed-pages
+      others)
+     set)))
+
 ;; TODO: pre-compute long page's db once loaded, this can avoid the first input lag
 ;; when writing.
 (defn refresh!
-  [repo-url {:keys [tx-data tx-meta]}]
+  "Re-compute corresponding queries (from tx) and refresh the related react components."
+  [repo-url {:keys [tx-data tx-meta] :as tx}]
   (when (and repo-url
              (seq tx-data)
              (not (:skip-refresh? tx-meta)))
     (let [db (conn/get-conn repo-url)
-          current-page (or (state/get-current-page)
-                           (date/today))
-          current-page (db-utils/entity [:block/name (util/page-name-sanity-lc current-page)])]
+          affected-keys (get-affected-queries-keys tx)]
+      (prn "Affected query keys: ")
+      (util/pprint affected-keys)
       (doseq [[k cache] @query-state]
-        (when (and (= (first k) repo-url) cache)
+        (when (and
+               (= (first k) repo-url)
+               (or (get affected-keys (vec (rest k)))
+                   (= :custom (second k))))
           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
             (when (or query query-fn)
               (try
-                (let [db (if (and (coll? @result)
-                                  (:db/id (first @result)))
-                           (let [current-page? (and
-                                                (= :page/blocks (second k))
-                                                (= (:db/id current-page) (nth k 2)))
-                                 page-id (:db/id current-page)
-                                 *current-page-db (state/get-reactive-current-page-db)
-                                 new-db (if current-page?
-                                          (new-db @result tx-data (get-in @*current-page-db [repo-url page-id]))
-                                          (new-db @result tx-data nil))]
-                             (when current-page?
-                               ;; TODO: lru cache to support multiple pages or queries
-                               (reset! *current-page-db {repo-url {page-id new-db}}))
-                             new-db)
-                           db)
+                (let [db' (when (and (vector? k) (not= (second k) :kv))
+                            (let [query-db (state/get-reactive-query-db k)
+                                  result (new-db @result tx-data query-db k)]
+                              (state/set-reactive-query-db! k result)
+                              result))
+                      db (or db' db)
                       new-result (->
                                   (cond
                                     query-fn

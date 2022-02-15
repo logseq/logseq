@@ -1925,9 +1925,9 @@
         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
         nil)]]))
 
-(rum/defc block-refs-count < rum/reactive
+(rum/defc block-refs-count < rum/reactive db-mixins/query
   [block]
-  (let [block-refs-count (model/get-block-refs-count (:block/uuid block))]
+  (let [block-refs-count (model/get-block-refs-count (:db/id block))]
     (when (and block-refs-count (> block-refs-count 0))
       [:div
        [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link

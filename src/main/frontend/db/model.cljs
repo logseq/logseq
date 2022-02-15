@@ -66,13 +66,13 @@
     (when (conn/get-conn repo)
       (->
        (react/q repo [:blocks id] {}
-                '[:find (pull ?block [*])
-                  :in $ ?id
-                  :where
-                  [?block :block/uuid ?id]]
-                id)
+         '[:find [(pull ?block [*]) ...]
+           :in $ ?id
+           :where
+           [?block :block/uuid ?id]]
+         id)
        react
-       ffirst))))
+       first))))
 
 (defn get-tag-pages
   [repo tag-name]
@@ -433,17 +433,15 @@
               result)))))))
 
 (defn get-block-refs-count
-  [block-id]
+  [block-db-id]
   (when-let [repo-url (state/get-current-repo)]
-    (when block-id
-      (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id])))
-      ;; (some->
-      ;; (react/q repo-url [:block/refs-count block-id]
-      ;;   {:query-fn (fn [_db]
-      ;;                (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
-      ;;   nil)
-      ;; react)
-      )))
+    (when block-db-id
+      (some->
+       (react/q repo-url [:block/refs-count block-db-id]
+         {:query-fn (fn [_db]
+                      (count (:block/_refs (db-utils/entity repo-url block-db-id))))}
+         nil)
+       react))))
 
 ;; TODO: native sort and limit support in DB
 (defn- get-limited-blocks
@@ -794,27 +792,21 @@
    (when (conn/get-conn repo-url)
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-utils/date->int (js/Date.))
-           pages (->>
-                  (react/q repo-url [:journals] {:use-cache? false}
-                           '[:find ?page-name ?journal-day
-                             :in $ ?today
-                             :where
-                             [?page :block/name ?page-name]
-                             [?page :block/journal? true]
-                             [?page :block/journal-day ?journal-day]
-                             [(<= ?journal-day ?today)]]
-                           today)
-                  (react)
-                  (sort-by last)
-                  (reverse)
-                  (map first)
-                  (take n))]
-       (mapv
-        (fn [page]
-          [page
-           (get-page-format page)])
-        pages)))))
+           today (db-utils/date->int (js/Date.))]
+       (->>
+        (react/q repo-url [:journals] {:use-cache? false}
+          '[:find [(pull ?page [*]) ...]
+            :in $ ?today
+            :where
+            [?page :block/name ?page-name]
+            [?page :block/journal? true]
+            [?page :block/journal-day ?journal-day]
+            [(<= ?journal-day ?today)]]
+          today)
+        (react)
+        (sort-by :block/journal-day)
+        (reverse)
+        (take n))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages

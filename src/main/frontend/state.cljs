@@ -204,7 +204,7 @@
 
      :srs/cards-due-count                   nil
 
-     :reactive/current-page-db              (atom {})})))
+     :reactive/query-dbs                    {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -1607,6 +1607,14 @@
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
 
-(defn get-reactive-current-page-db
-  []
-  (:reactive/current-page-db @state))
+(defn get-reactive-query-db
+  [ks]
+  (get-in @state [:reactive/query-dbs ks]))
+
+(defn set-reactive-query-db!
+  [ks db-value]
+  (set-state! [:reactive/query-dbs ks] db-value))
+
+(defn delete-reactive-query-db!
+  [ks]
+  (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
