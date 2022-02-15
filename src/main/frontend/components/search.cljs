@@ -81,31 +81,39 @@
      [:div {:class "font-medium" :key "content"}
       (highlight-exact-query content q)]]))
 
-(defonce search-timeout (atom nil))
+(defn- search-has-a-match?
+  [pages search-q result]
+  (or
+   (and (seq pages)
+        (= (util/safe-page-name-sanity-lc search-q)
+           (util/safe-page-name-sanity-lc (:data (first pages)))))
+   (nil? result)))
+
+(defn- transform-pages
+  [pages]
+  (map (fn [page]
+         (let [alias (model/get-redirect-page-name page)]
+           (cond->
+            {:type :page
+             :data page}
+            (and alias
+                 (not= (util/page-name-sanity-lc page)
+                       (util/page-name-sanity-lc alias)))
+            (assoc :alias alias))))
+       (remove nil? pages)))
 
 (rum/defc ^:large-vars/cleanup-todo search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
-  (let [pages (when-not all? (map (fn [page]
-                                    (let [alias (model/get-redirect-page-name page)]
-                                      (cond->
-                                        {:type :page
-                                         :data page}
-                                        (and alias
-                                             (not= (util/page-name-sanity-lc page)
-                                                   (util/page-name-sanity-lc alias)))
-                                        (assoc :alias alias))))
-                               (remove nil? pages)))
+  (let [pages (when-not all? (transform-pages pages))
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
-        new-page (if (or
-                      (and (seq pages)
-                           (= (util/safe-page-name-sanity-lc search-q)
-                              (util/safe-page-name-sanity-lc (:data (first pages)))))
-                      (nil? result)
-                      all?)
+        ;; TODO: Remove
+        new-page (if (or (search-has-a-match? pages search-q result)
+                         all?)
                    []
-                   [{:type :new-page}])
+                   []
+                   #_[{:type :new-page}])
         result (if config/publishing?
                  (concat pages files blocks)
                  (concat new-page pages files blocks))
@@ -298,6 +306,51 @@
                                 (search-result-item "Page" original-name))
                         nil))}))])
 
+(defonce search-timeout (atom nil))
+
+(defn- input-on-change
+  [e]
+  (when @search-timeout
+    (js/clearTimeout @search-timeout))
+  (let [timeout 300
+        value (util/evalue e)
+        is-composing? (util/onchange-event-is-composing? e)] ;; #3199
+    (if (and (string/blank? value) (not is-composing?))
+      (search-handler/clear-search! false)
+      (let [search-mode (state/get-search-mode)
+            opts (if (= :page search-mode)
+                   (when-let [current-page (or (state/get-current-page)
+                                               (date/today))]
+                     {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
+                   {})]
+        (state/set-q! value)
+        (reset! search-timeout
+                (js/setTimeout
+                 (fn []
+                   (if (= :page search-mode)
+                     (search-handler/search (state/get-current-repo) value opts)
+                     (search-handler/search (state/get-current-repo) value)))
+                 timeout))))))
+
+(rum/defc create-results
+  [search-q]
+  [:div.create-wrap
+   [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Create"]
+   [:div.flex.flex-row.justify-around.align-items
+    [:div.py-2.px-1.rounded-md.text.font-bold
+     {:on-click #(js/alert "TODO: Add block")}
+     "Add new block to today's journal"]
+    [:div.py-2.px-1.rounded-md.text.font-bold
+     {:on-click (fn [_e]
+                  ;; TODO: Refactor with search-auto-complete
+                  (search-handler/add-search-to-recent! (state/get-current-repo)
+                                                        search-q)
+                  (search-handler/clear-search!)
+                  (page-handler/create! search-q)
+                  (state/close-modal!)) }
+     (str (t :new-page) ": ")
+     [:span.ml-1 (str "\"" search-q "\"")]]]])
+
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
   (mixins/event-mixin
@@ -310,12 +363,12 @@
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         search-mode (state/sub :search/mode)
-        timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
      (when (mobile-util/is-native-platform?)
        {:style {:min-height "50vh"}})
 
+     [:div.header-wrap]
      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
@@ -328,28 +381,14 @@
                          (t :search))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
-        :on-change     (fn [e]
-                         (when @search-timeout
-                           (js/clearTimeout @search-timeout))
-                         (let [value (util/evalue e)
-                               is-composing? (util/onchange-event-is-composing? e)] ;; #3199
-                           (if (and (string/blank? value) (not is-composing?))
-                             (search-handler/clear-search! false)
-                             (let [search-mode (state/get-search-mode)
-                                   opts (if (= :page search-mode)
-                                          (when-let [current-page (or (state/get-current-page)
-                                                                      (date/today))]
-                                            {:page-db-id (:db/id (db/entity [:block/name (util/page-name-sanity-lc current-page)]))})
-                                          {})]
-                               (state/set-q! value)
-                               (reset! search-timeout
-                                       (js/setTimeout
-                                        (fn []
-                                          (if (= :page search-mode)
-                                            (search-handler/search (state/get-current-repo) value opts)
-                                            (search-handler/search (state/get-current-repo) value)))
-                                        timeout))))))}]]
+        :on-change     input-on-change}]]
+     (when-not (search-has-a-match? (transform-pages (:pages search-result))
+                                    search-q
+                                    search-result)
+       (create-results search-q))
+     #_[:div.keyboard-row.py-16 "Keyboard Shortcuts TODO"]
      [:div.search-results-wrap
+      [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"]
       (if (seq search-result)
         (search-auto-complete search-result search-q false)
         (recent-search-and-pages in-page-search?))]]))

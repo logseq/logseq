@@ -286,7 +286,7 @@
         :unlink "unlink"
         :search (if config/publishing?
                   "Search"
-                  "Search or create page")
+                  "Type a note or search your graph")
         :page-search "Search in the current page"
         :graph-search "Search graph"
         :new-page "New page"

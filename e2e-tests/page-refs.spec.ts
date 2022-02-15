@@ -73,8 +73,8 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
     let kw_name = kw + ' alias ' + rand
 
     await page.click('#search-button')
-    await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.waitForSelector('[placeholder="Type a note or search your graph"]')
+    await page.fill('[placeholder="Type a note or search your graph"]', kw_name)
     await page.waitForTimeout(500)
 
     const results = await page.$$('#ui__ac-inner .block')
@@ -97,8 +97,8 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
 
     // test search clicking (block)
     await page.click('#search-button')
-    await page.waitForSelector('[placeholder="Search or create page"]')
-    await page.fill('[placeholder="Search or create page"]', kw_name)
+    await page.waitForSelector('[placeholder="Type a note or search your graph"]')
+    await page.fill('[placeholder="Type a note or search your graph"]', kw_name)
     await page.waitForTimeout(500)
     page.click(":nth-match(.menu-link, 2)")
     await page.waitForNavigation()
