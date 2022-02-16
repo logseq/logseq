@@ -110,6 +110,24 @@
          (set! (.-state result-atom) result)
          (add-q! k nil nil result-atom identity identity identity))))))
 
+(defn- new-db
+  [cached-result tx-data old-db k]
+  (when (and (coll? cached-result)
+             (map? (first cached-result)))
+    (try
+      (let [db (or old-db
+                   (let [cached-result (util/remove-nils cached-result)]
+                     (-> (d/empty-db db-schema/schema)
+                         (d/with cached-result)
+                         (:db-after))))]
+        (:db-after (d/with db tx-data)))
+      (catch js/Error e
+        (prn "New db: " {:k k
+                         :old-db old-db
+                         :cached-result cached-result})
+        (js/console.error e)
+        old-db))))
+
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
@@ -143,9 +161,15 @@
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
             (if-not disable-reactive?
-              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)
+              (do
+                (let [*t (atom nil)]
+                  (reset! *t
+                          (js/setTimeout (fn []
+                                    (let [db' (new-db result nil nil k)]
+                                      (state/set-reactive-query-db! k db')
+                                      (js/clearTimeout @*t))) 1000)))
+                (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
               result-atom)))))))
-
 
 
 ;; TODO: Extract several parts to handlers
@@ -184,22 +208,6 @@
       (when-let [page-name (get-in match [:path-params :name])]
         (and (marker/marker? page-name)
              (string/upper-case page-name))))))
-
-(defn- new-db
-  [cached-result tx-data old-db k]
-  (try
-    (let [db (or old-db
-                 (let [cached-result (util/remove-nils cached-result)]
-                   (-> (d/empty-db db-schema/schema)
-                       (d/with cached-result)
-                       (:db-after))))]
-      (:db-after (d/with db tx-data)))
-    (catch js/Error e
-      (prn "New db: " {:k k
-                       :old-db old-db
-                       :cached-result cached-result})
-      (js/console.error e)
-      old-db)))
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."

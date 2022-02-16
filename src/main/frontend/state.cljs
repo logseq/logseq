@@ -1613,7 +1613,8 @@
 
 (defn set-reactive-query-db!
   [ks db-value]
-  (set-state! [:reactive/query-dbs ks] db-value))
+  (when db-value
+    (set-state! [:reactive/query-dbs ks] db-value)))
 
 (defn delete-reactive-query-db!
   [ks]
