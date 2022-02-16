@@ -620,7 +620,7 @@ class PluginLocal
   <head>
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
-    ${!IS_DEV ?
+    ${IS_DEV ?
         `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>` :
         `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`}
     
