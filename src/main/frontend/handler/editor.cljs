@@ -454,7 +454,7 @@
       [fst-block-text snd-block-text])))
 
 (defn outliner-insert-block!
-  [config current-block new-block sibling?]
+  [config current-block new-block {:keys [sibling? txs-state]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         skip-save-current-block? (:skip-save-current-block? config)
@@ -473,9 +473,10 @@
                    true
 
                    :else
-                   (not has-children?))]
+                   (not has-children?))
+        txs-state' (or txs-state (ds/new-outliner-txs-state))]
     (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)]
+     [txs-state txs-state']
      {:outliner-op :save-and-insert-node
       :skip-transact? false}
      (let [*blocks (atom [current-node])]
@@ -513,13 +514,15 @@
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
-        left-block (db/pull (:db/id (:block/left block)))
-        _ (outliner-core/save-node (outliner-core/block current-block))
-        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+        left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
-     (outliner-insert-block! config left-block prev-block sibling?))
-    (profile "ok handler" (ok-handler prev-block))))
+     (let [txs-state (ds/new-outliner-txs-state)]
+       (outliner-core/save-node (outliner-core/block current-block) {:txs-state txs-state})
+       (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+         (outliner-insert-block! config left-block prev-block {:sibling? sibling?
+                                                               :txs-state txs-state}))))
+    (ok-handler prev-block)))
 
 (defn insert-new-block-aux!
   [config
@@ -543,7 +546,7 @@
         sibling? (when block-self? false)]
     (profile
      "outliner insert block"
-     (outliner-insert-block! config current-block next-block sibling?))
+     (outliner-insert-block! config current-block next-block {:sibling? sibling?}))
     ;; WORKAROUND: The block won't refresh itself even if the content is empty.
     (when block-self?
       (gobj/set input "value" ""))
@@ -666,7 +669,7 @@
                                    nil)]
 
           (when block-m
-            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
+            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?})
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!

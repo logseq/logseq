@@ -272,41 +272,41 @@
                (= (first k) repo-url)
                (or (get affected-keys (vec (rest k)))
                    (= :custom (second k))))
-          (util/profile (str "Affected query key: " (rest k))
-           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
-             (when (or query query-fn)
-               (try
-                 (let [db' (when (and (vector? k) (not= (second k) :kv))
-                             (let [query-db (state/get-reactive-query-db k)
-                                   result (new-db @result tx-data query-db k)]
-                               (state/set-reactive-query-db! k result)
-                               result))
-                       db (or db' db)
-                       new-result (->
-                                   (cond
-                                     query-fn
-                                     (let [result (query-fn db)]
-                                       (if (coll? result)
-                                         (doall result)
-                                         result))
+          ;; (prn (str "Affected query key: " (rest k)))
+          (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
+            (when (or query query-fn)
+              (try
+                (let [db' (when (and (vector? k) (not= (second k) :kv))
+                            (let [query-db (state/get-reactive-query-db k)
+                                  result (new-db @result tx-data query-db k)]
+                              (state/set-reactive-query-db! k result)
+                              result))
+                      db (or db' db)
+                      new-result (->
+                                  (cond
+                                    query-fn
+                                    (let [result (query-fn db)]
+                                      (if (coll? result)
+                                        (doall result)
+                                        result))
 
-                                     inputs-fn
-                                     (let [inputs (inputs-fn)]
-                                       (apply d/q query db inputs))
+                                    inputs-fn
+                                    (let [inputs (inputs-fn)]
+                                      (apply d/q query db inputs))
 
-                                     (keyword? query)
-                                     (db-utils/get-key-value repo-url query)
+                                    (keyword? query)
+                                    (db-utils/get-key-value repo-url query)
 
-                                     (seq inputs)
-                                     (apply d/q query db inputs)
+                                    (seq inputs)
+                                    (apply d/q query db inputs)
 
-                                     :else
-                                     (d/q query db))
-                                   transform-fn)]
-                   (when-not (= new-result result)
-                     (set-new-result! k new-result)))
-                 (catch js/Error e
-                   (js/console.error e)))))))))))
+                                    :else
+                                    (d/q query db))
+                                  transform-fn)]
+                  (when-not (= new-result result)
+                    (set-new-result! k new-result)))
+                (catch js/Error e
+                  (js/console.error e))))))))))
 
 (defn set-key-value
   [repo-url key value]
