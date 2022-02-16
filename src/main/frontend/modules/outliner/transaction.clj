@@ -13,7 +13,7 @@
   [opts & body]
   (assert (map? opts))
   `(if (some? frontend.modules.outliner.core2/*transaction-data*)
-     (throw (js/Error. "nested call of save-transactions"))
+     (do ~@body)
      (binding [frontend.modules.outliner.core2/*transaction-data* (transient [])]
        ~@body
        (let [~'r (persistent! frontend.modules.outliner.core2/*transaction-data*)]
