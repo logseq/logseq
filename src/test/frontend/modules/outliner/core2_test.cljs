@@ -254,7 +254,7 @@
   (let [datoms (d/datoms db :avet :data)]
     (if (empty? datoms)
       {:txs-data [] :nodes-count-change 0}
-      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity db 1) db)
+      (let [nodes (apply subvec (vec (outliner-core/get-page-nodes (d/entity db 1) db))
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (if (seq nodes)
           {:txs-data (outliner-core/indent-nodes nodes db)
@@ -266,7 +266,7 @@
   (let [datoms (d/datoms db :avet :data)]
     (if (empty? datoms)
       {:txs-data [] :nodes-count-change 0}
-      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity db 1) db)
+      (let [nodes (apply subvec (vec (outliner-core/get-page-nodes (d/entity db 1) db))
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (if (seq nodes)
           {:txs-data (outliner-core/outdent-nodes nodes db)
@@ -353,7 +353,7 @@
   [conn _seq-state]
   (let [datoms (d/datoms @conn :avet :data)]
     (when (seq datoms)
-      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity @conn 1) @conn)
+      (let [nodes (apply subvec (vec (outliner-core/get-page-nodes (d/entity @conn 1) @conn))
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (when (seq nodes)
           (outliner-core/indent-nodes! nodes conn))))))
@@ -362,7 +362,7 @@
   [conn _seq-state]
   (let [datoms (d/datoms @conn :avet :data)]
     (when (seq datoms)
-      (let [nodes (apply subvec (outliner-core/get-page-nodes (d/entity @conn 1) @conn)
+      (let [nodes (apply subvec (vec (outliner-core/get-page-nodes (d/entity @conn 1) @conn))
                          (sort [(rand-int (count datoms)) (rand-int (count datoms))]))]
         (when (seq nodes)
           (outliner-core/outdent-nodes! nodes conn))))))

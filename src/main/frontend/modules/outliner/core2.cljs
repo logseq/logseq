@@ -13,6 +13,7 @@
 ;; - :block/level: node's indent level (>= 1)
 ;; - :block/page: which page this node belongs to
 
+;;; utils
 (defn- block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
@@ -47,6 +48,11 @@
   [node]
   {:db/id (:db/id node)})
 
+
+
+
+
+;;; Node apis
 (defprotocol Node
   (-get-id [this] "return :db/id or nil")
   (-get-level [this] "return :block/level or nil")
@@ -218,16 +224,22 @@
   [o]
   (not-any? (complement map?) o))
 
+(declare contains-node?)
+(defn- validate-nodes-not-contains-target
+  "validate target-node isn't child of any node of NODES"
+  [nodes target-id-or-entity db]
+  (let [target (target-entity target-id-or-entity db)]
+    (assert (not (contains-node? nodes target)))))
+
 
 ;;; write-operations on outliner nodes (no side effects) ;;;;;;;;;;;;;;;;
 ;; all operation functions are pure, and return transaction data,
 
 (defn insert-nodes
-  "insert NODES as consecutive sorted nodes after target as sibling or children.
+  "insert NODES as consecutive sorted nodes after target as siblings or children.
   return transaction data."
   [nodes db target-id-or-entity sibling?]
-  {:pre [(seq nodes)
-         (some? target-id-or-entity)
+  {:pre [(some? target-id-or-entity)
          (map-sequential? nodes)]}
   (let [nodes (assign-temp-id nodes)
         target (target-entity target-id-or-entity db)
@@ -257,7 +269,8 @@
   "move consecutive sorted NODES after target as sibling or children
   return transaction data."
   [nodes db target-id-or-entity sibling?]
-  {:pre [(seq nodes) (some? target-id-or-entity)]}
+  {:pre [(seq nodes)
+         (some? target-id-or-entity)]}
   (let [target (target-entity target-id-or-entity db)
         target-next (get-next target db)
         first-node (first nodes)
@@ -325,26 +338,28 @@
 
 ;;; get nodes functions ;;;;;;;;;;;;;;;;
 
+(defn- get-children-nodes-aux
+  [node db level]
+  (lazy-seq
+   (let [next-node (get-next node db)]
+     (when (and next-node
+                (> (get-level next-node) level))
+       (cons next-node (get-children-nodes-aux next-node db level))))))
+
 (defn get-children-nodes
-  "return sorted nodes: NODE itself and its children"
+  "return lazy sorted nodes: NODE itself and its children"
   [node db]
-  (let [node-level (get-level node)
-        nodes (transient [node])]
-    (loop [next-node (get-next node db)]
-      (when (and next-node (> (get-level next-node) node-level))
-        (conj! nodes next-node)
-        (recur (get-next next-node db))))
-    (persistent! nodes)))
+  (let [level (get-level node)]
+    (cons node (get-children-nodes-aux node db level))))
 
 (defn get-page-nodes
-  "return PAGE-NODE's sorted nodes"
+  "return lazy PAGE-NODE's sorted nodes"
   [page-node db]
-  (let [nodes (transient [])]
-    (loop [next-node (get-next page-node db)]
-      (when next-node
-        (conj! nodes next-node)
-        (recur (get-next next-node db))))
-    (persistent! nodes)))
+  (lazy-seq
+   (let [next-node (get-next page-node db)]
+     (when next-node
+       (cons next-node (get-page-nodes next-node db))))))
+
 
 ;;; predicates
 (defn contains-node?
@@ -369,12 +384,12 @@
         tx-report (d/transact! conn origin-tx-data)]
     (apply conj! *transaction-data* (:tx-data tx-report))))
 
-;;; TODO: validate target-node isn't child of any node of NODES
 (defn move-nodes!
   [nodes conn target-id-or-entity sibling?]
   {:pre [(d/conn? conn)]}
   (when (nil? *transaction-data*)
     (throw (js/Error. "move-nodes! used not in (save-transactions ...)")))
+  (validate-nodes-not-contains-target nodes target-id-or-entity @conn)
   (let [origin-tx-data (move-nodes nodes @conn target-id-or-entity sibling?)
         tx-report (d/transact! conn origin-tx-data)]
     (apply conj! *transaction-data* (:tx-data tx-report))))
