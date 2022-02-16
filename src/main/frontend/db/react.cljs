@@ -263,8 +263,6 @@
       others)
      set)))
 
-;; TODO: pre-compute long page's db once loaded, this can avoid the first input lag
-;; when writing.
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url {:keys [tx-data tx-meta] :as tx}]
