@@ -54,7 +54,7 @@
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority set-key-value
+  get-current-page set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! kv q
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh!]

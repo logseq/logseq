@@ -470,7 +470,6 @@
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               block-eids block-eids
                                blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
@@ -908,7 +907,7 @@
                                 pages
                                 aliases
                                 block-attrs))
-                            (react/q repo [:block/refed-blocks page-id] {:use-cache? false}
+                            (react/q repo [:block/refed-blocks page-id] {}
                               '[:find [(pull ?ref-block ?block-attrs) ...]
                                 :in $ ?page ?block-attrs
                                 :where
@@ -1031,7 +1030,7 @@
     (when (conn/get-conn repo)
       (let [block (db-utils/entity [:block/uuid block-uuid])]
         (->> (react/q repo [:block/refed-blocks (:db/id block)]
-               {}
+               {:use-cache? false}
                '[:find [(pull ?ref-block ?block-attrs) ...]
                  :in $ ?block-uuid ?block-attrs
                 :where

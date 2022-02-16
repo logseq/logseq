@@ -4,14 +4,12 @@
   It'll be great if we can find an automatically resolving and performant
   solution.
   "
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.util.marker :as marker]
             [frontend.db-schema :as db-schema]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
@@ -28,8 +26,6 @@
   [k new-result]
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
-
-;; KV
 
 (defn kv
   [key value]
@@ -187,28 +183,10 @@
       (let [page-name (util/page-name-sanity-lc page)]
         (db-utils/entity [:block/name page-name])))))
 
-(defn get-current-priority
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (contains? #{"a" "b" "c"} (string/lower-case page-name))
-             (string/upper-case page-name))))))
-
-(defn get-current-marker
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (marker/marker? page-name)
-             (string/upper-case page-name))))))
-
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data]}]
-  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent} (:a datom))) tx-data)
+  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
         refs (->> (filter (fn [datom] (= :block/refs (:a datom))) tx-data)
@@ -224,7 +202,9 @@
                                            [:block/uuid block-id]
                                            block-id)]
                             (when-let [block (db-utils/entity block-id)]
-                              (let [page-id (:db/id (:block/page block))
+                              (let [page-id (or
+                                             (when (:block/name block) (:db/id block))
+                                             (:db/id (:block/page block)))
                                     blocks [[:blocks (:block/uuid block)]]
                                     others (when page-id
                                              [[:page/blocks page-id]
@@ -272,7 +252,6 @@
                (= (first k) repo-url)
                (or (get affected-keys (vec (rest k)))
                    (= :custom (second k))))
-          ;; (prn (str "Affected query key: " (rest k)))
           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
             (when (or query query-fn)
               (try
