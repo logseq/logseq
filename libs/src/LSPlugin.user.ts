@@ -1,7 +1,8 @@
 import { deepMerge, mergeSettingsWithSchema, safetyPathJoin } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
-  IAppProxy, IDBProxy,
+  IAppProxy,
+  IDBProxy,
   IEditorProxy,
   ILSPluginUser,
   LSPluginBaseInfo,
@@ -10,9 +11,18 @@ import {
   BlockCommandCallback,
   StyleString,
   ThemeOptions,
-  UIOptions, IHookEvent, BlockIdentity,
+  UIOptions,
+  IHookEvent,
+  BlockIdentity,
   BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc, IUserOffHook, IGitProxy
+  UIContainerAttrs,
+  SimpleCommandCallback,
+  SimpleCommandKeybinding,
+  SettingSchemaDesc,
+  IUserOffHook,
+  IGitProxy,
+  IUIProxy,
+  UserProxyTags
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -208,6 +218,7 @@ const editor: Partial<IEditorProxy> = {
 
 const db: Partial<IDBProxy> = {}
 const git: Partial<IGitProxy> = {}
+const ui: Partial<IUIProxy> = {}
 
 type uiState = {
   key?: number,
@@ -440,7 +451,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    */
   _makeUserProxy (
     target: any,
-    tag?: 'app' | 'editor' | 'db' | 'git'
+    tag?: UserProxyTags
   ) {
     const that = this
     const caller = this.caller
@@ -473,8 +484,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
           let method = propKey as string
 
-          if (tag === 'git') {
-            method = 'git_' + method
+          if (['git', 'ui'].includes(tag)) {
+            method = tag + '_' + method
           }
 
           // Call host
@@ -513,6 +524,10 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
   get Git (): IGitProxy {
     return this._makeUserProxy(git, 'git')
+  }
+
+  get UI (): IUIProxy {
+    return this._makeUserProxy(ui, 'ui')
   }
 
   get FileStorage (): LSPluginFileStorage {

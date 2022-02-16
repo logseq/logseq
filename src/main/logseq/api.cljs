@@ -632,13 +632,19 @@
             dir (config/get-repo-dir repo)
             _ (fs/write-file! repo dir file content {:skip-compare? true})])))
 
-;; helpers
+;; ui
 (defn ^:export show_msg
   ([content] (show_msg content :success))
   ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
                           content (if hiccup? (parse-hiccup-ui content) content)]
                       (notification/show! content (keyword status)))))
 
+(defn ^:export ui_show_msg
+  [& args]
+  (apply show_msg args))
+
+
+;; helpers
 (defn ^:export query_element_by_id
   [id]
   (let [^js el (gdom/getElement id)]

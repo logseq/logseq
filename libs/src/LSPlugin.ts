@@ -242,6 +242,8 @@ export type ExternalCommandType =
   'logseq.ui/toggle-wide-mode' |
   'logseq.command-palette/toggle'
 
+export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui'
+
 /**
  * App level APIs
  */
@@ -556,6 +558,13 @@ export interface IGitProxy {
   saveIgnoreFile: (content: string) => Promise<void>
 }
 
+/**
+ * UI related APIS
+ */
+export interface IUIProxy {
+  showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
+}
+
 export interface ILSPluginThemeManager extends EventEmitter {
   themes: Map<PluginLocalIdentity, Array<ThemeOptions>>
 
@@ -711,6 +720,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Editor: IEditorProxy & Record<string, any>
   DB: IDBProxy
   Git: IGitProxy
+  UI: IUIProxy
 
   FileStorage: LSPluginFileStorage
 }
