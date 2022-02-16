@@ -6,6 +6,8 @@
             [frontend.util :as util]
             ["fuse.js" :as fuse]))
 
+;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
+
 (defonce indices (atom nil))
 
 (defn block->index
