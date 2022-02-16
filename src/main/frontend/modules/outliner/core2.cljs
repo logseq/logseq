@@ -56,17 +56,6 @@
   (-set-next [this id-or-node] "transaction to add :block/next attr")
   (-set-level [this level] "transaction to add :block/level attr"))
 
-(defn- map-get-id [this] (:db/id this))
-(defn- map-get-level [this] (:block/level this))
-(defn- map-get-next [this db] (d/entity db (:db/id (:block/next this))))
-(defn- map-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
-(defn- map-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
-(defn- map-set-next [this id-or-node]
-  (when id-or-node
-    (cond->> id-or-node
-      (not (number? id-or-node)) :db/id
-      true (assoc (id-map this) :block/next))))
-(defn- map-set-level [this level] (assoc (id-map this) :block/level level))
 
 (extend-protocol Node
   de/Entity
@@ -80,35 +69,96 @@
       (cond->> id-or-node
         (not (number? id-or-node)) :db/id
         true (assoc (id-map this) :block/next))))
-  (-set-level [this level] (assoc (id-map this) :block/level level))
+  (-set-level [this level] (assoc (id-map this) :block/level level)))
 
-  PersistentHashMap
-  (-get-id [this] (map-get-id this))
-  (-get-level [this] (map-get-level this))
-  (-get-next [this db] (map-get-next this db))
-  (-get-prev [this db] (map-get-prev this db))
-  (-unset-next [this] (map-unset-next this))
-  (-set-next [this id-or-node] (map-set-next this id-or-node))
-  (-set-level [this level] (map-set-level this level))
+(defn- map-get-id [this] (:db/id this))
+(defn- map-get-level [this] (:block/level this))
+(defn- map-get-next [this db] (d/entity db (:db/id (:block/next this))))
+(defn- map-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
+(defn- map-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
+(defn- map-set-next [this id-or-node]
+  (when id-or-node
+    (cond->> id-or-node
+      (not (number? id-or-node)) :db/id
+      true (assoc (id-map this) :block/next))))
+(defn- map-set-level [this level] (assoc (id-map this) :block/level level))
 
-  PersistentTreeMap
-  (-get-id [this] (map-get-id this))
-  (-get-level [this] (map-get-level this))
-  (-get-next [this db] (map-get-next this db))
-  (-get-prev [this db] (map-get-prev this db))
-  (-unset-next [this] (map-unset-next this))
-  (-set-next [this id-or-node] (map-set-next this id-or-node))
-  (-set-level [this level] (map-set-level this level))
+(defn- get-id [o]
+  (cond
+    (implements? Node o)
+    (-get-id o)
 
-  PersistentArrayMap
-  (-get-id [this] (map-get-id this))
-  (-get-level [this] (map-get-level this))
-  (-get-next [this db] (map-get-next this db))
-  (-get-prev [this db] (map-get-prev this db))
-  (-unset-next [this] (map-unset-next this))
-  (-set-next [this id-or-node] (map-set-next this id-or-node))
-  (-set-level [this level] (map-set-level this level)))
+    (map? o)
+    (map-get-id o)
 
+    :else
+    (throw (js/Error. (str "cannot get-id on " o)))))
+
+(defn- get-level [o]
+  (cond
+    (implements? Node o)
+    (-get-level o)
+
+    (map? o)
+    (map-get-level o)
+
+    :else
+    (throw (js/Error. (str "cannot get-level on " o)))))
+
+(defn- get-next [o db]
+  (cond
+    (implements? Node o)
+    (-get-next o db)
+
+    (map? o)
+    (map-get-next o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-next on " o)))))
+
+(defn- get-prev [o db]
+  (cond
+    (implements? Node o)
+    (-get-prev o db)
+
+    (map? o)
+    (map-get-prev o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-prev on " o)))))
+
+(defn- unset-next [o]
+  (cond
+    (implements? Node o)
+    (-unset-next o)
+
+    (map? o)
+    (map-unset-next o)
+
+    :else
+    (throw (js/Error. (str "cannot unset-next on " o)))))
+
+(defn- set-next [o id-or-node]
+  (cond
+    (implements? Node o)
+    (-set-next o id-or-node)
+
+    (map? o)
+    (map-set-next o id-or-node)
+
+    :else
+    (throw (js/Error. (str "cannot set-next on " o)))))
+
+(defn- set-level [o level]
+  (cond
+    (implements? Node o)
+    (-set-level o level)
+
+    (map? o)
+    (map-set-level o level)
+
+    :else
+    (throw (js/Error. (str "cannot set-level on " o)))))
 
 (defn- save-aux
   "Generate datascript transaction data,
@@ -153,14 +203,14 @@
 
 
 (defn- get-diff-level [node target-node sibling?]
-  (let [origin-level (-get-level node)
-        target-level (-get-level target-node)]
+  (let [origin-level (get-level node)
+        target-level (get-level target-node)]
     (cond-> (- target-level origin-level) (not sibling?) inc)))
 
 (defn- assign-temp-id
   [nodes]
   (map-indexed (fn [idx node]
-                 (if (-get-id node)
+                 (if (get-id node)
                    node
                    (assoc node :db/id (dec (- idx))))) nodes))
 
@@ -181,26 +231,26 @@
          (map-sequential? nodes)]}
   (let [nodes (assign-temp-id nodes)
         target (target-entity target-id-or-entity db)
-        next (-get-next target db)
+        next (get-next target db)
         first-node (first nodes)
         last-node (last nodes)
         diff-level (get-diff-level first-node target sibling?)
         update-level-txs
         (sequence
          (comp
-          (map #(merge % (-set-level % (+ diff-level (:block/level %)))))
+          (map #(merge % (set-level % (+ diff-level (:block/level %)))))
           (map #(save-aux db %))
           cat)
          nodes)
         update-next-id-txs
-        [(-set-next target first-node)
-         (-set-next last-node next)]
+        [(set-next target first-node)
+         (set-next last-node next)]
         update-internal-nodes-next-id-txs
         (for [i (range)
               :let [n1 (nth nodes i nil)
                     n2 (nth nodes (inc i) nil)]
               :while (and n1 n2)]
-          (-set-next n1 n2))]
+          (set-next n1 n2))]
     (vec (concat update-level-txs update-next-id-txs update-internal-nodes-next-id-txs))))
 
 (defn move-nodes
@@ -209,26 +259,26 @@
   [nodes db target-id-or-entity sibling?]
   {:pre [(seq nodes) (some? target-id-or-entity)]}
   (let [target (target-entity target-id-or-entity db)
-        target-next (-get-next target db)
+        target-next (get-next target db)
         first-node (first nodes)
-        origin-prev-first-node (-get-prev first-node db)
+        origin-prev-first-node (get-prev first-node db)
         last-node (last nodes)
-        origin-next-last-node (-get-next last-node db)
+        origin-next-last-node (get-next last-node db)
         diff-level (get-diff-level first-node target sibling?)]
     (into
      ;; alter :block/next
      (if (and target-next
-              (= (-get-id first-node) (-get-id target-next)))
+              (= (get-id first-node) (get-id target-next)))
        ;; no need to set-next if first-node is next node of target
        []
-       [(-unset-next origin-prev-first-node)
-        (-set-next target first-node)
-        (if target-next                 ; need to -unset-next when target-next is nil
-          (-set-next last-node target-next)
-          (-unset-next last-node))
-        (-set-next origin-prev-first-node origin-next-last-node)])
+       [(unset-next origin-prev-first-node)
+        (set-next target first-node)
+        (if target-next                 ; need to unset-next when target-next is nil
+          (set-next last-node target-next)
+          (unset-next last-node))
+        (set-next origin-prev-first-node origin-next-last-node)])
      ;; alter :block/level
-     (map #(-set-level % (+ diff-level (:block/level %))) nodes))))
+     (map #(set-level % (+ diff-level (:block/level %))) nodes))))
 
 
 (defn delete-nodes
@@ -238,13 +288,13 @@
   {:pre [(seq nodes)]}
   (let [first-node (first nodes)
         last-node (last nodes)
-        target-node (-get-prev first-node db)
-        next-node (-get-next last-node db)]
+        target-node (get-prev first-node db)
+        next-node (get-next last-node db)]
     (conj
      ;; retract nodes
-     (mapv (fn [node] [:db/retractEntity (-get-id node)]) nodes)
+     (mapv (fn [node] [:db/retractEntity (get-id node)]) nodes)
      ;; alter :block/next
-     (-set-next target-node next-node))))
+     (set-next target-node next-node))))
 
 (defn indent-nodes
   "indent consecutive sorted nodes.
@@ -252,11 +302,11 @@
   [nodes db]
   {:pre [(seq nodes)]}
   (let [first-node (first nodes)
-        first-node-level (-get-level first-node)
-        target-node (-get-prev first-node db)
-        target-level (-get-level target-node)]
+        first-node-level (get-level first-node)
+        target-node (get-prev first-node db)
+        target-level (get-level target-node)]
     (when (>= target-level first-node-level)
-      (map #(-set-level % (inc (-get-level %))) nodes))))
+      (map #(set-level % (inc (get-level %))) nodes))))
 
 (defn outdent-nodes
   "outdent consecutive sorted nodes.
@@ -264,13 +314,13 @@
   [nodes db]
   {:pre [(seq nodes)]}
   (let [last-node (last nodes)
-        last-node-level (-get-level last-node)
-        next-last-node (-get-next last-node db)
-        next-last-node-level (-get-level next-last-node)]
+        last-node-level (get-level last-node)
+        next-last-node (get-next last-node db)
+        next-last-node-level (get-level next-last-node)]
     (when (and (<= next-last-node-level last-node-level)
                                         ;every node's level >= 1
-               (not-any? #(<= (-get-level %) 1) nodes))
-      (map #(-set-level % (dec (-get-level %))) nodes))))
+               (not-any? #(<= (get-level %) 1) nodes))
+      (map #(set-level % (dec (get-level %))) nodes))))
 
 
 ;;; get nodes functions ;;;;;;;;;;;;;;;;
@@ -278,29 +328,29 @@
 (defn get-children-nodes
   "return sorted nodes: NODE itself and its children"
   [node db]
-  (let [node-level (-get-level node)
+  (let [node-level (get-level node)
         nodes (transient [node])]
-    (loop [next-node (-get-next node db)]
-      (when (and next-node (> (-get-level next-node) node-level))
+    (loop [next-node (get-next node db)]
+      (when (and next-node (> (get-level next-node) node-level))
         (conj! nodes next-node)
-        (recur (-get-next next-node db))))
+        (recur (get-next next-node db))))
     (persistent! nodes)))
 
 (defn get-page-nodes
   "return PAGE-NODE's sorted nodes"
   [page-node db]
   (let [nodes (transient [])]
-    (loop [next-node (-get-next page-node db)]
+    (loop [next-node (get-next page-node db)]
       (when next-node
         (conj! nodes next-node)
-        (recur (-get-next next-node db))))
+        (recur (get-next next-node db))))
     (persistent! nodes)))
 
 ;;; predicates
 (defn contains-node?
   "return not nil value if the consecutive sorted NODES contains NODE"
   [nodes node]
-  (some #(= (-get-id %) (-get-id node)) nodes))
+  (some #(= (get-id %) (get-id node)) nodes))
 
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
