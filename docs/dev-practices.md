@@ -4,6 +4,9 @@ This page describes development practices for this codebase.
 
 ## Linting
 
+Most of our linters require babashka. Before running them, please install
+https://github.com/babashka/babashka#installation.
+
 ### Clojure code
 
 To lint:
@@ -21,7 +24,6 @@ There are outstanding linting items that are currently ignored to allow linting 
 ### Unused vars
 
 We use https://github.com/borkdude/carve to detect unused vars in our codebase.
-Before running it, please install https://github.com/babashka/babashka.
 
 To run this linter:
 ```
@@ -38,6 +40,16 @@ scripts/carve.clj '{:interactive true}'
 
 When a var is ignored, it is added to `.carve/ignore`. Please add a comment for
 why a var is ignored to help others understand why it's unused.
+
+### Large vars
+
+Large vars have a lot of complexity and make it hard for the team to maintain
+and understand them. To run this linter:
+```
+scripts/large_vars.clj
+```
+
+To configure the linter, see its `config` var.
 
 ## Testing
 

@@ -14,7 +14,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
@@ -61,8 +61,6 @@
             [shadow.loader :as loader]
             [frontend.components.query-table :as query-table]
             [frontend.mobile.util :as mobile-util]))
-
-;; TODO: remove rum/with-context because it'll make reactive queries not working
 
 (defn safe-read-string
   ([s]
@@ -178,78 +176,77 @@
                    (reset! *resizing-image? false)
                    state)}
   [state config title src metadata full_text local?]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [size (get state ::size)]
-      (ui/resize-provider
-       (ui/resize-consumer
-        (cond->
-          {:className "resize image-resize"
-           :onSizeChanged (fn [value]
-                            (when (and (not @*resizing-image?)
-                                       (some? @size)
-                                       (not= value @size))
-                              (reset! *resizing-image? true))
-                            (reset! size value))
-           :onMouseUp (fn []
-                        (when (and @size @*resizing-image?)
-                          (when-let [block-id (:block/uuid config)]
-                            (let [size (bean/->clj @size)]
-                              (editor-handler/resize-image! block-id metadata full_text size))))
-                        (when @*resizing-image?
-                          ;; TODO: need a better way to prevent the clicking to edit current block
-                          (js/setTimeout #(reset! *resizing-image? false) 200)))
-           :onClick (fn [e]
-                      (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
-        [:div.asset-container
-         [:img.rounded-sm.shadow-xl.relative
-          (merge
-           {:loading "lazy"
-            :src     src
-            :title   title}
-           metadata)]
-         [:span.ctl
-          [:a.delete
-           {:title "Delete this image"
-            :on-click
-            (fn [e]
-              (when-let [block-id (:block/uuid config)]
-                (let [confirm-fn (ui/make-confirm-modal
-                                  {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                   :sub-title     (if local? :asset/physical-delete "")
-                                   :sub-checkbox? local?
-                                   :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                    (close-fn)
-                                                    (editor-handler/delete-asset-of-block!
-                                                     {:block-id    block-id
-                                                      :local?      local?
-                                                      :delete-local? (first sub-selected)
-                                                      :repo        (state/get-current-repo)
-                                                      :href        src
-                                                      :title       title
-                                                      :full-text   full_text}))})]
-                  (state/set-modal! confirm-fn)
-                  (util/stop e))))}
-           svg/trash-sm]
+  (let [size (get state ::size)]
+    (ui/resize-provider
+     (ui/resize-consumer
+      (cond->
+        {:className "resize image-resize"
+         :onSizeChanged (fn [value]
+                          (when (and (not @*resizing-image?)
+                                     (some? @size)
+                                     (not= value @size))
+                            (reset! *resizing-image? true))
+                          (reset! size value))
+         :onMouseUp (fn []
+                      (when (and @size @*resizing-image?)
+                        (when-let [block-id (:block/uuid config)]
+                          (let [size (bean/->clj @size)]
+                            (editor-handler/resize-image! block-id metadata full_text size))))
+                      (when @*resizing-image?
+                        ;; TODO: need a better way to prevent the clicking to edit current block
+                        (js/setTimeout #(reset! *resizing-image? false) 200)))
+         :onClick (fn [e]
+                    (when @*resizing-image? (util/stop e)))}
+        (and (:width metadata) (not (util/mobile?)))
+        (assoc :style {:width (:width metadata)}))
+      [:div.asset-container
+       [:img.rounded-sm.shadow-xl.relative
+        (merge
+         {:loading "lazy"
+          :src     src
+          :title   title}
+         metadata)]
+       [:span.ctl
+        [:a.delete
+         {:title "Delete this image"
+          :on-click
+          (fn [e]
+            (when-let [block-id (:block/uuid config)]
+              (let [confirm-fn (ui/make-confirm-modal
+                                {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                 :sub-title     (if local? :asset/physical-delete "")
+                                 :sub-checkbox? local?
+                                 :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                  (close-fn)
+                                                  (editor-handler/delete-asset-of-block!
+                                                   {:block-id    block-id
+                                                    :local?      local?
+                                                    :delete-local? (first sub-selected)
+                                                    :repo        (state/get-current-repo)
+                                                    :href        src
+                                                    :title       title
+                                                    :full-text   full_text}))})]
+                (state/set-modal! confirm-fn)
+                (util/stop e))))}
+         svg/trash-sm]
 
-          [:a.delete.ml-1
-           {:title    "maximize image"
-            :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                        images (to-array images)
-                                        images (if-not (= (count images) 1)
-                                                 (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (. _image querySelector "img")]
-                                                   (cons image (remove #(= image %) images)))
-                                                 images)
-                                        images (for [^js it images] {:src (.-src it)
-                                                                     :w (.-naturalWidth it)
-                                                                     :h (.-naturalHeight it)})]
+        [:a.delete.ml-1
+         {:title    "maximize image"
+          :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
+                                      images (to-array images)
+                                      images (if-not (= (count images) 1)
+                                               (let [^js _image (.closest (.-target e) ".asset-container")
+                                                     image (. _image querySelector "img")]
+                                                 (cons image (remove #(= image %) images)))
+                                               images)
+                                      images (for [^js it images] {:src (.-src it)
+                                                                   :w (.-naturalWidth it)
+                                                                   :h (.-naturalHeight it)})]
 
-                                    (when (seq images)
-                                      (lightbox/preview-images! images))))}
+                                  (when (seq images)
+                                    (lightbox/preview-images! images))))}
 
-           (svg/maximize)]]])))))
+         (svg/maximize)]]]))))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -648,7 +645,7 @@
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
-      (if block
+      (if (and block (:block/content block))
         (let [title [:span {:class "block-ref"}
                      (block-content (assoc config :block-ref? true)
                                     block nil (:block/uuid block)
@@ -817,7 +814,7 @@
     (page-cp config {:block/name namespace})]
    (namespace-hierarchy-aux config namespace children)])
 
-(defn inline
+(defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
     ["Plain" s]
@@ -1419,7 +1416,6 @@
                     has-children-blocks?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
-        block? (:block? config)
         empty-content? (block-content-empty? block)]
     [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
@@ -1431,7 +1427,7 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (if (or ref? block?)
+                     (if ref?
                        (state/toggle-collapsed-block! uuid)
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
@@ -2171,13 +2167,27 @@
      children)
     (distinct @refs)))
 
-(rum/defcs block-container < rum/reactive
+(defn- root-block?
+  [config block]
+  (and (:block? config)
+       (util/collapsed? block)
+       (= (:id config)
+          (str (:block/uuid block)))))
+
+(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
-           (let [[config block] (:rum/args state)]
-             (when (and (not (some? (state/sub-collapsed (:block/uuid block))))
-                        (or (:ref? config) (:block? config)))
-               (state/set-collapsed-block! (:block/uuid block)
-                                           (editor-handler/block-default-collapsed? block config)))
+           (let [[config block] (:rum/args state)
+                 block-id (:block/uuid block)]
+             (cond
+               (:ref? config)
+               (state/set-collapsed-block! block-id
+                                           (editor-handler/block-default-collapsed? block config))
+
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
+               :else
+               nil)
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
@@ -2202,11 +2212,14 @@
                  config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        ref? (boolean (:ref? config))
-        block? (boolean (:block? config))
-        collapsed? (if (or ref? block?)
+        ref? (:ref? config)
+        db-collapsed? (util/collapsed? block)
+        collapsed? (cond
+                     (or ref? (root-block? config block))
                      (state/sub-collapsed uuid)
-                     (util/collapsed? block))
+
+                     :else
+                     db-collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2468,7 +2481,7 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defcs custom-query < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo custom-query < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -2652,7 +2665,7 @@
                (when (and (= language "clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))
 
-(defn markup-element-cp
+(defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
   (let [format (or (:block/format config)
                    :markdown)]
@@ -2849,8 +2862,6 @@
       (rum/with-key (block-container config item)
         (str (:block/uuid item))))))
 
-(defonce ignore-scroll? (atom false))
-
 (defn- custom-query-or-ref?
   [config]
   (let [ref? (:ref? config)
@@ -2859,8 +2870,9 @@
 
 ;; TODO: virtual tree for better UX and memory usage reduce
 
+
 (defn- get-segment
-  [flat-blocks idx blocks->vec-tree]
+  [_config flat-blocks idx blocks->vec-tree]
   (let [new-idx (if (< idx block-handler/initial-blocks-length)
                   block-handler/initial-blocks-length
                   (+ idx block-handler/step-loading-blocks))
@@ -2882,15 +2894,13 @@
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
-        [segment idx] (get-segment flat-blocks
+        [segment idx] (get-segment config
+                                   flat-blocks
                                    @*last-idx
                                    blocks->vec-tree)
         bottom-reached (fn []
-                         (reset! *last-idx idx)
-                         (reset! ignore-scroll? false))
-        has-more? (and (>= (count flat-blocks) (inc idx))
-                       (not (and (:block? config)
-                                 (state/sub-collapsed (uuid (:id config))))))]
+                         (reset! *last-idx idx))
+        has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"

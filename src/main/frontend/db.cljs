@@ -98,7 +98,7 @@
   (when-let [old-job (get @persistent-jobs repo)]
     (js/clearTimeout old-job)))
 
-(defn- persist-if-idle!
+(defn persist-if-idle!
   [repo]
   (clear-repo-persistent-job! repo)
   (let [job (js/setTimeout
@@ -120,24 +120,25 @@
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (if (util/electron?)
-                 (when-not (:dbsync? (:tx-meta tx-report))
-                   ;; sync with other windows if needed
-                   (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
-                    (when graph-has-other-window?
-                      (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
-                 (do
-                   (state/set-last-transact-time! repo (util/time-ms))
-                   (persist-if-idle! repo)))
+               (when-not (:new-graph? (:tx-meta tx-report)) ; skip initial txs
+                 (if (util/electron?)
+                   (when-not (:dbsync? (:tx-meta tx-report))
+                     ;; sync with other windows if needed
+                     (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
+                       (when graph-has-other-window?
+                         (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
+                   (do
+                     (state/set-last-transact-time! repo (util/time-ms))
+                     (persist-if-idle! repo)))
 
-               ;; rebuild search indices
-               (let [data (:tx-data tx-report)
-                     datoms (filter
-                             (fn [datom]
-                               (contains? #{:block/name :block/content} (:a datom)))
-                             data)]
-                 (when-let [f @*sync-search-indice-f]
-                   (f datoms))))))
+                 ;; rebuild search indices
+                 (let [data (:tx-data tx-report)
+                       datoms (filter
+                               (fn [datom]
+                                 (contains? #{:block/name :block/content} (:a datom)))
+                               data)]
+                   (when-let [f @*sync-search-indice-f]
+                     (f datoms)))))))
 
 (defn- listen-and-persist!
   [repo]

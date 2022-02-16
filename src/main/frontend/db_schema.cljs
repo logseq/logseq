@@ -3,7 +3,7 @@
 (defonce version 1)
 (defonce ast-version 1)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
-(def schema
+(def ^:large-vars/data-var schema
   {:schema/version  {}
    :ast/version     {}
    :db/type         {}

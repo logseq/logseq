@@ -420,7 +420,7 @@
 ;; TODO: both zipmap and map lookup are slow in cljs
 ;; zipmap 20k blocks takes 30ms on my M1 Air.
 (defn sort-blocks
-  [blocks parent limit]
+  [blocks parent {:keys [limit] :as config}]
   (let [ids->blocks (zipmap (map
                               (fn [b]
                                 [(:db/id (:block/parent b))
@@ -437,24 +437,16 @@
               next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
               next-siblings (if (and next-sibling child-block)
                               (cons next-sibling next-siblings)
-                              next-siblings)]
+                              next-siblings)
+              collapsed? (:block/collapsed? node)]
           (if-let [node (and
-                         (not (:block/collapsed? node))
+                         (or (not collapsed?)
+                             (= (:db/id node) (:db/id parent)))
                          (or child-block next-sibling))]
             (recur node next-siblings (conj result node))
             (if-let [sibling (first next-siblings)]
               (recur sibling (rest next-siblings) (conj result sibling))
               result)))))))
-
-(comment
-  (let [page "Scripture (NASB 1995)"
-        page-entity (db-utils/pull [:block/name (string/lower-case page)])
-        blocks (->> (get-page-blocks (state/get-current-repo) (string/lower-case page) {:use-cache? false})
-                    (map (fn [b] (assoc b :block/content (:block/content (db-utils/entity (:db/id b)))))))]
-    (def page-entity page-entity)
-    (def blocks blocks)
-    (time (prn (count (sort-blocks blocks page-entity 1)))))
-  )
 
 (defn get-block-refs-count
   [block-id]
@@ -664,18 +656,6 @@
           conn
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
-
-(defn get-blocks-by-page
-  [repo id-or-lookup-ref]
-  (when-let [conn (conn/get-conn repo)]
-    (->
-     (d/q
-      '[:find (pull ?block [*])
-        :in $ ?page
-        :where
-        [?block :block/page ?page]]
-      conn id-or-lookup-ref)
-     flatten)))
 
 (defn get-block-children
   "Including nested children."
@@ -1258,12 +1238,6 @@
        (let [n (count (d/datoms conn :avet :block/uuid))]
          (reset! blocks-count-cache n)
          n)))))
-
-(defn get-all-block-uuids
-  []
-  (when-let [conn (conn/get-conn)]
-    (->> (d/datoms conn :avet :block/uuid)
-         (map :v))))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents

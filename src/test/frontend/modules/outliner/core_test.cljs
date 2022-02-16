@@ -330,7 +330,7 @@
         (is (= [19 20] children-of-18))))))
 
 (comment
-  (run-test test-insert-nodes))
+  (cljs.test/run-tests test-insert-nodes))
 
 (comment
-  (run-tests))
+  (cljs.test/run-tests))

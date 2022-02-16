@@ -164,7 +164,7 @@ last-modified-at:: 1609084800002"}]]
         :count 1}
 
        "(page-property parent \"child page 1\")"
-       {:query (dsl/->page-property-query "parent" "child page 1") 
+       {:query (dsl/->page-property-query "parent" "child page 1")
         :count 2}
 
        "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
@@ -188,7 +188,7 @@ last-modified-at:: 1609084800002"}]]
                      (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
         :count 3}))
 
-(deftest test-parse
+(deftest ^:large-vars/cleanup-todo test-parse
   []
   (testing "nil or blank strings should be ignored"
     (are [x y] (= (q x) y)
@@ -476,7 +476,7 @@ last-modified-at:: 1609084800002"}]]
                       (done))))
    :after config/destroy-test-db!})
 
-#_(run-tests)
+#_(cljs.test/run-tests)
 
 (comment
   (require '[clojure.pprint :as pprint])
