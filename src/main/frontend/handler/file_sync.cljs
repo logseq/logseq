@@ -16,7 +16,7 @@
 
 (defn graph-txid-exists?
   []
-  (let [[graph-uuid txid] @sync/graphs-txid]
+  (let [[graph-uuid _txid] @sync/graphs-txid]
     (some? graph-uuid)))
 
 
