@@ -3,7 +3,6 @@
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.state :as state]
-            [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.pipeline :as pipelines]))
 
 ;;;; APIs
@@ -91,11 +90,6 @@
       txs)))
 
 ;;;; Invokes
-
-(defn get-by-id
-  [id]
-  (let [conn (conn/get-conn false)]
-    (db-outliner/get-by-id conn id)))
 
 (defn- transact!
   [txs]

@@ -160,16 +160,12 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
-            (if-not disable-reactive?
+            (if disable-reactive?
+              result-atom
               (do
-                (let [*t (atom nil)]
-                  (reset! *t
-                          (js/setTimeout (fn []
-                                    (let [db' (new-db result nil nil k)]
-                                      (state/set-reactive-query-db! k db')
-                                      (js/clearTimeout @*t))) 1000)))
-                (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
-              result-atom)))))))
+                (let [db' (new-db result nil nil k)]
+                  (state/set-reactive-query-db! k db'))
+                (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))))
 
 
 ;; TODO: Extract several parts to handlers
@@ -224,9 +220,9 @@
         affected-keys (concat
                        (mapcat
                         (fn [block-id]
-                          (let [id (if (and (string? block-id) (util/uuid-string? block-id))
-                                     [:block/uuid block-id]
-                                     block-id)]
+                          (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                                           [:block/uuid block-id]
+                                           block-id)]
                             (when-let [block (db-utils/entity block-id)]
                               (let [page-id (:db/id (:block/page block))
                                     blocks [[:blocks (:block/uuid block)]]

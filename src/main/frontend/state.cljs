@@ -1141,13 +1141,6 @@
   (let [c (get-file-write-chan)]
     (count (gobj/get c "buf"))))
 
-(defn add-tx!
-  ;; TODO: replace f with data for batch transactions
-  [f]
-  (when f
-    (when-let [chan (get-db-batch-txs-chan)]
-      (async/put! chan f))))
-
 (defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
