@@ -161,6 +161,13 @@
       (string/join "/" (drop 2 parts))
       path)))
 
+(defn- encode-filepath
+  [filepath]
+  (->> (string/split filepath "/")
+       (remove empty?)
+       (map js/encodeURIComponent)
+       (string/join "/")))
+
 (defprotocol IRelativePath
   (-relative-path [this]))
 
@@ -488,7 +495,7 @@
   (get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (let [encoded-filepaths (map js/encodeURIComponent filepaths)
+      (let [encoded-filepaths (map encode-filepath filepaths)
             r (<! (.request this "get_files_meta" {:GraphUUID graph-uuid :Files encoded-filepaths}))]
         (if (instance? ExceptionInfo r)
           r
@@ -508,7 +515,7 @@
                                  (seq graph-uuid-opt)
                                  (assoc :GraphUUID graph-uuid-opt))))
   (get-remote-file-versions [this graph-uuid filepath]
-    (.request this "get_file_version_list" {:GraphUUID graph-uuid :File (js/encodeURIComponent filepath)}))
+    (.request this "get_file_version_list" {:GraphUUID graph-uuid :File (encode-filepath filepath)}))
   (list-remote-graphs [this]
     (.request this "list_graphs"))
 
