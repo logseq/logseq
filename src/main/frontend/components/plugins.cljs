@@ -153,6 +153,91 @@
       Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
       understand the source code."]))
 
+(rum/defc card-ctls-of-market < rum/static
+  [item stat installed? installing-or-updating?]
+  [:div.ctl
+   [:ul.l.flex.items-center
+    ;; stars
+    [:li.flex.text-sm.items-center.pr-3
+     (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
+
+    ;; downloads
+    (when-let [downloads (and stat (:total_downloads stat))]
+      (when (and downloads (> downloads 0))
+        [:li.flex.text-sm.items-center.pr-3
+         (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+
+   [:div.r.flex.items-center
+
+    [:a.btn
+     {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
+                                   :installing installing-or-updating?}])
+      :on-click #(plugin-handler/install-marketplace-plugin item)}
+     (if installed?
+       (t :plugin/installed)
+       (if installing-or-updating?
+         [:span.flex.items-center [:small svg/loading]
+          (t :plugin/installing)]
+         (t :plugin/install)))]]])
+
+(rum/defc card-ctls-of-installed < rum/static
+  [id name url sponsors unpacked? disabled?
+   installing-or-updating? has-other-pending?
+   new-version item]
+  [:div.ctl
+   [:div.l
+    [:div.de
+     [:strong (ui/icon "settings")]
+     [:ul.menu-list
+      [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
+      [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+      [:li {:on-click
+            #(let [confirm-fn
+                   (ui/make-confirm-modal
+                     {:title      (t :plugin/delete-alert name)
+                      :on-confirm (fn [_ {:keys [close-fn]}]
+                                    (close-fn)
+                                    (plugin-handler/unregister-plugin id))})]
+               (state/set-sub-modal! confirm-fn {:center? true}))}
+       (t :plugin/uninstall)]]]
+
+    (when (seq sponsors)
+      [:div.de.sponsors
+       [:strong (ui/icon "coffee")]
+       [:ul.menu-list
+        (for [link sponsors]
+          [:li [:a {:href link :target "_blank"}
+                [:span.flex.items-center link (ui/icon "external-link")]]])]])
+    ]
+
+   [:div.r.flex.items-center
+    (when (and unpacked? (not disabled?))
+      [:a.btn
+       {:on-click #(js-invoke js/LSPluginCore "reload" id)}
+       (t :plugin/reload)])
+
+    (when (not unpacked?)
+      [:div.updates-actions
+       [:a.btn
+        {:class    (util/classnames [{:disabled installing-or-updating?}])
+         :on-click #(when-not has-other-pending?
+                      (plugin-handler/check-or-update-marketplace-plugin
+                        (assoc item :only-check (not new-version))
+                        (fn [e] (notification/show! e :error))))}
+
+        (if installing-or-updating?
+          (t :plugin/updating)
+          (if new-version
+            (str (t :plugin/update) " 👉 " new-version)
+            (t :plugin/check-update))
+          )]])
+
+    (ui/toggle (not disabled?)
+               (fn []
+                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
+                 (page-handler/init-commands!))
+               true)]])
+
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
    disabled? market? *search-key has-other-pending?
@@ -210,89 +295,47 @@
 
       (if market?
         ;; market ctls
-        [:div.ctl
-         [:ul.l.flex.items-center
-          ;; stars
-          [:li.flex.text-sm.items-center.pr-3
-           (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
-
-          ;; downloads
-          (when-let [downloads (and stat (:total_downloads stat))]
-            (when (and downloads (> downloads 0))
-              [:li.flex.text-sm.items-center.pr-3
-               (svg/cloud-down 16) [:span.pl-1 downloads]]))]
-
-         [:div.r.flex.items-center
-
-          [:a.btn
-           {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
-                                         :installing installing-or-updating?}])
-            :on-click #(plugin-handler/install-marketplace-plugin item)}
-           (if installed?
-             (t :plugin/installed)
-             (if installing-or-updating?
-               [:span.flex.items-center [:small svg/loading]
-                (t :plugin/installing)]
-               (t :plugin/install)))]]]
+        (card-ctls-of-market item stat installed? installing-or-updating?)
 
         ;; installed ctls
-        [:div.ctl
-         [:div.l
-          [:div.de
-           [:strong (ui/icon "settings")]
-           [:ul.menu-list
-            [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
-            [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
-            [:li {:on-click
-                  #(let [confirm-fn
-                         (ui/make-confirm-modal
-                           {:title      (t :plugin/delete-alert name)
-                            :on-confirm (fn [_ {:keys [close-fn]}]
-                                          (close-fn)
-                                          (plugin-handler/unregister-plugin id))})]
-                     (state/set-sub-modal! confirm-fn {:center? true}))}
-             (t :plugin/uninstall)]]]
+        (card-ctls-of-installed
+          id name url sponsors unpacked? disabled?
+          installing-or-updating? has-other-pending? new-version item))]]))
 
-          (when (seq sponsors)
-            [:div.de.sponsors
-             [:strong (ui/icon "coffee")]
-             [:ul.menu-list
-              (for [link sponsors]
-                [:li [:a {:href link :target "_blank"}
-                      [:span.flex.items-center link (ui/icon "external-link")]]])]])
-          ]
+(rum/defc panel-tab-search < rum/static
+  [search-key *search-key *search-ref]
+  [:div.search-ctls
+   [:small.absolute.s1
+    (ui/icon "search")]
+   (when-not (string/blank? search-key)
+     [:small.absolute.s2
+      {:on-click #(when-let [^js target (rum/deref *search-ref)]
+                    (reset! *search-key nil)
+                    (.focus target))}
+      (ui/icon "x")])
+   [:input.form-input.is-small
+    {:placeholder "Search plugins"
+     :ref         *search-ref
+     :on-key-down (fn [^js e]
+                    (when (= 27 (.-keyCode e))
+                      (when-not (string/blank? search-key)
+                        (util/stop e)
+                        (reset! *search-key nil))))
+     :on-change   #(let [^js target (.-target %)]
+                     (reset! *search-key (util/trim-safe (.-value target))))
+     :value       (or search-key "")}]])
 
-         [:div.r.flex.items-center
-          (when (and unpacked? (not disabled?))
-            [:a.btn
-             {:on-click #(js-invoke js/LSPluginCore "reload" id)}
-             (t :plugin/reload)])
+(rum/defc panel-tab-developer
+  []
+  (ui/button
+    (t :plugin/contribute)
+    :href "https://github.com/logseq/marketplace"
+    :class "contribute"
+    :intent "logseq"
+    :target "_blank"))
 
-          (when (not unpacked?)
-            [:div.updates-actions
-             [:a.btn
-              {:class    (util/classnames [{:disabled installing-or-updating?}])
-               :on-click #(when-not has-other-pending?
-                            (plugin-handler/check-or-update-marketplace-plugin
-                              (assoc item :only-check (not new-version))
-                              (fn [e] (notification/show! e :error))))}
-
-              (if installing-or-updating?
-                (t :plugin/updating)
-                (if new-version
-                  (str (t :plugin/update) " 👉 " new-version)
-                  (t :plugin/check-update))
-                )]])
-
-          (ui/toggle (not disabled?)
-                     (fn []
-                       (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
-                       (page-handler/init-commands!))
-                     true)]])]]))
-
-(rum/defc panel-control-tabs
-  < rum/static
-  [t search-key *search-key category *category
+(rum/defc panel-control-tabs < rum/static
+  [search-key *search-key category *category
    sort-or-filter-by *sort-or-filter-by selected-unpacked-pkg
    market? develop-mode? reload-market-fn]
 
@@ -314,36 +357,8 @@
          (unpacked-plugin-loader selected-unpacked-pkg)])]
 
      [:div.flex.items-center.r
-
-      ;;(ui/button
-      ;;  (t :plugin/open-preferences)
-      ;;  :intent "logseq"
-      ;;  :on-click (fn []
-      ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
-      ;;                (js/apis.openPath (str root "/preferences.json")))))
-
       ;; search
-      [:div.search-ctls
-       [:small.absolute.s1
-        (ui/icon "search")]
-       (when-not (string/blank? search-key)
-         [:small.absolute.s2
-          {:on-click #(when-let [^js target (rum/deref *search-ref)]
-                        (reset! *search-key nil)
-                        (.focus target))}
-          (ui/icon "x")])
-       [:input.form-input.is-small
-        {:placeholder "Search plugins"
-         :ref         *search-ref
-         :on-key-down (fn [^js e]
-                        (when (= 27 (.-keyCode e))
-                          (when-not (string/blank? search-key)
-                            (util/stop e)
-                            (reset! *search-key nil))))
-         :on-change   #(let [^js target (.-target %)]
-                         (reset! *search-key (util/trim-safe (.-value target))))
-         :value       (or search-key "")}]]
-
+      (panel-tab-search search-key *search-key *search-ref)
 
       ;; sorter & filter
       (ui/dropdown-with-links
@@ -415,13 +430,7 @@
         {})
 
       ;; developer
-      (ui/button
-        (t :plugin/contribute)
-        :href "https://github.com/logseq/marketplace"
-        :class "contribute"
-        :intent "logseq"
-        :target "_blank")
-      ]]))
+      (panel-tab-developer)]]))
 
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
@@ -483,7 +492,6 @@
     [:div.cp__plugins-marketplace
 
      (panel-control-tabs
-       t
        @*search-key *search-key
        @*category *category
        @*sort-by *sort-by nil true
@@ -565,7 +573,6 @@
     [:div.cp__plugins-installed
 
      (panel-control-tabs
-       t
        @*search-key *search-key
        @*category *category
        @*filter-by *filter-by

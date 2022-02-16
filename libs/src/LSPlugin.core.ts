@@ -12,7 +12,7 @@ import {
   PROTOCOL_FILE, URL_LSP,
   safetyPathJoin,
   path, safetyPathNormalize,
-  mergeSettingsWithSchema
+  mergeSettingsWithSchema, IS_DEV
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -610,6 +610,7 @@ class PluginLocal
       dirPathInstalled = this._localRoot.replace(this.dotPluginsRoot, '')
       dirPathInstalled = path.join(DIR_PLUGINS, dirPathInstalled)
     }
+    let tag = (new Date()).getDay()
     let sdkPathRoot = await getSDKPathRoot()
     let entryPath = await invokeHostExportedApi(
       tmp_file_method,
@@ -619,7 +620,10 @@ class PluginLocal
   <head>
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
-    <script src="${sdkPathRoot}/lsplugin.user.js"></script>
+    ${IS_DEV ?
+        `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>` :
+        `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`}
+    
   </head>
   <body>
   <div id="app"></div>
