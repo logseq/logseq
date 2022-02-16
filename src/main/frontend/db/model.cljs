@@ -443,27 +443,6 @@
          nil)
        react))))
 
-;; TODO: native sort and limit support in DB
-(defn- get-limited-blocks
-  [db page block-eids limit]
-  (let [lefts (d/datoms db :avet :block/left)
-        lefts (zipmap (map :e lefts) lefts)
-        collapsed (d/datoms db :avet :block/collapsed?)
-        collapsed (zipmap (map :e collapsed) collapsed)
-        parents (d/datoms db :avet :block/parent)
-        parents (zipmap (map :e parents) parents)
-        blocks (map (fn [id]
-                      (let [collapsed? (:v (get collapsed id))]
-                        (cond->
-                          {:db/id id
-                           :block/left {:db/id (:v (get lefts id))}
-                           :block/parent {:db/id (:v (get parents id))}}
-                          collapsed?
-                          (assoc :block/collapsed? true))))
-                 block-eids)
-        blocks (sort-blocks blocks page limit)]
-    (map :db/id blocks)))
-
 ;; Use datoms index and provide limit support
 (defn get-page-blocks
   ([page]
@@ -491,15 +470,10 @@
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               ;; TODO: needs benchmark
-                               long-page? (> (count datoms) 1000)
-                               block-eids (if long-page?
-                                            (get-limited-blocks db page-entity block-eids limit)
-                                            block-eids)
+                               block-eids block-eids
                                blocks (db-utils/pull-many repo-url pull-keys block-eids)
-                               blocks (if long-page? blocks
-                                          (sort-blocks blocks page-entity nil))]
-                           (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
+                               blocks (map (fn [b] (assoc b :block/page bare-page-map)) blocks)]
+                           blocks))}
             nil)
           react))))))
 
