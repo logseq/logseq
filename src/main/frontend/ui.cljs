@@ -364,13 +364,20 @@
     (reset! last-scroll-top scroll-top)
     down?))
 
-(defn on-scroll
-  [node {:keys [on-load on-top-reached threshold]
-         :or {threshold 500}}]
+(defn bottom-reached?
+  [node threshold]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
-        client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) threshold)
+        client-height (gobj/get node "clientHeight")]
+    (<= (- full-height scroll-top client-height) threshold)))
+
+(defn on-scroll
+  [node {:keys [on-load on-top-reached threshold bottom-reached]
+         :or {threshold 500}}]
+  (let [scroll-top (gobj/get node "scrollTop")
+        bottom-reached? (if (fn? bottom-reached)
+                          (bottom-reached)
+                          (bottom-reached? node threshold))
         top-reached? (= scroll-top 0)
         down? (scroll-down?)]
     (when (and down? bottom-reached? on-load)

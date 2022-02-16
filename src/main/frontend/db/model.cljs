@@ -449,7 +449,7 @@
    (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
    (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys limit]
+  ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (when page
@@ -471,9 +471,8 @@
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
                                block-eids block-eids
-                               blocks (db-utils/pull-many repo-url pull-keys block-eids)
-                               blocks (map (fn [b] (assoc b :block/page bare-page-map)) blocks)]
-                           blocks))}
+                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
+                           (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
 

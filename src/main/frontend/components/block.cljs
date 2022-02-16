@@ -2899,14 +2899,16 @@
                                    flat-blocks
                                    @*last-idx
                                    blocks->vec-tree)
-        bottom-reached (fn []
-                         (reset! *last-idx idx))
+        bottom-reached (fn [] (reset! *last-idx idx))
         has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
+       :bottom-reached (fn []
+                         (when-let [node (gdom/getElement "lazy-blocks")]
+                           (ui/bottom-reached? node 1000)))
        :has-more has-more?
        :more (if (or (:preview? config) (:sidebar? config))
                "More"
