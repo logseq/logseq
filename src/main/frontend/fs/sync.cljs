@@ -35,8 +35,41 @@
 ;; - full-sync will be triggered after 20min of idle
 ;; - every 20s will flush local changes, and sync to remote
 
-;; TODO: add some spec validate
 ;; TODO: use access-token instead of id-token
+
+;;; specs
+(s/def ::state #{::idle
+                 ;; sync local-changed files
+                 ::local->remote
+                 ;; sync remote latest-transactions
+                 ::remote->local
+                 ;; local->remote full sync
+                 ::local->remote-full-sync
+                 ;; exec remote->local, then local->remote
+                 ::remote->local=>local->remote
+                 ;; exec remote->local, then local->remote-full-sync
+                 ::remote->local=>local->remote-full-sync
+                 ;; exec remote->local-full-sync, then local->remote-full-sync
+                 ::remote->local-full-sync=>local->remote-full-sync
+                 ::stop})
+(s/def ::path string?)
+(s/def ::time t/date?)
+(s/def ::current-local->remote-files (s/coll-of ::path :kind set?))
+(s/def ::current-remote->local-files (s/coll-of ::path :kind set?))
+(s/def ::history-item (s/keys :req-un [::path ::time]))
+(s/def ::history (s/coll-of ::history-item :kind seq?))
+(s/def ::sync-state (s/keys :req-un [::state
+                                     ::current-local->remote-files
+                                     ::current-remote->local-files
+                                     ::history]))
+
+;; diff
+(s/def ::TXId pos-int?)
+(s/def ::TXType #{"update_files" "delete_files" "rename_file"})
+(s/def ::TXContent string?)
+(s/def ::diff (s/keys :req-un [::TXId ::TXType ::TXContent]))
+
+
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -164,7 +197,6 @@
     (write-all w "#FileTxn[\"" from-path "\" -> \"" to-path
                "\" (updated? " updated ", renamed? " (.renamed? coll) ", deleted? " (.deleted? coll)
                ", txid " txid ")]")))
-
 (defn- diff->filetxns
   "convert diff(`get-diff`) to `FileTxn`"
   [{:keys [TXId TXType TXContent]}]
@@ -212,7 +244,7 @@
    cat))
 
 (defn- diffs->partitioned-filetxns
-  "return transducer.
+  "transducer.
   1. diff -> `FileTxn` , see also `get-diff`
   2. distinct redundant update type filetxns
   3. partition filetxns, each partition contains same type filetxns,
@@ -225,6 +257,24 @@
     cat
     distinct-update-filetxns-xf
     (partition-filetxns n)))
+
+(defn- filepath->diff
+  [index {:keys [relative-path user-uuid graph-uuid]}]
+  {:post [(s/valid? ::diff %)]}
+  {:TXId (inc index)
+   :TXType "update_files"
+   :TXContent (string/join "/" [user-uuid graph-uuid relative-path])})
+
+(defn- filepaths->partitioned-filetxns
+  "transducer.
+  1. filepaths -> diff
+  2. diffs->partitioned-filetxns"
+  [n graph-uuid user-uuid]
+  (comp
+   (map (fn [p]
+          {:relative-path p :user-uuid user-uuid :graph-uuid graph-uuid}))
+   (map-indexed filepath->diff)
+   (diffs->partitioned-filetxns n)))
 
 
 (deftype FileMetadata [size etag path last-modified remote? ^:mutable normalized-path]
@@ -283,7 +333,7 @@
   (get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
   (get-remote-file-versions [this graph-uuid filepath] "get file's version list")
   (list-remote-graphs [this] "list all remote graphs")
-  (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid]")
+  (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid, min-txid]")
   (create-graph [this graph-name] "create graph"))
 
 (defprotocol IToken
@@ -468,7 +518,9 @@
       (let [r (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
         (if (instance? ExceptionInfo r)
           r
-          (-> r :Transactions (as-> txns [txns (:TXId (last txns))]))))))
+          (-> r :Transactions (as-> txns [txns
+                                          (:TXId (last txns))
+                                          (:TXId (first txns))]))))))
 
   (create-graph [this graph-name]
     (.request this "create_graph" {:GraphName graph-name})))
@@ -504,7 +556,9 @@
          sync-state--remove-current-remote->local-files
          sync-state--stopped?)
 
-(defn- apply-filetxns-partitions [*sync-state graph-uuid base-path filetxns-partitions repo *txid *stopped]
+(defn- apply-filetxns-partitions
+  "won't call update-graph-txid! when *txid is nil"
+  [*sync-state graph-uuid base-path filetxns-partitions repo *txid *stopped]
   (go-loop [filetxns-partitions* filetxns-partitions]
     (if @*stopped
       {:stop true}
@@ -517,8 +571,9 @@
           (if (instance? ExceptionInfo r)
             r
             (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
-              (reset! *txid latest-txid)
-              (update-graphs-txid! latest-txid graph-uuid repo)
+              (when *txid
+                (reset! *txid latest-txid)
+                (update-graphs-txid! latest-txid graph-uuid repo))
               (recur (next filetxns-partitions*)))))))))
 
 (defmulti need-sync-remote? (fn [v] (cond
@@ -611,10 +666,39 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
+
+
 (deftype Remote->LocalSyncer [graph-uuid base-path repo *txid *sync-state
                               ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
+  (sync-files-remote->local!
+    [_ relative-filepaths latest-txid]
+    (go
+      (if-let [user-uuid (user/user-uuid)]
+        (let [partitioned-filetxns
+              (sequence (filepaths->partitioned-filetxns 10 graph-uuid user-uuid)
+                        relative-filepaths)
+              r
+              (if (empty? (flatten partitioned-filetxns))
+                {:succ true}
+                (<! (apply-filetxns-partitions
+                     *sync-state graph-uuid base-path partitioned-filetxns repo
+                     nil *stopped)))]
+          (cond
+            (instance? ExceptionInfo r)
+            {:unknown r}
+
+            @*stopped
+            {:stop true}
+
+            :else
+            (do (update-graphs-txid! latest-txid graph-uuid repo)
+                (reset! *txid latest-txid)
+                {:succ true})))
+        ;; not found user-uuid
+        {:unknown (ex-info "user-uuid not found" {})})))
+
   IRemote->LocalSync
   (stop-remote->local! [_] (vreset! *stopped true))
   (sync-remote->local! [_]
@@ -623,20 +707,22 @@
             (let [diff-r (<! (get-diff remoteapi graph-uuid @*txid))]
               (if (instance? ExceptionInfo diff-r)
                 diff-r
-                (let [[diff-txns latest-txid] diff-r]
-                  (when (number? latest-txid)
-                    (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
-                                                          (completing (fn [r i] (conj r (reverse i)))) ;reverse
-                                                          '()
-                                                          (reverse diff-txns))]
-                      (prn "partition-filetxns" partitioned-filetxns)
-                      ;; TODO: precheck etag
-                      (if (empty? (flatten partitioned-filetxns))
-                        (do (update-graphs-txid! latest-txid graph-uuid repo)
-                            (reset! *txid latest-txid)
-                            {:succ true})
-                        (<! (apply-filetxns-partitions
-                             *sync-state graph-uuid base-path partitioned-filetxns repo *txid *stopped))))))))]
+                (let [[diff-txns latest-txid min-txid] diff-r]
+                  (if (> min-txid @*txid) ;; if min-txid > @*txid, need to remote->local-full-sync
+                    {:need-remote->local-full-sync true}
+                    (when (pos-int? latest-txid)
+                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
+                                                            (completing (fn [r i] (conj r (reverse i)))) ;reverse
+                                                            '()
+                                                            (reverse diff-txns))]
+                        (prn "partition-filetxns" partitioned-filetxns)
+                        ;; TODO: precheck etag
+                        (if (empty? (flatten partitioned-filetxns))
+                          (do (update-graphs-txid! latest-txid graph-uuid repo)
+                              (reset! *txid latest-txid)
+                              {:succ true})
+                          (<! (apply-filetxns-partitions
+                               *sync-state graph-uuid base-path partitioned-filetxns repo *txid *stopped)))))))))]
         (cond
           (instance? ExceptionInfo r)
           {:unknown r}
@@ -644,10 +730,26 @@
           @*stopped
           {:stop true}
 
+          (:need-remote->local-full-sync r)
+          r
+
           :else
           {:succ true}))))
 
-  (sync-remote->local-all-files! [_] nil))
+  (sync-remote->local-all-files! [this]
+    (go
+      (let [remote-all-files-meta-c (get-remote-all-files-meta remoteapi graph-uuid)
+            local-all-files-meta-c (get-local-all-files-meta rsapi graph-uuid base-path)
+            remote-all-files-meta (<! remote-all-files-meta-c)
+            local-all-files-meta (<! local-all-files-meta-c)
+            diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
+            latest-txid (:TXId
+                         (<! (get-remote-graph remoteapi nil graph-uuid)))]
+        (println "[full-sync(remote->local)]"
+                       (count diff-remote-files) "files need to sync")
+        (<! (.sync-files-remote->local!
+             this (map -relative-path diff-remote-files)
+             latest-txid))))))
 
 
 (defn- file-changed?
@@ -777,7 +879,7 @@
               ;; partition FileChangeEvents
               (partition-file-change-events 10))
              diff-local-files)]
-        (println "[full-sync]" (count (flatten change-events-partitions)) "files need to sync to remote")
+        (println "[full-sync(local->remote)]" (count (flatten change-events-partitions)) "files need to sync")
         (loop [es-partitions change-events-partitions]
           (if stopped
             {:stop true}
@@ -791,21 +893,6 @@
 
                   (or need-sync-remote unknown) r)))))))))
 
-;;; specs
-(s/def ::state #{::idle
-                 ::local->remote
-                 ::remote->local
-                 ::full-sync
-                 ::remote->local=>local->remote
-                 ::remote->local=>full-sync
-                 ::stop})
-(s/def ::path string?)
-(s/def ::time t/date?)
-(s/def ::current-local->remote-files (s/coll-of ::path :kind set?))
-(s/def ::current-remote->local-files (s/coll-of ::path :kind set?))
-(s/def ::history-item (s/keys :req-un [::path ::time]))
-(s/def ::history (s/coll-of ::history-item :kind seq?))
-(s/def ::sync-state (s/keys :req-un [::state ::current-local->remote-files ::current-remote->local-files ::history]))
 
 ;;; sync state
 
@@ -887,12 +974,14 @@
         (<! (.local->remote this args))
         ::remote->local
         (<! (.remote->local this nil args))
-        ::full-sync
+        ::local->remote-full-sync
         (<! (.full-sync this))
         ::remote->local=>local->remote
         (<! (.remote->local this ::local->remote args))
-        ::remote->local=>full-sync
-        (<! (.remote->local this ::full-sync args))
+        ::remote->local=>local->remote-full-sync
+        (<! (.remote->local this ::local->remote-full-sync args))
+        ::remote->local-full-sync=>local->remote-full-sync
+        (<! (.remote->local-full-sync this ::local->remote-full-sync))
         ::stop
         (-stop! this))))
 
@@ -919,7 +1008,7 @@
           stop
           (<! (.schedule this ::stop))
           (or full-sync trigger-full-sync)
-          (<! (.schedule this ::full-sync))
+          (<! (.schedule this ::local->remote-full-sync))
           remote
           (<! (.schedule this ::remote->local remote))
           local
@@ -933,7 +1022,7 @@
           succ
           (.schedule this ::idle)
           need-sync-remote
-          (.schedule this ::remote->local=>full-sync)
+          (.schedule this ::remote->local=>local->remote-full-sync)
           stop
           (.schedule this ::stop)
           unknown
@@ -941,13 +1030,31 @@
             (debug/pprint "full-sync" unknown)
             (.schedule this ::idle))))))
 
+  (remote->local-full-sync [this next-state]
+    (go
+      (let [{:keys [succ unknown stop]}
+            (<! (sync-remote->local-all-files! remote->local-syncer))]
+        (cond
+          succ
+          (.schedule this next-state)
+          stop
+          (.schedule this ::stop)
+          unknown
+          (do
+            (debug/pprint "remote->local-full-sync" unknown)
+            (.schedule this ::idle))))))
+
   (remote->local [this next-state [remote-val]]
     (go
       (if (some-> remote-val :txid (<= @*txid))
         (.schedule this ::idle)
-        (let [{:keys [succ unknown stop]}
+        (let [{:keys [succ unknown stop need-remote->local-full-sync]}
               (<! (sync-remote->local! remote->local-syncer))]
           (cond
+            need-remote->local-full-sync
+            (if (= next-state ::local->remote-full-sync)
+              (.schedule this ::remote->local-full-sync=>local->remote-full-sync)
+              (.schedule this ::remote->local-full-sync))
             succ
             (.schedule this (or next-state ::idle))
             stop
