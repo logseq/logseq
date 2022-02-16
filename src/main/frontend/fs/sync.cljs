@@ -73,13 +73,11 @@
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
-
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
 (defn- update-graphs-txid! [latest-txid graph-uuid repo]
   (persist-var/-reset-value! graphs-txid [graph-uuid latest-txid] repo)
   (persist-var/persist-save graphs-txid))
-
 
 (defn- ws-stop! [*ws]
   (swap! *ws (fn [o] (assoc o :stop true)))
@@ -716,7 +714,9 @@
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
                   (if (> min-txid @*txid) ;; if min-txid > @*txid, need to remote->local-full-sync
-                    {:need-remote->local-full-sync true}
+                    (do (println "min-txid" min-txid "request-txid" @*txid)
+                        {:need-remote->local-full-sync true})
+
                     (when (pos-int? latest-txid)
                       (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse

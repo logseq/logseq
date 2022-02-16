@@ -11,7 +11,8 @@
   (config/get-file-path (state/get-current-repo) (str config/app-name "/" location ".edn")))
 
 (defprotocol ILoad
-  (-load [this]))
+  (-load [this])
+  (-loaded? [this]))
 
 (defprotocol ISave
   (-save [this]))
@@ -39,6 +40,8 @@
                           (-> o
                               (assoc-in [repo :loaded?] true)
                               (assoc-in [repo :value] content))))))))
+  (-loaded? [_]
+    (get-in @*value [(state/get-current-repo) :loaded?]))
 
   ISave
   (-save [_]

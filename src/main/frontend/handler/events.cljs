@@ -37,7 +37,9 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.fs.sync :as sync]))
 
 ;; TODO: should we move all events here?
 
@@ -90,7 +92,12 @@
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph]))
+  (state/pub-event! [:graph/ready graph])
+  ;; load persist-vars
+  (persist-var/load-vars)
+
+  ;; stop sync
+  (sync/sync-stop))
 
 (defmethod handle :graph/switch [[_ graph]]
   (if (outliner-file/writes-finished?)
