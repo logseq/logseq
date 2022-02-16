@@ -133,6 +133,7 @@
                                        (mobile-util/native-ios?))
                               (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
+                         (p/then (state/pub-event! [:graph/ready (state/get-current-repo)]))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
         interval-id (js/setInterval inner-fn 50)]
