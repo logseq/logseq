@@ -206,7 +206,8 @@
      :srs/mode?                             false
 
      :srs/cards-due-count                   nil
-     })))
+
+     :reactive/query-dbs                    {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -1149,13 +1150,6 @@
   (let [c (get-file-write-chan)]
     (count (gobj/get c "buf"))))
 
-(defn add-tx!
-  ;; TODO: replace f with data for batch transactions
-  [f]
-  (when f
-    (when-let [chan (get-db-batch-txs-chan)]
-      (async/put! chan f))))
-
 (defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
@@ -1620,6 +1614,19 @@
 (defn sub-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+
+(defn get-reactive-query-db
+  [ks]
+  (get-in @state [:reactive/query-dbs ks]))
+
+(defn set-reactive-query-db!
+  [ks db-value]
+  (when db-value
+    (set-state! [:reactive/query-dbs ks] db-value)))
+
+(defn delete-reactive-query-db!
+  [ks]
+  (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
 
 (defn get-modal-id
   []

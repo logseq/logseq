@@ -31,8 +31,7 @@
   [^js event current-block target-block move-to]
   (let [top? (= move-to :top)
         nested? (= move-to :nested)
-        alt-key? (and event (.-altKey event))
-        repo (state/get-current-repo)]
+        alt-key? (and event (.-altKey event))]
     (cond
       (not= (:block/format current-block) (:block/format target-block))
       (state/pub-event! [:notification/show
@@ -49,9 +48,7 @@
          (util/format "((%s))" (str (:block/uuid current-block)))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
-          :before? top?})
-        (db/refresh! repo {:key :block/change
-                           :data [current-block target-block]}))
+          :before? top?}))
 
       (and (every? map? [current-block target-block])
            (moveable? current-block target-block))
@@ -71,9 +68,7 @@
           (outliner-core/move-subtree current-node target-node false)
 
           :else
-          (outliner-core/move-subtree current-node target-node true))
-        (db/refresh! repo {:key :block/change
-                           :data [(:data current-node) (:data target-node)]}))
+          (outliner-core/move-subtree current-node target-node true)))
 
       :else
       nil)))

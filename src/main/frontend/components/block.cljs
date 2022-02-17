@@ -576,7 +576,7 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
+  (let [blocks (db/sub-block-and-children (state/get-current-repo) id)]
     [:div.color-level.embed-block.bg-base-2
      {:style {:z-index 2}
       :on-double-click #(edit-parent-block % config)
@@ -636,6 +636,7 @@
 (declare block-parents)
 
 (rum/defc block-reference < rum/reactive
+  db-mixins/query
   [config id label]
   (when (and
          (not (string/blank? id))
@@ -685,14 +686,15 @@
                       :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
-             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
-                                      {:style {:width      735
-                                               :text-align "left"
-                                               :max-height 600}}
-                                      [(block-parents config repo block-id {:indent? true})
-                                       (blocks-container
-                                        (db/get-block-and-children repo block-id)
-                                        (assoc config :id (str id) :preview? true))]]
+             (ui/tippy {:html        (fn []
+                                       [:div.tippy-wrapper.overflow-y-auto.p-4
+                                        {:style {:width      735
+                                                 :text-align "left"
+                                                 :max-height 600}}
+                                        [(block-parents config repo block-id {:indent? true})
+                                         (blocks-container
+                                          (db/get-block-and-children repo block-id)
+                                          (assoc config :id (str id) :preview? true))]])
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner)])
@@ -1924,9 +1926,9 @@
         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
         nil)]]))
 
-(rum/defc block-refs-count < rum/reactive
+(rum/defc block-refs-count < rum/reactive db-mixins/query
   [block]
-  (let [block-refs-count (model/get-block-refs-count (:block/uuid block))]
+  (let [block-refs-count (model/get-block-refs-count (:db/id block))]
     (when (and block-refs-count (> block-refs-count 0))
       [:div
        [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
@@ -2898,14 +2900,16 @@
                                    flat-blocks
                                    @*last-idx
                                    blocks->vec-tree)
-        bottom-reached (fn []
-                         (reset! *last-idx idx))
+        bottom-reached (fn [] (reset! *last-idx idx))
         has-more? (>= (count flat-blocks) (inc idx))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
       (block-list config segment)
       {:on-load bottom-reached
+       :bottom-reached (fn []
+                         (when-let [node (gdom/getElement "lazy-blocks")]
+                           (ui/bottom-reached? node 1000)))
        :has-more has-more?
        :more (if (or (:preview? config) (:sidebar? config))
                "More"

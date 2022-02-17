@@ -172,7 +172,7 @@
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file-no-sub path)
+              content (db/get-file path)
               [_ id _ _ _] (:rum/args state)
               value (some-> (gdom/getElement id)
                             (gobj/get "value"))]

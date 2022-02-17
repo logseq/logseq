@@ -7,6 +7,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
@@ -400,6 +401,7 @@
 
 (rum/defcs view
   < rum/reactive
+  db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
   {:will-mount (fn [state]

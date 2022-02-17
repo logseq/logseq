@@ -138,8 +138,7 @@
               (let [icon (get-page-icon entity)]
                 (favorite-item t name icon)))))]))))
 
-(rum/defc recent-pages
-  < rum/reactive db-mixins/query
+(rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md
@@ -200,7 +199,7 @@
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
-  [_route-match close-modal-fn]
+  [_route-match close-modal-fn left-sidebar-open?]
   (let [default-home (get-default-home-if-valid)]
 
     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
@@ -213,7 +212,6 @@
        (repo/repos-dropdown)
 
        [:div.nav-header
-
         (if (:page default-home)
           (sidebar-item
            {:class            "home-nav"
@@ -243,7 +241,7 @@
 
       (favorites t)
 
-      (recent-pages t)
+      (when left-sidebar-open? (recent-pages t))
 
       [:nav.px-2 {:aria-label "Sidebar"
                   :class      "new-page"}
@@ -263,7 +261,7 @@
      {:class (util/classnames [{:is-open left-sidebar-open?}])}
 
      ;; sidebar contents
-     (sidebar-nav route-match close-fn)
+     (sidebar-nav route-match close-fn left-sidebar-open?)
      [:span.shade-mask {:on-click close-fn}]]))
 
 (rum/defc main <
