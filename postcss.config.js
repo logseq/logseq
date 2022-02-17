@@ -4,5 +4,6 @@ module.exports = (ctx) => ({
     require('postcss-import-ext-glob')({}),
     require('postcss-import')({}),
     require('tailwindcss')('tailwind.config.js'),
+    ...(process.env.NODE_ENV === 'production' ? [require('cssnano')({})] : [])
   ],
 })
