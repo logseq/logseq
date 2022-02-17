@@ -541,7 +541,7 @@ export interface IDBProxy {
   /**
    * Run a datascript query
    */
-  datascriptQuery: <T = any>(query: string) => Promise<T>
+  datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
 }
 
 /**
