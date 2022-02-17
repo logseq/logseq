@@ -27,6 +27,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            #_:clj-kondo/ignore
             [frontend.handler.ui :as ui-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
