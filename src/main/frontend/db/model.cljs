@@ -651,8 +651,8 @@
           '[:find [(pull ?b [*]) ...]
             :in $ ?parent-id
             :where
-            [?b :block/parent ?parent]
-            [?parent :block/uuid ?parent-id]]
+            [?parent :block/uuid ?parent-id]
+            [?b :block/parent ?parent]]
           conn
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
@@ -820,21 +820,20 @@
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
-  (when (conn/get-conn repo)
+  (when-let [db (conn/get-conn repo)]
     (let [page-name (util/safe-page-name-sanity-lc page)
           pages (page-alias-set repo page)
           page-id (:db/id (db-utils/entity [:block/name page-name]))
-          ref-pages (->> (react/q repo [:page/ref-pages page-id] {:use-cache? false}
-                                  '[:find ?ref-page-name
-                                    :in $ ?pages
-                                    :where
-                                    [?block :block/page ?p]
-                                    [(contains? ?pages ?p)]
-                                    [?block :block/refs ?ref-page]
-                                    [?ref-page :block/name ?ref-page-name]]
-                                  pages)
-                         react
-                         db-utils/seq-flatten)]
+          ref-pages (d/q
+                      '[:find [?ref-page-name ...]
+                        :in $ ?pages
+                        :where
+                        [(untuple ?pages) [?page ...]]
+                        [?block :block/page ?page]
+                        [?block :block/refs ?ref-page]
+                        [?ref-page :block/name ?ref-page-name]]
+                      db
+                      pages)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-page-linked-refs-refed-pages
