@@ -76,7 +76,8 @@
 
 (defmethod handle :graph/added [[_ repo]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
-  (search-handler/rebuild-indices!))
+  (search-handler/rebuild-indices!)
+  (db/persist! repo))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
