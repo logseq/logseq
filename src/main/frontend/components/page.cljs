@@ -45,10 +45,12 @@
   (when page-name
     (if block-id
       (when-let [root-block (db/pull [:block/uuid block-id])]
-        (let [blocks (-> (db/get-block-and-children repo block-id)
+        (let [blocks (-> (db/sub-block-and-children repo block-id)
                          (model/sort-blocks root-block {}))]
           (cons root-block blocks)))
-      (db/get-page-blocks repo page-name))))
+      (when-let [page (db/pull [:block/name (util/safe-page-name-sanity-lc page-name)])]
+        (-> (db/get-page-blocks repo page-name)
+            (model/sort-blocks page {}))))))
 
 (defn- open-first-block!
   [state]

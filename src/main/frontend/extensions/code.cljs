@@ -172,7 +172,7 @@
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file-no-sub path)
+              content (db/get-file path)
               [_ id _ _ _] (:rum/args state)
               value (some-> (gdom/getElement id)
                             (gobj/get "value"))]
@@ -294,13 +294,14 @@
      (when-not (= mode "calc")
        [:div.extensions__code-lang
         (string/lower-case mode)]))
-   [:textarea (merge {:id id
-                      ;; Expose the textarea associated with the CodeMirror instance via
-                      ;; ref so that we can autofocus into the CodeMirror instance later.
-                      :ref textarea-ref-name
-                      :default-value code} attr)]
-   (when (= (:data-lang attr) "calc")
-     (calc/results (:calc-atom state)))])
+   [:div.flex.flex-1.flex-row.w-full.mt-6
+    [:textarea (merge {:id id
+                       ;; Expose the textarea associated with the CodeMirror instance via
+                       ;; ref so that we can autofocus into the CodeMirror instance later.
+                       :ref textarea-ref-name
+                       :default-value code} attr)]
+    (when (= (:data-lang attr) "calc")
+      (calc/results (:calc-atom state)))]])
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

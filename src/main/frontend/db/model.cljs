@@ -65,14 +65,14 @@
   (let [repo (state/get-current-repo)]
     (when (conn/get-conn repo)
       (->
-       (react/q repo [:blocks id] {}
-                '[:find (pull ?block [*])
-                  :in $ ?id
-                  :where
-                  [?block :block/uuid ?id]]
-                id)
+       (react/q repo [:frontend.db.react/block id] {}
+         '[:find [(pull ?block [*]) ...]
+           :in $ ?id
+           :where
+           [?block :block/uuid ?id]]
+         id)
        react
-       ffirst))))
+       first))))
 
 (defn get-tag-pages
   [repo tag-name]
@@ -214,8 +214,9 @@
   (when (and repo path last-modified-at)
     (when-let [conn (conn/get-conn repo false)]
       (d/transact! conn
-                   [{:file/path path
-                     :file/last-modified-at last-modified-at}]))))
+        [{:file/path path
+          :file/last-modified-at last-modified-at}]
+        {:skip-refresh? true}))))
 
 (defn get-file-last-modified-at
   [repo path]
@@ -229,23 +230,6 @@
   (when (and repo path)
     (when-let [conn (conn/get-conn repo false)]
       (d/entity (d/db conn) [:file/path path]))))
-
-(defn get-file
-  ([path]
-   (get-file (state/get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (->
-      (react/q repo [:file/content path]
-               {:use-cache? true}
-               '[:find ?content
-                 :in $ ?path
-                 :where
-                 [?file :file/path ?path]
-                 [?file :file/content ?content]]
-               path)
-      react
-      ffirst))))
 
 (defn get-file-contents
   [repo]
@@ -271,18 +255,18 @@
       conn)
      (flatten))))
 
-(defn get-custom-css
-  []
-  (when-let [repo (state/get-current-repo)]
-    (get-file (config/get-file-path repo "logseq/custom.css"))))
-
-(defn get-file-no-sub
+(defn get-file
   ([path]
-   (get-file-no-sub (state/get-current-repo) path))
+   (get-file (state/get-current-repo) path))
   ([repo path]
    (when (and repo path)
      (when-let [conn (conn/get-conn repo)]
        (:file/content (d/entity conn [:file/path path]))))))
+
+(defn get-custom-css
+  []
+  (when-let [repo (state/get-current-repo)]
+    (get-file (config/get-file-path repo "logseq/custom.css"))))
 
 (defn get-block-by-uuid
   [id]
@@ -449,36 +433,15 @@
               result)))))))
 
 (defn get-block-refs-count
-  [block-id]
+  [block-db-id]
   (when-let [repo-url (state/get-current-repo)]
-    (when block-id
+    (when block-db-id
       (some->
-      (react/q repo-url [:block/refs-count block-id]
-        {:query-fn (fn [_db]
-                     (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
-        nil)
-      react))))
-
-;; TODO: native sort and limit support in DB
-(defn- get-limited-blocks
-  [db page block-eids limit]
-  (let [lefts (d/datoms db :avet :block/left)
-        lefts (zipmap (map :e lefts) lefts)
-        collapsed (d/datoms db :avet :block/collapsed?)
-        collapsed (zipmap (map :e collapsed) collapsed)
-        parents (d/datoms db :avet :block/parent)
-        parents (zipmap (map :e parents) parents)
-        blocks (map (fn [id]
-                      (let [collapsed? (:v (get collapsed id))]
-                        (cond->
-                          {:db/id id
-                           :block/left {:db/id (:v (get lefts id))}
-                           :block/parent {:db/id (:v (get parents id))}}
-                          collapsed?
-                          (assoc :block/collapsed? true))))
-                 block-eids)
-        blocks (sort-blocks blocks page limit)]
-    (map :db/id blocks)))
+       (react/q repo-url [:frontend.db.react/block-refs-count block-db-id]
+         {:query-fn (fn [_db]
+                      (count (:block/_refs (db-utils/entity repo-url block-db-id))))}
+         nil)
+       react))))
 
 ;; Use datoms index and provide limit support
 (defn get-page-blocks
@@ -486,7 +449,7 @@
    (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
    (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys limit]
+  ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (when page
@@ -502,19 +465,12 @@
                           :block/journal-day (:block/journal-day page-entity)}]
        (when page-id
          (some->
-          (react/q repo-url [:page/blocks page-id]
+          (react/q repo-url [:frontend.db.react/page-blocks page-id]
             {:use-cache? use-cache?
              :query-fn (fn [db]
                          (let [datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               ;; TODO: needs benchmark
-                               long-page? (> (count datoms) 1000)
-                               block-eids (if long-page?
-                                            (get-limited-blocks db page-entity block-eids limit)
-                                            block-eids)
-                               blocks (db-utils/pull-many repo-url pull-keys block-eids)
-                               blocks (if long-page? blocks
-                                          (sort-blocks blocks page-entity nil))]
+                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
@@ -542,10 +498,12 @@
 
 (defn page-empty?
   [repo page-id]
-  (let [page-id (if (integer? page-id)
-                  page-id
-                  [:block/name (util/safe-page-name-sanity-lc page-id)])]
-    (empty? (:block/_parent (db-utils/entity repo page-id)))))
+  (when-let [db (conn/get-conn repo)]
+    (let [page-id (if (string? page-id)
+                    [:block/name (util/safe-page-name-sanity-lc page-id)]
+                    page-id)
+          page (d/entity db page-id)]
+      (nil? (:block/_left page)))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -624,9 +582,6 @@
                               '[:db/id :block/name :block/original-name]
                               ids))))))
 
-(defn block-and-children-transform
-  [result _repo-url _block-uuid]
-  (db-utils/seq-flatten result))
 
 (defn get-block-children-ids
   [repo block-uuid]
@@ -651,8 +606,8 @@
           '[:find [(pull ?b [*]) ...]
             :in $ ?parent-id
             :where
-            [?b :block/parent ?parent]
-            [?parent :block/uuid ?parent-id]]
+            [?parent :block/uuid ?parent-id]
+            [?b :block/parent ?parent]]
           conn
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
@@ -674,12 +629,24 @@
     [blocks-tree]))
 
 (defn get-block-and-children
+  [repo block-uuid]
+  (some-> (d/q
+            '[:find [(pull ?block ?block-attrs) ...]
+              :in $ ?id ?block-attrs
+              :where
+              [?block :block/uuid ?id]]
+            (conn/get-conn repo)
+            block-uuid
+            block-attrs)
+          first
+          flatten-tree))
+
+(defn sub-block-and-children
   ([repo block-uuid]
-   (get-block-and-children repo block-uuid true))
+   (sub-block-and-children repo block-uuid true))
   ([repo block-uuid use-cache?]
-   (some-> (react/q repo [:block/block block-uuid]
-             {:use-cache? use-cache?
-              :transform-fn #(block-and-children-transform % repo block-uuid)}
+   (some-> (react/q repo [:frontend.db.react/block-and-children block-uuid]
+             {:use-cache? use-cache?}
              '[:find [(pull ?block ?block-attrs) ...]
                :in $ ?id ?block-attrs
                :where
@@ -795,46 +762,39 @@
    (when (conn/get-conn repo-url)
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-utils/date->int (js/Date.))
-           pages (->>
-                  (react/q repo-url [:journals] {:use-cache? false}
-                           '[:find ?page-name ?journal-day
-                             :in $ ?today
-                             :where
-                             [?page :block/name ?page-name]
-                             [?page :block/journal? true]
-                             [?page :block/journal-day ?journal-day]
-                             [(<= ?journal-day ?today)]]
-                           today)
-                  (react)
-                  (sort-by last)
-                  (reverse)
-                  (map first)
-                  (take n))]
-       (mapv
-        (fn [page]
-          [page
-           (get-page-format page)])
-        pages)))))
+           today (db-utils/date->int (js/Date.))]
+       (->>
+        (react/q repo-url [:frontend.db.react/journals] {:use-cache? false}
+          '[:find [(pull ?page [*]) ...]
+            :in $ ?today
+            :where
+            [?page :block/name ?page-name]
+            [?page :block/journal? true]
+            [?page :block/journal-day ?journal-day]
+            [(<= ?journal-day ?today)]]
+          today)
+        (react)
+        (sort-by :block/journal-day)
+        (reverse)
+        (take n))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
-  (when (conn/get-conn repo)
+  (when-let [db (conn/get-conn repo)]
     (let [page-name (util/safe-page-name-sanity-lc page)
           pages (page-alias-set repo page)
           page-id (:db/id (db-utils/entity [:block/name page-name]))
-          ref-pages (->> (react/q repo [:page/ref-pages page-id] {:use-cache? false}
-                                  '[:find ?ref-page-name
-                                    :in $ ?pages
-                                    :where
-                                    [?block :block/page ?p]
-                                    [(contains? ?pages ?p)]
-                                    [?block :block/refs ?ref-page]
-                                    [?ref-page :block/name ?ref-page-name]]
-                                  pages)
-                         react
-                         db-utils/seq-flatten)]
+          ref-pages (d/q
+                      '[:find [?ref-page-name ...]
+                        :in $ ?pages
+                        :where
+                        [(untuple ?pages) [?page ...]]
+                        [?block :block/page ?page]
+                        [?block :block/refs ?ref-page]
+                        [?ref-page :block/name ?ref-page-name]]
+                      db
+                      pages)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-page-linked-refs-refed-pages
@@ -885,7 +845,7 @@
   (when (conn/get-conn repo)
     (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
           pages (page-alias-set repo page)
-          mentioned-pages (->> (react/q repo [:page/mentioned-pages page-id] {:use-cache? false}
+          mentioned-pages (->> (react/q repo [:frontend.db.react/page<-pages page-id] {:use-cache? false}
                                         '[:find ?mentioned-page-name
                                           :in $ ?pages ?page-name
                                           :where
@@ -937,22 +897,26 @@
                                           [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
                                            [?block :block/refs ?ref-page]
                                            [(contains? ?pages ?ref-page)]]]]
-                              (react/q repo [:block/refed-blocks page-id] {}
-                                '[:find [(pull ?block ?block-attrs) ...]
-                                  :in $ % ?pages ?aliases ?block-attrs
-                                  :where
-                                  (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
-                                rules
-                                pages
-                                aliases
-                                block-attrs))
-                            (react/q repo [:block/refed-blocks page-id] {:use-cache? false}
-                              '[:find [(pull ?ref-block ?block-attrs) ...]
-                                :in $ ?page ?block-attrs
-                                :where
-                                [?ref-block :block/refs ?page]]
-                              page-id
-                              block-attrs))
+                              (react/q repo
+                                       [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                                       {}
+                                       '[:find [(pull ?block ?block-attrs) ...]
+                                         :in $ % ?pages ?aliases ?block-attrs
+                                         :where
+                                         (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
+                                       rules
+                                       pages
+                                       aliases
+                                       block-attrs))
+                            (react/q repo
+                                     [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                                     {:use-cache? false}
+                                     '[:find [(pull ?ref-block ?block-attrs) ...]
+                                       :in $ ?page ?block-attrs
+                                       :where
+                                       [?ref-block :block/refs ?page]]
+                                     page-id
+                                     block-attrs))
              result (->> query-result
                          react
                          (sort-by-left-recursive)
@@ -1048,7 +1012,7 @@
                              (map pattern))
             filter-fn   (fn [datom]
                           (some (fn [p] (re-find p (:v datom))) patterns))]
-        (->> (react/q repo [:block/unlinked-refs page-id]
+        (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
                       {:query-fn (fn [db]
                                    (let [ids
                                          (->> (d/datoms db :aevt :block/content)
@@ -1068,16 +1032,17 @@
   (when-let [repo (state/get-current-repo)]
     (when (conn/get-conn repo)
       (let [block (db-utils/entity [:block/uuid block-uuid])]
-        (->> (react/q repo [:block/refed-blocks (:db/id block)]
-               {}
-               '[:find [(pull ?ref-block ?block-attrs) ...]
-                 :in $ ?block-uuid ?block-attrs
-                :where
-                [?block :block/uuid ?block-uuid]
-                [?ref-block :block/refs ?block]]
-               block-uuid
-               block-attrs)
-            react
+        (->> (react/q repo [:frontend.db.react/page<-blocks-or-block<-blocks
+                            (:db/id block)]
+                      {:use-cache? false}
+                      '[:find [(pull ?ref-block ?block-attrs) ...]
+                        :in $ ?block-uuid ?block-attrs
+                        :where
+                        [?block :block/uuid ?block-uuid]
+                        [?ref-block :block/refs ?block]]
+                      block-uuid
+                      block-attrs)
+             react
             (sort-by-left-recursive)
             db-utils/group-by-page)))))
 
@@ -1086,14 +1051,15 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
       (let [block (db-utils/entity [:block/uuid block-uuid])]
-        (->> (react/q repo [:ref-ids (:db/id block)] {}
-               '[:find ?ref-block
-                 :in $ ?block-uuid ?block-attrs
-                 :where
-                 [?block :block/uuid ?block-uuid]
-                 [?ref-block :block/refs ?block]]
-               block-uuid
-               block-attrs)
+        (->> (react/q repo [:frontend.db.react/block<-block-ids
+                            (:db/id block)] {}
+                      '[:find ?ref-block
+                        :in $ ?block-uuid ?block-attrs
+                        :where
+                        [?block :block/uuid ?block-uuid]
+                        [?ref-block :block/refs ?block]]
+                      block-uuid
+                      block-attrs)
              react)))))
 
 (defn get-referenced-blocks-ids
@@ -1362,10 +1328,7 @@
   (when (and repo path)
     (let [tx-data {:file/path path
                    :file/content content}]
-      (react/transact-react!
-       repo
-       [tx-data]
-       {:key [:file/content path]}))))
+      (db-utils/transact! repo [tx-data] {:skip-refresh? true}))))
 
 (defn get-pre-block
   [repo page-id]

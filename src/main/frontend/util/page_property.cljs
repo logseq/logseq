@@ -1,7 +1,6 @@
 (ns frontend.util.page-property
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]
@@ -68,9 +67,7 @@
               tx [(assoc page-id :block/properties new-properties)
                   block]]
           ;; (util/pprint tx)
-          (db/transact! tx)
-          (db/refresh! repo {:key :block/change
-                             :data [block]}))
+          (db/transact! tx))
         (let [block {:block/uuid (db/new-block-id)
                      :block/left page-id
                      :block/parent page-id
@@ -84,8 +81,5 @@
           (outliner-core/insert-node (outliner-core/block block)
                                      (outliner-core/block page)
                                      false)
-          (db/transact! [(assoc page-id :block/properties {key value})])
-          (db/refresh! repo {:key :block/change
-                             :data [block]})
-          (ui-handler/re-render-root!)))
+          (db/transact! [(assoc page-id :block/properties {key value})])))
       (outliner-file/sync-to-file page-id))))

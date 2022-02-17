@@ -7,6 +7,7 @@
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
@@ -400,6 +401,7 @@
 
 (rum/defcs view
   < rum/reactive
+  db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
   {:will-mount (fn [state]
@@ -493,7 +495,7 @@
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view blocks {:preview? true} (atom 0))))
+  (state/set-modal! #(view blocks {:preview? true} (atom 0)) {:id :srs}))
 
 
 ;;; ================================================================
@@ -534,22 +536,13 @@
         count))))
 
 ;;; register cards macro
-(rum/defcs cards
-  < rum/reactive
-  {:will-mount (fn [state]
-                 (let [[_config options] (:rum/args state)
-                       repo (state/get-current-repo)
-                       query-string (string/join ", " (:arguments options))
-                       blocks (query repo query-string)]
-                   (assoc state
-                          :query-string query-string
-                          :query-result blocks)))}
+(rum/defcs cards < rum/reactive
   (rum/local 0 ::card-index)
-  [state config _options]
+  [state config options]
   (let [repo (state/get-current-repo)
-        query-string (:query-string state)
+        query-string (string/join ", " (:arguments options))
+        query-result (query repo query-string)
         card-index (::card-index state)
-        query-result (:query-result state)
         global? (:global? config)]
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
@@ -564,7 +557,6 @@
           [:div.flex.flex-row.items-center
            (ui/icon "infinity" {:style {:font-size 20}})
            [:div.ml-1.text-sm.font-medium query-string]]
-
 
           [:div.flex.flex-row.items-center
 
@@ -592,7 +584,8 @@
                               (state/set-modal! #(view-modal
                                                   blocks
                                                   {:preview? true}
-                                                  card-index)))))}
+                                                  card-index)
+                                                {:id :srs}))))}
              "A"])]]
          (if (seq review-cards)
            [:div.px-1
@@ -606,7 +599,8 @@
                                                   (operation-card-info-summary!
                                                    review-records review-cards card-query-block)
                                                   (persist-var/persist-save of-matrix))}
-                                               card-index)))})
+                                               card-index)
+                                             {:id :srs}))})
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config
