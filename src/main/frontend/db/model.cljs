@@ -475,11 +475,20 @@
                                                                    [(zipmap (map :db/id blocks) blocks)
                                                                     (zipmap (map :db/id @result) @result)]))
                                datoms (d/datoms db :avet :block/page page-id)
-                               blocks (if (and tx-id->block @result)
-                                        (map (fn [datom] (let [id (:e datom)]
-                                                           (or (get tx-id->block id)
-                                                              (get cached-id->block id)))) datoms)
-                                        (let [block-eids (mapv :e datoms)]
+                               tx-merged-blocks (when (and tx-id->block result)
+                                                  (let [result (reduce (fn [acc datom]
+                                                                         (let [id (:e datom)
+                                                                               block (or (get tx-id->block id)
+                                                                                         (get cached-id->block id))]
+                                                                           (if block
+                                                                             (conj! acc block)
+                                                                             (reduced nil))))
+                                                                       (transient [])
+                                                                       datoms)]
+                                                    (persistent! result)))
+                               blocks (or
+                                       tx-merged-blocks
+                                       (let [block-eids (mapv :e datoms)]
                                           (db-utils/pull-many repo-url pull-keys block-eids)))]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
