@@ -268,7 +268,7 @@
 
 (defmethod handle :mobile/keyboard-did-show [[_]]
   (when-let [input (state/get-input)]
-    (util/make-el-into-viewport input)))
+    (util/make-el-cursor-position-into-center-viewport input)))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]

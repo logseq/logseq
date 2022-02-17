@@ -2369,8 +2369,7 @@
 
 (defn- keydown-new-line
   []
-  (insert "\n")
-  (ui-handler/try-to-editing-input-into-viewport!))
+  (insert "\n"))
 
 (declare delete-and-update)
 
@@ -3120,19 +3119,21 @@
     (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
 
+(defonce mobile-toolbar-height 40)
 (defn editor-on-height-change!
   [id]
-  (fn [row-height]
-    (let [input (gdom/getElement id)
-          top (gobj/get (.getBoundingClientRect input) "top")
-          cursor-y (+ top row-height)
+  (fn [box-height ^js row-height]
+    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
+          input (gdom/getElement id)
+          caret (cursor/get-caret-pos input)
+          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
+          box-top (gobj/get (.getBoundingClientRect input) "top")
+          cursor-y (+ cursor-bottom box-top)
           vw-height (.-height js/window.visualViewport)]
-      ;; 40 is mobile toolbar height
-      (when (<  vw-height (+ cursor-y 40))
+      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
         (let [main-node (gdom/getElement "main-content-container")
               scroll-top (.-scrollTop main-node)]
-          ;; 24 is default line height
-          (set! (.-scrollTop main-node) (+ scroll-top 24)))))))
+          (set! (.-scrollTop main-node) (+ scroll-top (/ vw-height 2))))))))
 
 (defn editor-on-change!
   [block id search-timeout]
