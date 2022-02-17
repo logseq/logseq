@@ -109,15 +109,18 @@
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
-        ;; TODO: Remove
         new-page (if (or (search-has-a-match? pages search-q result)
                          all?)
                    []
-                   []
-                   #_[{:type :new-page}])
+                   [{:type :add-to-todays-journal :group "Create"}
+                    {:type :new-page}])
         result (if config/publishing?
                  (concat pages files blocks)
-                 (concat new-page pages files blocks))
+                 (concat new-page
+                         (map-indexed
+                          (fn [idx result]
+                            (if (= 0 idx) (assoc result :group "Search") result))
+                          (concat pages files blocks))))
         result (if (= search-mode :graph)
                  [{:type :graph-add-filter}]
                  result)
@@ -126,7 +129,9 @@
      (ui/auto-complete
       result
       {:class "search-results"
+       :get-group-name :group
        :on-chosen (fn [{:keys [type data alias]}]
+                    ;; TODO: Exclude :new-page and :add-to-todays-journal
                     (search-handler/add-search-to-recent! repo search-q)
                     (search-handler/clear-search!)
                     (case type
@@ -135,6 +140,11 @@
 
                       :new-page
                       (page-handler/create! search-q)
+
+                      :add-to-todays-journal
+                      (editor-handler/api-insert-new-block!
+                       search-q
+                       {:page (date/today)})
 
                       :page
                       (let [data (or alias data)]
@@ -198,9 +208,15 @@
                                                 :graph-add-filter
                                                 [:b search-q]
 
+                                                :add-to-todays-journal
+                                                (search-result-item "Page" "Add new block to today's journal")
+                                                #_[:div.text.font-bold "Add new block to today's journal"]
+
                                                 :new-page
-                                                [:div.text.font-bold (str (t :new-page) ": ")
-                                                 [:span.ml-1 (str "\"" search-q "\"")]]
+                                                (search-result-item "Page" "New page")
+
+                                                #_[:div.text.font-bold (str (t :new-page) ": ")
+                                                   [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                 :page
                                                 [:span {:data-page-ref data}
@@ -237,6 +253,7 @@
 (rum/defc recent-search-and-pages
   [in-page-search?]
   [:div.recent-search
+   [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"]
    [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
@@ -270,7 +287,7 @@
                     (case type
                       :page
                       (do (route/redirect-to-page! data)
-                          (state/close-modal!))
+                        (state/close-modal!))
                       :search
                       (let [q data]
                         (state/set-q! q)
@@ -291,11 +308,11 @@
                             (let [page data]
                               (when (string? page)
                                 (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page)])]
-                                 (state/sidebar-add-block!
-                                  (state/get-current-repo)
-                                  (:db/id page)
-                                  :page
-                                  {:page page}))))
+                                  (state/sidebar-add-block!
+                                   (state/get-current-repo)
+                                   (:db/id page)
+                                   :page
+                                   {:page page}))))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
@@ -374,7 +391,13 @@
      (when (mobile-util/is-native-platform?)
        {:style {:min-height "50vh"}})
 
-     [:div.header-wrap]
+     [:div.pt-2.pl-4.header-wrap
+      (when (seq search-q)
+        (if (search-has-a-match? (transform-pages (:pages search-result))
+                                 search-q
+                                 search-result)
+          [:div [:span.mr-2 (ui/icon "search")] "Search"]
+          [:div [:span.mr-2 (ui/icon "plus")] "Quick Capture"]))]
      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
@@ -388,13 +411,22 @@
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
         :on-change     input-on-change}]]
-     (when-not (search-has-a-match? (transform-pages (:pages search-result))
+     #_(when-not (search-has-a-match? (transform-pages (:pages search-result))
                                     search-q
                                     search-result)
        (create-results search-q))
-     #_[:div.keyboard-row.py-16 "Keyboard Shortcuts TODO"]
      [:div.search-results-wrap
-      [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"]
+      [:div.pb-2.keyboard-shortcuts.flex.flex-row.justify-around.align-items
+       [:div.flex-row.flex.align-items
+        [:div.mr-2 "ESC"]
+        [:div "Dismiss"]]
+       [:div.flex-row.flex.align-items
+        [:div.mr-2 (ui/icon "command")]
+        [:div.mr-2 (ui/icon "arrow-back")]
+        [:div "Create and jump to it"]]
+       [:div.flex-row.flex.align-items
+        [:div.mr-2 (ui/icon "arrow-back")]
+        [:div "Create"]]]
       (if (seq search-result)
         (search-auto-complete search-result search-q false)
         (recent-search-and-pages in-page-search?))]]))

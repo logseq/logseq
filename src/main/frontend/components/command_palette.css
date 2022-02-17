@@ -34,6 +34,13 @@
       max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
     }
 
+    .search-results .ui__ac-group-name {
+      text-transform: uppercase;
+      font-size: 1em;
+      color: white;
+      @apply font-medium opacity-50;
+    }
+
     .input-wrap {
       height: var(--palettle-input-height);
     }
