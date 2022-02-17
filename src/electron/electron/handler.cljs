@@ -46,13 +46,15 @@
   (readdir dir))
 
 (defmethod handle :unlink [_window [_ repo path]]
-  (let [file-name (-> (string/replace path (str repo "/") "")
-                      (string/replace "/" "_")
-                      (string/replace "\\" "_"))
-        recycle-dir (str repo "/logseq/.recycle")
-        _ (fs-extra/ensureDirSync recycle-dir)
-        new-path (str recycle-dir "/" file-name)]
-    (fs/renameSync path new-path)))
+  (if (plugin/dotdir-file? path)
+    (fs/unlinkSync path)
+    (let [file-name   (-> (string/replace path (str repo "/") "")
+                        (string/replace "/" "_")
+                        (string/replace "\\" "_"))
+          recycle-dir (str repo "/logseq/.recycle")
+          _           (fs-extra/ensureDirSync recycle-dir)
+          new-path    (str recycle-dir "/" file-name)]
+      (fs/renameSync path new-path))))
 
 (defn backup-file
   [repo path content]
