@@ -78,12 +78,15 @@
   (let [path (.getPath ^object app "userData")]
     (path/join path "search")))
 
-(defonce search-version "search.version")
-
+(defn get-search-ver-dir
+  []
+  (let [path (.getPath ^object app "userData")]
+    (path/join path "search.versions")))
 
 (defn ensure-search-dir!
   []
-  (fs/ensureDirSync (get-search-dir)))
+  (fs/ensureDirSync (get-search-dir))
+  (fs/ensureDirSync (get-search-ver-dir)))
 
 ;; (defn rm-search-dir!
 ;;   []
@@ -100,11 +103,12 @@
 (defn get-db-version-path
   "File for storing search cache version"
   [db-name]
-  (let [[db-name db-full-path] (get-db-full-path db-name)]
-    [db-name db-full-path (str db-full-path "." search-version)]))
+  (let [db-name (sanitize-db-name db-name)
+        search-dir (get-search-dir)
+        search-ver-dir (get-search-ver-dir)]
+    [db-name (path/join search-dir db-name) (path/join search-ver-dir db-name)]))
 
 (defn get-search-version
-  "Not normalized db name"
   [db-name]
   (let [[_db-name db-full-path db-ver-path] (get-db-version-path db-name)]
     (if (and (fs/existsSync db-ver-path) (fs/existsSync db-full-path)) ;; avoid case that only ver file exists
@@ -122,18 +126,17 @@
 
 (defn open-db!
   [db-name]
-  (let [[db-normalized-name db-full-path] (get-db-full-path db-name)
+  (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)
         db (sqlite3 db-full-path nil)
         _ (create-blocks-table! db)
         _ (create-blocks-fts-table! db)
         _ (add-triggers! db)]
-    (swap! databases assoc db-normalized-name db)))
+    (swap! databases assoc db-sanitized-name db)))
 
 (defn open-dbs!
   []
   (let [search-dir (get-search-dir)
         dbs (fs/readdirSync search-dir)
-        dbs (remove (fn [file-name] (.endsWith file-name search-version)) dbs)
         dbs (remove (fn [file-name] (.startsWith file-name ".")) dbs)]
     (when (seq dbs)
       (doseq [db-name dbs]
