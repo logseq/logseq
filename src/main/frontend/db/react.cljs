@@ -10,7 +10,56 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.db-schema :as db-schema]))
+            [frontend.db-schema :as db-schema]
+            [cljs.spec.alpha :as s]))
+
+;;; keywords specs for reactive query, used by `react/q` calls
+;; ::block
+;; pull-block react-query
+(s/def ::block (s/tuple #(= ::block %) uuid?))
+;; ::block-refs-count
+;; (count (:block/refs block)) react-query
+(s/def ::block-refs-count (s/tuple #(= ::block-refs-count %) int?))
+;; ::page-blocks
+;; get page-blocks react-query
+(s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))
+;; ::block-and-children
+;; get block&children react-query
+(s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
+;; ::journals
+;; get journal-list react-query
+(s/def ::journals (s/tuple #(= ::journals %)))
+;; ::page->pages
+;; get PAGES referenced by PAGE
+(s/def ::page->pages (s/tuple #(= ::page->pages %) int?))
+;; ::page<-pages
+;; get PAGES referencing PAGE
+(s/def ::page<-pages (s/tuple #(= ::page<-pages %) int?))
+;; ::page<-blocks-or-block<-blocks
+;; get BLOCKS referencing PAGE or BLOCK
+(s/def ::page<-blocks-or-block<-blocks
+  (s/tuple #(= ::page<-blocks-or-block<-blocks %) int?))
+;; FIXME: this react-query has performance issues
+(s/def ::page-unlinked-refs (s/tuple #(= ::page-unlinked-refs %) int?))
+;; ::block<-block-ids
+;; get BLOCK-IDS referencing BLOCK
+(s/def ::block<-block-ids (s/tuple #(= ::block<-block-ids %) int?))
+;; custom react-query
+(s/def ::custom any?)
+
+(s/def ::react-query-keys (s/or :block ::block
+                                :block-refs-count ::block-refs-count
+                                :page-blocks ::page-blocks
+                                :block-and-children ::block-and-children
+                                :journals ::journals
+                                :page->pages ::page->pages
+                                :page<-pages ::page<-pages
+                                :page<-blocks-or-block<-blocks ::page<-blocks-or-block<-blocks
+                                :page-unlinked-refs ::page-unlinked-refs
+                                :block<-block-ids ::block<-block-ids
+                                :custom ::custom))
+
+(s/def ::affected-keys (s/coll-of ::react-query-keys))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -128,6 +177,7 @@
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
+  {:pre [(s/valid? ::react-query-keys k)]}
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (conn/get-conn repo)]
@@ -186,6 +236,8 @@
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data]}]
+  {:post [(s/valid? ::affected-keys %)]}
+
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
@@ -205,37 +257,33 @@
                               (let [page-id (or
                                              (when (:block/name block) (:db/id block))
                                              (:db/id (:block/page block)))
-                                    blocks [[:blocks (:block/uuid block)]]
+                                    blocks [[::block (:block/uuid block)]]
                                     others (when page-id
-                                             [[:page/blocks page-id]
-                                              [:page/ref-pages page-id]])]
+                                             [[::page-blocks page-id]
+                                              [::page->pages page-id]])]
                                 (concat blocks others)))))
                         blocks)
 
                        (when-let [current-page-id (:db/id (get-current-page))]
-                         [[:page/ref-pages current-page-id]
-                          [:page/mentioned-pages current-page-id]])
+                         [[::page->pages current-page-id]
+                          [::page<-pages current-page-id]])
 
                        (map (fn [ref]
                               (let [entity (db-utils/entity ref)]
                                 (if (:block/name entity) ; page
-                                  [:page/blocks ref]
-                                  [:block/refs-count ref])))
-                         refs))
+                                  [::page-blocks ref]
+                                  [::block-refs-count ref])))
+                            refs))
         others (some->>
                 (filter (fn [ks]
-                          (contains? #{:block/block :block/refed-blocks :block/unlinked-refs} (second ks)))
+                          (contains? #{::block-and-children
+                                       ::page<-blocks-or-block<-blocks}
+                                     (second ks)))
                         (keys @query-state))
-                (map (fn [v] (vec (rest v)))))
-        refed-pages (map
-                      (fn [[k page-id]]
-                        (when (and page-id (= k :block/refed-blocks))
-                          [:page/ref-pages page-id]))
-                      affected-keys)]
+                (map (fn [v] (vec (rest v)))))]
     (->>
      (util/concat-without-nil
       affected-keys
-      refed-pages
       others)
      set)))
 
