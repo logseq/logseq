@@ -22,7 +22,12 @@ async function page_rename_test(page, original_page_name: string, new_page_name:
   await page.type('.title input', new_name)
   await page.keyboard.press('Enter')
   await page.click('.ui__confirm-modal button')
+
   expect(await page.innerText('.page-title .title')).toBe(new_name)
+
+  // TODO: Test if page is renamed in re-entrance
+  
+  // TODO: Test if page is hierarchy
 }
 
 test('page rename test', async ({ page }) => {
