@@ -434,7 +434,7 @@
   (when-not (gobj/get e "shiftKey")
     (editor-handler/clear-selection!)))
 
-(rum/defcs sidebar <
+(rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
