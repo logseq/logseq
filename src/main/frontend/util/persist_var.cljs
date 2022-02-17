@@ -61,7 +61,6 @@
     [_ new-value]
     (swap! *value (fn [_] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
 
-
   IPrintWithWriter
   (-pr-writer [_ w _opts]
     (write-all w (str "#PersistVar[" @*value ", loc: " location "]"))))
@@ -70,8 +69,7 @@
 (def *all-persist-vars (atom []))
 
 (defn load-vars []
-  (doseq [var @*all-persist-vars]
-    (-load var)))
+  (p/all (mapv -load @*all-persist-vars)))
 
 (defn persist-var
   "This var is stored at logseq/LOCATION.edn"
