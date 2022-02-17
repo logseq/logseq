@@ -86,7 +86,8 @@
 
    :editor/escape-editing        {:desc    "Escape editing"
                                   :binding false
-                                  :fn      (fn [_ _] (editor-handler/escape-editing))}
+                                  :fn      (fn [_ _]
+                                             (editor-handler/escape-editing))}
 
    :editor/backspace             {:desc    "Backspace / Delete backwards"
                                   :binding "backspace"
@@ -470,11 +471,12 @@
                          :auto-complete/shift-complete])
 
     :shortcut.handler/cards
-    (build-category-map [:cards/toggle-answers
-                         :cards/next-card
-                         :cards/forgotten
-                         :cards/remembered
-                         :cards/recall])
+    (-> (build-category-map [:cards/toggle-answers
+                             :cards/next-card
+                             :cards/forgotten
+                             :cards/remembered
+                             :cards/recall])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/block-editing-only
     (->

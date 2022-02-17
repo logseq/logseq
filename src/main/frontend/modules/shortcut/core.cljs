@@ -109,7 +109,7 @@
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
-      ;;(log/info :shortcut/install-shortcut {:id id :shortcut (str (dh/shortcut-binding id))})
+      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (str (dh/shortcut-binding id))})
       (register-shortcut! handler id))
 
     (let [f (fn [e]

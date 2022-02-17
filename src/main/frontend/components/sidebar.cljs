@@ -445,7 +445,8 @@
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (when (= 27 (.-keyCode e))
-                        (if (state/modal-opened?)
+                        (if (and (state/modal-opened?)
+                                 (not (:editor/editing? @state/state)))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   {:did-mount (fn [state]
