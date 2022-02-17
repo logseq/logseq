@@ -473,13 +473,14 @@
                                                                        blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                    (remove nil?))]
                                                                    [(zipmap (map :db/id blocks) blocks)
-                                                                    (util/profile "zipmap" (zipmap (map :db/id @result) @result))]))
+                                                                    (zipmap (map :db/id @result) @result)]))
                                datoms (d/datoms db :avet :block/page page-id)
-                               block-eids (mapv :e datoms)
                                blocks (if (and tx-id->block @result)
-                                        (map (fn [id] (or (get tx-id->block id)
-                                                          (get cached-id->block id))) block-eids)
-                                        (db-utils/pull-many repo-url pull-keys block-eids))]
+                                        (map (fn [datom] (let [id (:e datom)]
+                                                           (or (get tx-id->block id)
+                                                              (get cached-id->block id)))) datoms)
+                                        (let [block-eids (mapv :e datoms)]
+                                          (db-utils/pull-many repo-url pull-keys block-eids)))]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
