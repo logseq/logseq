@@ -6,6 +6,7 @@
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -333,23 +334,28 @@
                  timeout))))))
 
 (rum/defc create-results
-  [search-q]
+  [input]
   [:div.create-wrap
    [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Create"]
    [:div.flex.flex-row.justify-around.align-items
     [:div.py-2.px-1.rounded-md.text.font-bold
-     {:on-click #(js/alert "TODO: Add block")}
+     {:on-click (fn [_e]
+                  (search-handler/clear-search!)
+                  (editor-handler/api-insert-new-block!
+                   input
+                   {:page (date/today)})
+                  (state/close-modal!))}
      "Add new block to today's journal"]
     [:div.py-2.px-1.rounded-md.text.font-bold
      {:on-click (fn [_e]
                   ;; TODO: Refactor with search-auto-complete
                   (search-handler/add-search-to-recent! (state/get-current-repo)
-                                                        search-q)
+                                                        input)
                   (search-handler/clear-search!)
-                  (page-handler/create! search-q)
+                  (page-handler/create! input)
                   (state/close-modal!)) }
      (str (t :new-page) ": ")
-     [:span.ml-1 (str "\"" search-q "\"")]]]])
+     [:span.ml-1 (str "\"" input "\"")]]]])
 
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
