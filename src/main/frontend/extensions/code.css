@@ -27,7 +27,7 @@
     text-align: right;
 
     &-output-line {
-      height: 1.7em;
+      height: 23px;
       white-space: pre;
       font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     }
