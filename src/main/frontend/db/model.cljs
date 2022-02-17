@@ -438,7 +438,7 @@
     (when block-db-id
       (some->
        (react/q repo-url [:frontend.db.react/block-refs-count block-db-id]
-         {:query-fn (fn [_db]
+         {:query-fn (fn [_db _tx-report _result]
                       (count (:block/_refs (db-utils/entity repo-url block-db-id))))}
          nil)
        react))))
@@ -467,10 +467,19 @@
          (some->
           (react/q repo-url [:frontend.db.react/page-blocks page-id]
             {:use-cache? use-cache?
-             :query-fn (fn [db]
-                         (let [datoms (d/datoms db :avet :block/page page-id)
+             :query-fn (fn [db tx-report result]
+                         (let [[tx-id->block cached-id->block] (when (and tx-report result)
+                                                                 (let [tx-block-ids (mapv :e (:tx-data tx-report))
+                                                                       blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
+                                                                                   (remove nil?))]
+                                                                   [(zipmap (map :db/id blocks) blocks)
+                                                                    (util/profile "zipmap" (zipmap (map :db/id @result) @result))]))
+                               datoms (d/datoms db :avet :block/page page-id)
                                block-eids (mapv :e datoms)
-                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
+                               blocks (if (and tx-id->block @result)
+                                        (map (fn [id] (or (get tx-id->block id)
+                                                          (get cached-id->block id))) block-eids)
+                                        (db-utils/pull-many repo-url pull-keys block-eids))]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
@@ -1013,7 +1022,7 @@
             filter-fn   (fn [datom]
                           (some (fn [p] (re-find p (:v datom))) patterns))]
         (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
-                      {:query-fn (fn [db]
+                      {:query-fn (fn [db _tx-report _result]
                                    (let [ids
                                          (->> (d/datoms db :aevt :block/content)
                                               (filter filter-fn)
