@@ -210,10 +210,10 @@
 (defn- validate-nodes-level
   "check consecutive sorted nodes' :block/level are legal"
   [nodes]
-  (loop [nodes (next nodes) last-level (some-> (first nodes) outliner-core/-get-level)]
+  (loop [nodes (next nodes) last-level (some-> (first nodes) outliner-core/get-level)]
     (when (seq nodes)
       (let [node (first nodes)
-            level (outliner-core/-get-level node)]
+            level (outliner-core/get-level node)]
         (is (<= level (inc last-level)) (str "node: " node))
         (recur (next nodes) level)))))
 

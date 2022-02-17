@@ -5,7 +5,8 @@
             [frontend.db.model :as db-model]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.modules.outliner.transaction]))
+            [frontend.modules.outliner.transaction]
+            [cljs.spec.alpha :as s]))
 
 ;;; Commentary
 ;; properties related to block position:
@@ -49,9 +50,6 @@
   {:db/id (:db/id node)})
 
 
-
-
-
 ;;; Node apis
 (defprotocol Node
   (-get-id [this] "return :db/id or nil")
@@ -89,7 +87,7 @@
       true (assoc (id-map this) :block/next))))
 (defn- map-set-level [this level] (assoc (id-map this) :block/level level))
 
-(defn- get-id [o]
+(defn get-id [o]
   (cond
     (implements? Node o)
     (-get-id o)
@@ -100,7 +98,7 @@
     :else
     (throw (js/Error. (str "cannot get-id on " o)))))
 
-(defn- get-level [o]
+(defn get-level [o]
   (cond
     (implements? Node o)
     (-get-level o)
@@ -111,7 +109,7 @@
     :else
     (throw (js/Error. (str "cannot get-level on " o)))))
 
-(defn- get-next [o db]
+(defn get-next [o db]
   (cond
     (implements? Node o)
     (-get-next o db)
@@ -122,7 +120,7 @@
     :else
     (throw (js/Error. (str "cannot get-next on " o)))))
 
-(defn- get-prev [o db]
+(defn get-prev [o db]
   (cond
     (implements? Node o)
     (-get-prev o db)
@@ -133,7 +131,7 @@
     :else
     (throw (js/Error. (str "cannot get-prev on " o)))))
 
-(defn- unset-next [o]
+(defn unset-next [o]
   (cond
     (implements? Node o)
     (-unset-next o)
@@ -144,7 +142,7 @@
     :else
     (throw (js/Error. (str "cannot unset-next on " o)))))
 
-(defn- set-next [o id-or-node]
+(defn set-next [o id-or-node]
   (cond
     (implements? Node o)
     (-set-next o id-or-node)
@@ -155,7 +153,7 @@
     :else
     (throw (js/Error. (str "cannot set-next on " o)))))
 
-(defn- set-level [o level]
+(defn set-level [o level]
   (cond
     (implements? Node o)
     (-set-level o level)
@@ -165,6 +163,7 @@
 
     :else
     (throw (js/Error. (str "cannot set-level on " o)))))
+;;; node apis ends here
 
 (defn- save-aux
   "Generate datascript transaction data,
@@ -207,7 +206,6 @@
     id-or-entity
     (d/entity db id-or-entity)))
 
-
 (defn- get-diff-level [node target-node sibling?]
   (let [origin-level (get-level node)
         target-level (get-level target-node)]
@@ -224,22 +222,29 @@
   [o]
   (not-any? (complement map?) o))
 
+;;; some validators and specs
 (declare contains-node?)
 (defn- validate-nodes-not-contains-target
-  "validate target-node isn't child of any node of NODES"
   [nodes target-id-or-entity db]
   (let [target (target-entity target-id-or-entity db)]
     (assert (not (contains-node? nodes target)))))
 
+(s/def ::target-node-map (s/keys :req [:block/level :block/page :db/id]
+                                 :opt [:block/next]))
+
+(s/def ::target-id-or-entity (s/or :id int?
+                                   :entity de/entity?
+                                   :map ::target-node-map))
+
 
 ;;; write-operations on outliner nodes (no side effects) ;;;;;;;;;;;;;;;;
-;; all operation functions are pure, and return transaction data,
+;; all operation functions are pure, return transaction data
 
 (defn insert-nodes
   "insert NODES as consecutive sorted nodes after target as siblings or children.
   return transaction data."
   [nodes db target-id-or-entity sibling?]
-  {:pre [(some? target-id-or-entity)
+  {:pre [(s/valid? ::target-id-or-entity target-id-or-entity)
          (map-sequential? nodes)]}
   (let [nodes (assign-temp-id nodes)
         target (target-entity target-id-or-entity db)
@@ -270,7 +275,7 @@
   return transaction data."
   [nodes db target-id-or-entity sibling?]
   {:pre [(seq nodes)
-         (some? target-id-or-entity)]}
+         (s/valid? ::target-id-or-entity target-id-or-entity)]}
   (let [target (target-entity target-id-or-entity db)
         target-next (get-next target db)
         first-node (first nodes)
