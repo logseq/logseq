@@ -28,7 +28,8 @@
             [shadow.resource :as rc]
             [frontend.mobile.util :as mobile-util]
             [frontend.db.persist :as db-persist]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [clojure.set :as set]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -170,17 +171,17 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (let [parsed-files (filter
-                      (fn [file]
-                        (let [format (format/get-format (:file/path file))]
-                          (contains? config/mldoc-support-formats format)))
-                      files)
-        parsed-files (sort-by :file/path parsed-files)
+  (let [support-files (filter
+                       (fn [file]
+                         (let [format (format/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
+                       files)
+        support-files (sort-by :file/path support-files)
         new-graph? (:new-graph? opts)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))]
     (when (seq delete-data) (db/transact! repo-url delete-data))
-    (doseq [file parsed-files]
+    (doseq [file support-files]
       (file-handler/alter-file repo-url
                                (:file/path file)
                                (:file/content file)
