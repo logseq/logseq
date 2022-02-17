@@ -33,6 +33,18 @@ export async function createRandomPage(page: Page) {
   return randomTitle;
 }
 
+export async function createPage(page: Page, page_name: string) {// Click #search-button
+  await page.click('#search-button')
+  // Fill [placeholder="Search or create page"]
+  await page.fill('[placeholder="Search or create page"]', page_name)
+  // Click text=/.*New page: "new page".*/
+  await page.click('text=/.*New page: ".*/')
+  // wait for textarea of first block
+  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+  return page_name;
+}
+
 /**
 * Locate the last block in the inner editor
 * @param page The Playwright Page object.
