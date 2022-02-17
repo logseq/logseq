@@ -477,18 +477,18 @@
             (let [next-dir (:NextDir r)
                   next-continuation-token (:NextContinuationToken r)
                   objs (:Objects r)]
+              (apply conj! file-meta-list
+                     (map
+                      #(->FileMetadata (:Size %)
+                                       (:ETag %)
+                                       (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
+                                       (:LastModified %)
+                                       true nil)
+                      objs))
               (if (and (empty? next-dir)
                        (empty? next-continuation-token))
                 (persistent! file-meta-list) ; finish
-                (do (apply conj! file-meta-list
-                           (map
-                            #(->FileMetadata (:Size %)
-                                             (:ETag %)
-                                             (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
-                                             (:LastModified %)
-                                             true nil)
-                            objs))
-                    (recur next-dir next-continuation-token)))))))))
+                (recur next-dir next-continuation-token))))))))
 
   (get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
@@ -523,9 +523,13 @@
       (let [r (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
         (if (instance? ExceptionInfo r)
           r
-          (-> r :Transactions (as-> txns [txns
-                                          (:TXId (last txns))
-                                          (:TXId (first txns))]))))))
+          (-> r
+              :Transactions
+              (as-> txns
+                  (sort-by :TXId txns)
+                  [txns
+                   (:TXId (last txns))
+                   (:TXId (first txns))]))))))
 
   (create-graph [this graph-name]
     (.request this "create_graph" {:GraphName graph-name})))
@@ -713,7 +717,7 @@
               (if (instance? ExceptionInfo diff-r)
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
-                  (if (> min-txid @*txid) ;; if min-txid > @*txid, need to remote->local-full-sync
+                  (if (> (dec min-txid) @*txid) ;; if min-txid-1 > @*txid, need to remote->local-full-sync
                     (do (println "min-txid" min-txid "request-txid" @*txid)
                         {:need-remote->local-full-sync true})
 
@@ -1019,7 +1023,9 @@
           remote
           (<! (.schedule this ::remote->local remote))
           local
-          (<! (.schedule this ::local->remote local))))))
+          (<! (.schedule this ::local->remote local))
+          :else
+          (<! (.schedule this :idle))))))
 
   (full-sync [this]
     (go
@@ -1071,7 +1077,7 @@
                 (.schedule this ::idle)))))))
 
   (local->remote [this [^FileChangeEvent local-change]]
-    (assert (some? local-change))
+    (assert (some? local-change) local-change)
     (go
       (let [{:keys [succ need-sync-remote unknown]}
             (<! (sync-local->remote! local->remote-syncer [local-change]))]
