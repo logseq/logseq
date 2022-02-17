@@ -683,7 +683,7 @@ body.is-pdf-active {
     padding-left: 0;
   }
 
-  #main-content.is-left-sidebar-open {
+  #main-container.is-left-sidebar-open {
     padding-left: unset;
   }
 }

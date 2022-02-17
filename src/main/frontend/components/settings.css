@@ -68,8 +68,16 @@
     > article {
       flex: 1;
       padding: 0 12px 12px;
-      max-height: 80vh;
-      /* overflow: auto; */
+      max-height: 70vh;
+      overflow: auto;
+      margin-right: -17px;
+      margin-bottom: -17px;
+    }
+
+    &.no-aside {
+      > article {
+        padding-left: 0;
+      }
     }
 
     .panel-wrap {

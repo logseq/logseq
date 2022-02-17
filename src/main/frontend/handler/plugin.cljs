@@ -7,6 +7,7 @@
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as md]
+            [frontend.fs :as fs]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -132,6 +133,15 @@
   (when (:plugin/updates-downloading? @state/state)
     (state/set-state! :plugin/updates-downloading? false)))
 
+(defn has-setting-schema?
+  [id]
+  (when-let [pl (and id (get-plugin-inst (name id)))]
+    (boolean (.-settingsSchema pl))))
+
+(defn get-enabled-plugins-if-setting-schema
+  []
+  (when-let [plugins (seq (state/get-enabled?-installed-plugins false nil true))]
+    (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
   [t]
@@ -157,7 +167,7 @@
                                       (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
                                     (state/consume-updates-coming-plugin payload true))))
 
-                             (do    ;; register new
+                             (do                            ;; register new
                                (p/then
                                  (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                                  (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
@@ -295,9 +305,28 @@
         (and theme-mode (state/set-theme! (if (= theme-mode "light") "white" theme-mode)))
         (js/LSPluginCore.selectTheme (bean/->js theme))))))
 
-(defn update-plugin-settings
+(defn update-plugin-settings-state
   [id settings]
-  (swap! state/state update-in [:plugin/installed-plugins id] assoc :settings settings))
+  (state/set-state! [:plugin/installed-plugins id :settings]
+                    ;; TODO: force settings related ui reactive
+                    ;; Sometimes toggle to `disable` not working
+                    ;; But related-option data updated?
+                    (assoc settings :disabled (boolean (:disabled settings)))))
+
+(defn open-settings-file-in-default-app!
+  [id-or-plugin]
+  (when-let [plugin (if (coll? id-or-plugin)
+                      id-or-plugin (state/get-plugin-by-id id-or-plugin))]
+    (when-let [file-path (:usf plugin)]
+      (js/apis.openPath file-path))))
+
+(defn open-plugin-settings!
+  ([id] (open-plugin-settings! id false))
+  ([id nav?]
+   (when-let [plugin (and id (state/get-plugin-by-id id))]
+     (if (has-setting-schema? id)
+       (state/pub-event! [:go/plugins-settings id nav? (or (:name plugin) (:title plugin))])
+       (open-settings-file-in-default-app! plugin)))))
 
 (defn parse-user-md-content
   [content {:keys [url]}]
@@ -365,6 +394,37 @@
   []
   (ipc/ipc "getLogseqDotDirRoot"))
 
+(defn make-fn-to-load-dotdir-json
+  [dirname default]
+  (fn [key]
+    (when-let [key (and key (name key))]
+      (p/let [repo   ""
+              path   (get-ls-dotdir-root)
+              exist? (fs/file-exists? path dirname)
+              _      (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
+              path   (util/node-path.join path dirname (str key ".json"))
+              _      (fs/create-if-not-exists repo "" path (or default "{}"))
+              json   (fs/read-file "" path)]
+        [path (js/JSON.parse json)]))))
+
+(defn make-fn-to-save-dotdir-json
+  [dirname]
+  (fn [key content]
+    (when-let [key (and key (name key))]
+      (p/let [repo ""
+              path (get-ls-dotdir-root)
+              path (util/node-path.join path dirname (str key ".json"))]
+        (fs/write-file! repo "" path content {:skip-compare? true})))))
+
+(defn make-fn-to-unlink-dotdir-json
+  [dirname]
+  (fn [key]
+    (when-let [key (and key (name key))]
+      (p/let [repo ""
+              path (get-ls-dotdir-root)
+              path (util/node-path.join path dirname (str key ".json"))]
+        (fs/unlink! repo path nil)))))
+
 (defn show-themes-modal!
   []
   (state/pub-event! [:modal/show-themes-modal]))
@@ -387,7 +447,7 @@
   (let [pending? (seq (:plugin/updates-pending @state/state))]
     (when-let [plugins (and (not pending?)
                             ;; TODO: too many requests may be limited by Github api
-                            (seq (take 32 (state/get-enabled-installed-plugins theme?))))]
+                            (seq (take 32 (state/get-enabled?-installed-plugins theme?))))]
       (state/set-state! :plugin/updates-pending
                         (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))
@@ -470,7 +530,7 @@
                                           (let [id (keyword id)]
                                             (when (and settings
                                                        (contains? (:plugin/installed-plugins @state/state) id))
-                                              (update-plugin-settings id (bean/->clj settings)))))))
+                                              (update-plugin-settings-state id (bean/->clj settings)))))))
 
             default-plugins (get-user-default-plugins)
 

@@ -76,7 +76,8 @@
 
 (defmethod handle :graph/added [[_ repo]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
-  (search-handler/rebuild-indices!))
+  (search-handler/rebuild-indices!)
+  (db/persist! repo))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
@@ -169,7 +170,7 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards))
+  (state/set-modal! srs/global-cards {:id :srs}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
@@ -235,6 +236,14 @@
 
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
+
+(defmethod handle :go/plugins-settings [[_ pid nav? title]]
+  (if pid
+    (do
+     (state/set-state! :plugin/focused-settings pid)
+     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+     (plugin/open-focused-settings-modal! title))
+    (state/close-sub-modal! "ls-focused-settings-modal")))
 
 
 (defmethod handle :redirect-to-home [_]

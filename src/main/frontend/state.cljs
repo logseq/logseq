@@ -56,6 +56,7 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
@@ -169,6 +170,8 @@
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
+     :plugin/navs-settings?                 true
+     :plugin/focused-settings               nil            ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -1063,6 +1066,7 @@
   (:modal/show? @state))
 
 (declare set-modal!)
+(declare close-modal!)
 
 (defn get-sub-modals
   []
@@ -1095,11 +1099,14 @@
   ([all?-a-id]
    (if (true? all?-a-id)
      (swap! state assoc :modal/subsets [])
-     (let [id all?-a-id
+     (let [id     all?-a-id
+           mid    (:modal/id @state)
            modals (:modal/subsets @state)]
-       (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                             (dec (count modals)))]
-         (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals))))))
+       (if (and id (not (string/blank? mid)) (= id mid))
+         (close-modal!)
+         (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
+                          (dec (count modals)))]
+           (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
    (:modal/subsets @state)))
 
 (defn set-modal!
@@ -1107,10 +1114,11 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [label fullscreen? close-btn? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
+          :modal/id id
           :modal/label (or label (if center? "ls-modal-align-center" ""))
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
@@ -1122,6 +1130,7 @@
   (if (seq (get-sub-modals))
     (close-sub-modal!)
     (swap! state assoc
+           :modal/id nil
            :modal/label ""
            :modal/show? false
            :modal/fullscreen? false
@@ -1520,13 +1529,19 @@
   []
   (:ui/visual-viewport-state @state))
 
-(defn get-enabled-installed-plugins
-  [theme?]
-  (filterv
-    #(and (:iir %)
-          (not (get-in % [:settings :disabled]))
-          (= (boolean theme?) (:theme %)))
-    (vals (:plugin/installed-plugins @state))))
+(defn get-plugin-by-id
+  [id]
+  (when-let [id (and id (keyword id))]
+    (get-in @state [:plugin/installed-plugins id])))
+
+(defn get-enabled?-installed-plugins
+  ([theme?] (get-enabled?-installed-plugins theme? true false))
+  ([theme? enabled? include-unpacked?]
+   (filterv
+     #(and (if include-unpacked? true (:iir %))
+           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
+           (= (boolean theme?) (:theme %)))
+     (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
   []
@@ -1612,3 +1627,7 @@
 (defn delete-reactive-query-db!
   [ks]
   (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
+
+(defn get-modal-id
+  []
+  (:modal/id @state))

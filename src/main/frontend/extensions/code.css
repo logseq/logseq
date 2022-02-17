@@ -21,52 +21,36 @@
   }
 
   &-calc {
-    @apply absolute right-0 text-sm;
-    padding: 0 0.25em;
-    margin-top: 24px;
-    top: 3px;
-    z-index: 1;
-    background: transparent;
+    @apply text-sm;
+    padding: 0.25em;
     width: max-content;
     text-align: right;
 
     &-output-line {
       height: 23px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-around;
-
-      > span {
-          font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-      }
+      white-space: pre;
+      font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     }
   }
+}
 
-  > .CodeMirror {
-    order: 1;
+.CodeMirror {
     width: 100%;
-    z-index: 0;
-    height: auto;
-    margin-top: 4px;
-    margin-bottom: 6px;
-    padding-top: 20px;
     font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-    max-width: var(--ls-main-content-max-width-wide);
     border-radius: 2px;
     line-height: 1.45em;
 
     &:not(.CodeMirror-focused) {
-      .CodeMirror-activeline-background {
-        background: unset !important;
-      }
+        .CodeMirror-activeline-background {
+            background: unset !important;
+        }
     }
 
     pre.CodeMirror-line {
-      box-shadow: none !important;
+        box-shadow: none !important;
     }
 
     .CodeMirror-hscrollbar {
         cursor: pointer;
     }
-  }
 }

@@ -29,5 +29,6 @@
 (defn enable-when-not-component-editing!
   [f]
   (fn [e]
-    (when-not (state/block-component-editing?)
+    (when (or (contains? #{:srs} (state/get-modal-id))
+              (not (state/block-component-editing?)))
       (f e))))
