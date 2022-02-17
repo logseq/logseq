@@ -44,7 +44,10 @@
   [repo page-name block-id]
   (when page-name
     (if block-id
-      (db/get-block-and-children repo block-id)
+      (when-let [root-block (db/pull [:block/uuid block-id])]
+        (let [blocks (-> (db/get-block-and-children repo block-id)
+                         (model/sort-blocks root-block {}))]
+          (cons root-block blocks)))
       (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!
@@ -62,11 +65,7 @@
   state)
 
 (rum/defc page-blocks-inner <
-  {:init (fn [state]
-           (when-let [block-id (last (:rum/args state))]
-             (state/set-collapsed-block! block-id false))
-           state)
-   :did-mount  open-first-block!
+  {:did-mount  open-first-block!
    :did-update open-first-block!}
   [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
@@ -174,6 +173,7 @@
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
+          input-ref (rum/create-ref)
           repo (state/get-current-repo)
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
@@ -181,25 +181,38 @@
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
           confirm-fn (fn []
-                       (let [merge? (and (not= (util/page-name-sanity-lc page-name)
+                       (let [new-page-name (string/trim @*title-value)
+                             merge? (and (not= (util/page-name-sanity-lc page-name)
                                                (util/page-name-sanity-lc @*title-value))
                                          (page-handler/page-exists? page-name)
                                          (page-handler/page-exists? @*title-value))]
                          (ui/make-confirm-modal
                           {:title         (if merge?
-                                            (str "Page \"" @*title-value "\" already exists, merge them?")
-                                            "Do you really want to change the page name?")
+                                            (str "Page “" @*title-value "” already exists, merge to it?")
+                                            (str "Do you really want to change the page name to “" new-page-name "”?"))
                            :on-confirm    (fn [_e {:keys [close-fn]}]
                                             (close-fn)
                                             (page-handler/rename! (or title page-name) @*title-value)
                                             (reset! *edit? false))
                            :on-cancel     (fn []
                                             (reset! *title-value old-name)
+                                            (gobj/set (rum/deref input-ref) "value" old-name)
                                             (reset! *edit? true))})))
+          rollback-fn #(do
+                         (reset! *title-value old-name)
+                         (gobj/set (rum/deref input-ref) "value" old-name)
+                         (reset! *edit? false)
+                         (notification/show! "Illegal page name, can not rename!" :warning))
           blur-fn (fn [e]
+                    (when (util/wrapped-by-quotes? @*title-value)
+                      (swap! *title-value util/unquote-string)
+                      (gobj/set (rum/deref input-ref) "value" @*title-value))
                     (cond
                       (= old-name @*title-value)
                       nil
+
+                      (string/blank? @*title-value)
+                      (rollback-fn)
 
                       :else
                       (state/set-modal! (confirm-fn)))
@@ -208,6 +221,7 @@
         [:h1.title {:style {:margin-left -2}}
          [:input.w-full
           {:type          "text"
+           :ref           input-ref
            :auto-focus    true
            :style         {:outline "none"
                            :font-weight 600}
@@ -215,8 +229,7 @@
            :default-value old-name
            :on-change     (fn [e]
                             (let [value (util/evalue e)]
-                              (when-not (string/blank? value)
-                                (reset! *title-value (string/trim value)))))
+                              (reset! *title-value (string/trim value))))
            :on-blur       blur-fn
            :on-key-down   (fn [e]
                             (when (= (gobj/get e "key") "Enter")
