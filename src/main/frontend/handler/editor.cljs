@@ -27,7 +27,6 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile]
