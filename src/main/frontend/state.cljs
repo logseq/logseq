@@ -1620,3 +1620,7 @@
 (defn sub-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+
+(defn get-modal-id
+  []
+  (:modal/id @state))

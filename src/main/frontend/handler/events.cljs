@@ -170,7 +170,7 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards))
+  (state/set-modal! srs/global-cards {:id :srs}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
