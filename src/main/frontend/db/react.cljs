@@ -278,12 +278,12 @@
                                   [::page-blocks ref]
                                   [::block-refs-count ref])))
                             refs))
-        others (some->>
+        others (->>
+                (keys @query-state)
                 (filter (fn [ks]
                           (contains? #{::block-and-children
                                        ::page<-blocks-or-block<-blocks}
-                                     (second ks)))
-                        (keys @query-state))
+                                     (second ks))))
                 (map (fn [v] (vec (rest v)))))]
     (->>
      (util/concat-without-nil
