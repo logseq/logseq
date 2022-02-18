@@ -235,7 +235,7 @@
         vw-pending? (state/sub :ui/visual-viewport-pending?)
         ;; TODO: should we add this focus step to `simple-insert!`?
         viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/make-el-into-center-viewport input)
+                             (util/make-el-cursor-position-into-center-viewport input)
                              (.focus input)))]
     [:div#mobile-editor-toolbar.bg-base-2
      {:style {:bottom (if vw-state
@@ -278,7 +278,6 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (viewport-fn)
                          (commands/simple-insert! parent-id "\n" {}))}
        (ui/icon "arrow-back"
                 {:style {:fontSize ui/icon-size}})]]
