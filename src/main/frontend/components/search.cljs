@@ -87,7 +87,7 @@
   (or
    (and (seq pages)
         (= (util/safe-page-name-sanity-lc search-q)
-           (util/safe-page-name-sanity-lc (:data (first pages)))))
+           (util/safe-page-name-sanity-lc (first pages))))
    (nil? result)))
 
 (defn- transform-pages
@@ -103,20 +103,105 @@
             (assoc :alias alias))))
        (remove nil? pages)))
 
-(rum/defc ^:large-vars/cleanup-todo search-auto-complete
-  [{:keys [pages files blocks has-more?] :as result} search-q all?]
-  (let [pages (when-not all? (transform-pages pages))
+(defn search-item-render
+  [search-q {:keys [type data alias]}]
+  (let [search-mode (state/get-search-mode)
+        data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
+    [:div {:class "py-2"}
+     (case type
+       :graph-add-filter
+       [:b search-q]
+
+       :add-to-todays-journal
+       (search-result-item "Block" "Add new block to today's journal")
+
+       :new-page
+       (search-result-item "Page" [:div.text (str (t :new-page) ": ")
+                                   [:span.ml-1 (str "\"" search-q "\"")]])
+
+       :page
+       [:span {:data-page-ref data}
+        (when alias
+          (let [target-original-name (model/get-page-original-name alias)]
+            [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
+        (search-result-item "Page" (highlight-exact-query data search-q))]
+
+       :file
+       (search-result-item "File" (highlight-exact-query data search-q))
+
+       :block
+       (let [{:block/keys [page uuid]} data  ;; content here is normalized
+             page (util/get-page-original-name page)
+             repo (state/sub :git/current-repo)
+             format (db/get-page-format page)
+             block (model/query-block-by-uuid uuid)
+             content (:block/content block)]
+         [:span {:data-block-ref uuid}
+          (search-result-item "Block"
+                              (block-search-result-item repo uuid format content search-q search-mode))])
+
+       nil)]))
+
+(defn- search-on-chosen
+  [search-q repo {:keys [type data alias]}]
+  (when-not (contains? #{:new-page :add-to-todays-journal} type)
+    (search-handler/add-search-to-recent! repo search-q))
+  (search-handler/clear-search!)
+  (case type
+    :graph-add-filter
+    (state/add-graph-search-filter! search-q)
+
+    :new-page
+    (page-handler/create! search-q)
+
+    :add-to-todays-journal
+    (editor-handler/api-insert-new-block!
+     search-q
+     {:page (date/today)})
+
+    :page
+    (let [data (or alias data)]
+      (route/redirect-to-page! data))
+
+    :file
+    (route/redirect! {:to :file
+                      :path-params {:path data}})
+
+    :block
+    (let [repo (state/get-current-repo)
+          block-uuid (uuid (:block/uuid data))
+          collapsed? (db/parents-collapsed? repo block-uuid)
+          page (:block/page (db/entity [:block/uuid block-uuid]))
+          long-page? (block-handler/long-page? repo (:db/id page))]
+      (if page
+        (if (or collapsed? long-page?)
+          (route/redirect-to-page! block-uuid)
+          (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+        ;; search indice outdated
+        (println "[Error] Block page missing: "
+                 {:block-id block-uuid
+                  :block (db/pull [:block/uuid block-uuid])})))
+    nil)
+  (state/close-modal!))
+
+(rum/defc search-auto-complete
+  [{:keys [files blocks has-more?] :as result} search-q all?]
+  (let [pages (when-not all? (transform-pages (:pages result)))
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
-        new-page (if (or (search-has-a-match? pages search-q result)
-                         all?)
-                   []
-                   [{:type :add-to-todays-journal :group "Create"}
-                    {:type :new-page}])
+        create-results
+        (if (or (search-has-a-match? (:pages result) search-q result)
+                all?)
+          []
+          (cond-> []
+                  (= search-mode :global)
+                  (conj {:type :add-to-todays-journal :group "Create"})
+                  true
+                  (conj {:type :new-page})))
         result (if config/publishing?
                  (concat pages files blocks)
-                 (concat new-page
+                 (concat create-results
                          (map-indexed
                           (fn [idx result]
                             (if (= 0 idx) (assoc result :group "Search") result))
@@ -130,46 +215,7 @@
       result
       {:class "search-results"
        :get-group-name :group
-       :on-chosen (fn [{:keys [type data alias]}]
-                    ;; TODO: Exclude :new-page and :add-to-todays-journal
-                    (search-handler/add-search-to-recent! repo search-q)
-                    (search-handler/clear-search!)
-                    (case type
-                      :graph-add-filter
-                      (state/add-graph-search-filter! search-q)
-
-                      :new-page
-                      (page-handler/create! search-q)
-
-                      :add-to-todays-journal
-                      (editor-handler/api-insert-new-block!
-                       search-q
-                       {:page (date/today)})
-
-                      :page
-                      (let [data (or alias data)]
-                        (route/redirect-to-page! data))
-
-                      :file
-                      (route/redirect! {:to :file
-                                        :path-params {:path data}})
-
-                      :block
-                      (let [repo (state/get-current-repo)
-                            block-uuid (uuid (:block/uuid data))
-                            collapsed? (db/parents-collapsed? repo block-uuid)
-                            page (:block/page (db/entity [:block/uuid block-uuid]))
-                            long-page? (block-handler/long-page? repo (:db/id page))]
-                        (if page
-                          (if (or collapsed? long-page?)
-                            (route/redirect-to-page! block-uuid)
-                            (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
-                          ;; search indice outdated
-                          (println "[Error] Block page missing: "
-                                   {:block-id block-uuid
-                                    :block (db/pull [:block/uuid block-uuid])})))
-                      nil)
-                    (state/close-modal!))
+       :on-chosen #(search-on-chosen search-q repo %)
        :on-shift-chosen (fn [{:keys [type data alias]}]
                           (search-handler/add-search-to-recent! repo search-q)
                           (case type
@@ -201,45 +247,7 @@
 
                             nil)
                           (state/close-modal!))
-       :item-render (fn [{:keys [type data alias]}]
-                      (let [search-mode (state/get-search-mode)
-                            data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
-                        [:div {:class "py-2"} (case type
-                                                :graph-add-filter
-                                                [:b search-q]
-
-                                                :add-to-todays-journal
-                                                (search-result-item "Page" "Add new block to today's journal")
-                                                #_[:div.text.font-bold "Add new block to today's journal"]
-
-                                                :new-page
-                                                (search-result-item "Page" "New page")
-
-                                                #_[:div.text.font-bold (str (t :new-page) ": ")
-                                                   [:span.ml-1 (str "\"" search-q "\"")]]
-
-                                                :page
-                                                [:span {:data-page-ref data}
-                                                 (when alias
-                                                   (let [target-original-name (model/get-page-original-name alias)]
-                                                     [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-                                                 (search-result-item "Page" (highlight-exact-query data search-q))]
-
-                                                :file
-                                                (search-result-item "File" (highlight-exact-query data search-q))
-
-                                                :block
-                                                (let [{:block/keys [page uuid]} data  ;; content here is normalized
-                                                      page (util/get-page-original-name page)
-                                                      repo (state/sub :git/current-repo)
-                                                      format (db/get-page-format page)
-                                                      block (model/query-block-by-uuid uuid)
-                                                      content (:block/content block)]
-                                                  [:span {:data-block-ref uuid}
-                                                   (search-result-item "Block"
-                                                                       (block-search-result-item repo uuid format content search-q search-mode))])
-
-                                                nil)]))})
+       :item-render #(search-item-render search-q %)})
      (when (and has-more? (util/electron?) (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
@@ -253,7 +261,8 @@
 (rum/defc recent-search-and-pages
   [in-page-search?]
   [:div.recent-search
-   [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"]
+   (when-not in-page-search?
+     [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"])
    [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
@@ -350,30 +359,6 @@
                      (search-handler/search (state/get-current-repo) value)))
                  timeout))))))
 
-(rum/defc create-results
-  [input]
-  [:div.create-wrap
-   [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Create"]
-   [:div.flex.flex-row.justify-around.align-items
-    [:div.py-2.px-1.rounded-md.text.font-bold
-     {:on-click (fn [_e]
-                  (search-handler/clear-search!)
-                  (editor-handler/api-insert-new-block!
-                   input
-                   {:page (date/today)})
-                  (state/close-modal!))}
-     "Add new block to today's journal"]
-    [:div.py-2.px-1.rounded-md.text.font-bold
-     {:on-click (fn [_e]
-                  ;; TODO: Refactor with search-auto-complete
-                  (search-handler/add-search-to-recent! (state/get-current-repo)
-                                                        input)
-                  (search-handler/clear-search!)
-                  (page-handler/create! input)
-                  (state/close-modal!)) }
-     (str (t :new-page) ": ")
-     [:span.ml-1 (str "\"" input "\"")]]]])
-
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
   (mixins/event-mixin
@@ -391,13 +376,12 @@
      (when (mobile-util/is-native-platform?)
        {:style {:min-height "50vh"}})
 
-     [:div.pt-2.pl-4.header-wrap
-      (when (seq search-q)
-        (if (search-has-a-match? (transform-pages (:pages search-result))
-                                 search-q
-                                 search-result)
-          [:div [:span.mr-2 (ui/icon "search")] "Search"]
-          [:div [:span.mr-2 (ui/icon "plus")] "Quick Capture"]))]
+     (when (= :global search-mode)
+       [:div.pt-2.pl-4.header-wrap
+        (when (seq search-q)
+          (if (search-has-a-match? (:pages search-result) search-q search-result)
+            [:div [:span.mr-2 (ui/icon "search")] "Search"]
+            [:div [:span.mr-2 (ui/icon "plus")] "Quick Capture"]))])
      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
@@ -411,22 +395,22 @@
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
         :on-change     input-on-change}]]
-     #_(when-not (search-has-a-match? (transform-pages (:pages search-result))
-                                    search-q
-                                    search-result)
-       (create-results search-q))
+     (when (and (= :global search-mode)
+                (not (search-has-a-match? (:pages search-result)
+                                          search-q
+                                          search-result)))
+       [:div.pb-2.keyboard-shortcuts.flex.flex-row.justify-around.align-items
+        [:div.flex-row.flex.align-items
+         [:div.mr-2 "ESC"]
+         [:div "Dismiss"]]
+        [:div.flex-row.flex.align-items
+         [:div.mr-2 (ui/icon "command")]
+         [:div.mr-2 (ui/icon "arrow-back")]
+         [:div "Create and jump to it"]]
+        [:div.flex-row.flex.align-items
+         [:div.mr-2 (ui/icon "arrow-back")]
+         [:div "Create"]]])
      [:div.search-results-wrap
-      [:div.pb-2.keyboard-shortcuts.flex.flex-row.justify-around.align-items
-       [:div.flex-row.flex.align-items
-        [:div.mr-2 "ESC"]
-        [:div "Dismiss"]]
-       [:div.flex-row.flex.align-items
-        [:div.mr-2 (ui/icon "command")]
-        [:div.mr-2 (ui/icon "arrow-back")]
-        [:div "Create and jump to it"]]
-       [:div.flex-row.flex.align-items
-        [:div.mr-2 (ui/icon "arrow-back")]
-        [:div "Create"]]]
       (if (seq search-result)
         (search-auto-complete search-result search-q false)
         (recent-search-and-pages in-page-search?))]]))
