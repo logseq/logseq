@@ -173,6 +173,10 @@
         (js/console.error e)
         old-db))))
 
+(defn get-query-cached-result
+  [k]
+  (:result (get @query-state k)))
+
 (defn q
   [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
@@ -181,14 +185,14 @@
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (conn/get-conn repo)]
-      (let [result-atom (:result (get @query-state k))]
+      (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
         (if (and use-cache? result-atom)
           result-atom
           (let [result (cond
                          query-fn
-                         (query-fn conn)
+                         (query-fn conn nil nil)
 
                          inputs-fn
                          (let [inputs (inputs-fn)]
@@ -312,7 +316,7 @@
                       new-result (->
                                   (cond
                                     query-fn
-                                    (let [result (query-fn db)]
+                                    (let [result (query-fn db tx result)]
                                       (if (coll? result)
                                         (doall result)
                                         result))
