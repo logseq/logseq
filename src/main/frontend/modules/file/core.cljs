@@ -75,22 +75,26 @@
                     (str prefix sep new-content)))]
     (content-with-collapsed-state format content collapsed? properties)))
 
+
+(defn- tree->file-content-aux
+  [tree {:keys [init-level] :as opts}]
+  (let [block-contents (transient [])]
+    (loop [[f & r] tree level init-level]
+      (if (nil? f)
+        (->> block-contents persistent! flatten (remove nil?))
+        (let [page? (nil? (:block/page f))
+              content (if page? nil (transform-content f level opts))
+              new-content
+              (if-let [children (seq (:block/children f))]
+                     (cons content (tree->file-content-aux children {:init-level (inc level)}))
+                     [content])]
+          (conj! block-contents new-content)
+          (recur r level))))))
+
 (defn tree->file-content
-  [tree {:keys [init-level]
-         :as opts}]
-  (loop [block-contents []
-         [f & r] tree
-         level init-level]
-    (if (nil? f)
-      (string/join "\n" block-contents)
-      (let [page? (nil? (:block/page f))
-            content (if page? nil (transform-content f level opts))
-            new-content
-            (->> (if-let [children (seq (:block/children f))]
-                   [content (tree->file-content children {:init-level (inc level)})]
-                   [content])
-                 (remove nil?))]
-        (recur (into block-contents new-content) r level)))))
+  [tree opts]
+  (->> (tree->file-content-aux tree opts) (string/join "\n")))
+
 
 (def init-level 1)
 
