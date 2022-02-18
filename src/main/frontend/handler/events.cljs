@@ -298,6 +298,17 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
+(defmethod handle :backup/broken-config [[_ repo path content]]
+  (when (and repo content)
+    (let [path (config/get-config-path)
+          broken-path (str path "-broken")]
+      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})]
+        (notification/show!
+         [:p.content
+          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/config.edn-broken."]
+         :error
+         false)))))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]
