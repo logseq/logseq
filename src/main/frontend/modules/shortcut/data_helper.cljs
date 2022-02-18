@@ -140,12 +140,7 @@
   (let [repo (state/get-current-repo)
         path (cfg/get-config-path)]
     (when-let [content (db/get-file path)]
-      (let [result (try
-                     (rewrite/parse-string content)
-                     (catch js/Error e
-                       (println "Parsing config file failed: ")
-                       (js/console.dir e)
-                       {}))
+      (let [result (common-handler/parse-config path content)
             new-result (rewrite/update
                         result
                         :shortcuts

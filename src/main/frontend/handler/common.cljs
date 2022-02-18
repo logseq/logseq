@@ -17,7 +17,8 @@
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [borkdude.rewrite-edn :as rewrite]))
 
 (defn get-ref
   [repo-url]
@@ -121,16 +122,8 @@
   [content]
   (safe-read-string content
                     (fn [_e]
-                      (notification/show!
-                       [:div {:style {:z-index 999}}
-                        [:h1
-                         "Invalid configuration."]
-                        [:p "You can send the file \"config.edn\" to "
-                         [:code
-                          "help@logseq.com"]
-                         [:span ", we'll repair and send it back to you."]]]
-                       :error
-                       false))))
+                      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
+                      (reader/read-string config/config-default-content))))
 
 (defn reset-config!
   [repo-url content]
@@ -241,3 +234,14 @@
       (d/set-style! context-menu
                     :left (str client-x "px")
                     :top (str (+ scroll-y client-y) "px")))))
+
+(defn parse-config
+  "Parse configuration from file `content` such as from config.edn."
+  [path content]
+  (try
+    (rewrite/parse-string content)
+    (catch js/Error e
+      (println "Parsing config file failed: ")
+      (js/console.error e)
+      (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
+      (rewrite/parse-string config/config-default-content))))
