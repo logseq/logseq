@@ -797,6 +797,16 @@
         (reverse)
         (take n))))))
 
+(defn journal-day-exists?
+  [graph day]
+  (d/q
+    '[:find ?p .
+      :in $ ?day
+      :where
+      [?p :block/journal-day ?day]]
+    (conn/get-conn graph)
+    day))
+
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
