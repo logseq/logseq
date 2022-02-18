@@ -45,6 +45,14 @@ const common = {
     return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
   },
 
+  syncAssetFiles () {
+    return gulp.src([
+        "./node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**",
+        "!**/*/i18n-*.js"
+      ])
+      .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets')))
+  },
+
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   },
@@ -116,6 +124,6 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAllStatic,
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keepSyncStaticInRt))
-exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, css.buildCSS)

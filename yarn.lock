@@ -396,7 +396,14 @@
     "@babel/helper-validator-option" "^7.16.7"
     "@babel/plugin-transform-typescript" "^7.16.7"
 
-"@babel/runtime@^7.5.5", "@babel/runtime@^7.8.4", "@babel/runtime@^7.8.7":
+"@babel/runtime@^7.10.2":
+  version "7.17.2"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.17.2.tgz#66f68591605e59da47523c631416b18508779941"
+  integrity sha512-hzeyJyMA1YGdJTuWU0e/j4wKXrU4OMFvY2MSlaI9B7VQb0r5cxTE3EAIS2Q7Tn2RIcDkRvTA/v2JsAEhxe99uw==
+  dependencies:
+    regenerator-runtime "^0.13.4"
+
+"@babel/runtime@^7.5.5", "@babel/runtime@^7.8.7":
   version "7.16.7"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.16.7.tgz#03ff99f64106588c9c403c6ecb8c3bafbbdff1fa"
   integrity sha512-9E9FJowqAsytyOY6LG+1KuueckRL+aQW+mKvXRXnuFGyRAyepJPmEo9vgMfXUA6O9u3IeEdv9MAkppFcaQwogQ==
@@ -521,10 +528,10 @@
     global-agent "^3.0.0"
     global-tunnel-ng "^2.7.1"
 
-"@excalidraw/excalidraw@0.4.3":
-  version "0.4.3"
-  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.4.3.tgz#e1b2cfbafe405a5b0504c5f631b0857e61d5a5de"
-  integrity sha512-AAQ87Q2VFojcBJjOp/Sc2F/y4s9Hb1sB/YmEo4QwKnZUnB3cnn8hPpBIMIIi9z7090pOLunC5ewaiQAirWcCKw==
+"@excalidraw/excalidraw@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.10.0.tgz#5329d6fb1b0cca068e2cd34da6d648dd6d0d3fec"
+  integrity sha512-0fHc/oX394dHAT7LEacwZ0vh8aeI179plYnfaeLeRHBtHARgmtlmvxcnxd2pxJ0Z1Uj/Cy76oK9MVw/y8P1HhQ==
 
 "@fullhuman/postcss-purgecss@^4.0.3":
   version "4.1.3"
@@ -6815,12 +6822,12 @@ react-resize-context@3.0.0:
     lodash "^4.17.10"
     shallowequal "^1.1.0"
 
-react-textarea-autosize@8.0.1:
-  version "8.0.1"
-  resolved "https://registry.yarnpkg.com/react-textarea-autosize/-/react-textarea-autosize-8.0.1.tgz#fce0dbf6a59b7b9d892c6af40b6be06a29f62c49"
-  integrity sha512-Qs7Lm17F0CIsWeDaUcHPpP22etVQHkayOcMgOXTfVasVToS6G+IL+5a7ECZtbDR2qTgTRIXjYcLmuZUuTX4tNA==
+react-textarea-autosize@8.3.3:
+  version "8.3.3"
+  resolved "https://registry.yarnpkg.com/react-textarea-autosize/-/react-textarea-autosize-8.3.3.tgz#f70913945369da453fd554c168f6baacd1fa04d8"
+  integrity sha512-2XlHXK2TDxS6vbQaoPbMOfQ8GK7+irc2fVK6QFIcC8GOnH3zI/v481n+j1L0WaPVvKxwesnY93fEfH++sus2rQ==
   dependencies:
-    "@babel/runtime" "^7.8.4"
+    "@babel/runtime" "^7.10.2"
     use-composed-ref "^1.0.0"
     use-latest "^1.0.0"
 

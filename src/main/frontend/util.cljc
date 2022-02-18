@@ -1378,28 +1378,32 @@
               false)))))
 
 #?(:cljs
-  (defn make-el-into-center-viewport
-    [^js/HTMLElement el]
-    (when el
-      (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+   (defn make-el-into-center-viewport
+     [^js/HTMLElement el]
+     (when el
+       (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
 
 #?(:cljs
-   (defn make-el-into-viewport
-     ([^js/HTMLElement el]
-      (make-el-into-viewport el 60))
-     ([^js/HTMLElement el offset]
-      (make-el-into-viewport el offset true))
-     ([^js/HTMLElement el offset async?]
-      (let [handle #(let [viewport-height (or (.-height js/window.visualViewport)
-                                              (.-clientHeight js/document.documentElement))
-                          target-bottom (.-bottom (.getBoundingClientRect el))]
-                      (when (> (+ target-bottom (or (safe-parse-int offset) 0))
-                               viewport-height)
-                        (make-el-into-center-viewport el)))]
-
-        (if async?
-          (js/setTimeout #(handle) 64)
-          (handle))))))
+   (defn make-el-cursor-position-into-center-viewport
+     [^js/HTMLElement el]
+     (when el
+       (let [main-node (gdom/getElement "main-content-container")
+             pos (get-selection-start el)
+             cursor-top (some-> (gdom/getElement "mock-text")
+                                gdom/getChildren
+                                array-seq
+                                (nth-safe pos)
+                                .-offsetTop)
+             box-caret (.getBoundingClientRect el)
+             box-top (.-top box-caret)
+             box-bottom (.-bottom box-caret)
+             vw-height (or (.-height js/window.visualViewport)
+                           (.-clientHeight js/document.documentElement))
+             scroll-top (.-scrollTop main-node)
+             cursor-y (if cursor-top (+ cursor-top box-top) box-bottom)
+             scroll (- cursor-y (/ vw-height 2))]
+         (when (> scroll 0)
+           (set! (.-scrollTop main-node) (+ scroll-top scroll)))))))
 
 #?(:cljs
    (defn make-el-center-if-near-top
