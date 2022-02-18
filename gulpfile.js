@@ -23,10 +23,16 @@ const css = {
   },
 
   buildCSS (...params) {
-    return cp.spawn(`yarn css:build`, {
-      shell: true,
-      stdio: 'inherit'
-    })
+    return gulp.series(
+      () => exec(`yarn css:build`, {}),
+      css._optimizeCSSForRelease
+    )(...params)
+  },
+
+  _optimizeCSSForRelease () {
+    return gulp.src(path.join(outputPath, 'css', 'style.css'))
+      .pipe(cleanCSS())
+      .pipe(gulp.dest(path.join(outputPath, 'css')))
   }
 }
 
