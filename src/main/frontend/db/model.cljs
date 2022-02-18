@@ -469,11 +469,11 @@
             {:use-cache? use-cache?
              :query-fn (fn [db tx-report result]
                          (let [[tx-id->block cached-id->block] (when (and tx-report result)
-                                                                 (let [tx-block-ids (mapv :e (:tx-data tx-report))
+                                                                 (let [tx-block-ids (distinct (mapv :e (:tx-data tx-report)))
                                                                        blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                    (remove nil?))]
-                                                                   [(zipmap (map :db/id blocks) blocks)
-                                                                    (zipmap (map :db/id @result) @result)]))
+                                                                   [(zipmap (mapv :db/id blocks) blocks)
+                                                                    (zipmap (mapv :db/id @result) @result)]))
                                datoms (d/datoms db :avet :block/page page-id)
                                tx-merged-blocks (when (and tx-id->block result)
                                                   (let [result (reduce (fn [acc datom]
@@ -485,7 +485,7 @@
                                                                              (reduced nil))))
                                                                        (transient [])
                                                                        datoms)]
-                                                    (persistent! result)))
+                                                    (when result (persistent! result))))
                                blocks (or
                                        tx-merged-blocks
                                        (let [block-eids (mapv :e datoms)]
