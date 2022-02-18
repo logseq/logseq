@@ -15,7 +15,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (def excalidraw (r/adapt-class (gobj/get Excalidraw "default")))
 (def serialize-as-json (gobj/get Excalidraw "serializeAsJSON"))
@@ -145,5 +146,8 @@
   (let [repo (state/get-current-repo)
         granted? (state/sub [:nfs/user-granted? repo])]
     ;; Web granted
-    (when-not (and (config/local-db? repo) (not granted?) (not (util/electron?)))
+    (when-not (and (config/local-db? repo)
+                   (not granted?)
+                   (not (util/electron?))
+                   (not (mobile-util/is-native-platform?)))
       (draw-container option))))
