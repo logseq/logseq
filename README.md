@@ -76,10 +76,10 @@ Logseq is also made possible by the following projects:
 
 The following is for developers and designers who want to build and run Logseq locally and contribute to this project.
 
-We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for LogSeq's codebase overview and [a development practices page](docs/dev-practices.md).
+We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for Logseq's codebase overview and [a development practices page](docs/dev-practices.md).
 
 ## Set up development environment
-
+* The following instructions are for setting up web app / desktop app development environment on macOS / Linux. For other cases like Windows users or mobile development, please refer to [Docs directory](docs/)
 ### 1. Requirements
 
 - [Node.js](https://nodejs.org/en/download/) (See [build.yml](.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
