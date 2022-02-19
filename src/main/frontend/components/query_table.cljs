@@ -64,7 +64,7 @@
     (:block/content item)
     :page
     (:block/name item)
-    (get-in item [:block/properties key])))
+    (get-in item [:block/properties sort-by-item])))
 
 (defn- desc?
   [*desc? p-desc?]
@@ -106,8 +106,10 @@
                           (filter included-keys keys)
                           included-keys)
                   keys))
-          result (sort-result-by (partial sort-by-fn sort-by-item)
-                                 (desc? *desc? p-desc?)
+          desc? (desc? *desc? p-desc?)
+          result (sort-result-by (fn [item]
+                                   (sort-by-fn sort-by-item item))
+                                 desc?
                                  result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}}
