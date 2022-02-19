@@ -336,7 +336,7 @@
                 (= (first k) repo-url)
                 (or (get affected-keys (vec (rest k)))
                     custom?))
-           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
+           (let [{:keys [query query-fn result]} cache]
              (when (or query query-fn)
                (try
                  (let [db' (when (and (vector? k) (not= (second k) :kv))
