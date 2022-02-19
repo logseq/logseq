@@ -684,10 +684,6 @@ video {
 /** endregion **/
 
 /** region App utilities **/
-.page {
-  margin-top: 24px;
-}
-
 .ls-center {
   position: absolute;
   top: 50%;
