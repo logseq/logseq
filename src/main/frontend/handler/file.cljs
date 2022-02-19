@@ -130,8 +130,8 @@
                 (str (config/get-repo-dir repo-url) "/" file)
 
                 (and (mobile/native-android?) (not= "/" (first file)))
-                (str (config/get-repo-dir repo-url) "/" file)
-
+                file
+                
                 (and (mobile/native-ios?) (not= "/" (first file)))
                 file
 
