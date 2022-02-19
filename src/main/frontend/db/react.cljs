@@ -11,7 +11,8 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.db-schema :as db-schema]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [clojure.core.async :as async]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -295,6 +296,32 @@
       others)
      set)))
 
+(defn- execute-query!
+  [graph db k tx {:keys [query inputs transform-fn query-fn inputs-fn result]}]
+  (let [new-result (->
+                    (cond
+                      query-fn
+                      (let [result (query-fn db tx result)]
+                        (if (coll? result)
+                          (doall result)
+                          result))
+
+                      inputs-fn
+                      (let [inputs (inputs-fn)]
+                        (apply d/q query db inputs))
+
+                      (keyword? query)
+                      (db-utils/get-key-value graph query)
+
+                      (seq inputs)
+                      (apply d/q query db inputs)
+
+                      :else
+                      (d/q query db))
+                    transform-fn)]
+    (when-not (= new-result result)
+      (set-new-result! k new-result))))
+
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url {:keys [tx-data tx-meta] :as tx}]
@@ -304,44 +331,26 @@
     (let [db (conn/get-conn repo-url)
           affected-keys (get-affected-queries-keys tx)]
       (doseq [[k cache] @query-state]
-        (when (and
-               (= (first k) repo-url)
-               (or (get affected-keys (vec (rest k)))
-                   (= :custom (second k))))
-          (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
-            (when (or query query-fn)
-              (try
-                (let [db' (when (and (vector? k) (not= (second k) :kv))
-                            (let [query-db (state/get-reactive-query-db k)
-                                  result (new-db @result tx-data query-db k)]
-                              (state/set-reactive-query-db! k result)
-                              result))
-                      db (or db' db)
-                      new-result (->
-                                  (cond
-                                    query-fn
-                                    (let [result (query-fn db tx result)]
-                                      (if (coll? result)
-                                        (doall result)
-                                        result))
-
-                                    inputs-fn
-                                    (let [inputs (inputs-fn)]
-                                      (apply d/q query db inputs))
-
-                                    (keyword? query)
-                                    (db-utils/get-key-value repo-url query)
-
-                                    (seq inputs)
-                                    (apply d/q query db inputs)
-
-                                    :else
-                                    (d/q query db))
-                                  transform-fn)]
-                  (when-not (= new-result result)
-                    (set-new-result! k new-result)))
-                (catch js/Error e
-                  (js/console.error e))))))))))
+        (let [custom? (= :custom (second k))]
+          (when (and
+                (= (first k) repo-url)
+                (or (get affected-keys (vec (rest k)))
+                    custom?))
+           (let [{:keys [query inputs transform-fn query-fn inputs-fn result]} cache]
+             (when (or query query-fn)
+               (try
+                 (let [db' (when (and (vector? k) (not= (second k) :kv))
+                             (let [query-db (state/get-reactive-query-db k)
+                                   result (new-db @result tx-data query-db k)]
+                               (state/set-reactive-query-db! k result)
+                               result))
+                       db (or db' db)
+                       f #(execute-query! repo-url db k tx cache)]
+                   (if custom?
+                     (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                     (f)))
+                 (catch js/Error e
+                   (js/console.error e)))))))))))
 
 (defn set-key-value
   [repo-url key value]
@@ -358,3 +367,21 @@
        (if-let [result (get m key)]
          result
          m)))))
+
+(defn run-custom-queries-when-idle!
+  []
+  (let [chan (state/get-reactive-custom-queries-chan)]
+    (async/go-loop []
+      (let [[f query] (async/<! chan)]
+        (try
+          (if (state/input-idle? (state/get-current-repo))
+            (f)
+            (do
+              (async/<! (async/timeout 2000))
+              (async/put! chan [f query])))
+          (catch js/Error error
+            (let [type :custom-query/failed]
+              (js/console.error (str type "\n" query))
+              (js/console.error error)))))
+      (recur))
+    chan))
