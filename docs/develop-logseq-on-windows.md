@@ -15,36 +15,39 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 ### An example of installing pre-requisites on Windows
 * Install [Chocolatey](https://chocolatey.org/)
 * Install JRE
-* `choco install nvm`
-* `nvm install 16.13` (or whatever version)
-* `nvm use 16.13`
-* `npm install -g yarn`
-* `nvm use 16.13`
+* Install NVM for Windows, Node.js, and Yarn
+  ```
+  choco install nvm
+  nvm install 16.13 (or whatever version)
+  nvm use 16.13
+  npm install -g yarn
+  nvm use 16.13
+  ```
 * Install [clj-on-windows](https://github.com/clojure/tools.deps.alpha/wiki/clj-on-Windows)
 
 Congrats! The pre-requisites are ready.
 
 ## Set-up development environment (web app)
 The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.  
-Go to your cloned Logseq repo. Then:
-* `yarn` (to install dependencies. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`)
-* `clj -M:cljs watch app electron` (the `clj` equivalent of `yarn cljs:watch`)
+Go to your cloned Logseq repo. Then install dependencies, execute the `clj` equivalent of `yarn watch` via doing the `gulp`'s job manually (as it's not available on Windows). Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`.
+* copy files in `resources` to `static`
+* ```
+  yarn
+  clj -M:cljs watch app electron
+  ```
+* ```
+  yarn css:watch
+  ```
 
 Now you can access the app via `http://localhost:3001` and all changes to the code will be watched.
 
 ## Set-up development environment (desktop)
-* `yarn`
-* `clj -M:cljs release app publishing electron --debug` (the `clj` equivalent of `yarn release`, to build the app into `static` directory)
-* `cd static`
-* `yarn`
-* `cd ..`
-
-Then do the `gulp`'s job manually (as it's not available on Windows). Following commands are equivalent to `yarn dev-electron-app`:
-* copy files in `resources` to `static`
-* `yarn css:build`
-* `cd static`
-* `yarn electron:dev`
-
+To run the desktop app in development mode, after setting up web app development environment, run following commands which are equivalent to `yarn dev-electron-app`:
+* ```
+  cd static
+  yarn
+  yarn electron:dev
+  ```
 The desktop app should pop-up on your screen.
 
 ## An example of setting up proxy in PowerShell
