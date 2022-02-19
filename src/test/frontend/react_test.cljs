@@ -6,8 +6,7 @@
             [frontend.fixtures :as fixtures]))
 
 (use-fixtures :each
-  fixtures/react-components
-  fixtures/react-impl)
+  fixtures/react-components)
 
 (deftest simple-react-test
   (let [react-ref (atom 1)]
