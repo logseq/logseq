@@ -250,7 +250,8 @@
                                          {:page page}))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
-         [:h1.title {:style {:margin-left -2}}
+         [:h1.title {:data-ref page-name
+                     :style {:margin-left -2}}
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
