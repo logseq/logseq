@@ -4,7 +4,6 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as db-react]
-            [frontend.react :as react-test]
             [frontend.state :as state]))
 
 (defn load-test-env
