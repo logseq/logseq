@@ -450,7 +450,8 @@
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren)
+      nil)))
 
 (def ^:export update_block
   (fn [block-uuid content ^js _opts]
