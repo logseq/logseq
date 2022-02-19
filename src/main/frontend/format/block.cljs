@@ -547,10 +547,10 @@
                            #{}])
                         block (cond->
                                 (assoc block
-                                      :uuid id
-                                      :refs ref-pages-in-properties
-                                      :children (or current-block-children [])
-                                      :format format)
+                                       :uuid id
+                                       :refs ref-pages-in-properties
+                                       :children (or current-block-children [])
+                                       :format format)
                                 (seq (:properties properties))
                                 (assoc :properties (:properties properties))
 
