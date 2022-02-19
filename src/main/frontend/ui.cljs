@@ -24,7 +24,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["react-tweet-embed" :as react-tweet-embed]
+            ["@logseq/react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]

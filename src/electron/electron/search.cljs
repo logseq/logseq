@@ -16,15 +16,16 @@
       (.close database))
     (reset! databases nil)))
 
-(defn normalize-db-name
+(defn sanitize-db-name
   [db-name]
   (-> db-name
       (string/replace "/" "_")
-      (string/replace "\\" "_")))
+      (string/replace "\\" "_")
+      (string/replace ":" "_"))) ;; windows
 
 (defn get-db
   [repo]
-  (get @databases (normalize-db-name repo)))
+  (get @databases (sanitize-db-name repo)))
 
 (defn prepare
   [^object db sql]
@@ -105,7 +106,7 @@
 
 (defn get-db-full-path
   [db-name]
-  (let [db-name (normalize-db-name db-name)
+  (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
     [db-name (path/join search-dir db-name)]))
 
