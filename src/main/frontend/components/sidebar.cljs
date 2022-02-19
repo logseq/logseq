@@ -93,6 +93,7 @@
         target (state/sub :favorites/dragging)]
     [:li.favorite-item
      {:key name
+      :data-ref name
       :class (if (and target @dragging-over (not= target @dragging-over))
                "dragging-target"
                "")
@@ -158,7 +159,9 @@
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-          [:li.recent-item {:key name}
+          [:li.recent-item
+           {:key name
+            :data-ref name}
            (page-name name (get-page-icon entity))]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
