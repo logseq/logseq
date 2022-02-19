@@ -1,7 +1,7 @@
 # Build Logseq Desktop on Windows
 
 ## Intro
-This is a guidance on creating Logseq development environment on Windows with `PowerShell`. Non-platform specific instructions like [this section in README.md](https://github.com/logseq/logseq/blob/master/README.md#set-up-development-environment) **should also be referenced** in the practice.
+This is a guide on creating Logseq development environment on Windows with `PowerShell`. Non-platform specific instructions like [Develop Logseq](develop-logseq.md) **should also be referenced**.
 
 ## Pre-requisites
 * Ensure `Set-ExecutionPolicy Unrestricted` (or other equivalent)
@@ -27,7 +27,7 @@ Congrats! The pre-requisites are ready.
 ## Set-up development environment (web app)
 The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.  
 Go to your cloned Logseq repo. Then:
-* `yarn` (to install dependencies. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy)
+* `yarn` (to install dependencies. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`)
 * `clj -M:cljs watch app electron` (the `clj` equivalent of `yarn cljs:watch`)
 
 Now you can access the app via `http://localhost:3001` and all changes to the code will be watched.
@@ -39,13 +39,13 @@ Now you can access the app via `http://localhost:3001` and all changes to the co
 * `yarn`
 * `cd ..`
 
-Then do the `gulp`'s job manually (as it's not available on Windows). Folloing commands are equivalent to `yarn dev-electron-app`:
+Then do the `gulp`'s job manually (as it's not available on Windows). Following commands are equivalent to `yarn dev-electron-app`:
 * copy files in `resources` to `static`
 * `yarn css:build`
 * `cd static`
 * `yarn electron:dev`
 
-The desktop app should be pop-up on your screen.
+The desktop app should pop-up on your screen.
 
 ## An example of setting up proxy in PowerShell
 ```
