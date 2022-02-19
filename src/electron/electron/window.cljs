@@ -3,7 +3,7 @@
             [electron.utils :refer [mac? win32? linux? dev? logger open]]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
-            ["electron" :refer [BrowserWindow app Menu MenuItem session shell] :as electron]
+            ["electron" :refer [BrowserWindow app session shell] :as electron]
             ["path" :as path]
             ["url" :as URL]
             [electron.state :as state]
