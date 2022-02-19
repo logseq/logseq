@@ -423,7 +423,7 @@
             {blocks :value next-phase :next-phase} (show-cycle card @phase)
             root-block (.-block card)
             root-block-id (:block/uuid root-block)]
-        [:div.ls-card
+        [:div.ls-card.content
          {:class (when (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto"))}
          (let [repo (state/get-current-repo)]
@@ -622,7 +622,7 @@
                        card-index))]
            review-finished)])
       (if global?
-        [:div.ls-card
+        [:div.ls-card.content
          [:h1.title "Time to create a card!"]
 
          [:div
@@ -632,7 +632,7 @@
            [:a {:href "https://docs.logseq.com/#/page/cards" :target "_blank"}
             "click this link"]
            " to check the documentation."]]]
-        [:div.opacity-60.custom-query-title.ls-card
+        [:div.opacity-60.custom-query-title.ls-card.content
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]
          [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
