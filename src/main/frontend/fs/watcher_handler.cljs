@@ -9,10 +9,13 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]))
+
+;; all IPC paths must be normalized! (via util/path-normalize)
 
 (defn- set-missing-block-ids!
   [content]
@@ -39,7 +42,8 @@
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
-    (let [repo (config/get-local-repo dir)
+    (let [path (util/path-normalize path)
+          repo (config/get-local-repo dir)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
       (when (and (or content (= type "unlink"))
