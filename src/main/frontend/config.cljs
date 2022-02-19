@@ -304,11 +304,15 @@
 (defn get-repo-dir
   [repo-url]
   (cond
-    (or
-     (mobile-util/is-native-platform?)
-     (and (util/electron?) (local-db? repo-url)))
+    (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 
+    (and (mobile-util/is-native-platform?) (local-db? repo-url))
+    (let [dir (get-local-dir repo-url)]
+      (if (string/starts-with? dir "file:")
+        dir
+        (str "file:///" (string/replace dir #"^/+" ""))))
+    
     :else
     (str "/"
          (->> (take-last 2 (string/split repo-url #"/"))
@@ -326,7 +330,7 @@
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (let [path (cond
-                 (and (or (util/electron?) (mobile-util/native-android?)) (local-db? repo-url))
+                 (and (util/electron?) (local-db? repo-url))
                  (let [dir (get-repo-dir repo-url)]
                    (if (string/starts-with? relative-path dir)
                      relative-path
@@ -334,9 +338,16 @@
                           (string/replace relative-path #"^/" ""))))
 
                  (and (mobile-util/native-ios?) (local-db? repo-url))
-                 (let [dir (-> (get-repo-dir repo-url)
-                               (string/replace "file:///" "file:/"))]
+                 (let [dir (get-repo-dir repo-url)]
                    (js/decodeURI (str dir relative-path)))
+
+                 (and (mobile-util/native-android?) (local-db? repo-url))
+                 (let [dir (get-repo-dir repo-url)
+                       dir (if (or (string/starts-with? dir "file:")
+                                   (string/starts-with? dir "content:"))
+                             dir
+                             (str "file:///" (string/replace dir #"^/+" "")))]
+                   (str (string/replace dir #"/+$" "") "/" relative-path))
 
                  (= "/" (first relative-path))
                  (subs relative-path 1)
