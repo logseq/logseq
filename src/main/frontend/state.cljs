@@ -28,6 +28,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
@@ -1144,6 +1145,10 @@
 (defn get-file-write-chan
   []
   (:file/writes @state))
+
+(defn get-reactive-custom-queries-chan
+  []
+  (:reactive/custom-queries @state))
 
 (defn get-write-chan-length
   []
