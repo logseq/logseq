@@ -264,10 +264,10 @@
                                          (merge
                                           {:use-cache? use-cache?}
                                           (cond->
-                                           (when sort-by
-                                             {:transform-fn sort-by})
-                                           disable-reactive?
-                                           (assoc :disable-reactive? true))))]
+                                            (when sort-by
+                                              {:transform-fn sort-by})
+                                            disable-reactive?
+                                            (assoc :disable-reactive? true))))]
            (when result
              (flatten (util/react result)))))))))
 
@@ -395,9 +395,9 @@
     :delay 200
     :theme "monospace"}
    (ui/button btn-text
-              :id id
-              :background background
-              :on-click on-click)))
+     :id id
+     :background background
+     :on-click on-click)))
 
 (rum/defcs view
   < rum/reactive
@@ -438,20 +438,20 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             [:div.flex-1
-              (when-not (and (not preview?) (= next-phase 1))
-                [:div.flex.flex-row.justify-between
-                 (btn-with-shortcut {:btn-text (case next-phase
-                                                 1 "Hide answers"
-                                                 2 "Show answers"
-                                                 3 "Show clozes")
-                                     :shortcut "s"
-                                     :id       "card-answers"
-                                     :on-click #(reset! phase next-phase)})])
+             (when-not (and (not preview?) (= next-phase 1))
+               [:div.flex.flex-row.justify-between
+                (btn-with-shortcut {:btn-text (case next-phase
+                                                1 "Hide answers"
+                                                2 "Show answers"
+                                                3 "Show clozes")
+                                    :shortcut "s"
+                                    :id       "card-answers"
+                                    :on-click #(reset! phase next-phase)})])
 
              (when (and (> (count cards) 1) preview?)
                (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
-                          :id "card-next"
-                          :class "mr-2"
+                 :id "card-next"
+                 :class "mr-2"
                  :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
@@ -482,21 +482,29 @@
                          :class "tippy-hover"
                          :interactive true}
                         (ui/button "Reset"
-                                   :id "card-reset"
-                                   :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                                   :small? true
-                                   :on-click #(operation-reset! card))))]
+                          :id "card-reset"
+                          :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                          :small? true
+                          :on-click #(operation-reset! card))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
+  rum/reactive
+  db-mixins/query
   [blocks option card-index]
-  (view blocks option card-index))
+  (let [blocks (if (fn? blocks) (blocks) blocks)]
+    (when (seq blocks)
+      (view blocks option card-index))))
+
+(rum/defc preview-cp
+  [block-id]
+  (let [blocks-f (fn [] (db/sub-block-and-children (state/get-current-repo) block-id))]
+    (view-modal blocks-f {:preview? true} (atom 0))))
 
 (defn preview
-  [blocks]
-  (state/set-modal! #(view blocks {:preview? true} (atom 0)) {:id :srs}))
-
+  [block-id]
+  (state/set-modal! #(preview-cp block-id) {:id :srs}))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
@@ -536,7 +544,7 @@
         count))))
 
 ;;; register cards macro
-(rum/defcs cards < rum/reactive
+(rum/defcs cards < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
   [state config options]
   (let [repo (state/get-current-repo)
@@ -579,28 +587,30 @@
             [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
              {:id "preview-all-cards"
               :on-click (fn [_]
-                          (let [blocks query-result]
-                            (when (> (count blocks) 0)
-                              (state/set-modal! #(view-modal
-                                                  blocks
-                                                  {:preview? true}
-                                                  card-index)
-                                                {:id :srs}))))}
+                          (let [blocks-f (fn [] (query repo query-string))]
+                            (state/set-modal! #(view-modal
+                                                blocks-f
+                                                {:preview? true}
+                                                card-index)
+                                              {:id :srs})))}
              "A"])]]
          (if (seq review-cards)
            [:div.px-1
             (when-not modal?
               {:on-click (fn []
-                           (state/set-modal! #(view-modal
-                                               review-cards
-                                               {:modal? true
-                                                :callback
-                                                (fn [review-records]
-                                                  (operation-card-info-summary!
-                                                   review-records review-cards card-query-block)
-                                                  (persist-var/persist-save of-matrix))}
-                                               card-index)
-                                             {:id :srs}))})
+                           (let [blocks-f (fn []
+                                            (let [query-result (query repo query-string)]
+                                              (:result (query-scheduled repo query-result (tl/local-now)))))]
+                             (state/set-modal! #(view-modal
+                                                 blocks-f
+                                                 {:modal? true
+                                                  :callback
+                                                  (fn [review-records]
+                                                    (operation-card-info-summary!
+                                                     review-records review-cards card-query-block)
+                                                    (persist-var/persist-save of-matrix))}
+                                                 card-index)
+                                               {:id :srs})))})
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config
