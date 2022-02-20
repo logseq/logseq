@@ -48,14 +48,16 @@
 
 
             (when editable?
-              (. menu append
-                 (MenuItem. #js {:label "Cut"
-                                 :enabled (and has-text? (.-canCut edit-flags))
-                                 :role "cut"}))
-              (. menu append
-                 (MenuItem. #js {:label "Copy"
-                                 :enabled (.-canCopy edit-flags)
-                                 :role "copy"}))
+              (when has-text?
+                (. menu append
+                   (MenuItem. #js {:label "Cut"
+                                   :enabled (.-canCut edit-flags)
+                                   :role "cut"}))
+                (. menu append
+                   (MenuItem. #js {:label "Copy"
+                                   :enabled (.-canCopy edit-flags)
+                                   :role "copy"})))
+
               (. menu append
                  (MenuItem. #js {:label "Paste"
                                  :enabled (.-canPaste edit-flags)
