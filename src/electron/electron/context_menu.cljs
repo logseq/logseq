@@ -7,18 +7,18 @@
 ;; context menu is registerd in window/setup-window-listeners!
 (defn setup-context-menu!
   [^js win]
-  (let [web-contents (. win -webContents)
+  (let [web-contents (.-webContents win)
 
         context-menu-handler
-        (fn [_event params]
+        (fn [_event ^js params]
           (let [menu (Menu.)
-                suggestions (.-dictionarySuggestions ^js params)
-                edit-flags (.-editFlags ^js params)
-                editable? (.-isEditable ^js params)
-                selection-text (.-selectionText ^js params)
+                suggestions (.-dictionarySuggestions params)
+                edit-flags (.-editFlags params)
+                editable? (.-isEditable params)
+                selection-text (.-selectionText params)
                 has-text? (not (string/blank? (string/trim selection-text)))
-                link-url (not-empty (.-linkURL ^js params))
-                media-type (.-mediaType ^js params)]
+                link-url (not-empty (.-linkURL params))
+                media-type (.-mediaType params)]
 
             (doseq [suggestion suggestions]
               (. menu append
@@ -26,16 +26,13 @@
                                       suggestion
                                       :click
                                       #(. web-contents replaceMisspelling suggestion)}))))
-            (when (not-empty suggestions)
-              (. menu append (MenuItem. #js {:type "separator"})))
-            (when-let [misspelled-word (not-empty (.-misspelledWord ^js params))]
+            (when-let [misspelled-word (not-empty (.-misspelledWord params))]
               (. menu append
                  (MenuItem. (clj->js {:label
                                       "Add to dictionary"
                                       :click
-                                      #(.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word))}))))
-
-            (. menu append (MenuItem. #js {:type "separator"}))
+                                      #(.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word))})))
+              (. menu append (MenuItem. #js {:type "separator"})))
 
             (when (and utils/mac? has-text? (not link-url))
               (. menu append
@@ -46,29 +43,33 @@
                  (MenuItem. #js {:label "Search with Google"
                                  :click #(let [url (js/URL. "https://www.google.com/search")]
                                            (.. url -searchParams (set "q" selection-text))
-                                           (.. shell (openExternal (.toString url))))})))
-            (. menu append (MenuItem. #js {:type "separator"}))
+                                           (.. shell (openExternal (.toString url))))}))
+              (. menu append (MenuItem. #js {:type "separator"})))
 
-            (when (and has-text? editable?)
-              (when (.-canCut edit-flags)
-                (. menu append
-                   (MenuItem. #js {:label "Cut"
-                                   :role "cut"})))
-              (when (.-canCopy edit-flags)
-                (. menu append
-                   (MenuItem. #js {:label "Copy"
-                                   :role "copy"}))))
 
-            (when (and editable? (.-canPaste edit-flags))
+            (when editable?
+              (. menu append
+                 (MenuItem. #js {:label "Cut"
+                                 :enabled (and has-text? (.-canCut edit-flags))
+                                 :role "cut"}))
+              (. menu append
+                 (MenuItem. #js {:label "Copy"
+                                 :enabled (.-canCopy edit-flags)
+                                 :role "copy"}))
               (. menu append
                  (MenuItem. #js {:label "Paste"
-                                 :role "paste"})))
+                                 :enabled (.-canPaste edit-flags)
+                                 :role "paste"}))
+              (. menu append
+                 (MenuItem. #js {:label "Select All"
+                                 :enabled (.-canSelectAll edit-flags)
+                                 :role "selectAll"})))
 
             (when (= media-type "image")
               (. menu append
                  (MenuItem. #js {:label "Save Image"
                                  :click (fn [menu-item]
-                                          (let [url (.-srcURL ^js params)
+                                          (let [url (.-srcURL params)
                                                 url (if (.-transform menu-item)
                                                       (. menu-item transform url)
                                                       url)]
@@ -77,7 +78,7 @@
               (. menu append
                  (MenuItem. #js {:label "Save Image As..."
                                  :click (fn [menu-item]
-                                          (let [url (.-srcURL ^js params)
+                                          (let [url (.-srcURL params)
                                                 url (if (.-transform menu-item)
                                                       (. menu-item transform url)
                                                       url)]
@@ -85,9 +86,10 @@
 
               (. menu append
                  (MenuItem. #js {:label "Copy Image"
-                                 :click #(. web-contents copyImageAt (.-x ^js params) (.-y ^js params))})))
+                                 :click #(. web-contents copyImageAt (.-x params) (.-y params))})))
 
-            (. menu popup)))]
+            (when (not-empty (.-items menu))
+              (. menu popup))))]
 
     (doto web-contents
       (.on "context-menu" context-menu-handler))
