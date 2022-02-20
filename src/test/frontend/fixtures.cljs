@@ -4,8 +4,6 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as db-react]
-            [frontend.react :as react-test]
-            [frontend.react-impls :as react-impls]
             [frontend.state :as state]))
 
 (defn load-test-env
@@ -32,10 +30,3 @@
     (reset-datascript repo)
     (let [r (f)]
       (reset-datascript repo) r)))
-
-(defn react-impl
-  [f]
-  (reset! react-impls/react react-test/react)
-  (let [r (f)]
-    (reset! react-impls/react react-impls/react)
-    r))

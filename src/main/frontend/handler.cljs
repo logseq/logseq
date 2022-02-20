@@ -183,12 +183,6 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn on-load-events
-  []
-  (set! js/window.onload
-        (fn []
-          (instrument/init))))
-
 (defn clear-cache!
   []
   (notification/show! "Clearing..." :warning false)
@@ -215,7 +209,7 @@
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
-    (on-load-events)
+    (instrument/init)
     (set-network-watcher!)
 
     (mobile/init!)

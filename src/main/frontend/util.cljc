@@ -14,12 +14,12 @@
             [cljs-time.core :as t]
             [dommy.core :as d]
             [frontend.mobile.util :refer [is-native-platform?]]
-            [frontend.react-impls :as react-impls]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
             [goog.userAgent]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
   (:require
    [clojure.core.async :as async]
    [clojure.pprint]
@@ -823,8 +823,9 @@
 #?(:cljs
    (defn react
      [ref]
-     (let [r @react-impls/react]
-       (r ref))))
+     (if rum.core/*reactions*
+       (rum/react ref)
+       @ref)))
 
 (defn time-ms
   []

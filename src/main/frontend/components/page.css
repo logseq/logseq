@@ -255,6 +255,25 @@
   transform: scale(0.7);
 }
 
+.ls-page-title {
+  @apply rounded-sm;
+  
+  padding: 5px 8px;
+  margin: 0 -6px;
+  
+  &.title {
+    margin-bottom: 12px;
+  }
+
+  > .edit-input {
+    width: 100%;
+  }
+
+  &.editing {
+    background-color: var(--ls-secondary-background-color);
+  }
+}
+
 /* Change to another cursor style if Shift key is active */
 [data-active-keystroke*="Shift" i]
 :is(.journal-title, .page-title,

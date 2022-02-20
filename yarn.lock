@@ -638,6 +638,11 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
 
+"@logseq/react-tweet-embed@1.3.1-1":
+  version "1.3.1-1"
+  resolved "https://registry.yarnpkg.com/@logseq/react-tweet-embed/-/react-tweet-embed-1.3.1-1.tgz#119d22be8234de006fc35c3fa2a36f85634c5be6"
+  integrity sha512-9O0oHs5depCvh6ZQvwtl1xb7B80YG5rUfY10uSUat5itOlcE3IWaYYpe6p/tcHErqHWnWgkXHitAB9M29FMbQg==
+
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
   resolved "https://registry.yarnpkg.com/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz#7619c2eb21b25483f6d167548b4cfd5a7488c3d5"
@@ -2061,14 +2066,6 @@ clean-stack@^2.0.0:
   resolved "https://registry.yarnpkg.com/clean-stack/-/clean-stack-2.2.0.tgz#ee8472dbb129e727b31e8a10a427dee9dfe4008b"
   integrity sha512-4diC9HaTE+KRAMWhDhrGOECgWZxoevMc5TlkObMqNSsVU62PYzXZ/SMTjzyGAFF1YusgxGcSWTEXBhp0CPwQ1A==
 
-cli-truncate@^2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/cli-truncate/-/cli-truncate-2.1.0.tgz#c39e28bf05edcde5be3b98992a22deed5a2b93c7"
-  integrity sha512-n8fOixwDD6b/ObinzTrp1ZKFzbgvKZvuz/TvejnLn1aQfC6r52XEx85FmuC+3HI+JM7coBRXUvNqEU2PHVrHpg==
-  dependencies:
-    slice-ansi "^3.0.0"
-    string-width "^4.2.0"
-
 cliui@^3.2.0:
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/cliui/-/cliui-3.2.0.tgz#120601537a916d29940f934da3b48d585a39213d"
@@ -2890,16 +2887,7 @@ earcut@^2.2.2:
   resolved "https://registry.yarnpkg.com/earcut/-/earcut-2.2.3.tgz#d44ced2ff5a18859568e327dd9c7d46b16f55cf4"
   integrity sha512-iRDI1QeCQIhMCZk48DRDMVgQSSBDmbzzNhnxIo+pwx3swkfjMh6vh0nWLq1NdvGHLKH6wIrAM3vQWeTj6qeoug==
 
-electron-context-menu@3.1.1:
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/electron-context-menu/-/electron-context-menu-3.1.1.tgz#109884e79df293f7e85effcbdbbe45d362987d94"
-  integrity sha512-LJhwaKf6XHwk2LQ5SdwoGNODoA8lRwks9bbEeAqqMf4e3hsrT7pZtX6MaHKYNFZKxF14JjI/VR+VRjGvxmaQoA==
-  dependencies:
-    cli-truncate "^2.1.0"
-    electron-dl "^3.2.1"
-    electron-is-dev "^2.0.0"
-
-electron-dl@^3.2.1:
+electron-dl@3.3.0:
   version "3.3.0"
   resolved "https://registry.yarnpkg.com/electron-dl/-/electron-dl-3.3.0.tgz#4e422e276c627373ba61fcf3f92ffa088988db1a"
   integrity sha512-Zwaz/OMGPIfBLV2SQH4sTsdDOs/U4y5AOHfremMBXEpjIxX+SiTx845DZAvJJwgb5hfowyWOBLiJhd/emBNLLQ==
@@ -2907,11 +2895,6 @@ electron-dl@^3.2.1:
     ext-name "^5.0.0"
     pupa "^2.0.1"
     unused-filename "^2.1.0"
-
-electron-is-dev@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/electron-is-dev/-/electron-is-dev-2.0.0.tgz#833487a069b8dad21425c67a19847d9064ab19bd"
-  integrity sha512-3X99K852Yoqu9AcW50qz3ibYBWY79/pBhlMCab8ToEWS48R0T9tyxRiQhwylE7zQdXrMnx2JKqUJyMPmt5FBqA==
 
 electron-to-chromium@^1.4.17:
   version "1.4.38"
@@ -5264,10 +5247,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.3.0:
-  version "1.3.0"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.3.0.tgz#e72a157cc1204442ea5e90facd60837343a66338"
-  integrity sha512-qDxtIXzOheFJHq0d/4bDvMkM/VrhbDLMKw9MZurWbNPW6PxZQduC0BhXIGZyP4qT+pecZpUEMbUyMbNGn8ztsw==
+mldoc@1.3.1:
+  version "1.3.1"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.3.1.tgz#50a8ad73d0489624883ad1414dd8a11ccff0ddf1"
+  integrity sha512-WlsK7fKQOV4t3YBVonHOOE+SOYkPn6/jb3Ob+Hn8dH/SMZ71OfhdKIxjqJrYn4M+10FfiQvKS9lXVHLAGqsl/A==
   dependencies:
     yargs "^12.0.2"
 
@@ -6777,11 +6760,6 @@ react-grid-layout@0.16.6:
     react-draggable "3.x"
     react-resizable "1.x"
 
-react-icon-base@2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
-  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
-
 react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
@@ -6847,11 +6825,6 @@ react-transition-group@4.3.0:
     dom-helpers "^5.0.1"
     loose-envify "^1.4.0"
     prop-types "^15.6.2"
-
-react-tweet-embed@1.3.1:
-  version "1.3.1"
-  resolved "https://registry.yarnpkg.com/react-tweet-embed/-/react-tweet-embed-1.3.1.tgz#066d45dd3fc4c72c6ea61a85857c9044d408235f"
-  integrity sha512-qVAlb3/d3YhYHHB6Y3J/8OCY+a5KOzCnY/qUaBnK8qtEKXK9qWePlpGevDQgryWuKxggwxW1UHPLZ3VpPc7XUQ==
 
 react@17.0.2:
   version "17.0.2"
@@ -7401,15 +7374,6 @@ slash@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/slash/-/slash-3.0.0.tgz#6539be870c165adbd5240220dbe361f1bc4d4634"
   integrity sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==
-
-slice-ansi@^3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/slice-ansi/-/slice-ansi-3.0.0.tgz#31ddc10930a1b7e0b67b08c96c2f49b77a789787"
-  integrity sha512-pSyv7bSTC7ig9Dcgbw9AuRNUb5k5V6oDudjZoMBSr13qpLBG7tB+zgCkARjq7xIUgdz5P1Qe8u+rSGdouOOIyQ==
-  dependencies:
-    ansi-styles "^4.0.0"
-    astral-regex "^2.0.0"
-    is-fullwidth-code-point "^3.0.0"
 
 slice-ansi@^4.0.0:
   version "4.0.0"

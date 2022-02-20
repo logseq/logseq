@@ -8,7 +8,6 @@
 
 (use-fixtures :each
   fixtures/load-test-env
-  fixtures/react-impl
   fixtures/react-components
   fixtures/reset-db)
 

@@ -66,11 +66,12 @@
     (when (conn/get-conn repo)
       (->
        (react/q repo [:frontend.db.react/block id] {}
-         '[:find [(pull ?block [*]) ...]
-           :in $ ?id
+         '[:find [(pull ?block ?block-attrs) ...]
+           :in $ ?id ?block-attrs
            :where
            [?block :block/uuid ?id]]
-         id)
+         id
+         block-attrs)
        react
        first))))
 

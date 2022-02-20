@@ -1619,14 +1619,15 @@
   [ks]
   (get-in @state [:reactive/query-dbs ks]))
 
-(defn set-reactive-query-db!
-  [ks db-value]
-  (when db-value
-    (set-state! [:reactive/query-dbs ks] db-value)))
-
 (defn delete-reactive-query-db!
   [ks]
   (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
+
+(defn set-reactive-query-db!
+  [ks db-value]
+  (if db-value
+    (set-state! [:reactive/query-dbs ks] db-value)
+    (delete-reactive-query-db! ks)))
 
 (defn get-modal-id
   []

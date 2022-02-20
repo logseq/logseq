@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -22,7 +22,7 @@
     "better-sqlite3": "7.4.5",
     "chokidar": "^3.5.1",
     "dugite": "1.103.0",
-    "electron-context-menu": "3.1.1",
+    "electron-dl": "3.3.0",
     "electron-log": "4.3.1",
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
