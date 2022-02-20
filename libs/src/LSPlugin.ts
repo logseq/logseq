@@ -561,8 +561,20 @@ export interface IGitProxy {
 /**
  * UI related APIS
  */
+export type UIMsgOptions = {
+  key: string,
+  timeout: number, // milliseconds. `0` indicate that keep showing
+}
+
+export type UIMsgKey = UIMsgOptions['key']
+
 export interface IUIProxy {
-  showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
+  showMsg: (
+    content: string,
+    status?: 'success' | 'warning' | 'error' | string,
+    opts?: Partial<UIMsgOptions>) => Promise<UIMsgKey>
+
+  closeMsg: (key: UIMsgKey) => void
 }
 
 export interface ILSPluginThemeManager extends EventEmitter {

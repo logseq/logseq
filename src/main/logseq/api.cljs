@@ -635,14 +635,24 @@
 
 ;; ui
 (defn ^:export show_msg
-  ([content] (show_msg content :success))
-  ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
-                          content (if hiccup? (parse-hiccup-ui content) content)]
-                      (notification/show! content (keyword status)))))
+  ([content] (show_msg content :success nil))
+  ([content status ^js opts]
+   (let [{:keys [key timeout]} (bean/->clj opts)
+         hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
+         content (if hiccup? (parse-hiccup-ui content) content)
+         uid (when (string? key) (keyword key))
+         clear? (not= timeout 0)
+         key' (notification/show! content (keyword status) clear? uid timeout)]
+     (name key'))))
 
 (defn ^:export ui_show_msg
   [& args]
   (apply show_msg args))
+
+(defn ^:export ui_close_msg
+  [key]
+  (when (string? key)
+    (notification/clear! (keyword key)) nil))
 
 
 ;; helpers
