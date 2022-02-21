@@ -28,9 +28,7 @@
 (defn- clean-uri
   [uri]
   (when (string? uri)
-    (-> uri
-        (string/replace "file://" "")
-        (util/url-decode))))
+    (util/url-decode uri)))
 
 (defn readdir
   "readdir recursively"
@@ -53,11 +51,11 @@
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
-                                               (util/node-path.join
-                                                d
-                                                (if (mobile-util/native-ios?)
-                                                  (util/url-encode file)
-                                                  file)))))
+                                               (str (string/replace d #"/+$" "")
+                                                    "/"
+                                                    (if (mobile-util/native-ios?)
+                                                      (util/url-encode file)
+                                                      file)))))
                              files-with-stats (p/all
                                                (mapv
                                                 (fn [file]
@@ -159,19 +157,18 @@
                       (log/error :write-file-failed error)))))))))
 
 (defn get-file-path [dir path]
-  (let [[dir' path'] (map #(some-> %
-                                  (string/replace "///" "/")
-                                  js/decodeURI)
-                         [dir path])
+  (let [[dir path] (map #(some-> %
+                                 js/decodeURI)
+                        [dir path])
+        dir (string/replace dir #"/+$" "")
         path (cond (nil? path)
-               dir
+                   dir
 
-               (string/starts-with? path' dir')
-               path'
+                   (string/starts-with? path dir)
+                   path
 
-               :else
-               (-> (str dir' path)
-                   (string/replace "//" "/")))]
+                   :else
+                   (str dir path))]
     (if (mobile-util/native-ios?)
       (js/encodeURI (js/decodeURI path))
       path)))
@@ -202,11 +199,7 @@
     ;; Too dangerious!!! We'll never implement this.
     nil)
   (read-file [_this dir path _options]
-    (let [path (str dir path)
-          path (if (or (string/starts-with? path "file:")
-                       (string/starts-with? path "content:"))
-                 path
-                 (str "file:///" (string/replace path #"^/+" "")))]
+    (let [path (get-file-path dir path)]
       (->
        (p/let [content (.readFile Filesystem
                                   (clj->js

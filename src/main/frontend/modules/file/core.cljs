@@ -16,6 +16,7 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn- content-with-collapsed-state
+  "Only accept nake content (without any indentation)"
   [format content collapsed? properties]
   (cond
     collapsed?
@@ -67,13 +68,14 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
+                        content (content-with-collapsed-state format content collapsed? properties)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
                               ""
                               " ")]
                     (str prefix sep new-content)))]
-    (content-with-collapsed-state format content collapsed? properties)))
+    content))
 
 
 (defn- tree->file-content-aux

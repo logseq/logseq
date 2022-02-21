@@ -48,7 +48,7 @@
    (cond
      mobile-native?
      (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (util/path-normalize (string/replace uri "file://" ""))
+            {:file/path             (util/path-normalize uri)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
