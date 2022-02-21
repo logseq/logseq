@@ -34,8 +34,8 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInn
 
   // check if diacritics are indexed
   await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.fill('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
+  await page.waitForSelector('[placeholder="Type a note, create a page, or search your graph"]')
+  await page.fill('[placeholder="Type a note, create a page, or search your graph"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
 
   await page.waitForTimeout(500)
   const results = await page.$$('#ui__ac-inner .block')
