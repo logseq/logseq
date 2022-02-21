@@ -284,9 +284,11 @@
         :sync-from-local-files "Refresh"
         :sync-from-local-files-detail "Import changes from local files"
         :unlink "unlink"
+        :search/search-header "Search"
+        :search/quick-capture "Quick Capture"
         :search (if config/publishing?
                   "Search"
-                  "Type a note or search your graph")
+                  "Type a note, create a page, or search your graph")
         :page-search "Search in the current page"
         :graph-search "Search graph"
         :new-page "New page"
@@ -3188,7 +3190,7 @@
         :plugin/marketplace-tips "Se o plugin não funcionar corretamente quando instalado pela 1ª vez, tente reiniciar o Logseq."
         :plugin/up-to-date "Está atualizado"
         :plugin/custom-js-alert "Ficheiro custom.js encontrado, quer executá-lo? (Se não compreender o conteúdo do ficheiro, é melhor não executá-lo, pois há certos riscos de segurança ao fazê-lo.)"
-        
+
         :pdf/copy-ref "Copiar referência"
         :pdf/copy-text "Copiar texto"
         :pdf/linked-ref "Referências ligadas"

@@ -23,8 +23,8 @@ export async function createRandomPage(page: Page) {
 
   // Click #search-button
   await page.click('#search-button')
-  // Fill [placeholder="Type a note or search your graph"]
-  await page.fill('[placeholder="Type a note or search your graph"]', randomTitle)
+  // Fill [placeholder="Type a note, create a page, or search your graph"]
+  await page.fill('[placeholder="Type a note, create a page, or search your graph"]', randomTitle)
   // Click text=/.*New page: "new page".*/
   await page.click('text=/.*New page: ".*/')
   // wait for textarea of first block

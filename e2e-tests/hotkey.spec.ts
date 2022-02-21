@@ -12,9 +12,9 @@ test('open search dialog', async ({ page }) => {
     expect(false)
   }
 
-  await page.waitForSelector('[placeholder="Type a note or search your graph"]')
+  await page.waitForSelector('[placeholder="Type a note, create a page, or search your graph"]')
   await page.keyboard.press('Escape')
-  await page.waitForSelector('[placeholder="Type a note or search your graph"]', { state: 'hidden' })
+  await page.waitForSelector('[placeholder="Type a note, create a page, or search your graph"]', { state: 'hidden' })
 })
 
 // See-also: https://github.com/logseq/logseq/issues/3278

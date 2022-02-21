@@ -262,7 +262,7 @@
   [in-page-search?]
   [:div.recent-search
    (when-not in-page-search?
-     [:div.px-2.font-medium.opacity-50 {:style {:text-transform "uppercase"}} "Search"])
+     [:div.px-2.font-medium.opacity-50.uppercase (t :search/search-header)])
    [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
     [:div "Recent search:"]
     (ui/with-shortcut :go/search-in-page "bottom"
@@ -380,8 +380,8 @@
        [:div.pt-2.pl-4.header-wrap
         (when (seq search-q)
           (if (search-has-a-match? (:pages search-result) search-q search-result)
-            [:div [:span.mr-2 (ui/icon "search")] "Search"]
-            [:div [:span.mr-2 (ui/icon "plus")] "Quick Capture"]))])
+            [:div [:span.mr-2 (ui/icon "search")] (t :search/search-header)]
+            [:div [:span.mr-2 (ui/icon "plus")] (t :search/quick-capture)]))])
      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"
@@ -399,14 +399,15 @@
                 (not (search-has-a-match? (:pages search-result)
                                           search-q
                                           search-result)))
-       [:div.pb-2.keyboard-shortcuts.flex.flex-row.justify-around.align-items
+       [:div.pb-2.create-keyboard-shortcuts.flex.flex-row.justify-around.align-items
         [:div.flex-row.flex.align-items
          [:div.mr-2 "ESC"]
          [:div "Dismiss"]]
-        [:div.flex-row.flex.align-items
-         [:div.mr-2 (ui/icon "command")]
-         [:div.mr-2 (ui/icon "arrow-back")]
-         [:div "Create and jump to it"]]
+        ;; TODO: Enable once this is available
+        #_[:div.flex-row.flex.align-items
+           [:div.mr-2 (ui/icon "command")]
+           [:div.mr-2 (ui/icon "arrow-back")]
+           [:div "Create and jump to it"]]
         [:div.flex-row.flex.align-items
          [:div.mr-2 (ui/icon "arrow-back")]
          [:div "Create"]]])

@@ -35,8 +35,8 @@ test('toggle sidebar', async ({ page }) => {
 
 test('search', async ({ page }) => {
   await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Type a note or search your graph"]')
-  await page.fill('[placeholder="Type a note or search your graph"]', 'welcome')
+  await page.waitForSelector('[placeholder="Type a note, create a page, or search your graph"]')
+  await page.fill('[placeholder="Type a note, create a page, or search your graph"]', 'welcome')
 
   await page.waitForTimeout(500)
   const results = await page.$$('#ui__ac-inner .block')
