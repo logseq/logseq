@@ -132,30 +132,30 @@
    (html-link-format! nil))
   ([link]
    (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
-          cur-pos (cursor/pos input)
-          empty-selection? (= selection-start selection-end)
-          selection-link? (and selection (or (util/starts-with? selection "http://")
-                                             (util/starts-with? selection "https://")))
-          [content forward-pos] (cond
-                                  empty-selection?
-                                  (config/get-empty-link-and-forward-pos format)
+     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+           cur-pos (cursor/pos input)
+           empty-selection? (= selection-start selection-end)
+           selection-link? (and selection (or (util/starts-with? selection "http://")
+                                              (util/starts-with? selection "https://")))
+           [content forward-pos] (cond
+                                   empty-selection?
+                                   (config/get-empty-link-and-forward-pos format)
 
-                                  link
-                                  (config/with-label-link format selection link)
+                                   link
+                                   (config/with-label-link format selection link)
 
-                                  selection-link?
-                                  (config/with-default-link format selection)
+                                   selection-link?
+                                   (config/with-default-link format selection)
 
-                                  :else
-                                  (config/with-default-label format selection))
-          new-value (str
-                     (subs value 0 selection-start)
-                     content
-                     (subs value selection-end))
-          cur-pos (or selection-start cur-pos)]
-      (state/set-edit-content! edit-id new-value)
-      (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
+                                   :else
+                                   (config/with-default-label format selection))
+           new-value (str
+                      (subs value 0 selection-start)
+                      content
+                      (subs value selection-end))
+           cur-pos (or selection-start cur-pos)]
+       (state/set-edit-content! edit-id new-value)
+       (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
 (defn open-block-in-sidebar!
   [block-id]
@@ -163,10 +163,10 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
-          (state/get-current-repo)
-          (:db/id block)
-          (if page? :page :block)
-          block)))))
+         (state/get-current-repo)
+         (:db/id block)
+         (if page? :page :block)
+         block)))))
 
 (defn reset-cursor-range!
   [node]
@@ -1152,32 +1152,32 @@
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
                                            :level (int level)}))
-                                     selected-blocks))
+                                  selected-blocks))
                       (remove nil?))
           first-block (first blocks)
           first-root-level-index (ffirst
-                                   (filter (fn [[_ block]] (= (:level block) 1))
-                                           (map-indexed vector blocks)))
+                                  (filter (fn [[_ block]] (= (:level block) 1))
+                                          (map-indexed vector blocks)))
           root-level (atom (:level first-block))
           adjusted-blocks (map-indexed
-                            (fn [index {:keys [id level]}]
-                              {:id id
-                               :level (if (< index first-root-level-index)
-                                        (if (< level @root-level)
-                                          (do
-                                            (reset! root-level level)
-                                            1)
-                                          (inc (- level @root-level)))
-                                        level)})
-                            blocks)
+                           (fn [index {:keys [id level]}]
+                             {:id id
+                              :level (if (< index first-root-level-index)
+                                       (if (< level @root-level)
+                                         (do
+                                           (reset! root-level level)
+                                           1)
+                                         (inc (- level @root-level)))
+                                       level)})
+                           blocks)
           block (db/pull [:block/uuid (:id first-block)])
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
                                    (condp = (:block/format block)
-                                    :org
-                                    (util/format (str (string/join (repeat level "*")) " ((%s))") id)
-                                    :markdown
-                                    (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
+                                     :org
+                                     (util/format (str (string/join (repeat level "*")) " ((%s))") id)
+                                     :markdown
+                                     (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1674,7 +1674,7 @@
    "=" "="
    "/" "/"
    "+" "+"})
-   ;; ":" ":"                              ; TODO: only properties editing and org mode tag
+;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 
 (def reversed-autopair-map
@@ -1823,7 +1823,7 @@
   [blocks]
   (let [repo (state/get-current-repo)
         lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                           [:block/uuid (medley/uuid id)])) blocks)
+                                            [:block/uuid (medley/uuid id)])) blocks)
                          (remove nil?))
         blocks (db/pull-many repo '[*] lookup-refs)]
     (reorder-blocks blocks)))
@@ -2791,7 +2791,7 @@
       (do
         (util/stop e)
         (delete-and-update
-          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
+         input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
 
 (defn indent-outdent
   [indent?]
@@ -3446,10 +3446,10 @@
        (doseq [block-id block-ids]
          (when-let [block (db/entity [:block/uuid block-id])]
            (let [current-value (:block/collapsed? block)]
-            (when-not (= current-value value)
-              (let [block (outliner-core/block {:block/uuid block-id
-                                                :block/collapsed? value})]
-                (outliner-core/save-node block {:txs-state txs-state})))))))
+             (when-not (= current-value value)
+               (let [block (outliner-core/block {:block/uuid block-id
+                                                 :block/collapsed? value})]
+                 (outliner-core/save-node block {:txs-state txs-state})))))))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
         ;; update editing input content
@@ -3646,11 +3646,15 @@
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.
   Currently, this handles several cases:
-  1. References."
+  1. References.
+  2. Custom queries."
   [block config]
-  (if (:ref? config)
+  (if (or (:ref? config)
+          (:custom-query? config))
     (and
      (seq (:block/children block))
-     (>= (:ref/level block)
-         (state/get-ref-open-blocks-level)))
+     (or
+      (:custom-query? config)
+      (>= (:ref/level block)
+          (state/get-ref-open-blocks-level))))
     (util/collapsed? block)))

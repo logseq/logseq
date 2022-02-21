@@ -140,7 +140,9 @@
   (if (string/blank? content)
     []
     (let [format (format/get-format file)
-          ast (mldoc/->edn content (mldoc/default-config format {:parse_outline_only? true}))]
+          ast (mldoc/->edn content (mldoc/default-config format
+                                                         ;; {:parse_outline_only? true}
+                                                         ))]
       (println "Parsing finished : " file)
       (let [first-block (ffirst ast)
             properties (let [properties (and (property/properties-ast? first-block)
@@ -183,23 +185,3 @@
 (defn extract-all-block-refs
   [content]
   (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))
-
-(comment
-  (def page (frontend.db/entity [:block/name (string/lower-case "Scripture (NASB 1995)")]))
-  (def page (frontend.db/entity [:block/name (string/lower-case "test")]))
-  (def file (:block/file page))
-  (def content (:file/content (db/pull (:db/id file))))
-
-  (do
-    (prn "Full parse: ")
-    (dotimes [_ 5] (time (do (mldoc/->edn content (mldoc/default-config :markdown)) nil)))
-    (prn "Parse outline-only")
-    (dotimes [_ 5] (time (do (mldoc/->edn content (mldoc/default-config :markdown {:parse_outline_only? true})) nil))))
-  (simple-benchmark []
-                    (mldoc/->edn content (mldoc/default-config :markdown))
-                    5)
-  (simple-benchmark []
-                    (mldoc/->edn content (mldoc/default-config :markdown {:parse_outline_only? true}))
-                    5)
-
-  )

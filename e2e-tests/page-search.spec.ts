@@ -1,12 +1,47 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInnerBlock } from './utils'
+import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInnerBlock, activateNewPage } from './utils'
 
 /***
  * Test alias features
  * Test search refering features
  * Consider diacritics
  ***/
+
+ test('Search page and blocks (diacritics)', async ({ page }) => {
+  let hotkeyOpenLink = 'Control+o'
+  let hotkeyBack = 'Control+['
+  if (IsMac) {
+    hotkeyOpenLink = 'Meta+o'
+    hotkeyBack = 'Meta+['
+  }
+
+  const rand = randomString(20)
+
+  // diacritic opening test
+  await createRandomPage(page)
+
+  await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1')
+  await page.keyboard.press(hotkeyOpenLink)
+
+  // build target Page with diacritics
+  await activateNewPage(page)
+  await page.type(':nth-match(textarea, 1)', 'Diacritic title test content')
+
+  await page.keyboard.press('Enter')
+  await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
+  await page.keyboard.press(hotkeyBack)
+
+  // check if diacritics are indexed
+  await page.click('#search-button')
+  await page.waitForSelector('[placeholder="Search or create page"]')
+  await page.fill('[placeholder="Search or create page"]', 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
+
+  await page.waitForTimeout(500)
+  const results = await page.$$('#ui__ac-inner .block')
+  expect(results.length).toEqual(3) // 2 blocks + 1 page
+  await page.keyboard.press("Escape")
+})
 
 async function alias_test(page, page_name: string, search_kws: string[]) {
   let hotkeyOpenLink = 'Control+o'
@@ -111,33 +146,6 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
   // TODO: search clicking (alias property)
 }
 
-// test('page alias', async ({ page }) => {
-//   await alias_test(page, "p")
-// })
-
-
 test('page diacritic alias', async ({ page }) => {
   await alias_test(page, "ü", ["ü", "ü", "Ü"])
-})
-
-test('hashtag and quare brackets in same line #4178', async ({ page }) => {
-  await createRandomPage(page)
-
-  await page.type(':nth-match(textarea, 1)', '#foo bar')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
-  await page.type(':nth-match(textarea, 1)', 'bar [[blah]]')
-  for (let i = 0; i < 12; i++) {
-    await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-  }
-  await page.type(':nth-match(textarea, 1)', ' ')
-  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-
-  await page.type(':nth-match(textarea, 1)', '#')
-  await page.waitForSelector('text="Search for a page"', { 'state': 'visible' })
-
-  await page.type(':nth-match(textarea, 1)', 'fo')
-
-  await page.click('.absolute >> text=' + 'foo')
-
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('#foo bar [[blah]]')
 })

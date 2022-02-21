@@ -211,7 +211,7 @@
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
                     (cond
                       (= old-name @*title-value)
-                      nil
+                      (reset! *edit? false)
 
                       (string/blank? @*title-value)
                       (rollback-fn)
@@ -220,8 +220,9 @@
                       (state/set-modal! (confirm-fn)))
                     (util/stop e))]
       (if @*edit?
-        [:h1.title {:style {:margin-left -2}}
-         [:input.w-full
+        [:h1.title.ls-page-title
+         {:class (util/classnames [{:editing @*edit?}])}
+         [:input.edit-input
           {:type          "text"
            :ref           input-ref
            :auto-focus    true
@@ -229,13 +230,18 @@
                            :font-weight 600}
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
            :default-value old-name
-           :on-change     (fn [e]
+           :on-change     (fn [^js e]
                             (let [value (util/evalue e)]
                               (reset! *title-value (string/trim value))))
            :on-blur       blur-fn
-           :on-key-down   (fn [e]
+           :on-key-down   (fn [^js e]
                             (when (= (gobj/get e "key") "Enter")
-                              (blur-fn e)))}]]
+                              (blur-fn e)))
+           :on-key-up     (fn [^js e]
+                            ;; Esc
+                            (when (= 27 (.-keyCode e))
+                              (reset! *title-value old-name)
+                              (reset! *edit? false)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
@@ -250,7 +256,7 @@
                                          {:page page}))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
-         [:h1.title {:style {:margin-left -2}}
+         [:h1.title.ls-page-title {:data-ref page-name}
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 

@@ -31,9 +31,11 @@
   [^js event current-block target-block move-to]
   (let [top? (= move-to :top)
         nested? (= move-to :nested)
-        alt-key? (and event (.-altKey event))]
+        alt-key? (and event (.-altKey event))
+        current-format (:block/format current-block)
+        target-format (:block/format target-block)]
     (cond
-      (not= (:block/format current-block) (:block/format target-block))
+      (and current-format target-format (not= current-format target-format))
       (state/pub-event! [:notification/show
                          {:content [:div "Those two pages have different formats."]
                           :status :warning

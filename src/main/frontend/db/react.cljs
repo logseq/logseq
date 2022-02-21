@@ -157,15 +157,19 @@
 
 (defn- new-db
   [cached-result tx-data old-db k]
-  (when (and (coll? cached-result)
-             (map? (first cached-result)))
+  (when-not (= :custom (second k))
     (try
-      (let [db (or old-db
-                   (let [cached-result (util/remove-nils cached-result)]
-                     (-> (d/empty-db db-schema/schema)
-                         (d/with cached-result)
-                         (:db-after))))]
-        (:db-after (d/with db tx-data)))
+      (let [empty-db (d/empty-db db-schema/schema)
+            db (or old-db
+                   (when (and (coll? cached-result)
+                              (or (map? (first cached-result))
+                                  (empty? cached-result)))
+                     (let [cached-result (util/remove-nils cached-result)]
+                       (-> empty-db
+                           (d/with cached-result)
+                           (:db-after)))))]
+        (when db
+          (:db-after (d/with db tx-data))))
       (catch js/Error e
         (prn "New db: " {:k k
                          :old-db old-db

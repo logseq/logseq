@@ -53,8 +53,6 @@
 #?(:clj (defmacro defc
           [sym args & body]
           `(defn ~sym ~args
-             (assert (some? *with-key*)
-               "should specify component key by frontend.react-impl/with-key.")
              (let [f# (fn []
                         (binding [*comp-key* *with-key*
                                   ;; inner component should specify own *with-key*

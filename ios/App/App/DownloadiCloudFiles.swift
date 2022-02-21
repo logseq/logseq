@@ -19,7 +19,8 @@ public class DownloadiCloudFiles: CAPPlugin,  UIDocumentPickerDelegate  {
         "md",
         "org",
         "css",
-        "edn"
+        "edn",
+        "excalidraw"
     ]
     
     var containerUrl: URL? {
