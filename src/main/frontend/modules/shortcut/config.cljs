@@ -315,16 +315,20 @@
                                     :binding "mod+shift+p"
                                     :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
 
-   :graph/open              {:desc    "Select graph to open"
+   :graph/open                     {:desc    "Select graph to open"
                                     :fn      (fn [] (state/set-state! :ui/open-select :graph-open))
                                     :binding "mod+shift+g"}
 
-   :graph/remove            {:desc    "Remove a graph"
+   :graph/remove                   {:desc    "Remove a graph"
                                     :fn      (fn [] (state/set-state! :ui/open-select :graph-remove))
                                     :binding false}
 
    :graph/add                      {:desc "Add a graph"
                                     :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+                                    :binding false}
+
+   :graph/save                     {:desc "Save current graph to disk"
+                                    :fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
    :command/run                    (when (util/electron?)
@@ -511,6 +515,7 @@
                           :graph/open
                           :graph/remove
                           :graph/add
+                          :graph/save
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -695,6 +700,7 @@
     :graph/open
     :graph/remove
     :graph/add
+    :graph/save
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
