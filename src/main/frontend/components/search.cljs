@@ -152,12 +152,18 @@
     (state/add-graph-search-filter! search-q)
 
     :new-page
-    (page-handler/create! search-q)
+    (do
+      (page-handler/create! search-q)
+      (state/pub-event! [:instrument {:type :search/quick-capture
+                                      :payload {:action :new-page}}]))
 
     :add-to-todays-journal
-    (editor-handler/api-insert-new-block!
-     search-q
-     {:page (date/today)})
+    (do
+      (editor-handler/api-insert-new-block!
+       search-q
+       {:page (date/today)})
+      (state/pub-event! [:instrument {:type :search/quick-capture
+                                      :payload {:action :add-to-todays-journal}}]))
 
     :page
     (let [data (or alias data)]
