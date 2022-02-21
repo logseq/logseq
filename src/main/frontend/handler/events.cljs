@@ -101,6 +101,9 @@
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
 
+(defmethod handle :graph/save [_]
+  (db/persist! (state/get-current-repo)))
+
 (defn get-local-repo
   []
   (when-let [repo (state/get-current-repo)]
