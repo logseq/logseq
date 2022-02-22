@@ -1,7 +1,6 @@
 (ns frontend.handler.export-test
-  ;; namespace local config for private function tests
-  {:clj-kondo/config {:linters {:private-call {:level :off}}}}
-  (:require [cljs.test :refer [async deftest use-fixtures are]]
+  (:require [cljs.test :refer [async deftest use-fixtures are is]]
+            [clojure.edn :as edn]
             [frontend.handler.export :as export]
             [frontend.db.config :as config]
             [frontend.handler.repo :as repo-handler]
@@ -52,9 +51,17 @@
 (deftest export-files-as-markdown
   (are [expect files]
       (= expect
-         (export/export-files-as-markdown (state/get-current-repo) files true))
+         (@#'export/export-files-as-markdown (state/get-current-repo) files true))
     [["pages/page1.md" "- 1\n\t- 2\n\t\t- 3\n\t\t- 3\n- 4"]]
     [{:path "pages/page1.md" :content (:file/content (nth test-files 0)) :names ["page1"] :format :markdown}]
 
     [["pages/page2.md" "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4"]]
     [{:path "pages/page2.md" :content (:file/content (nth test-files 1)) :names ["page2"] :format :markdown}]))
+
+(deftest export-repo-as-edn-str
+  (let [edn-output (edn/read-string
+                    (@#'export/export-repo-as-edn-str (state/get-current-repo)))]
+    (is (= #{:version :blocks} (set (keys edn-output)))
+        "Correct top-level keys")
+    (is (= ["page1" "page2"] (map :block/page-name (:blocks edn-output)))
+        "Correct pages")))

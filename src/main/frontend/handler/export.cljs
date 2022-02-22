@@ -17,7 +17,8 @@
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
             [goog.dom :as gdom]
-            [promesa.core :as p]))
+            [promesa.core :as p])
+  (:import [goog.string StringBuffer]))
 
 (defn- get-page-content
   [repo page]
@@ -464,17 +465,21 @@
       (str "_" (quot (util/time-ms) 1000))
       (str "." (string/lower-case (name extension)))))
 
+(defn- export-repo-as-edn-str [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [sb (StringBuffer.)]
+      (pprint/pprint (blocks conn) (StringBufferWriter. sb))
+      (str sb))))
+
 (defn export-repo-as-edn-v2!
   [repo]
-  (when-let [conn (db/get-conn repo)]
-    (let [edn-str (with-out-str
-                    (pprint/pprint
-                     (blocks conn)))
-          data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent edn-str))]
-      (when-let [anchor (gdom/getElement "download-as-edn-v2")]
-        (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (file-name repo :edn))
-        (.click anchor)))))
+  (when-let [data-str (some->> (export-repo-as-edn-str repo)
+                               js/encodeURIComponent
+                               (str "data:text/edn;charset=utf-8,"))]
+    (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+      (.setAttribute anchor "href" data-str)
+      (.setAttribute anchor "download" (file-name repo :edn))
+      (.click anchor))))
 
 (defn- nested-update-id
   [vec-tree]

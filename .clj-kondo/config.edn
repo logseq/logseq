@@ -12,7 +12,8 @@
   :consistent-alias
   {:aliases {datascript.core d
              datascript.transit dt
-             datascript.db ddb}}}
+             datascript.db ddb
+             lambdaisland.glogi log}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}
