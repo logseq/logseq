@@ -1,6 +1,6 @@
-.cp__palette {
+.cp__palette, .cp__select {
   --palettle-input-height: 64px;
-  --palettle-container-height: 70vh;
+  --palettle-container-height: 75vh;
 
   &-main {
     max-height: var(--palettle-container-height);
@@ -9,7 +9,7 @@
     display: flex;
     flex-direction: column;
 
-    width: 80vw;
+    /* width: 80vw; */
 
     @screen lg {
       width: 820px;
@@ -27,6 +27,7 @@
     }
 
     .command-results-wrap,
+    .item-results-wrap,
     .search-results-wrap > div:first-child {
       overflow-x: hidden;
       overflow-y: auto;
@@ -45,5 +46,8 @@
   }
 
   &-results {
+    .tip code {
+      white-space: nowrap;
+    }
   }
 }

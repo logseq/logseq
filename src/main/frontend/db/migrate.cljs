@@ -1,28 +1,22 @@
 (ns frontend.db.migrate
-  (:require [datascript.core :as d]
-            [frontend.db-schema :as db-schema]
-            [frontend.state :as state]))
+  (:require [datascript.core :as d]))
 
-(defn- migrate-attribute
-  [f]
-  (if (and (keyword? f) (= "page" (namespace f)))
-    (let [k (keyword "block" (name f))]
-      (case k
-        :block/ref-pages
-        :block/refs
-        k))
-    f))
-
-(defn with-schema [db new-schema]
-  (let [datoms (->> (d/datoms db :eavt)
-                    (map (fn [d]
-                           (let [a (migrate-attribute (:a d))]
-                             (d/datom (:e d) a (:v d) (:tx d) (:added d))))))]
-    (-> (d/empty-db new-schema)
-       (with-meta (meta db))
-       (d/db-with datoms))))
+(defn get-collapsed-blocks
+  [db]
+  (d/q
+    '[:find [?b ...]
+      :where
+      [?b :block/properties ?properties]
+      [(get ?properties :collapsed) ?collapsed]
+      [(= true ?collapsed)]]
+    db))
 
 (defn migrate
-  [repo db]
-  (state/pub-event! [:graph/migrated repo])
-  (with-schema db db-schema/schema))
+  [db]
+  (when db
+    (let [collapsed-blocks (get-collapsed-blocks db)]
+      (if (seq collapsed-blocks)
+        (let [tx-data (map (fn [id] {:db/id id
+                                     :block/collapsed? true}) collapsed-blocks)]
+          (d/db-with db tx-data))
+        db))))

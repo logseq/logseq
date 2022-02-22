@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-
 (defn- moveable?
   [current-block target-block]
   (let [current-block-uuid (:block/uuid current-block)]
@@ -22,22 +21,26 @@
           true))))))
 
 (defn move-block
-  "There can be at least 3 possible situations:
+  "There can be two possible situations:
   1. Move a block in the same file (either top-to-bottom or bottom-to-top).
   2. Move a block between two different files.
-  3. Move a block between two files in different repos.
 
   Notes:
-  1. Those two blocks might have different formats, e.g. one is `org` and another is `markdown`,
-     we don't handle this now. TODO: transform between different formats in mldoc.
-  2. Sometimes we might need to move a parent block to it's own child.
+  Sometimes we might need to move a parent block to it's own child.
   "
   [^js event current-block target-block move-to]
   (let [top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        repo (state/get-current-repo)]
+        current-format (:block/format current-block)
+        target-format (:block/format target-block)]
     (cond
+      (and current-format target-format (not= current-format target-format))
+      (state/pub-event! [:notification/show
+                         {:content [:div "Those two pages have different formats."]
+                          :status :warning
+                          :clear? true}])
+
       alt-key?
       (do
         (editor-handler/set-block-property! (:block/uuid current-block)
@@ -47,9 +50,7 @@
          (util/format "((%s))" (str (:block/uuid current-block)))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
-          :before? top?})
-        (db/refresh! repo {:key :block/change
-                           :data [current-block target-block]}))
+          :before? top?}))
 
       (and (every? map? [current-block target-block])
            (moveable? current-block target-block))
@@ -63,14 +64,13 @@
             (if first-child?
               (let [parent (tree/-get-parent target-node)]
                 (outliner-core/move-subtree current-node parent false))
-              (outliner-core/move-subtree current-node target-node true)))
+              (let [before-node (tree/-get-left target-node)]
+                (outliner-core/move-subtree current-node before-node true))))
           nested?
           (outliner-core/move-subtree current-node target-node false)
 
           :else
-          (outliner-core/move-subtree current-node target-node true))
-        (db/refresh! repo {:key :block/change
-                           :data [(:data current-node) (:data target-node)]}))
+          (outliner-core/move-subtree current-node target-node true)))
 
       :else
       nil)))

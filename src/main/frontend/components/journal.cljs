@@ -19,12 +19,12 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :refer [t]]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page format]
-  (when-let [page-e (db/pull [:block/name (string/lower-case page)])]
+  [repo page _format]
+  (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
 (rum/defc journal-cp < rum/reactive
@@ -38,19 +38,18 @@
                     (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)
-        page-entity (db/pull [:block/name (string/lower-case title)])
+        page-entity (db/pull [:block/name (util/page-name-sanity-lc title)])
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
     (if (and (mobile-util/is-native-platform?) intro?)
-      (rum/with-context [[t] i18n/*tongue-context*]
-        [:div
-         [:h1.title
-          (t :new-graph)]
+      [:div
+       [:h1.title
+        (t :new-graph)]
 
-         (ui/button
-           (t :open-a-directory)
-           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
+       (ui/button
+         (t :open-a-directory)
+         :on-click #(page-handler/ls-dir-files! shortcut/refresh!))]
       [:div.flex-1.journal.page (cond->
                                   {:class (if intro? "logseq-intro" "")}
                                   data-page-tags
@@ -92,11 +91,13 @@
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list "main-container"
-                     (for [[journal-name format] latest-journals]
-                       [:div.journal-item.content {:key journal-name}
-                        (journal-cp [journal-name format])])
+   (ui/infinite-list "main-content-container"
+                     (for [{:block/keys [name format]} latest-journals]
+                       [:div.journal-item.content {:key name}
+                        (journal-cp [name format])])
                      {:has-more (page-handler/has-more-journals?)
+                      :more-class "text-4xl"
+                      :on-top-reached page-handler/create-today-journal!
                       :on-load (fn []
                                  (page-handler/load-more-journals!))})])
 

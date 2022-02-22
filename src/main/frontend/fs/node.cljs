@@ -35,10 +35,10 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
+  [this repo dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
     (p/catch
-        (p/let [result (ipc/ipc "writeFile" path content)]
+        (p/let [result (ipc/ipc "writeFile" repo path content)]
           (when ok-handler
             (ok-handler repo path result)))
         (fn [error]
@@ -53,28 +53,26 @@
                                           nil))))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
-            file-page (db/get-file-page-id path)
-            page-empty? (and file-page (db/page-empty? repo file-page))
-            db-content (or (db/get-file repo path) "")
+            db-content (or old-content (db/get-file repo path) "")
             contents-matched? (contents-matched? disk-content db-content)
             pending-writes (state/get-write-chan-length)]
       (cond
         (and
          (not= stat :not-found)         ; file on the disk was deleted
          (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn"} ext))
+         (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
         (do
           (when (util/electron?)
             (debug/set-ack-step! path :saved-successfully)
             (debug/ack-file-write! path))
-          (let [disk-content (encrypt/decrypt disk-content)]
+          (p/let [disk-content (encrypt/decrypt disk-content)]
             (state/pub-event! [:file/not-matched-from-disk path disk-content content])))
 
         :else
         (->
-         (p/let [result (ipc/ipc "writeFile" path content)
+         (p/let [result (ipc/ipc "writeFile" repo path content)
                  mtime (gobj/get result "mtime")]
            (when (util/electron?)
              (debug/set-ack-step! path :saved-successfully)
@@ -92,25 +90,32 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
+(defn- open-dir []
+  (p/let [dir-path (util/mocked-open-dir-path)
+          result (if dir-path
+                   (ipc/ipc "getFiles" dir-path)
+                   (ipc/ipc "openDir" {}))]
+    result))
+
 (defrecord Node []
   protocol/Fs
-  (mkdir! [this dir]
+  (mkdir! [_this dir]
     (ipc/ipc "mkdir" dir))
-  (mkdir-recur! [this dir]
+  (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
-  (readdir [this dir]                   ; recursive
+  (readdir [_this dir]                   ; recursive
     (ipc/ipc "readdir" dir))
-  (unlink! [this repo path _opts]
+  (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
              (config/get-repo-dir repo)
              path))
-  (rmdir! [this dir]
+  (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
-  (read-file [this dir path _options]
+  (read-file [_this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))
-  (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
+  (write-file! [this repo dir path content opts]
     (let [path (concat-path dir path)]
       (p/let [stat (p/catch
                        (protocol/stat this dir path)
@@ -118,14 +123,14 @@
               sub-dir (first (util/get-dir-and-basename path))
               _ (protocol/mkdir-recur! this sub-dir)]
         (write-file-impl! this repo dir path content opts stat))))
-  (rename! [this repo old-path new-path]
+  (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
-  (stat [this dir path]
+  (stat [_this dir path]
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
-  (open-dir [this ok-handler]
-    (ipc/ipc "openDir" {}))
-  (get-files [this path-or-handle ok-handler]
+  (open-dir [_this _ok-handler]
+    (open-dir))
+  (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
-  (watch-dir! [this dir]
+  (watch-dir! [_this dir]
     (ipc/ipc "addDirWatcher" dir)))

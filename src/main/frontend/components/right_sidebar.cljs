@@ -5,7 +5,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.svg :as svg]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -22,16 +22,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    (ui/tippy
-      {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t r")]]
-       :delay 2000
-       :hideDelay 1
-       :position "left"
-       :interactive true
-       :arrow true}
-
+    (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:a.button.fade-link.toggle
        {:on-click state/toggle-sidebar-open?!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
@@ -71,6 +62,7 @@
      (page/page-graph)]
 
     :block-ref
+    #_:clj-kondo/ignore
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
       [(t :right-side-bar/block-ref)
        (let [block (:block block-data)
@@ -83,6 +75,7 @@
            (block-cp repo idx block)]])])
 
     :block
+    #_:clj-kondo/ignore
     (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
@@ -98,28 +91,19 @@
                       (:block/name (db/entity db-id))
                       page-name)]
       [[:a.page-title {:href     (rfe/href :page {:name page-name})
-            :on-click (fn [e]
-                        (when (gobj/get e "shiftKey")
-                          (.preventDefault e)))}
+                       :on-click (fn [e]
+                                   (when (gobj/get e "shiftKey")
+                                     (.preventDefault e)))}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
 
     :page-presentation
-    (let [page-name (get-in block-data [:page :block/name])
-          journal? (:journal? block-data)
-          blocks (db/get-page-blocks repo page-name)
-          blocks (if journal?
-                   (rest blocks)
-                   blocks)
-          sections (block/build-slide-sections blocks {:id          "slide-reveal-js"
-                                                       :slide?      true
-                                                       :sidebar?    true
-                                                       :page-name   page-name})]
+    (let [page-name (get-in block-data [:page :block/name])]
       [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
-        (slide/slide sections)]])
+        (slide/slide page-name)]])
 
     ["" [:span]]))
 
@@ -139,7 +123,7 @@
 
   (let [item
         (if (= :page block-type)
-          (let [lookup-ref (if (number? db-id) db-id [:block/name (string/lower-case db-id)])
+          (let [lookup-ref (if (number? db-id) db-id [:block/name (util/page-name-sanity-lc db-id)])
                 page (db/query-entity-in-component lookup-ref)]
             (when (seq page)
               (build-sidebar-item repo idx db-id block-type page t)))
@@ -176,8 +160,7 @@
 
 (defn get-current-page
   []
-  (let [match (:route-match @state/state)
-        theme (:ui/theme @state/state)]
+  (let [match (:route-match @state/state)]
     (get-page match)))
 
 (rum/defc sidebar-resizer
@@ -224,7 +207,7 @@
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
        [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
         [:div.ml-4.text-sm
-         [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
+         [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "contents" :contents nil))}
           (t :right-side-bar/contents)]]
 
@@ -247,7 +230,7 @@
                                        :margin-right 2}}
         (toggle)]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+      [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
            (rum/with-key
@@ -258,15 +241,13 @@
 
 (rum/defcs sidebar < rum/reactive
   [state]
-  (let [blocks (state/sub :sidebar/blocks)
+  (let [blocks (state/sub-right-sidebar-blocks)
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
-        repo (state/sub :git/current-repo)
-        t (i18n/use-tongue)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen
-       {:class (if sidebar-open? "open" "closed")}
-       (when sidebar-open?
-         (sidebar-inner repo t blocks))])))
+        repo (state/sub :git/current-repo)]
+    [:div#right-sidebar.cp__right-sidebar.h-screen
+     {:class (if sidebar-open? "open" "closed")}
+     (when sidebar-open?
+       (sidebar-inner repo t blocks))]))

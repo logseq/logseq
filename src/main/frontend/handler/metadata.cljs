@@ -18,7 +18,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [encrypted? (= k :db/encrypted-secret)
           path (config/get-metadata-path)
-          file-content (db/get-file-no-sub path)]
+          file-content (db/get-file path)]
       (p/let [_ (file-handler/create-metadata-file repo false)]
         (let [metadata-str (or file-content default-metadata-str)
               metadata (try
@@ -45,6 +45,7 @@
         all-pages (->> (db/get-all-pages repo)
                        (common-handler/fix-pages-timestamps)
                        (map #(select-keys % [:block/name :block/created-at :block/updated-at]))
+                       (sort-by :block/name)
                        (vec))]
     (p/let [_ (-> (file-handler/create-pages-metadata-file repo)
                   (p/catch (fn [] nil)))]

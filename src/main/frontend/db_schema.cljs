@@ -1,9 +1,9 @@
 (ns frontend.db-schema)
 
-(defonce version "0.0.2")
-(defonce ast-version "0.0.1")
+(defonce version 1)
+(defonce ast-version 1)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
-(def schema
+(def ^:large-vars/data-var schema
   {:schema/version  {}
    :ast/version     {}
    :db/type         {}
@@ -24,14 +24,13 @@
 
    :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
-   :block/parent {:db/valueType :db.type/ref}
+   :block/parent {:db/valueType :db.type/ref
+                  :db/index true}
    :block/left {:db/valueType :db.type/ref}
+   :block/collapsed? {:db/index true}
 
    ;; :markdown, :org
    :block/format {}
-
-   ;; mldoc parsed ast
-   :block/title {}
 
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref
@@ -70,9 +69,6 @@
    :block/properties {}
    ;; vector
    :block/properties-order {}
-
-   ;; parsed ast
-   :block/body {}
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
@@ -140,11 +136,10 @@
     :block/level
     :block/heading-level
     :block/type
-    :block/title
-    :block/body
     :block/properties
     :block/created-at
     :block/updated-at
+    :block/warning
     }
   )
 
@@ -159,5 +154,4 @@
     :block/content
     :block/properties
     :block/alias
-    :block/tags
-    :block/unordered})
+    :block/tags})

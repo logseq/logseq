@@ -5,15 +5,11 @@
 (defn loaded? []
   js/window.Asciidoctor)
 
-(defn ->edn
-  [content config]
-  nil)
-
 (defrecord AdocMode []
   protocol/Format
-  (toEdn [this content config]
-    (->edn content config))
-  (toHtml [this content config references]
+  (toEdn [_this _content _config]
+    nil)
+  (toHtml [_this content _config _references]
     (when (loaded?)
       (let [config {:attributes {:showTitle false
                                  :hardbreaks true
@@ -21,13 +17,13 @@
                                  ;; :source-highlighter "pygments"
                                  }}]
         (.convert (js/window.Asciidoctor) content (clj->js config)))))
-  (loaded? [this]
+  (loaded? [_this]
     (some? (loaded?)))
-  (lazyLoad [this ok-handler]
+  (lazyLoad [_this ok-handler]
     (loader/load
      "https://cdnjs.cloudflare.com/ajax/libs/asciidoctor.js/1.5.9/asciidoctor.min.js"
      ok-handler))
-  (exportMarkdown [this content config references]
+  (exportMarkdown [_this _content _config _references]
     (throw "not support"))
-  (exportOPML [this content config title references]
+  (exportOPML [_this _content _config _title _references]
     (throw "not support")))

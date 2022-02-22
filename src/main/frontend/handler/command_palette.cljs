@@ -8,31 +8,31 @@
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
-(s/def :command/action (and fn?
-                            ;; action fn expects zero number of arities
-                            (fn [action] (zero? (.-length action)))))
+(s/def :command/action fn?)
 (s/def :command/shortcut string?)
+(s/def :command/tag vector?)
 
 (s/def :command/command
   (s/keys :req-un [:command/id :command/desc :command/action]
-          :opt-un [:command/shortcut]))
+          :opt-un [:command/shortcut :command/tag]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global
         :shortcut.handler/global-prevent-default
         :shortcut.handler/global-non-editing-only]
-       (mapcat shortcut-helper/shortcuts->commands)
-       ;; some of the shortcut fn takes the shape of (fn [e] xx)
-       ;; instead of (fn [] xx)
-       ;; remove them for now
-       (remove (fn [{:keys [action]}] (not (zero? (.-length action)))))))
+       (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
   (->> (get @state/state :command-palette/commands)
        (sort-by :id)))
 
-(defn history []
-  (or (storage/get "commands-history") []))
+(defn get-commands-unique []
+  (reduce #(assoc %1 (:id %2) %2) {}
+          (get @state/state :command-palette/commands)))
+
+(defn history
+  ([] (or (storage/get "commands-history") []))
+  ([vals] (storage/set "commands-history" vals)))
 
 (defn- assoc-invokes [cmds]
   (let [invokes (->> (history)
@@ -69,7 +69,7 @@
   (register
    {:id :document/open-logseq-doc
     :desc \"Document: open Logseq documents\"
-    :action (fn [] (js/window.open \"https://logseq.github.io/\"))})
+    :action (fn [] (js/window.open \"https://docs.logseq.com/\"))})
   ```
 
   To add i18n support, prefix `id` with command and put that item in dict.
@@ -82,6 +82,15 @@
                                     :id  id})
       (state/set-state! :command-palette/commands (conj cmds command)))))
 
+(defn unregister
+  [id]
+  (let [id (keyword id)
+        cmds (get-commands-unique)]
+    (when (contains? cmds id)
+      (state/set-state! :command-palette/commands (vals (dissoc cmds id)))
+      ;; clear history
+      (history (filter #(not= (:id %) id) (history))))))
+
 (defn register-global-shortcut-commands []
   (let [cmds (global-shortcut-commands)]
     (doseq [cmd cmds] (register cmd))))
@@ -91,4 +100,4 @@
   (register
    {:id :document/open-logseq-doc
     :desc "Document: open Logseq documents"
-    :action (fn [] (js/window.open "https://logseq.github.io/"))}))
+    :action (fn [] (js/window.open "https://docs.logseq.com/"))}))

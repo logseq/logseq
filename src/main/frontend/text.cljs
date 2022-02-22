@@ -2,24 +2,25 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [medley.core :as medley]))
+            [frontend.handler.link :as link]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
+(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
 
 (defn get-file-basename
   [path]
   (when-not (string/blank? path)
-    (-> (util/node-path.basename path)
-        (string/split #"\.")
-        first)))
+    (util/node-path.name path)))
 
 (defn get-page-name
   [s]
   (and (string? s)
-       (or (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (get-file-basename path))
+       (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
+             (string/trim label))
+           (when-let [[_ path _label] (re-matches org-page-ref-re s)]
+             (some-> (get-file-basename path)
+                     (string/replace "." "/")))
            (-> (re-matches page-ref-re-0 s)
                second))))
 
@@ -51,10 +52,7 @@
 
 (defn page-ref-un-brackets!
   [s]
-  (when (string? s)
-    (if (page-ref? s)
-      (subs s 2 (- (count s) 2))
-      s)))
+  (or (get-page-name s) s))
 
 (defn block-ref-un-brackets!
   [s]
@@ -72,6 +70,14 @@
      (remove string/blank?)
      (map string/trim))))
 
+(defn sep-by-hashtag
+  [s]
+  (when s
+    (some->>
+     (string/split s #"#")
+     (remove string/blank?)
+     (map string/trim))))
+
 (defn- not-matched-nested-pages
   [s]
   (and (string? s)
@@ -83,6 +89,11 @@
   (let [x (re-seq #"\[\[" s)
         y (re-seq #"\]\]" s)]
     (and (> (count x) 0) (= (count x) (count y)))))
+
+(defn get-nested-page-name
+  [page-name]
+  (when-let [first-match (re-find page-ref-re-without-nested page-name)]
+    (second first-match)))
 
 (defn- concat-nested-pages
   [coll]
@@ -130,23 +141,24 @@
                         (fn [s]
                           (when-not (util/wrapped-by-quotes? (string/trim s))
                             (string/split s page-ref-re-2))))
-                       (mapcat (fn [s] (cond
-                                        (util/wrapped-by-quotes? s)
-                                        nil
+                       (mapcat (fn [s]
+                                 (cond
+                                   (util/wrapped-by-quotes? s)
+                                   nil
 
-                                        (string/includes? (string/trimr s) "]],")
-                                        (let [idx (string/index-of s "]],")]
-                                          [(subs s 0 idx)
-                                           "]]"
-                                           (subs s (+ idx 3))])
+                                   (string/includes? (string/trimr s) "]],")
+                                   (let [idx (string/index-of s "]],")]
+                                     [(subs s 0 idx)
+                                      "]]"
+                                      (subs s (+ idx 3))])
 
-                                        :else
-                                        [s])))
+                                   :else
+                                   [s])))
                        (remove #(= % ""))
                        (mapcat (fn [s] (if (string/ends-with? s "]]")
-                                        [(subs s 0 (- (count s) 2))
-                                         "]]"]
-                                        [s])))
+                                         [(subs s 0 (- (count s) 2))
+                                          "]]"]
+                                         [s])))
                        concat-nested-pages
                        (remove string/blank?)
                        (mapcat (fn [s]
@@ -158,7 +170,8 @@
                                    [(if un-brackets? (page-ref-un-brackets! s) s)]
 
                                    :else
-                                   (sep-by-comma s))))
+                                   (->> (sep-by-comma s)
+                                        (mapcat sep-by-hashtag)))))
                        (distinct))]
        (if (or (coll? result)
                (and (string? result)
@@ -181,18 +194,21 @@
     ""))
 
 (defn- remove-level-space-aux!
-  [text pattern space?]
+  [text pattern space? trim-left?]
   (let [pattern (util/format
                  (if space?
                    "^[%s]+\\s+"
                    "^[%s]+\\s?")
-                 pattern)]
-    (string/replace-first (string/triml text) (re-pattern pattern) "")))
+                 pattern)
+        text (if trim-left? (string/triml text) text)]
+    (string/replace-first text (re-pattern pattern) "")))
 
 (defn remove-level-spaces
   ([text format]
-   (remove-level-spaces text format false))
+   (remove-level-spaces text format false true))
   ([text format space?]
+   (remove-level-spaces text format space? true))
+  ([text format space? trim-left?]
    (when format
      (cond
        (string/blank? text)
@@ -203,7 +219,7 @@
        text
 
        :else
-       (remove-level-space-aux! text (config/get-block-pattern format) space?)))))
+       (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
 
 (defn build-data-value
   [col]
@@ -214,14 +230,6 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
-
-(defn scheduled-deadline-dash->star
-  [content]
-  (-> content
-      (string/replace "- TODO -> DONE [" "* TODO -> DONE [")
-      (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
-      (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
-      (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))
 
 (defn remove-indentation-spaces
   [s level remove-first-line?]
@@ -237,13 +245,11 @@
 
 (defn namespace-page?
   [p]
-  (and (not (string/starts-with? p "../"))
+  (and (string? p)
+       (string/includes? p "/")
+       (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (string/starts-with? p "http"))
-       (not
-        (when-let [last-part (last (string/split p #"/"))]
-          ;; a file
-          (string/includes? last-part ".")))))
+       (not (util/url? p))))
 
 (defn add-timestamp
   [content key value]
@@ -270,3 +276,103 @@
                             (not (string/starts-with? (string/lower-case line) key)))
                           lines)]
     (string/join "\n" new-lines)))
+
+(defn get-current-line-by-pos
+  [s pos]
+  (let [lines (string/split-lines s)
+        result (reduce (fn [acc line]
+                         (let [new-pos (+ acc (count line))]
+                           (if (>= new-pos pos)
+                             (reduced line)
+                             (inc new-pos)))) 0 lines)]
+    (when (string? result)
+      result)))
+
+(defn get-string-all-indexes
+  "Get all indexes of `value` in the string `s`."
+  [s value]
+  (loop [acc []
+         i 0]
+    (if-let [i (string/index-of s value i)]
+      (recur (conj acc i) (+ i (count value)))
+      acc)))
+
+(defn surround-by?
+  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  [value pos before end]
+  (let [start-pos (if (= :start before) 0 (- pos (count before)))
+        end-pos (if (= :end end) (count value) (+ pos (count end)))]
+    (when (>= (count value) end-pos)
+      (= (cond
+           (and (= :end end) (= :start before))
+           ""
+
+           (= :end end)
+           before
+
+           (= :start before)
+           end
+
+           :else
+           (str before end))
+         (subs value start-pos end-pos)))))
+
+(defn wrapped-by?
+  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  [value pos before end]
+  (let [before-matches (->> (get-string-all-indexes value before)
+                            (map (fn [i] [i :before])))
+        end-matches (->> (get-string-all-indexes value end)
+                         (map (fn [i] [i :end])))
+        indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
+        ks (map second indexes)
+        q [:before :between :end]]
+    (true?
+     (reduce (fn [acc k]
+               (if (= q (conj acc k))
+                 (reduced true)
+                 (vec (take-last 2 (conj acc k)))))
+             []
+             ks))))
+
+(defn get-graph-name-from-path
+  [path]
+  (when (string? path)
+    (let [parts (->> (string/split path #"/")
+                     (take-last 2))]
+      (-> (if (not= (first parts) "0")
+            (string/join "/" parts)
+            (last parts))
+          js/decodeURI))))
+
+(defonce non-parsing-properties
+  (atom #{"background-color" "background_color"}))
+
+(defn parse-property
+  [k v]
+  (let [k (name k)
+        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
+        v (string/trim v)]
+    (cond
+      (contains? #{"title" "filters"} k)
+      v
+
+      (= v "true")
+      true
+      (= v "false")
+      false
+
+      (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
+      (util/safe-parse-int v)
+
+      (util/wrapped-by-quotes? v) ; wrapped in ""
+      v
+
+      (contains? @non-parsing-properties (string/lower-case k))
+      v
+
+      (link/link v)
+      v
+
+      :else
+      (split-page-refs-without-brackets v))))

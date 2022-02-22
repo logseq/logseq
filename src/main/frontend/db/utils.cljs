@@ -54,12 +54,6 @@
   (util/parse-int
    (string/replace (date/ymd date) "/" "")))
 
-(defn with-repo
-  [repo blocks]
-  (map (fn [block]
-         (assoc block :block/repo repo))
-       blocks))
-
 (defn entity
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))
@@ -97,12 +91,16 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
+   (transact! repo-url tx-data nil))
+  ([repo-url tx-data tx-meta]
    (when-not config/publishing?
      (let [tx-data (->> (util/remove-nils tx-data)
                         (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (conn/get-conn repo-url false)]
-           (d/transact! conn (vec tx-data))))))))
+           (if tx-meta
+             (d/transact! conn (vec tx-data) tx-meta)
+             (d/transact! conn (vec tx-data)))))))))
 
 (defn get-key-value
   ([key]

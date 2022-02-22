@@ -118,6 +118,15 @@ dummy.convertToViewportRectangle = function() {};
 dummy.init = function() {};
 dummy.commit = function() {};
 dummy.raw = function() {};
+dummy.onHeadersReceived = function() {};
+dummy.responseHeaders = function() {};
+dummy.velocityDecay = function() {};
+dummy.velocityDecay = function() {};
+dummy.updatePosition = function() {};
+dummy.getNodesObjects = function() {};
+dummy.getEdgesObjects = function() {};
+dummy.alphaTarget = function() {};
+dummy.restart = function() {};
 
 /**
  * @typedef {{

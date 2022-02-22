@@ -55,6 +55,7 @@ input::-webkit-inner-spin-button {
           color: var(--ls-icon-color);
           background-color: transparent;
           transition: none;
+          word-break: normal;
 
           &.is-active {
             opacity: 1;
@@ -69,6 +70,8 @@ input::-webkit-inner-spin-button {
       }
 
       .pager {
+        white-space: nowrap;
+
         > .nu {
           padding-right: 4px;
 
@@ -671,7 +674,7 @@ body.is-pdf-active {
     padding-left: calc(var(--ph-view-container-width) + 15px);
   }
 
-  #sidebar-nav-wrapper {
+  #left-sidebar {
     border: none !important;
     display: none;
   }
@@ -680,7 +683,7 @@ body.is-pdf-active {
     padding-left: 0;
   }
 
-  #main-content.is-left-sidebar-open {
+  #main-container.is-left-sidebar-open {
     padding-left: unset;
   }
 }

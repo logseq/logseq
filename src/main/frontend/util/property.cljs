@@ -36,14 +36,15 @@
 
 (defn contains-properties?
   [content]
-  (and (string/includes? content properties-start)
-       (util/safe-re-find properties-end-pattern content)))
+  (when content
+    (and (string/includes? content properties-start)
+         (util/safe-re-find properties-end-pattern content))))
 
 (defn remove-empty-properties
   [content]
   (if (contains-properties? content)
     (string/replace content
-                    (re-pattern ":PROPERTIES:\n:END:\n*")
+                    (re-pattern ":PROPERTIES:\n+:END:\n*")
                     "")
     content))
 
@@ -76,41 +77,54 @@
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
+(defn get-org-property-keys
+  [content]
+  (let [content-lines (string/split-lines content)
+        [_ properties&body] (split-with #(-> (string/triml %)
+                                             string/upper-case
+                                             (string/starts-with? properties-start)
+                                             not)
+                                        content-lines)
+        properties (rest (take-while #(-> (string/trim %)
+                                          string/upper-case
+                                          (string/starts-with? properties-end)
+                                          not
+                                          (or (string/blank? %)))
+                                     properties&body))]
+    (when (seq properties)
+      (map #(->> (string/split % ":")
+                 (remove string/blank?)
+                 first
+                 string/upper-case)
+           properties))))
+
+(defn get-markdown-property-keys
+  [content]
+  (let [content-lines (string/split-lines content)
+        properties (filter #(re-matches #"^.+::\s*.+" %) content-lines)]
+    (when (seq properties)
+      (map #(->> (string/split % "::")
+                 (remove string/blank?)
+                 first
+                 string/upper-case)
+           properties))))
+
 (defn get-property-keys
   [format content]
   (cond
     (contains-properties? content)
-    (let [content-lines (string/split-lines content)
-          [_ properties&body] (split-with #(-> (string/triml %)
-                                               string/upper-case
-                                               (string/starts-with? properties-start)
-                                               not)
-                                          content-lines)
-          properties (rest (take-while #(-> (string/trim %)
-                                            string/upper-case
-                                            (string/starts-with? properties-end)
-                                            not
-                                            (or (string/blank? %)))
-                                       properties&body))]
-      (when (seq properties)
-        (map #(->> (string/split % ":")
-                   (remove string/blank?)
-                   first
-                   string/upper-case)
-             properties)))))
+    (get-org-property-keys content)
+
+    (= :markdown format)
+    (get-markdown-property-keys content)))
 
 (defn property-key-exist?
   [format content key]
   (let [key (string/upper-case key)]
     (contains? (set (util/remove-first #{key} (get-property-keys format content))) key)))
 
-(defn goto-properties-beginning
-  [format input]
-  (cursor/move-cursor-to-thing input properties-start 0)
-  (cursor/move-cursor-forward input (count properties-start)))
-
 (defn goto-properties-end
-  [format input]
+  [_format input]
   (cursor/move-cursor-to-thing input properties-start 0)
   (let [from (cursor/pos input)]
     (cursor/move-cursor-to-thing input properties-end from)))
@@ -213,6 +227,7 @@
   (string/starts-with? s "---\n"))
 
 (defn insert-property
+  "Only accept nake content (without any indentation)"
   ([format content key value]
    (insert-property format content key value false))
   ([format content key value front-matter?]
@@ -420,35 +435,3 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
-
-(defonce non-parsing-properties
-  (atom #{"background-color" "background_color"}))
-
-(defn parse-property
-  [k v]
-  (let [k (name k)
-        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
-        v (string/trim v)]
-    (cond
-      (contains? #{"title" "filters"} k)
-      v
-
-      (= v "true")
-      true
-      (= v "false")
-      false
-
-      (util/safe-re-find #"^\d+$" v)
-      (util/safe-parse-int v)
-
-      (util/wrapped-by-quotes? v) ; wrapped in ""
-      (util/unquote-string v)
-
-      (contains? @non-parsing-properties (string/lower-case k))
-      v
-
-      (string/starts-with? v "http")
-      v
-
-      :else
-      (text/split-page-refs-without-brackets v))))

@@ -48,7 +48,7 @@ Please go to https://discuss.logseq.com/c/feature-requests/7.
 2. Start writing and have fun!
 
 ## FAQ
-Please go to https://logseq.github.io/#/page/faq.
+Please go to https://docs.logseq.com/#/page/faq.
 
 ## Credits
 
@@ -76,111 +76,14 @@ Logseq is also made possible by the following projects:
 
 The following is for developers and designers who want to build and run Logseq locally and contribute to this project.
 
-We also have [a dedicated page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for LogSeq's codebase overview.
+We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for Logseq's codebase overview and [a development practices page](docs/dev-practices.md).
 
 ## Set up development environment
+* For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop-logseq.md).
 
-### 1. Requirements
+* For Windows users, please refer to [Develop LogSeq on Windows](docs/develop-logseq-on-windows.md) in addition.
 
-- [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
-- [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
-
-### 2. Compile to JavaScript
-
-```bash
-git clone https://github.com/logseq/logseq
-cd logseq
-yarn
-yarn watch
-```
-
-### 3. Open the browser
-
-Open <http://localhost:3001>.
-
-### 4. Build a release
-
-```bash
-yarn release
-```
-
-### 5. Run tests
-
-Run ClojureScript tests
-
-```bash
-yarn test
-```
-
-Run Cypress tests
-
-``` bash
-yarn e2e-test
-```
-
-Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
-
-```bash
-clj -Mtest-clj
-```
-
-## Desktop app development
-
-### 1. Compile to JavaScript
-
-```bash
-yarn watch
-```
-
-### 2. Open the dev app
-
-```bash
-yarn dev-electron-app
-```
-
-### 3. Build a release
-
-```bash
-yarn release-electron
-```
-
-## Alternative: Docker based development environment
-
-Basically it just pre-installs Java, Clojure and NodeJS for your convenience.
-
-### 1. Fetch sources
-
-```bash
-git clone https://github.com/logseq/logseq
-```
-
-### 2. Build Docker image
-
-```bash
-cd logseq
-docker build -t logseq-docker .
-```
-
-### 3. Run Docker container
-
-#### MacOS/Linux
-
-```bash
-docker run -v $(pwd):/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
-```
-#### Windows
-
-```bash
-docker run -v %cd%:/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
-```
-
-### 4. Inside the container compile as described above
-
-```bash
-cd logseq
-yarn
-yarn watch
-```
+There are more guides in [docs/](docs/), e.g. the [Guide for contributing to translations](docs/contributing-to-translations.md) and the [Docker web app guide](docs/docker-web-app-guide.md)
 
 ## Thanks
 

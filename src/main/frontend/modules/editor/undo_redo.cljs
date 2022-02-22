@@ -2,10 +2,7 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
-            [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.debug :as debug]
-            [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.pipeline :as pipelines]))
 
 ;;;; APIs
@@ -83,7 +80,7 @@
 (defn get-txs
   [redo? txs]
   (let [txs (if redo? txs (reverse txs))]
-    (mapv (fn [[id attr value tx add? :as datom]]
+    (mapv (fn [[id attr value tx add?]]
             (let [op (cond
                        (and redo? add?) :db/add
                        (and (not redo?) add?) :db/retract
@@ -94,27 +91,17 @@
 
 ;;;; Invokes
 
-(defn get-by-id
-  [id]
-  (let [conn (conn/get-conn false)]
-    (db-outliner/get-by-id conn id)))
-
 (defn- transact!
   [txs]
   (let [conn (conn/get-conn false)
         db-report (d/transact! conn txs)]
-    (do (pipelines/invoke-hooks db-report))))
-
-(defn- refresh!
-  [opts]
-  (let [repo (state/get-current-repo)]
-   (db/refresh! repo opts)))
+    (pipelines/invoke-hooks db-report)))
 
 (defn undo
   []
   (let [[e prev-e] (pop-undo)]
     (when e
-      (let [{:keys [blocks txs]} e
+      (let [{:keys [txs]} e
             new-txs (get-txs false txs)
             editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
                                  (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
@@ -122,21 +109,16 @@
                             (:editor-cursor e))]
         (push-redo e)
         (transact! new-txs)
-        (let [blocks
-              (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
-          (refresh! {:key :block/change :data (vec blocks)}))
         (assoc e
                :txs-op new-txs
                :editor-cursor editor-cursor)))))
 
 (defn redo
   []
-  (when-let [{:keys [blocks txs]:as e} (pop-redo)]
+  (when-let [{:keys [txs]:as e} (pop-redo)]
     (let [new-txs (get-txs true txs)]
       (push-undo e)
       (transact! new-txs)
-      (let [blocks (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
-        (refresh! {:key :block/change :data (vec blocks)}))
       (assoc e :txs-op new-txs))))
 
 (defn listen-outliner-operation

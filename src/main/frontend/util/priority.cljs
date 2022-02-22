@@ -3,6 +3,20 @@
             [frontend.util :as util]
             [frontend.util.marker :as marker]))
 
+(defn cycle-priority-state
+  [content]
+  (let [priority-reg #"\[#([ABC]{1})\]\s{1}"
+        priority (last (util/safe-re-find priority-reg content))
+        next-priority (case priority
+                        "A" "B"
+
+                        "B" "C"
+
+                        "C" nil
+
+                        "A")]
+    (and next-priority (util/format "[#%s]" next-priority))))
+
 (defn add-or-update-priority
   [content format priority]
   (let [priority-pattern  #"(\[#[ABC]\])?\s?"

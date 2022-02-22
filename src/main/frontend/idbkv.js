@@ -12,18 +12,18 @@ class Store {
         this._init();
     }
     _init() {
-        if (this._dbp) {
-            return;
-        }
-        this._dbp = new Promise((resolve, reject) => {
-            const openreq = indexedDB.open(this._dbName, this._version);
-            openreq.onerror = () => reject(openreq.error);
-            openreq.onsuccess = () => resolve(openreq.result);
-            // First time setup: create an empty object store
-            openreq.onupgradeneeded = () => {
-                openreq.result.createObjectStore(this._storeName);
-            };
-        });
+      if (this._dbp) {
+        return;
+      }
+      this._dbp = new Promise((resolve, reject) => {
+        const openreq = indexedDB.open(this._dbName, this._version);
+        openreq.onerror = () => reject(openreq.error);
+        openreq.onsuccess = () => resolve(openreq.result);
+        // First time setup: create an empty object store
+        openreq.onupgradeneeded = () => {
+          openreq.result.createObjectStore(this._storeName);
+        };
+      });
     }
     _withIDBStore(type, callback) {
         this._init();

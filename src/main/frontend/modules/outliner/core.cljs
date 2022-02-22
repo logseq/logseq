@@ -2,11 +2,11 @@
   (:require [clojure.set :as set]
             [clojure.zip :as zip]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.modules.outliner.state :as outliner-state]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
@@ -38,49 +38,36 @@
       [:block/uuid left-id])
     (block)))
 
-(defn- index-blocks-by-left-id
-  [blocks]
-  (reduce
-    (fn [acc block]
-      (assert (tree/satisfied-inode? block) "Block should match satisfied-inode?.")
-      (let [left-id (tree/-get-left-id block)]
-        (when (get acc left-id)
-          (prn "acc: " acc)
-          (prn "block: " (:data block))
-          (throw (js/Error. "There are two blocks have the same left-id")))
-        (assoc acc left-id block)))
-    {}
-    blocks))
-
-(defn get-children
-  [id]
-  (let [repo (state/get-current-repo)]
-   (some->>
-     (outliner-state/get-by-parent-id repo [:block/uuid id])
-     (mapv block))))
-
-(defn- update-block-unordered
-  [block]
-  (let [parent (:block/parent block)
-        page (:block/page block)
-        type (:block/type block)]
-    (if (and parent page type (= parent page) (= type :heading))
-      (assoc block :block/unordered false)
-      (assoc block :block/unordered true))))
-
 (defn- block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
         block (cond->
                 (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
-                (assoc :block/created-at updated-at))
-        ;; content (property/insert-properties (:block/format block)
-        ;;                                     (or (:block/content block) "")
-        ;;                                     {:created-at (:block/created-at block)
-        ;;                                      :updated-at (:block/updated-at block)})
-        ]
+                (assoc :block/created-at updated-at))]
     block))
+
+(defn- remove-orphaned-page-refs!
+  [db-id txs-state old-refs new-refs]
+  (when (not= old-refs new-refs)
+    (let [new-refs (set (map (fn [ref]
+                               (or (:block/name ref)
+                                   (and (:db/id ref)
+                                        (:block/name (db/entity (:db/id ref)))))) new-refs))
+          old-pages (->> (map :db/id old-refs)
+                         (db-model/get-entities-by-ids)
+                         (remove (fn [e] (contains? new-refs (:block/name e))))
+                         (map :block/name)
+                         (remove nil?))
+          orphaned-pages (when (seq old-pages)
+                           (db-model/get-orphaned-pages {:pages old-pages
+                                                         :empty-ref-f (fn [page]
+                                                                        (let [refs (:block/_refs page)]
+                                                                          (or (zero? (count refs))
+                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
+      (when (seq orphaned-pages)
+        (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
+          (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -136,13 +123,16 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [this (block (update-block-unordered (:data this)))
-          m (-> (:data this)
-                (dissoc :block/children :block/meta :block/top? :block/bottom?)
+    (let [m (-> (:data this)
+                (dissoc :block/children :block/meta :block/top? :block/bottom?
+                        :block/title :block/body)
                 (util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
-          id (:db/id (:data this))]
+          id (:db/id (:data this))
+          block-entity (db/entity id)
+          old-refs (:block/refs block-entity)
+          new-refs (:block/refs m)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
@@ -155,13 +145,14 @@
                                            [:db/retract id attribute])
                                       db-schema/retract-attributes)))))
 
-        (when-let [e (:block/page (db/entity id))]
+        (when-let [e (:block/page block-entity)]
           (let [m {:db/id (:db/id e)
                    :block/updated-at (util/time-ms)}
                 m (if (:block/created-at e)
                     m
                     (assoc m :block/created-at (util/time-ms)))]
-            (swap! txs-state conj m))))
+            (swap! txs-state conj m))
+          (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
 
@@ -196,24 +187,13 @@
       block-id))
 
   (-get-children [this]
-    (let [children (get-children (tree/-get-id this))]
-      (when (seq children)
-        (let [left-id->block (index-blocks-by-left-id children)]
-          (loop [sorted-children []
-                 current-node this]
-            (let [id (tree/-get-id current-node)]
-              (if-let [right (get left-id->block id)]
-                (recur (conj sorted-children right) right)
-                (do
-                  (let [should-equal
-                        (=
-                          (count children)
-                          (count sorted-children))]
-                    (when-not should-equal
-                      (prn "children: " (mapv #(get-in % [:data :block/uuid]) children))
-                      (prn "sorted-children: " (mapv #(get-in % [:data :block/uuid]) sorted-children))
-                      (throw (js/Error. "Number of children and sorted-children are not equal."))))
-                  sorted-children)))))))))
+    (let [parent-id (tree/-get-id this)
+          children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
+      (map block children))))
+
+(defn set-block-collapsed! [txs-state id collapsed?]
+  (swap! txs-state concat [{:db/id id
+                            :block/collapsed? collapsed?}]))
 
 (defn save-node
   ([node]
@@ -298,7 +278,7 @@
 (defn- walk-&-insert-nodes
   [loc target-node sibling? transact]
   (let [update-node-fn
-        (fn [node new-node] new-node)]
+        (fn [_node new-node] new-node)]
     (if (zip/end? loc)
       loc
       (if (vector? (zip/node loc))
@@ -329,44 +309,34 @@
       (zip/left result-loc-or-vec)
       result-loc-or-vec)))
 
-(defn- get-node-tree-sub-topmost-last-loc
-  [loc]
-  (let [topmost-last-loc (get-node-tree-topmost-last-loc loc)
-        result-vec-or-nil (zip/right topmost-last-loc)]
-    (when (and (some? result-vec-or-nil)
-               (vector? (zip/node result-vec-or-nil)))
-      (get-node-tree-topmost-last-loc result-vec-or-nil))))
-
 (defn insert-nodes
   "Insert nodes as children(or siblings) of target-node.
   new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
   [new-nodes-tree target-node sibling?]
   (ds/auto-transact!
    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes}
-   (let [loc (zip/vector-zip new-nodes-tree)]
-     ;; TODO: validate new-nodes-tree structure
-     (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
-           loc (zip/vector-zip (zip/root updated-nodes))
-           ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
-           topmost-last-loc (get-node-tree-topmost-last-loc loc)
-           ;; sub-topmost-last-loc=5, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
-           sub-topmost-last-loc (get-node-tree-sub-topmost-last-loc loc)
-           right-node (tree/-get-right target-node)
-           down-node (tree/-get-down target-node)]
-       ;; update node's left&parent after inserted nodes
-       (cond
-         (and (not sibling?) (some? right-node) (nil? down-node))
-         nil            ;ignore
-         (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
-         (let [topmost-last-node (zip/node topmost-last-loc)
-               updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
-           (tree/-save updated-node txs-state))
-         (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
-         (let [topmost-last-node (zip/node topmost-last-loc)
-               updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
-           (tree/-save updated-node txs-state))
-         (and sibling? (some? down-node)) ;; unchanged
-         nil)))))
+   ;; TODO: validate new-nodes-tree structure
+   (let [loc (zip/vector-zip new-nodes-tree)
+         updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
+         loc (zip/vector-zip (zip/root updated-nodes))
+         ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
+         topmost-last-loc (get-node-tree-topmost-last-loc loc)
+         right-node (tree/-get-right target-node)
+         down-node (tree/-get-down target-node)]
+     ;; update node's left&parent after inserted nodes
+     (cond
+       (and (not sibling?) (some? right-node) (nil? down-node))
+       nil            ;ignore
+       (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
+       (let [topmost-last-node (zip/node topmost-last-loc)
+             updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
+         (tree/-save updated-node txs-state))
+       (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
+       (let [topmost-last-node (zip/node topmost-last-loc)
+             updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
+         (tree/-save updated-node txs-state))
+       (and sibling? (some? down-node)) ;; unchanged
+       nil))))
 
 (defn move-nodes
   "Move nodes up/down."
@@ -563,7 +533,10 @@
                  (tree/-save txs-state)))
            (some-> last-node-right
                    (tree/-set-left-id first-node-left-id)
-                   (tree/-save txs-state))))
+                   (tree/-save txs-state))
+           (when-let [parent (get-block-by-id first-node-left-id)]
+             (when (db-model/block-collapsed? first-node-left-id)
+               (set-block-collapsed! txs-state (:db/id (get-data parent)) false)))))
        (when-not (first-level? first-node)
          (let [parent (tree/-get-parent first-node)
                parent-parent-id (tree/-get-parent-id parent)
@@ -575,7 +548,7 @@
              ;; direct outdenting (the old behavior)
              (let [right-siblings (get-right-siblings last-node)
                    right-siblings (doall
-                                   (map (fn [sibling right-siblings]
+                                   (map (fn [sibling]
                                           (some->
                                            (tree/-set-parent-id sibling last-node-id)
                                            (tree/-save txs-state)))
@@ -590,18 +563,21 @@
                              (tree/-save txs-state)))))))))))))
 
 (defn- set-nodes-page-aux
-  [node page txs-state]
-  (let [new-node (update node :data assoc :block/page page)]
+  [node page page-format txs-state]
+  (let [new-node (update node :data assoc
+                         :block/page page
+                         :block/format page-format)]
     (tree/-save new-node txs-state)
     (doseq [n (tree/-get-children new-node)]
-      (set-nodes-page-aux n page txs-state))))
+      (set-nodes-page-aux n page page-format txs-state))))
 
 (defn- set-nodes-page
   [node target-node txs-state]
   (let [page (or (get-in target-node [:data :block/page])
                  {:db/id (get-in target-node [:data :db/id])}) ; or page block
-        ]
-    (set-nodes-page-aux node page txs-state)))
+
+        page-format (:block/format (db/entity (or (:db/id page) page)))]
+    (set-nodes-page-aux node page page-format txs-state)))
 
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.
@@ -612,13 +588,15 @@
   [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
          (boolean? sibling?)]}
-  (let [target-node-id (tree/-get-id target-node)]
-    (when-not (or (and sibling?
-                       (= (tree/-get-left-id root) target-node-id)
-                       (not= (tree/-get-parent-id root) target-node-id))
-                  (and (not sibling?)
-                       (= (tree/-get-left-id root) target-node-id)
-                       (= (tree/-get-parent-id root) target-node-id)))
+  (if-let [target-node-id (tree/-get-id target-node)]
+    (when-not (and
+               (or (and sibling?
+                        (= (tree/-get-left-id root) target-node-id)
+                        (not= (tree/-get-parent-id root) target-node-id))
+                   (and (not sibling?)
+                        (= (tree/-get-left-id root) target-node-id)
+                        (= (tree/-get-parent-id root) target-node-id)))
+               (= target-node-id (tree/-get-id root)))
       (let [root-page (:db/id (:block/page (:data root)))
             target-page (:db/id (:block/page (:data target-node)))
             not-same-page? (not= root-page target-page)
@@ -636,7 +614,9 @@
            (let [new-root (first (if sibling?
                                    (insert-node-as-sibling txs-state root target-node)
                                    (insert-node-as-first-child txs-state root target-node)))]
-             (set-nodes-page new-root target-node txs-state))))))))
+             (when (not= root-page target-page)
+               (set-nodes-page new-root target-node txs-state)))))))
+    (js/console.trace)))
 
 (defn get-right-node
   [node]

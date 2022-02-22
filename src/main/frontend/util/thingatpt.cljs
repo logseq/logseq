@@ -5,6 +5,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.text :as text]
+            [cljs.reader :as reader]
             [goog.object :as gobj]))
 
 (defn thing-at-point
@@ -59,7 +60,7 @@
                   (:full-content page-ref)))))
 
 (defn embed-macro-at-point [& [input]]
-  (when-let [macro (thing-at-point ["{{embed" "}}"] (first input) " ")]
+  (when-let [macro (thing-at-point ["{{embed" "}}"] input)]
     (assoc macro :type "macro")))
 
 (defn properties-at-point [& [input]]
@@ -83,7 +84,7 @@
               (let [key (first (string/split line "::"))
                     line-beginning-pos (cursor/line-beginning-pos input)
                     pos-in-line (- (cursor/pos input) line-beginning-pos)]
-                (if (<= 0 pos-in-line (+ (count key) (count "::")))
+                (when (<= 0 pos-in-line (+ (count key) (count "::")))
                   {:full-content (str key "::")
                    :raw-content key
                    :start line-beginning-pos
@@ -92,19 +93,20 @@
 
 (defn- get-list-item-indent&bullet [line]
   (when-not (string/blank? line)
-    (or (re-matches #"^([ \t\r]*)(\+|\*|-) (\[[X ]\])*.*$" line)
-        (re-matches #"^([\s]*)(\d+)\. (\[[X ]\])*.*$" line))))
+    (or (re-matches #"^([ \t\r]*)(\+|\*|-){1} (\[[X ]\])?.*$" line)
+        (re-matches #"^([\s]*)(\d+){1}\. (\[[X ]\])?.*$" line))))
 
 (defn list-item-at-point [& [input]]
   (when-let [line (line-at-point input)]
     (when-let [[_ indent bullet checkbox]
                (get-list-item-indent&bullet (:raw-content line))]
-      (assoc line
-             :type "list-item"
-             :indent indent
-             :bullet bullet
-             :checkbox checkbox
-             :ordered (int? (cljs.reader/read-string bullet))))))
+      (let [bullet (reader/read-string bullet)]
+        (assoc line
+               :type "list-item"
+               :indent indent
+               :bullet bullet
+               :checkbox checkbox
+               :ordered (int? bullet))))))
 
 (defn- get-markup-at-point [& [input]]
   (let [format (state/get-preferred-format)]
@@ -120,7 +122,7 @@
   (when-let [markup (get-markup-at-point input)]
     (assoc markup :type "markup")))
 
-(defn- org-admonition&src-at-point [& [input]]
+(defn org-admonition&src-at-point [& [input]]
   (when-let [admonition&src (thing-at-point ["#+BEGIN_" "#+END_"] input)]
     (let [params (string/split
                   (first (string/split-lines (:full-content admonition&src)))
@@ -147,12 +149,17 @@
                        string/split-lines
                        first
                        (string/replace "```" "")
-                       string/trim)]
-      (when-not (string/blank? language)
-            (assoc markdown-src
-                   :type "source-block"
-                   :language language
-                   :headers nil)))))
+                       string/trim)
+          raw-content (:raw-content markdown-src)
+          blank-raw-content? (string/blank? raw-content)
+          action (if (or blank-raw-content? (= (string/trim raw-content) language))
+                   :into-code-editor
+                   :none)]
+      (assoc markdown-src
+             :type "source-block"
+             :language language
+             :action action
+             :headers nil))))
 
 (defn admonition&src-at-point [& [input]]
   (or (org-admonition&src-at-point input)

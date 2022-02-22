@@ -2,13 +2,12 @@
   (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
 
@@ -21,18 +20,33 @@
     (route-fn to path-params query-params)))
 
 (defn redirect-to-home!
+  ([]
+   (redirect-to-home! true))
+  ([pub-event?]
+   (when pub-event? (state/pub-event! [:redirect-to-home]))
+   (redirect! {:to :home})))
+
+(defn redirect-to-all-pages!
   []
-  (redirect! {:to :home}))
+  (redirect! {:to :all-pages}))
+
+(defn redirect-to-graph-view!
+  []
+  (redirect! {:to :graph}))
 
 (defn redirect-to-page!
+  "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}}))
   ([page-name anchor]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}
                :query-params {:anchor anchor}}))
   ([page-name anchor push]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}
                :query-params {:anchor anchor}
@@ -70,9 +84,8 @@
               (str (subs content 0 48) "...")
               content))
           "Page no longer exists!!")
-        (let [page (db/pull [:block/name (string/lower-case name)])]
-          (or (:block/original-name page)
-              (:block/name page)
+        (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
+          (or (util/get-page-original-name page)
               "Logseq"))))
     :tag
     (str "#"  (:name path-params))
@@ -95,7 +108,8 @@
 (defn update-page-label!
   [route]
   (let [{:keys [data]} route]
-    (set! (. js/document.body.dataset -page) (name (:name data)))))
+    (when-let [data-name (:name data)]
+      (set! (. js/document.body.dataset -page) (name data-name)))))
 
 (defn jump-to-anchor!
   [anchor-text]
@@ -112,8 +126,7 @@
       (jump-to-anchor! anchor)
       (util/scroll-to (util/app-scroll-container-node)
                       (state/get-saved-scroll-position)
-                      false))
-    (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
+                      false))))
 
 (defn go-to-search!
   [search-mode]

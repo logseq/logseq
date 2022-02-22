@@ -1,6 +1,5 @@
 (ns frontend.components.query-table
-  (:require [clojure.string :as string]
-            [frontend.components.svg :as svg]
+  (:require [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.common :as common-handler]
@@ -9,6 +8,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
+            [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -47,11 +47,34 @@
   [result]
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
-                      (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0)))
-                 result)]
+                      (let [b (block/parse-title-and-body b)]
+                        (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0))))
+                    result)]
     (if (every? #(zero? (get-in % ks)) result)
       (map #(medley/dissoc-in % ks) result)
       result)))
+
+(defn- sort-by-fn [sort-by-item item]
+  (case sort-by-item
+    :created-at
+    (:block/created-at item)
+    :updated-at
+    (:block/updated-at item)
+    :block
+    (:block/content item)
+    :page
+    (:block/name item)
+    (get-in item [:block/properties sort-by-item])))
+
+(defn- desc?
+  [*desc? p-desc?]
+  (cond
+    (some? @*desc?)
+    @*desc?
+    (some? p-desc?)
+    p-desc?
+    :else
+    true))
 
 (rum/defcs result-table < rum/reactive
   (rum/local nil ::sort-by-item)
@@ -65,14 +88,6 @@
           *sort-by-item (get state ::sort-by-item)
           *desc? (get state ::desc?)
           sort-by-item (or @*sort-by-item (some-> p-sort-by keyword) :updated-at)
-          desc? (cond
-                  (some? @*desc?)
-                  @*desc?
-                  (some? p-desc?)
-                  p-desc?
-                  :else
-                  true)
-          editor-box (get config :editor-box)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
           result (if page? result (attach-clock-property result))
@@ -91,73 +106,71 @@
                           (filter included-keys keys)
                           included-keys)
                   keys))
-          sort-by-fn (fn [item]
-                       (let [key sort-by-item]
-                         (case key
-                           :created-at
-                           (:block/created-at item)
-                           :updated-at
-                           (:block/updated-at item)
-                           :block
-                           (:block/content item)
-                           :page
-                           (:block/name item)
-                           (get-in item [:block/properties key]))))
-          result (sort-result-by sort-by-fn desc? result)]
+          desc? (desc? *desc? p-desc?)
+          result (sort-result-by (fn [item]
+                                   (sort-by-fn sort-by-item item))
+                                 desc?
+                                 result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}}
        [:table.table-auto
-        (for [key keys]
-          (let [key-name (if (and (= key :clock-time) (integer? clock-time-total))
-                           (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
-                                                                  clock-time-total))
-                           (name key))]
-            (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))
-        (for [item result]
-          (let [format (:block/format item)
-                edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
-                heading-level (:block/heading-level item)]
-            [:tr.cursor
-             (for [key keys]
-               (let [value (case key
-                             :page
-                             [:string (or (:block/original-name item)
-                                          (:block/name item))]
+        [:thead
+         [:tr.cursor
+          (for [key keys]
+            (let [key-name (if (and (= key :clock-time) (integer? clock-time-total))
+                             (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
+                                                                   clock-time-total))
+                             (name key))]
+              (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))]]
+        [:tbody
+         (for [item result]
+           (let [format (:block/format item)]
+             [:tr.cursor
+              (for [key keys]
+                (let [value (case key
+                              :page
+                              [:string (or (:block/original-name item)
+                                           (:block/name item))]
 
-                             :block       ; block title
-                             (let [title (:block/title item)]
-                               (if (seq title)
-                                 [:element (->elem :div (map-inline config title))]
-                                 [:string (:block/content item)]))
+                              :block       ; block title
+                              (let [content (:block/content item)
+                                    {:block/keys [title]} (block/parse-title-and-body
+                                                           (:block/uuid item)
+                                                           (:block/format item)
+                                                           (:block/pre-block? item)
+                                                           content)]
+                                (if (seq title)
+                                  [:element (->elem :div (map-inline config title))]
+                                  [:string content]))
 
-                             :created-at
-                             [:string (when-let [created-at (:block/created-at item)]
-                                        (date/int->local-time-2 created-at))]
+                              :created-at
+                              [:string (when-let [created-at (:block/created-at item)]
+                                         (date/int->local-time-2 created-at))]
 
-                             :updated-at
-                             [:string (when-let [updated-at (:block/updated-at item)]
-                                        (date/int->local-time-2 updated-at))]
+                              :updated-at
+                              [:string (when-let [updated-at (:block/updated-at item)]
+                                         (date/int->local-time-2 updated-at))]
 
-                             [:string (get-in item [:block/properties key])])]
-                 [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
-                                         :on-mouse-move (fn [] (reset! select? true))
-                                         :on-mouse-up (fn []
-                                                        (when-not @select?
-                                                          (state/sidebar-add-block!
-                                                           (state/get-current-repo)
-                                                           (:db/id item)
-                                                           :block-ref
-                                                           {:block item})))}
-                  (when value
-                    (if (= :element (first value))
-                      (second value)
-                      (let [value (second value)]
-                        (if (coll? value)
-                          (let [vals (for [item value]
-                                       (page-cp {} {:block/name item}))]
-                            (interpose [:span ", "] vals))
-                          (if (not (string? value))
-                            value
-                            (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                              (page-cp {} page)
-                              (inline-text format value)))))))]))]))]])))
+                              [:string (get-in item [:block/properties key])])]
+                  [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
+                                          :on-mouse-move (fn [] (reset! select? true))
+                                          :on-mouse-up (fn []
+                                                         (when-not @select?
+                                                           (state/sidebar-add-block!
+                                                            (state/get-current-repo)
+                                                            (:db/id item)
+                                                            :block-ref
+                                                            {:block item})))}
+                   (when value
+                     (if (= :element (first value))
+                       (second value)
+                       (let [value (second value)]
+                         (if (coll? value)
+                           (let [vals (for [item value]
+                                        (page-cp {} {:block/name item}))]
+                             (interpose [:span ", "] vals))
+                           (if (not (string? value))
+                             value
+                             (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                               (page-cp {} page)
+                               (inline-text format value)))))))]))]))]]])))

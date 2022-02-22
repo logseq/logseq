@@ -10,7 +10,6 @@
             [frontend.external.roam-export :as roam-export]
             [frontend.format :as f]
             [frontend.format.protocol :as fp]
-            [frontend.handler.file :as file-handler]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.publishing.html :as html]
@@ -26,12 +25,6 @@
    (outliner-tree/blocks->vec-tree
     (db/get-page-blocks-no-cache repo page) page) {:init-level 1}))
 
-(defn- get-page-content-debug
-  [repo page]
-  (outliner-file/tree->file-content
-   (outliner-tree/blocks->vec-tree
-    (db/get-page-blocks-no-cache repo page) page) {:init-level 1
-                                              :heading-to-list? true}))
 (defn- get-file-content
   [repo file-path]
   (if-let [page-name
@@ -65,28 +58,17 @@
    (outliner-tree/blocks->vec-tree (str (:block/uuid block)))
    (outliner-file/tree->file-content {:init-level 1})))
 
-
-(defn export-repo-as-json!
-  [repo]
-  (when-let [db (db/get-conn repo)]
-    (let [db-json (db/db->json db)
-          data-str (str "data:text/json;charset=utf-8," (js/encodeURIComponent db-json))]
-      (when-let [anchor (gdom/getElement "download-as-json")]
-        (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
-        (.click anchor)))))
-
 (defn download-file!
   [file-path]
   (when-let [repo (state/get-current-repo)]
     (when-let [content (get-file-content repo file-path)]
       (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
-                           (clj->js {:type "text/plain;charset=utf-8,"}))]
-        (let [anchor (gdom/getElement "download")
-              url (js/window.URL.createObjectURL data)]
-          (.setAttribute anchor "href" url)
-          (.setAttribute anchor "download" file-path)
-          (.click anchor))))))
+                           (clj->js {:type "text/plain;charset=utf-8,"}))
+            anchor (gdom/getElement "download")
+            url (js/window.URL.createObjectURL data)]
+        (.setAttribute anchor "href" url)
+        (.setAttribute anchor "download" file-path)
+        (.click anchor)))))
 
 (defn export-repo-as-html!
   [repo]
@@ -96,7 +78,7 @@
                                            (db/filter-only-public-pages-and-blocks db))
           db-str       (db/db->string db)
           state        (select-keys @state/state
-                                    [:ui/theme :ui/cycle-collapse
+                                    [:ui/theme
                                      :ui/sidebar-collapsed-blocks
                                      :ui/show-recent?
                                      :config])
@@ -106,7 +88,12 @@
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]
       (if (util/electron?)
-        (js/window.apis.exportPublishAssets raw-html-str (config/get-custom-css-path) (config/get-repo-dir repo) (clj->js asset-filenames))
+        (js/window.apis.exportPublishAssets
+         raw-html-str
+         (config/get-custom-css-path)
+         (config/get-repo-dir repo)
+         (clj->js asset-filenames)
+         (util/mocked-open-dir-path))
 
         (when-let [anchor (gdom/getElement "download-as-html")]
           (.setAttribute anchor "href" html-str)
@@ -142,22 +129,9 @@
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
 
-(defn export-git-repo-as-zip!
-  [repo]
-  (p/let [files (file-handler/load-files repo)
-          contents (file-handler/load-multiple-files repo files)
-          files (zipmap files contents)
-          [owner repo-name] (util/get-git-owner-and-repo repo)
-          repo-name (str owner "-" repo-name)]
-    (when (seq files)
-      (p/let [zipfile (zip/make-zip repo-name files repo)]
-        (when-let [anchor (gdom/getElement "download")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
-
 (defn get-md-file-contents
   [repo]
+  #_:clj-kondo/ignore
   (let [conn (db/get-conn repo)]
     (filter (fn [[path _]]
               (let [path (string/lower-case path)]
@@ -281,7 +255,7 @@
      :block-refs block-refs}))
 
 (defn get-page-page&block-refs [repo page-name embed-pages embed-blocks block-refs]
-  (let [page-name* (string/lower-case page-name)
+  (let [page-name* (util/page-name-sanity-lc page-name)
         page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
         ast (mldoc/->edn page-content (mldoc/default-config format))
@@ -391,16 +365,6 @@
                                     (f/get-default-config %2)
                                     (js/JSON.stringify (clj->js %3)))))
 
-(defn- convert-md-files-unordered-list-or-heading
-  [repo files heading-to-list?]
-  (->> files
-       (mapv (fn [{:keys [path content names format]}]
-               (when (first names)
-                 [path (fp/exportMarkdown f/mldoc-record content
-                                          (f/get-default-config format {:export-heading-to-list? heading-to-list? :export-keep-properties? true})
-                                          nil)])))
-       (remove nil?)))
-
 (defn- get-file-contents-with-suffix
   [repo]
   (let [conn (db/get-conn repo)
@@ -430,73 +394,18 @@
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
 
-(defn export-page-as-markdown!
-  [page-name]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [file (db/get-page-file page-name)]
-      (when-let [path (:file/path file)]
-        (when-let [content (get-page-content repo page-name)]
-          (let [names [page-name]
-                format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files
-                  (export-files-as-markdown repo files (state/export-heading-to-list?))]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "export-page-as-markdown")
-                      url (js/window.URL.createObjectURL data)]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" path)
-                  (.click anchor))))))))))
-
 (defn export-repo-as-opml!
+  #_:clj-kondo/ignore
   [repo]
   (when-let [repo (state/get-current-repo)]
     (when-let [files (get-file-contents-with-suffix repo)]
       (let [files (export-files-as-opml repo files)
             zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-          (when-let [anchor (gdom/getElement "export-as-opml")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
-
-(defn export-page-as-opml!
-  [page-name]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [file (db/get-page-file page-name)]
-      (when-let [path (:file/path file)]
-        (when-let [content (get-page-content repo page-name)]
-          (let [names [page-name]
-                format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files (export-files-as-opml repo files)]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "export-page-as-opml")
-                      url (js/window.URL.createObjectURL data)
-                      opml-path (string/replace (string/lower-case path) #"(.+)\.(md|org|markdown)$" "$1.opml")]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" opml-path)
-                  (.click anchor))))))))))
-
-(defn convert-page-markdown-unordered-list-or-heading!
-  [page-name]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [file (db/get-page-file page-name)]
-      (when-let [path (:file/path file)]
-        (when-let [content (get-page-content repo page-name)]
-          (let [names [page-name]
-                format (f/get-format path)
-                files [{:path path :content content :names names :format format}]]
-            (let [files (convert-md-files-unordered-list-or-heading repo files (state/export-heading-to-list?))]
-              (let [data (js/Blob. [(second (first files))]
-                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
-                (let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")
-                      url (js/window.URL.createObjectURL data)]
-                  (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" path)
-                  (.click anchor))))))))))
+               (when-let [anchor (gdom/getElement "export-as-opml")]
+                 (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+                 (.setAttribute anchor "download" (.-name zipfile))
+                 (.click anchor)))))))
 
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)
@@ -547,8 +456,6 @@
           :block/heading-level
           :block/format
           :block/children
-          :block/title
-          :block/body
           :block/content]))})
 
 (defn- file-name [repo extension]

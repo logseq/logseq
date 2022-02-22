@@ -1,8 +1,9 @@
-import { StyleString, UIOptions } from './LSPlugin'
+import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
+import { merge } from 'lodash-es'
 
 interface IObject {
   [key: string]: any;
@@ -48,47 +49,7 @@ export function isObject (item: any) {
   return (item === Object(item) && !Array.isArray(item))
 }
 
-export function deepMerge (
-  target: IObject,
-  ...sources: Array<IObject>
-) {
-  // return the target if no sources passed
-  if (!sources.length) {
-    return target
-  }
-
-  const result: IObject = target
-
-  if (isObject(result)) {
-    const len: number = sources.length
-
-    for (let i = 0; i < len; i += 1) {
-      const elm: any = sources[i]
-
-      if (isObject(elm)) {
-        for (const key in elm) {
-          if (elm.hasOwnProperty(key)) {
-            if (isObject(elm[key])) {
-              if (!result[key] || !isObject(result[key])) {
-                result[key] = {}
-              }
-              deepMerge(result[key], elm[key])
-            } else {
-              if (Array.isArray(result[key]) && Array.isArray(elm[key])) {
-                // concatenate the two arrays and remove any duplicate primitive values
-                result[key] = Array.from(new Set(result[key].concat(elm[key])))
-              } else {
-                result[key] = elm[key]
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return result
-}
+export const deepMerge = merge
 
 export function genID () {
   // Math.random should be unique because of its seeding algorithm.
@@ -169,7 +130,8 @@ export function invokeHostExportedApi (
   method: string,
   ...args: Array<any>
 ) {
-  method = method?.replace(/^[_$]+/, '')
+  method = method?.startsWith('_call') ? method :
+    method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
   // @ts-ignore
@@ -229,32 +191,37 @@ export function setupInjectedStyle (
   }
 }
 
+const injectedUIEffects = new Map<string, () => void>()
+
 export function setupInjectedUI (
   this: PluginLocal,
   ui: UIOptions,
-  attrs: Record<string, any>
+  attrs: Record<string, string>,
+  initialCallback?: (e: { el: HTMLElement, float: boolean }) => void
 ) {
+  let slot: string = ''
+  let selector: string
+  let float: boolean
+
   const pl = this
-  let slot = ''
-  let selector = ''
 
   if ('slot' in ui) {
     slot = ui.slot
     selector = `#${slot}`
-  } else {
+  } else if ('path' in ui) {
     selector = ui.path
+  } else {
+    float = true
   }
 
-  const target = selector && document.querySelector(selector)
+  const id = `${ui.key}-${slot}-${pl.id}`
+  const key = `${ui.key}--${pl.id}`
+
+  const target = float ? document.body : (selector && document.querySelector(selector))
   if (!target) {
     console.error(`${this.debugTag} can not resolve selector target ${selector}`)
     return
   }
-
-  const id = `${ui.key}-${slot}-${pl.id}`
-  const key = `${ui.key}-${pl.id}`
-
-  let el = document.querySelector(`#${id}`) as HTMLElement
 
   if (ui.template) {
     // safe template
@@ -262,12 +229,34 @@ export function setupInjectedUI (
       ui.template, {
         ADD_TAGS: ['iframe'],
         ALLOW_UNKNOWN_PROTOCOLS: true,
-        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
+        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling', 'target']
       })
+  } else { // remove ui
+    injectedUIEffects.get(id)?.call(null)
+    return
   }
 
-  if (el) {
-    el.innerHTML = ui.template
+  let el = document.querySelector(`#${id}`) as HTMLElement
+  let content = float ? el?.querySelector('.ls-ui-float-content') : el
+
+  if (content) {
+    content.innerHTML = ui.template
+
+    // update attributes
+    attrs && Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
+
+    let positionDirty = el.dataset.dx != null
+    ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+      if (positionDirty && [
+        'left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
+
+      el.style[k] = v
+    })
     return
   }
 
@@ -275,12 +264,46 @@ export function setupInjectedUI (
   el.id = id
   el.dataset.injectedUi = key || ''
 
-  // TODO: Support more
-  el.innerHTML = ui.template
+  if (float) {
+    content = document.createElement('div')
+    content.classList.add('ls-ui-float-content')
+    el.appendChild(content)
+  } else {
+    content = el
+  }
+
+  // TODO: enhance template
+  content.innerHTML = ui.template
 
   attrs && Object.entries(attrs).forEach(([k, v]) => {
     el.setAttribute(k, v)
   })
+
+  ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
+
+  let teardownUI: () => void
+  let disposeFloat: () => void
+
+  if (float) {
+    el.setAttribute('draggable', 'true')
+    el.setAttribute('resizable', 'true')
+    ui.close && (el.dataset.close = ui.close)
+    el.classList.add('lsp-ui-float-container', 'visible')
+    disposeFloat = (
+      pl._setupResizableContainer(el, key),
+        pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
+  }
+
+  if (!!slot && ui.reset) {
+    const exists = Array.from(target.querySelectorAll('[data-injected-ui]'))
+      .map((it: HTMLElement) => it.id)
+
+    exists?.forEach((exist: string) => {
+      injectedUIEffects.get(exist)?.call(null)
+    })
+  }
 
   target.appendChild(el);
 
@@ -297,9 +320,17 @@ export function setupInjectedUI (
     }, false)
   })
 
-  return () => {
+  // callback
+  initialCallback?.({ el, float })
+
+  teardownUI = () => {
+    disposeFloat?.()
+    injectedUIEffects.delete(id)
     target!.removeChild(el)
   }
+
+  injectedUIEffects.set(id, teardownUI)
+  return teardownUI
 }
 
 export function transformableEvent (target: HTMLElement, e: Event) {
@@ -354,4 +385,18 @@ export function setupInjectedTheme (url?: string) {
     }
     injectedThemeEffect = null
   })
+}
+
+export function mergeSettingsWithSchema (
+  settings: Record<string, any>,
+  schema: Array<SettingSchemaDesc>) {
+  const defaults = (schema || []).reduce((a, b) => {
+    if ('default' in b) {
+      a[b.key] = b.default
+    }
+    return a
+  }, {})
+
+  // shadow copy
+  return Object.assign(defaults, settings)
 }

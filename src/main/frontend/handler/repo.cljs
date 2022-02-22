@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
@@ -13,7 +12,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.extract :as extract-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.notification :as notification]
@@ -28,6 +26,9 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.db.persist :as db-persist]
+            [electron.ipc :as ipc]
             [clojure.set :as set]))
 
 ;; Project settings should be checked in two situations:
@@ -60,24 +61,6 @@
         default-content (case (name format)
                           "org" (rc/inline "contents.org")
                           "markdown" (rc/inline "contents.md")
-                          "")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
-
-(defn create-favorites-file
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        path (str (state/get-pages-directory)
-                  "/favorites."
-                  (config/get-file-extension format))
-        file-path (str "/" path)
-        default-content (case (name format)
-                          "org" (rc/inline "favorites.org")
-                          "markdown" (rc/inline "favorites.md")
                           "")]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
@@ -131,8 +114,8 @@
           path (str (config/get-journals-directory) "/" file-name "."
                     (config/get-file-extension format))
           file-path (str "/" path)
-          page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
-          empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
+          page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
+          empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
@@ -158,38 +141,8 @@
              _ (file-handler/create-metadata-file repo-url encrypted?)
              _ (create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
-             _ (create-favorites-file repo-url)
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
-
-(defn- remove-non-exists-refs!
-  [data all-block-ids]
-  (let [block-ids (->> (->> (map :block/uuid data)
-                        (remove nil?)
-                        (set))
-                       (set/union (set all-block-ids)))
-        keep-block-ref-f (fn [refs]
-                           (filter (fn [ref]
-                                     (if (and (vector? ref)
-                                              (= :block/uuid (first ref)))
-                                       (contains? block-ids (second ref))
-                                       ref)) refs))]
-    (map (fn [item]
-           (if (and (map? item)
-                    (:block/uuid item))
-             (update item :block/refs keep-block-ref-f)
-             item)) data)))
-
-(defn- reset-contents-and-blocks!
-  [repo-url files blocks-pages delete-files delete-blocks refresh?]
-  (db/transact-files-db! repo-url files)
-  (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
-        all-data (-> (concat delete-files delete-blocks files blocks-pages)
-                     (util/remove-nils))
-        all-data (if refresh?
-                   (remove-non-exists-refs! all-data (db-model/get-all-block-uuids))
-                   (remove-non-exists-refs! all-data nil))]
-    (db/transact! repo-url all-data)))
 
 (defn- load-pages-metadata!
   [repo file-paths files]
@@ -218,21 +171,24 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (p/let [refresh? (:refresh? opts)
-          parsed-files (filter
-                        (fn [file]
-                          (let [format (format/get-format (:file/path file))]
-                            (contains? config/mldoc-support-formats format)))
-                        files)
-          blocks-pages (if (seq parsed-files)
-                         (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata refresh?)
-                         [])]
-    (let [config-file (config/get-config-path)]
-      (when (contains? (set file-paths) config-file)
-        (when-let [content (some #(when (= (:file/path %) config-file)
-                                    (:file/content %)) files)]
-          (file-handler/restore-config! repo-url content true))))
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks refresh?)
+  (let [support-files (filter
+                       (fn [file]
+                         (let [format (format/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
+                       files)
+        support-files (sort-by :file/path support-files)
+        new-graph? (:new-graph? opts)
+        delete-data (->> (concat delete-files delete-blocks)
+                         (remove nil?))]
+    (when (seq delete-data) (db/transact! repo-url delete-data))
+    (doseq [file support-files]
+      (file-handler/alter-file repo-url
+                               (:file/path file)
+                               (:file/content file)
+                               {:new-graph? new-graph?
+                                :re-render-root? false
+                                :from-disk? true
+                                :metadata metadata}))
     (load-pages-metadata! repo-url file-paths files)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
@@ -241,7 +197,7 @@
         (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-importing-to-db! false)
+    (state/set-parsing-files! false)
     (state/pub-event! [:graph/added repo-url])))
 
 (defn- parse-files-and-create-default-files!
@@ -255,37 +211,46 @@
       (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))
     (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))
 
+(defn- update-parsing-state!
+  [repo-url refresh?]
+  (state/set-loading-files! repo-url false)
+  (when-not refresh? (state/set-parsing-files! true)))
+
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts refresh?] :as opts
                    :or {re-render? true}}]
-  (state/set-loading-files! false)
-  (when-not refresh? (state/set-importing-to-db! true))
-  (let [file-paths (map :file/path files)]
-    (let [metadata-file (config/get-metadata-path)
-          metadata-content (some #(when (= (:file/path %) metadata-file)
-                                    (:file/content %)) files)
-          metadata (when metadata-content
-                     (common-handler/read-metadata! repo-url metadata-content))
-          db-encrypted? (:db/encrypted? metadata)
-          db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
-      (if db-encrypted?
-        (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
-          (state/set-state! :encryption/graph-parsing? true)
-          (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
-                             db-encrypted-secret
-                             close-fn]))
-        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))))
+  (update-parsing-state! repo-url refresh?)
+
+  (let [f (fn []
+            (let [file-paths (map :file/path files)
+                  metadata-file (config/get-metadata-path)
+                  metadata-content (some #(when (= (:file/path %) metadata-file)
+                                            (:file/content %)) files)
+                  metadata (when metadata-content
+                             (common-handler/read-metadata! metadata-content))
+                  db-encrypted? (:db/encrypted? metadata)
+                  db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
+              (if db-encrypted?
+                (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
+                  (state/set-state! :encryption/graph-parsing? true)
+                  (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                                     db-encrypted-secret
+                                     close-fn]))
+                (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))))]
+    (if util/node-test?
+      (f)
+      (js/setTimeout f 100))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh?]
-             :as opts}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
+
   (let [config (or (state/get-config repo-url)
-                   (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
-                           :file/content
-                           (common-handler/safe-read-string "Parsing config file failed: ")))
+                   (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+                                        :file/content)]
+                     (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (str (config/get-local-dir repo-url) "/") "")))
@@ -299,7 +264,8 @@
                            (parse-files-and-load-to-db! repo-url files-contents (assoc option :refresh? refresh?)))))]
     (cond
       (and (not (seq diffs)) nfs-files)
-      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
+      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true
+                                                       :new-graph? new-graph?})
 
       (and first-clone? (not nfs-files))
       (->
@@ -310,7 +276,7 @@
                   (js/console.dir error)
                   ;; Empty repo
                   (create-default-files! repo-url)
-                  (state/set-loading-files! false))))
+                  (state/set-loading-files! repo-url false))))
 
       :else
       (when (seq diffs)
@@ -396,9 +362,9 @@
                          result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
-                         (p/then (fn [result]
+                         (p/then (fn [_result]
                                    (-> (git/checkout repo-url)
-                                       (p/then (fn [result]
+                                       (p/then (fn [_result]
                                                  (git-handler/set-git-status! repo-url nil)
                                                  (git-handler/set-git-last-pulled-at! repo-url)
                                                  (when (and local-latest-commit fetchHead
@@ -519,7 +485,7 @@
        (do
          (state/set-cloning! true)
          (git/clone repo-url token))
-       (fn [result]
+       (fn [_result]
          (state/set-current-repo! repo-url)
          (db/start-db-conn! (state/get-me) repo-url)
          (db/mark-repo-as-cloned! repo-url))
@@ -535,10 +501,12 @@
   [{:keys [id url] :as repo}]
   ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
-                      (db/remove-conn! url)
-                      (db/remove-db! url)
-                      (search/remove-db! url)
-                      (state/delete-repo! repo))]
+                      (let [graph-exists? (db/get-conn url)]
+                        (db/remove-conn! url)
+                        (db-persist/delete-graph! url)
+                        (search/remove-db! url)
+                        (state/delete-repo! repo)
+                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))))]
     (if (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f))
@@ -568,7 +536,6 @@
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
-             (create-favorites-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))
@@ -618,7 +585,7 @@
   (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
     (do
-      (doseq [{:keys [id url]} (:repos me)]
+      (doseq [{:keys [url]} (:repos me)]
         (let [repo url]
           (if (db/cloned? repo)
             (p/do!
@@ -639,7 +606,7 @@
     (search/reset-indice! url)
     (db/remove-conn! url)
     (db/clear-query-state!)
-    (-> (p/do! (db/remove-db! url)
+    (-> (p/do! (db-persist/delete-graph! url)
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))
@@ -648,9 +615,12 @@
   [nfs-rebuild-index! ok-handler]
   (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)]
+    (let [local? (config/local-db? repo)
+          repo-dir (config/get-repo-dir repo)]
       (if local?
-        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
+        (p/let [_ (when (mobile-util/native-ios?)
+                    (mobile-util/sync-icloud-repo repo-dir))
+                _ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
@@ -663,11 +633,3 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
-
-(defn get-repo-name
-  [url]
-  (last (string/split url #"/")))
-
-(defn auto-push!
-  []
-  (git-commit-and-push! "Logseq auto save"))

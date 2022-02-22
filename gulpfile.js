@@ -45,22 +45,37 @@ const common = {
     return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
   },
 
+  syncAssetFiles () {
+    return gulp.src([
+        "./node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**",
+        "!**/*/i18n-*.js"
+      ])
+      .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets')))
+  },
+
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   },
 
-  syncStatic () {
+  syncAllStatic () {
     return gulp.src([
       outputFilePath,
       '!' + path.join(outputPath, 'node_modules/**')
     ]).pipe(gulp.dest(publicStaticPath))
   },
 
-  keepSyncStatic () {
+  syncJS_CSSinRt () {
+    return gulp.src([
+      path.join(outputPath, 'js/**'),
+      path.join(outputPath, 'css/**')
+    ], { base: outputPath }).pipe(gulp.dest(publicStaticPath))
+  },
+
+  keepSyncStaticInRt () {
     return gulp.watch([
       path.join(outputPath, 'js/**'),
       path.join(outputPath, 'css/**')
-    ], { ignoreInitial: true }, common.syncStatic)
+    ], { ignoreInitial: true }, common.syncJS_CSSinRt)
   }
 }
 
@@ -79,7 +94,7 @@ exports.electron = () => {
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('yarn cljs:release', {
+  cp.execSync('yarn cljs:release-electron', {
     stdio: 'inherit'
   })
 
@@ -109,5 +124,6 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncStatic, gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keepSyncStatic))
-exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
+  gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keepSyncStaticInRt))
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, css.buildCSS)

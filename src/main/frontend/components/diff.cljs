@@ -167,7 +167,7 @@
               repo
               path
               remote-latest-commit
-              (fn [{:keys [repo-url path ref content]}]
+              (fn [{:keys [repo-url path content]}]
                 (p/let [content (encrypt/decrypt content)]
                   (swap! state/state
                          assoc-in [:github/contents repo-url remote-latest-commit path] content)))
@@ -241,9 +241,9 @@
   (when (nil? @disk-value)
     (reset! disk-value disk-content)
     (reset! db-value db-content))
-  [:div.cp__diff-file {:style {:width 980}}
+  [:div.cp__diff-file
    [:div.cp__diff-file-header
-    [:span.cp__diff-file-header-content.pl-1.font-medium {:style {:word-break "break-word"}}
+    [:span.cp__diff-file-header-content.pl-1.font-medium
      (str "File " path " has been modified on the disk.")]]
    [:div.p-4
     (when (not= (string/trim disk-content) (string/trim db-content))
@@ -264,39 +264,37 @@
         :title-trigger? true}))
 
     [:hr]
-
-    [:div.flex.flex-row.mt-4
+    
+    [:div.flex.flex-col.mt-4.sm:flex-row
      [:div.flex-1
       [:div.mb-2 "On disk:"]
       [:textarea.overflow-auto
        {:value (rum/react disk-value)
         :on-change (fn [e]
-                     (reset! disk-value (util/evalue e)))
-        :style {:min-height "50vh"}}
+                     (reset! disk-value (util/evalue e)))}
        disk-content]
       (ui/button "Select this"
-        :on-click
-        (fn []
-          (when-let [value @disk-value]
-            (file/alter-file repo path @disk-value
-                            {:re-render-root? true
-                             :skip-compare? true}))
-          (state/close-modal!)))]
+                 :on-click
+                 (fn []
+                   (when-let [value @disk-value]
+                     (file/alter-file repo path value
+                                      {:re-render-root? true
+                                       :skip-compare? true}))
+                   (state/close-modal!)))]
 
-     [:div.ml-4.flex-1
+     [:div.flex-1.mt-8.sm:ml-4.sm:mt-0
       [:div.mb-2 "In Logseq:"]
       [:textarea.overflow-auto
        {:value (rum/react db-value)
         :on-change (fn [e]
                      (prn "new-value: " (util/evalue e))
-                     (reset! db-value (util/evalue e)))
-        :style {:min-height "50vh"}}
+                     (reset! db-value (util/evalue e)))}
        db-content]
       (ui/button "Select this"
-        :on-click
-        (fn []
-          (when-let [value @db-value]
-            (file/alter-file repo path value
-                            {:re-render-root? true
-                             :skip-compare? true}))
-          (state/close-modal!)))]]]])
+                 :on-click
+                 (fn []
+                   (when-let [value @db-value]
+                     (file/alter-file repo path value
+                                      {:re-render-root? true
+                                       :skip-compare? true}))
+                   (state/close-modal!)))]]]])

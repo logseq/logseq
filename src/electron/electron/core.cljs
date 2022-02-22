@@ -2,8 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
-            [electron.configs :as cfgs]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -11,11 +10,13 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
-            ["electron-window-state" :as windowStateKeeper]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
             [clojure.core.async :as async]
             [electron.state :as state]
-            [electron.git :as git]))
+            [electron.git :as git]
+            [electron.window :as win]
+            [electron.exceptions :as exceptions]
+            ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -23,64 +24,12 @@
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
-(def ROOT_PATH (path/join js/__dirname ".."))
-(def MAIN_WINDOW_ENTRY (if dev?
-                         ;;"http://localhost:3001"
-                         (str "file://" (path/join js/__dirname "index.html"))
-                         (str "file://" (path/join js/__dirname "electron.html"))))
-
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
-
-(defn create-main-window
-  "Creates main app window"
-  []
-  (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
-        win-opts (cond->
-                   {:width                (.-width win-state)
-                    :height               (.-height win-state)
-                    :frame                true
-                    :titleBarStyle        "hiddenInset"
-                    :trafficLightPosition {:x 16 :y 16}
-                    :autoHideMenuBar      (not mac?)
-                    :webPreferences
-                                          {:plugins                 true ; pdf
-                                           :nodeIntegration         false
-                                           :nodeIntegrationInWorker false
-                                           :contextIsolation        true
-                                           :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
-                                           ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                                           ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                                           :enableBlinkFeatures     'OverlayScrollbars'
-                                           :preload                 (path/join js/__dirname "js/preload.js")}}
-                   linux?
-                   (assoc :icon (path/join js/__dirname "icons/logseq.png")))
-        url MAIN_WINDOW_ENTRY
-        win (BrowserWindow. (clj->js win-opts))]
-    (.manage win-state win)
-    (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
-      (clj->js {:urls (array "*://*.youtube.com/*")})
-      (fn [^js details callback]
-        (let [url (.-url details)
-              urlObj (js/URL. url)
-              origin (.-origin urlObj)
-              requestHeaders (.-requestHeaders details)]
-          (if (and
-                (.hasOwnProperty requestHeaders "referer")
-                (not-empty (.-referer requestHeaders)))
-              (callback #js {:cancel false
-                             :requestHeaders requestHeaders})
-              (do
-                (set! (.-referer requestHeaders) origin)
-                (callback #js {:cancel false
-                               :requestHeaders requestHeaders}))))))
-    (.loadURL win url)
-    (when dev? (.. win -webContents (openDevTools)))
-    win))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -117,63 +66,64 @@
      (.unregisterProtocol protocol LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
-(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
-  (let [app-path (. app getAppPath)
-        asset-filenames (js->clj asset-filenames)
-        paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
-    (when (seq paths)
-      (let [root-dir (first paths)
-            static-dir (path/join root-dir "static")
+(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
+  (p/let [app-path (. app getAppPath)
+          asset-filenames (js->clj asset-filenames)
+          root-dir (or output-path (handler/open-dir-dialog))]
+    (when root-dir
+      (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
             index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
-                           [(. fs writeFile index-html-path html)
+                          [(. fs writeFile index-html-path html)
 
 
-                            (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+                           (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
-                           (map
-                             (fn [filename]
-                               (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
-                                   (p/catch
-                                     (fn [e]
-                                       (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                       (js/console.error e)))))
-                             asset-filenames)
+                          (map
+                            (fn [filename]
+                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                                  (p/catch
+                                      (fn [e]
+                                        (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
+                                        (js/console.error e)))))
+                            asset-filenames)
 
-                           (map
-                             (fn [part]
-                               (. fs copy (path/join app-path part) (path/join static-dir part)))
-                             ["css" "fonts" "icons" "img" "js"])))
+                          (map
+                            (fn [part]
+                              (. fs copy (path/join app-path part) (path/join static-dir part)))
+                            ["css" "fonts" "icons" "img" "js"])))
                 custom-css (. fs readFile custom-css-path)
                 _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
-                              js-files))
+                           js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
                                    (path/join static-dir "js" "publishing" file)
                                    (path/join static-dir "js" file)))
-                              js-files))
+                           js-files))
                 _ (. fs removeSync (path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
+        call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
         quit-dirty-state "set-quit-dirty-state"
-        web-contents (. win -webContents)]
+        clear-win-effects! (win/setup-window-listeners! win)]
+
     (doto ipcMain
       (.handle quit-dirty-state
                (fn [_ dirty?]
@@ -197,57 +147,22 @@
                  (try
                    (js-invoke app type args)
                    (catch js/Error e
-                     (js/console.error e))))))
+                     (js/console.error e)))))
 
+      (.handle call-win-channel
+               (fn [^js e type & args]
+                 (let [win (get-win-from-sender e)]
+                   (try
+                     (js-invoke win type args)
+                     (catch js/Error e
+                       (js/console.error e)))))))
 
-    (.on web-contents "context-menu"
-         (fn
-           [_event params]
-           (let [menu (Menu.)
-                 suggestions (.-dictionarySuggestions ^js params)]
-
-             (doseq [suggestion suggestions]
-               (. menu append
-                  (MenuItem. (clj->js {:label
-                                       suggestion
-                                       :click
-                                       (fn [] (. web-contents replaceMisspelling suggestion))}))))
-
-             (when-let [misspelled-word (.-misspelledWord ^js params)]
-               (. menu append
-                  (MenuItem. (clj->js {:label
-                                       "Add to dictionary"
-                                       :click
-                                       (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
-
-             (. menu popup))))
-
-
-    (.on web-contents "new-window"
-         (fn [e url]
-           (let [url (if (string/starts-with? url "file:")
-                       (js/decodeURIComponent url) url)
-                 url (if-not win32? (string/replace url "file://" "") url)]
-             (.. logger (info "new-window" url))
-             (if (string/includes?
-                   (.normalize path url)
-                   (.join path (. app getAppPath) "index.html"))
-               (.info logger "pass-window" url)
-               (open url)))
-           (.preventDefault e)))
-
-    (doto win
-      (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-      (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
-
-    #(do (.removeHandler ipcMain toggle-win-channel)
+    #(do (clear-win-effects!)
+         (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
-         (.removeHandler ipcMain call-app-channel))))
-
-(defn- destroy-window!
-  [^js win]
-  (.destroy win))
+         (.removeHandler ipcMain call-app-channel)
+         (.removeHandler ipcMain call-win-channel))))
 
 (defn main
   []
@@ -257,11 +172,12 @@
       (.quit app))
     (do
       (.registerSchemesAsPrivileged
-        protocol (bean/->js [{:scheme     LSP_SCHEME
-                              :privileges {:standard        true
-                                           :secure          true
-                                           :bypassCSP       true
-                                           :supportFetchAPI true}}]))
+       protocol (bean/->js [{:scheme     LSP_SCHEME
+                             :privileges {:standard        true
+                                          :secure          true
+                                          :bypassCSP       true
+                                          :supportFetchAPI true}}]))
+
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
@@ -279,10 +195,11 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor!)
-                   ^js win (create-main-window)
-                   _ (reset! *win win)
-                   *quitting? (atom false)]
+                   ^js win (win/create-main-window)
+                   _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+
+               (utils/disableXFrameOptions win)
 
                (when (search/version-changed?)
                  (search/rm-search-dir!))
@@ -297,10 +214,11 @@
                         (fn []
                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
-                                tt (handler/set-ipc-handler! win)]
+                                t3 (handler/set-ipc-handler! win)
+                                tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
 
                ;; setup effects
@@ -310,21 +228,25 @@
                (.on win "close" (fn [e]
                                   (when @*quit-dirty?
                                     (.preventDefault e)
+                                    (state/close-window! win)
                                     (let [web-contents (. win -webContents)]
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
-                                        (if (or @*quitting? (not mac?))
+                                        (if (or @win/*quitting? (not mac?))
                                           (when-let [win @*win]
-                                            (destroy-window! win)
+                                            (win/destroy-window! win)
                                             (reset! *win nil))
                                           (do (.preventDefault ^js/Event e)
                                               (if (and mac? (.isFullScreen win))
                                                 (do (.once win "leave-full-screen" #(.hide win))
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
-               (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
-               (.on app "activate" #(if @*win (.show win)))))))))
+
+               (.on app "before-quit" (fn [_e]
+                                        (reset! win/*quitting? true)))
+
+               (.on app "activate" #(when @*win (.show win)))))))))
 
 (defn start []
   (js/console.log "Main - start")

@@ -1,24 +1,21 @@
 (ns frontend.db.outliner
   (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
-            [frontend.util :as util]))
+            [clojure.set :as set]))
 
 (defn get-by-id
   [conn id]
   (try
     (d/pull @conn '[*] id)
-    (catch js/Error e nil)))
+    (catch js/Error _e nil)))
 
 (defn get-by-parent-&-left
   [conn parent-id left-id]
-  (let [r (d/q '[:find (pull ?a [*])
-                 :in $ ?p ?l
-                 :where
-                 [?a :block/left ?l]
-                 [?a :block/parent ?p]]
-            @conn parent-id left-id)]
-    (ffirst r)))
+  (when (and parent-id left-id)
+    (let [lefts (:block/_left (d/entity @conn left-id))
+          children (:block/_parent (d/entity @conn parent-id))
+          ids (set/intersection lefts children)
+          id (:db/id (first ids))]
+      (when id (d/pull @conn '[*] id)))))
 
 ;; key [:block/children parent-id]
 
@@ -27,14 +24,6 @@
     :in $ ?id
     :where
     [?a :block/parent ?id]])
-
-(defn save-block
-  [conn block-m]
-  (let [tx (-> (dissoc block-m :block/children :block/level :block/meta)
-             (util/remove-nils))
-        block-id (:block/uuid block-m)]
-    (d/transact! conn [tx])
-    (db-utils/pull [:block/uuid block-id])))
 
 (defn del-block
   [conn id-or-look-ref]
@@ -53,7 +42,3 @@
                  [?a :block/journal? true]]
                @conn)]
     (flatten r)))
-
-(defn remove-non-existed-refs!
-  [refs]
-  (filter db/entity refs))

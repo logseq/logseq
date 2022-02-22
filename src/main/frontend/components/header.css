@@ -1,8 +1,9 @@
 .cp__header {
-  @apply shadow z-10 h-12;
+  @apply shadow z-10;
   -webkit-app-region: drag;
-
-  padding-right: 0.5rem;
+  
+  padding-top: var(--ls-headbar-inner-top-padding);
+  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -25,6 +26,15 @@
 
   > .r {
     align-items: center;
+    padding-right: 0.5rem;
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  /* To prevent header glitch on Safari */
+  > .l, > .r {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
   }
 
   .it svg {
@@ -52,28 +62,27 @@
 
   &-tips {
     position: absolute;
-    width: 100%;
-    padding: 0 0;
-    transform: translateY(100%);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: var(--ls-secondary-background-color);
-    box-sizing: border-box;
-    margin: 0;
-    left: 0;
-    top: -2px;
-    color: var(--ls-secondary-text-color);
+    padding: 13px 0;
+    text-align: center;
+    font-weight: 500;
+    background: transparent;
+    margin-top: 0;
+    line-height: 0;
+    top: 0;
+    left: 40%;
+    transform: translateX(-50%);
+    z-index: 1000;
 
     > p {
+      color: var(--ls-primary-text-color);
       margin: 0;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       font-size: 14px;
     }
 
     a {
-      color: var(--ls-link-text-color) !important;
+      color: var(--ls-link-text-color, #045591) !important;
     }
 
     a.restart {
@@ -84,12 +93,20 @@
 
       svg {
         color: currentColor !important;
+        margin-right: 2px;
       }
 
       > strong {
         display: inline-block;
         padding-left: 2px;
       }
+    }
+  }
+
+  .dropdown-wrapper {
+    .ti {
+      margin-right: 5px;
+      opacity: .9;
     }
   }
 }
@@ -160,10 +177,137 @@ a.button {
 
   &:hover, &.active {
     opacity: 1;
-    background: var(--ls-tertiary-background-color);
+    background: none;
+    @screen md {
+        background: var(--ls-tertiary-background-color);
+    }
   }
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
   cursor: default !important;
+}
+
+html.is-ios.is-safari {
+    
+  .cp__header {
+    background-color: var(--ls-primary-background-color);
+  }
+
+  .is-vw-pending {
+    display: none !important;
+  }
+}
+
+html.is-native-iphone,
+html.is-native-iphone-without-notch,
+html.is-native-ipad {
+
+     #main-container {
+        padding-top: 0px;
+    }
+
+    #main-content-container {
+        padding-top: 0px;
+        height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
+    }
+    
+    .cp__header > .r {
+        display: flex;
+    }
+}
+
+html.is-native-ipad {
+    --ls-headbar-inner-top-padding: 0px;
+    --ls-headbar-height: 4rem;
+    
+    .cp__header {
+      background-color: transparent !important;
+      display: flex;
+      
+      > .l {
+        /* background-color: var(--ls-primary-background-color); */
+        padding-top: 20px;
+      }
+
+      > .r {
+        flex: 1;
+        background-color: var(--ls-primary-background-color);
+        height: 100%;
+        padding-top: 20px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+    }
+    
+    .left-sidebar-inner  {
+        > .wrap {
+            padding-top: 20px;
+      }
+    }
+
+    .cp__right-sidebar {
+        &-settings {
+            margin-top: -4px;
+        }
+
+        &-topbar {
+            padding-top: 37px;
+        }
+
+        &-inner {
+            .resizer {
+                top: 30vh;
+                width: 12px;
+                height: 40vh;
+            }
+            
+            .resizer:hover {
+                background-color: var(--ls-guideline-color, #ddd);
+            }
+        }
+    }
+}
+
+html.is-native-iphone {
+    --ls-headbar-inner-top-padding: 36px;
+
+    .left-sidebar-inner {
+        > .wrap {
+            padding-top: 12px;
+        }
+
+        .new-page {
+            padding-bottom: 12px;
+        }
+    }
+    
+    .ui__notifications {
+        top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
+    }
+    
+    @media (orientation: landscape) {
+        --ls-headbar-inner-top-padding: 8px;
+        --ls-headbar-height: 2.5rem;
+
+        .cp__header {
+            @apply shadow z-10;
+        }
+    }
+}
+
+html.is-native-iphone-without-notch {
+    
+    --ls-headbar-inner-top-padding: 15px;
+    --ls-headbar-height: 2.5rem;
+
+    @media (orientation: landscape) {
+
+        --ls-headbar-inner-top-padding: 0px;
+        --ls-headbar-height: 2.5rem;
+     
+        .cp__header {
+            @apply shadow z-10;
+        }
+    }
 }

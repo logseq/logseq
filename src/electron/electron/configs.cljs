@@ -12,10 +12,9 @@
 (defn- ensure-cfg
   []
   (try
-    (do
-      (.ensureFileSync fs cfg-path)
-      (let [body (.toString (.readFileSync fs cfg-path))]
-        (if (seq body) (reader/read-string body) {})))
+    (.ensureFileSync fs cfg-path)
+    (let [body (.toString (.readFileSync fs cfg-path))]
+      (if (seq body) (reader/read-string body) {}))
     (catch js/Error e
       (js/console.error :cfg-error e)
       {})))
@@ -23,7 +22,7 @@
 (defn- write-cfg!
   [cfg]
   (try
-    (do (.writeFileSync fs cfg-path (pr-str cfg)) cfg)
+    (.writeFileSync fs cfg-path (pr-str cfg)) cfg
     (catch js/Error e
       (js/console.error :cfg-error e))))
 
@@ -32,12 +31,6 @@
   (let [cfg (ensure-cfg)
         cfg (assoc cfg k v)]
     (write-cfg! cfg)))
-
-(defn del-item!
-  [k]
-  (when-let [cfg (and k (ensure-cfg))]
-    (let [cfg (dissoc cfg k)]
-      (write-cfg! cfg))))
 
 (defn get-item
   [k]

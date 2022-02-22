@@ -6,16 +6,21 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             [clojure.string :as string]
-            [electron.utils :refer [logger]]
+            [electron.utils :refer [logger fetch extract-zip] :as utils]
             [electron.configs :as cfgs]
-            [electron.utils :refer [*win fetch extract-zip] :as utils]))
+            [electron.window :refer [get-all-windows]]))
 
 ;; update & install
-(def *installing-or-updating (atom nil))
+;;(def *installing-or-updating (atom nil))
 (def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
 (def emit (fn [type payload]
-            (.. ^js @*win -webContents
-                (send (name type) (bean/->js payload)))))
+            (doseq [^js win (get-all-windows)]
+              (.. win -webContents
+                  (send (name type) (bean/->js payload))))))
+
+(defn dotdir-file?
+  [file]
+  (and file (string/starts-with? (path/normalize file) cfgs/dot-root)))
 
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
@@ -28,7 +33,7 @@
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
-            _ (js/console.debug "[Release Latest] " endpoint)
+            _ (debug "[Release Latest] " endpoint)
             res (bean/->clj res)
             version (:tag_name res)
             asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
@@ -38,28 +43,23 @@
            zipball
            (api "zipball"))
          asset)
-       version])
+       version
+       (:body res)])
 
     (fn [^js e]
       (emit :lsp-installed {:status :error :payload e})
       (throw (js/Error. :release-network-issue)))))
 
-(defn fetch-tag-release-asset
-  [repo tag])
-
 (defn download-asset-zip
-  [{:keys [id repo title author description effect]} url dot-extract-to]
+  [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
-    (p/let [^js res (fetch url)
-            _ (if-not (.-ok res) (throw (js/Error. :download-network-issue)))
+    (p/let [^js res (fetch dl-url #js {:timeout 30000})
+            _ (when-not (.-ok res) (throw (js/Error. :download-network-issue)))
             frm-zip (p/create
                       (fn [resolve1 reject1]
-                        (let [headers (. res -headers)
-                              body (.-body res)
-                              total-size (js/parseInt (.get headers "content-length"))
-                              start-at (.now js/Date)
+                        (let [body (.-body res)
                               *downloaded (atom 0)
-                              dest-basename (path/basename url)
+                              dest-basename (path/basename dl-url)
                               dest-basename (if-not (string/ends-with? dest-basename ".zip")
                                               (str id "_" dest-basename ".zip") dest-basename)
                               tmp-dest-file (path/join (os/tmpdir) (str dest-basename ".pending"))
@@ -71,7 +71,7 @@
                                             (reset! *downloaded downloaded))))
                             (.on "error" (fn [^js e]
                                            (reject1 e)))
-                            (.on "end" (fn [^js e]
+                            (.on "end" (fn [^js _e]
                                          (.close dest-file)
                                          (let [dest-file (string/replace tmp-dest-file ".pending" "")]
                                            (fs/renameSync tmp-dest-file dest-file)
@@ -91,7 +91,7 @@
                                    "."
                                    (last (take-while #(pkg? (.join path zip-extracted-path %)) dirs))))
 
-            _ (if-not tmp-extracted-root
+            _ (when-not tmp-extracted-root
                 (throw (js/Error. :invalid-plugin-package)))
 
             tmp-extracted-root (.join path zip-extracted-path tmp-extracted-root)
@@ -102,12 +102,17 @@
             _ (fs/moveSync tmp-extracted-root dot-extract-to)
 
             _ (let [src (.join path dot-extract-to "package.json")
+                    ^js sponsors (bean/->js sponsors)
                     ^js pkg (fs/readJsonSync src)]
                 (set! (.-repo pkg) repo)
                 (set! (.-title pkg) title)
                 (set! (.-author pkg) author)
                 (set! (.-description pkg) description)
                 (set! (.-effect pkg) (boolean effect))
+                ;; Force overwrite version because of developers tend to
+                ;; forget to update the version number of package.json
+                (when dl-version (set! (.-version pkg) dl-version))
+                (when sponsors (set! (.-sponsors pkg) sponsors))
                 (fs/writeJsonSync src pkg))
 
             _ (do
@@ -119,27 +124,29 @@
       (throw e))))
 
 (defn install-or-update!
-  [{:keys [version repo] :as item}]
-  (when (and (not @*installing-or-updating) repo)
-    (let [updating? (and version (. semver valid version))]
+  [{:keys [version repo only-check] :as item}]
+  (when repo
+    (let [coerced-version (and version (. semver coerce version))
+          updating? (and version (. semver valid coerced-version))]
 
-      (js/console.debug (if updating? "Updating:" "Installing:") repo)
+      (debug (if updating? "Updating:" "Installing:") repo)
 
       (-> (p/create
-            (fn [resolve reject]
-              (reset! *installing-or-updating item)
+            (fn [resolve _reject]
+              ;;(reset! *installing-or-updating item)
               ;; get releases
-              (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
+              (-> (p/let [[asset latest-version notes] (fetch-latest-release-asset item)
 
                           _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
 
                           ;; compare latest version
-                          _ (when (and updating? latest-version
-                                       (. semver valid latest-version))
+                          _ (when-let [coerced-latest-version
+                                       (and updating? latest-version
+                                            (. semver coerce latest-version))]
 
                               (debug "[Updating Latest?] " version " > " latest-version)
 
-                              (if (. semver lt version latest-version)
+                              (if (. semver lt coerced-version coerced-latest-version)
                                 (debug "[Updating Latest] " latest-version)
                                 (throw (js/Error. :no-new-version))))
 
@@ -147,31 +154,39 @@
                                    (:browser_download_url asset) asset)
 
                           _ (when-not dl-url
+                              (debug "[Download URL Error]" asset)
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (download-asset-zip item dl-url dest)
-                          _ (debug "[Updated DONE] " latest-version)]
+                          _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
+                          _ (debug "[" (if only-check "Checked" "Updated") "DONE] " latest-version)]
 
                     (emit :lsp-installed
-                          {:status  :completed
-                           :payload (assoc item :zip dl-url :dst dest)})
+                          {:status     :completed
+                           :only-check only-check
+                           :payload    (if only-check
+                                         (assoc item :latest-version latest-version :latest-notes notes)
+                                         (assoc item :zip dl-url :dst dest))})
 
-                    (resolve))
+                    (resolve nil))
+
                   (p/catch
                     (fn [^js e]
                       (emit :lsp-installed
-                            {:status  :error
-                             :payload (.-message e)}))
+                            {:status     :error
+                             :only-check only-check
+                             :payload    (assoc item :error-code (.-message e))}))
                     (resolve nil)))))
 
-          (p/finally #(reset! *installing-or-updating nil))))))
+          (p/finally
+            (fn []))))))
 
 (defn uninstall!
   [id]
   (let [id (string/replace id #"^[.\/]+" "")
         plugin-path (.join path (utils/get-ls-dotdir-root) "plugins" id)
         settings-path (.join path (utils/get-ls-dotdir-root) "settings" (str id ".json"))]
+    (debug "[Uninstall]" plugin-path)
     (when (fs/pathExistsSync plugin-path)
       (fs/removeSync plugin-path)
       (fs/removeSync settings-path))))

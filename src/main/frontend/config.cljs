@@ -60,10 +60,6 @@
   []
   (or 10 (get-in @state/state [:config :git-push-secs])))
 
-(defn git-repo-status-secs
-  []
-  (or 10 (get-in @state/state [:config :git-push-secs])))
-
 (defn text-formats
   []
   (let [config-formats (some->> (get-in @state/state [:config :text-formats])
@@ -185,14 +181,6 @@
       "`"
       "")))
 
-(defn get-subscript
-  [format]
-  "_")
-
-(defn get-superscript
-  [format]
-  "^")
-
 (defn get-empty-link-and-forward-pos
   [format]
   (case format
@@ -213,6 +201,17 @@
      1]
     ["" 0]))
 
+(defn with-label-link
+  [format label link]
+  (case format
+    :org
+    [(util/format "[[%s][label]]" link label)
+     (+ 4 (count link) (count label))]
+    :markdown
+    [(util/format "[%s](%s)" label link)
+     (+ 4 (count link) (count label))]
+    ["" 0]))
+
 (defn with-default-label
   [format label]
   (case format
@@ -223,13 +222,6 @@
     [(util/format "[%s]()" label)
      (+ 3 (count label))]
     ["" 0]))
-
-(defn properties-wrapper
-  [format]
-  (case format
-    :markdown
-    "---\n\n---"
-    ""))
 
 (defn properties-wrapper-pattern
   [format]
@@ -244,34 +236,6 @@
     :markdown
     "md"
     (name format)))
-
-(defn get-file-format
-  [extension]
-  (case (keyword extension)
-    :markdown
-    :markdown
-    :md
-    :markdown
-    (keyword extension)))
-
-(defn default-empty-block
-  ([format]
-   (default-empty-block format 2))
-  ([format n]
-   (let [block-pattern (get-block-pattern format)]
-     (apply str (repeat n block-pattern)))))
-
-(defn with-code-wrapper
-  [format mode code]
-  (let [mode (if-not (string/blank? mode)
-               (str mode " ")
-               "")]
-    (case format
-      :markdown
-      (util/format "```%s\n%s\n```" mode code)
-      :org
-      (util/format "#+BEGIN_SRC%s\n%s\n#+END_SRC" mode code)
-      code)))
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
@@ -289,15 +253,13 @@
   [path]
   (util/starts-with? path default-draw-directory))
 
-(defn journal?
-  [path]
-  (string/includes? path (str (get-journals-directory) "/")))
-
 (defonce local-repo "local")
 
 (defn demo-graph?
-  []
-  (= (state/get-current-repo) local-repo))
+  ([]
+   (demo-graph? (state/get-current-repo)))
+  ([graph]
+   (= graph local-repo)))
 
 (defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
@@ -342,11 +304,15 @@
 (defn get-repo-dir
   [repo-url]
   (cond
-    (or
-     (mobile-util/is-native-platform?)
-     (and (util/electron?) (local-db? repo-url)))
+    (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 
+    (and (mobile-util/is-native-platform?) (local-db? repo-url))
+    (let [dir (get-local-dir repo-url)]
+      (if (string/starts-with? dir "file:")
+        dir
+        (str "file:///" (string/replace dir #"^/+" ""))))
+    
     :else
     (str "/"
          (->> (take-last 2 (string/split repo-url #"/"))
@@ -360,20 +326,35 @@
     (util/node-path.join (get-repo-dir repo-url) path)))
 
 (defn get-file-path
+  "Normalization happens here"
   [repo-url relative-path]
   (when (and repo-url relative-path)
-    (cond
-      (and (or (util/electron?) (mobile-util/is-native-platform?)) (local-db? repo-url))
-      (let [dir (get-repo-dir repo-url)]
-        (if (string/starts-with? relative-path dir)
-          relative-path
-          (str dir "/"
-               (string/replace relative-path #"^/" ""))))
-      (= "/" (first relative-path))
-      (subs relative-path 1)
+    (let [path (cond
+                 (and (util/electron?) (local-db? repo-url))
+                 (let [dir (get-repo-dir repo-url)]
+                   (if (string/starts-with? relative-path dir)
+                     relative-path
+                     (str dir "/"
+                          (string/replace relative-path #"^/" ""))))
 
-      :else
-      relative-path)))
+                 (and (mobile-util/native-ios?) (local-db? repo-url))
+                 (let [dir (get-repo-dir repo-url)]
+                   (js/decodeURI (str dir relative-path)))
+
+                 (and (mobile-util/native-android?) (local-db? repo-url))
+                 (let [dir (get-repo-dir repo-url)
+                       dir (if (or (string/starts-with? dir "file:")
+                                   (string/starts-with? dir "content:"))
+                             dir
+                             (str "file:///" (string/replace dir #"^/+" "")))]
+                   (str (string/replace dir #"/+$" "") "/" relative-path))
+
+                 (= "/" (first relative-path))
+                 (subs relative-path 1)
+
+                 :else
+                 relative-path)]
+      (util/path-normalize path))))
 
 (defn get-config-path
   ([]
@@ -415,9 +396,3 @@
 (defn get-block-hidden-properties
   []
   (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))
-
-(defn get-static-path
-  []
-  (if (and (util/electron?) dev?)
-    "static/"
-    ""))

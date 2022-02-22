@@ -13,6 +13,7 @@ pom.xml.asc
 
 node_modules/
 static/
+tmp
 
 .cpcache/
 /src/gen
@@ -29,11 +30,12 @@ strings.csv
 
 .calva
 resources/electron.js
-.clj-kondo/
+.clj-kondo/.cache
 .lsp/
 /libs/dist/
 charlie/
 .vscode
 /.preprocessor-cljs
 docker
-yarn.lock
+android/app/src/main/assets/capacitor.plugin.json
+ios/App/App/capacitor.config.json

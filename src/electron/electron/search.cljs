@@ -3,12 +3,9 @@
             ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [electron.utils :refer [logger] :as utils]
             ["electron" :refer [app]]))
 
 (defonce version "0.0.1")
-
-(def error (partial (.-error logger) "[Search]"))
 
 (defonce databases (atom nil))
 
@@ -19,15 +16,16 @@
       (.close database))
     (reset! databases nil)))
 
-(defn normalize-db-name
+(defn sanitize-db-name
   [db-name]
   (-> db-name
       (string/replace "/" "_")
-      (string/replace "\\" "_")))
+      (string/replace "\\" "_")
+      (string/replace ":" "_"))) ;; windows
 
 (defn get-db
   [repo]
-  (get @databases (normalize-db-name repo)))
+  (get @databases (sanitize-db-name repo)))
 
 (defn prepare
   [^object db sql]
@@ -108,7 +106,7 @@
 
 (defn get-db-full-path
   [db-name]
-  (let [db-name (normalize-db-name db-name)
+  (let [db-name (sanitize-db-name db-name)
         search-dir (get-search-dir)]
     [db-name (path/join search-dir db-name)]))
 
@@ -159,41 +157,45 @@
 ;;                          "select id, uuid, content from blocks_fts where content match ? ORDER BY rank")]
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
+(defn- search-blocks-aux
+  [database sql input page limit]
+  (let [stmt (prepare database sql)]
+    (js->clj
+     (if page
+       (.all ^object stmt (int page) input limit)
+       (.all ^object stmt  input limit))
+     :keywordize-keys true)))
+
 (defn search-blocks
   [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-      (let [match? (or
-                    (string/includes? q " and ")
-                    (string/includes? q " & ")
-                    (string/includes? q " or ")
-                    (string/includes? q " | ")
-                    ;; (string/includes? q " not ")
-                    )
-            input  (if match?
-                         (-> q
-                             (string/replace " and " " AND ")
-                             (string/replace " & " " AND ")
-                             (string/replace " or " " OR ")
-                             (string/replace " | " " OR ")
-                             (string/replace " not " " NOT "))
-                         (str "%" (string/replace q #"\s+" "%") "%"))
+      (let [match-input (-> q
+                            (string/replace " and " " AND ")
+                            (string/replace " & " " AND ")
+                            (string/replace " or " " OR ")
+                            (string/replace " | " " OR ")
+                            (string/replace " not " " NOT "))
+            match-input (if (not= q match-input)
+                          (string/replace match-input "," "")
+                          (str "\"" match-input "\""))
+            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
             limit  (or limit 20)
             select "select rowid, uuid, content, page from blocks_fts where "
             pg-sql (if page "page = ? and" "")
-            sql    (if match?
-                     (str select
-                          pg-sql
-                          " content match ? order by rank limit ?")
-                     (str select
-                          pg-sql
-                          " content like ? limit ?"))
-            stmt   (prepare database sql)]
-        (js->clj
-         (if page
-           (.all ^object stmt (int page) input limit)
-           (.all ^object stmt  input limit))
-          :keywordize-keys true)))))
+            match-sql (str select
+                           pg-sql
+                           " content match ? order by rank limit ?")
+            non-match-sql (str select
+                               pg-sql
+                               " content like ? limit ?")]
+        (->>
+         (concat
+          (search-blocks-aux database match-sql match-input page limit)
+          (search-blocks-aux database non-match-sql non-match-input page limit))
+         (distinct)
+         (take limit)
+         (vec))))))
 
 (defn truncate-blocks-table!
   [repo]

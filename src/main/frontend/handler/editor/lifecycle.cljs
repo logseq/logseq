@@ -2,11 +2,13 @@
   (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.mobile.util :as mobile-util]
             [goog.dom :as gdom]))
 
 (defn did-mount!
   [state]
-  (let [[{:keys [format block-parent-id]} id] (:rum/args state)
+  (let [[{:keys [block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
@@ -18,7 +20,10 @@
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
     (when-let [element (gdom/getElement id)]
-      (.focus element)))
+      (.focus element)
+      (when (or (mobile-util/is-native-platform?)
+                (util/mobile?))
+        (util/make-el-cursor-position-into-center-viewport element))))
   state)
 
 (defn did-remount!
@@ -28,8 +33,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [id value format block repo config]} (get-state)
-        file? (:file? config)]
+  (let [{:keys [value]} (get-state)]
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
     (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))

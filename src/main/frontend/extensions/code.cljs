@@ -4,40 +4,128 @@
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/selection/active-line"]
+            ["codemirror/mode/apl/apl"]
+            ["codemirror/mode/asciiarmor/asciiarmor"]
+            ["codemirror/mode/asn.1/asn.1"]
+            ["codemirror/mode/asterisk/asterisk"]
+            ["codemirror/mode/brainfuck/brainfuck"]
             ["codemirror/mode/clike/clike"]
             ["codemirror/mode/clojure/clojure"]
+            ["codemirror/mode/cmake/cmake"]
+            ["codemirror/mode/cobol/cobol"]
             ["codemirror/mode/coffeescript/coffeescript"]
             ["codemirror/mode/commonlisp/commonlisp"]
+            ["codemirror/mode/crystal/crystal"]
             ["codemirror/mode/css/css"]
+            ["codemirror/mode/cypher/cypher"]
+            ["codemirror/mode/d/d"]
             ["codemirror/mode/dart/dart"]
+            ["codemirror/mode/diff/diff"]
+            ["codemirror/mode/django/django"]
             ["codemirror/mode/dockerfile/dockerfile"]
+            ["codemirror/mode/dtd/dtd"]
+            ["codemirror/mode/dylan/dylan"]
+            ["codemirror/mode/ebnf/ebnf"]
+            ["codemirror/mode/ecl/ecl"]
+            ["codemirror/mode/eiffel/eiffel"]
             ["codemirror/mode/elm/elm"]
             ["codemirror/mode/erlang/erlang"]
+            ["codemirror/mode/factor/factor"]
+            ["codemirror/mode/fcl/fcl"]
+            ["codemirror/mode/forth/forth"]
+            ["codemirror/mode/fortran/fortran"]
+            ["codemirror/mode/gas/gas"]
+            ["codemirror/mode/gfm/gfm"]
+            ["codemirror/mode/gherkin/gherkin"]
             ["codemirror/mode/go/go"]
+            ["codemirror/mode/groovy/groovy"]
+            ["codemirror/mode/haml/haml"]
+            ["codemirror/mode/handlebars/handlebars"]
+            ["codemirror/mode/haskell-literate/haskell-literate"]
             ["codemirror/mode/haskell/haskell"]
+            ["codemirror/mode/haxe/haxe"]
+            ["codemirror/mode/htmlembedded/htmlembedded"]
+            ["codemirror/mode/htmlmixed/htmlmixed"]
+            ["codemirror/mode/http/http"]
+            ["codemirror/mode/idl/idl"]
             ["codemirror/mode/javascript/javascript"]
+            ["codemirror/mode/jinja2/jinja2"]
             ["codemirror/mode/jsx/jsx"]
             ["codemirror/mode/julia/julia"]
+            ["codemirror/mode/livescript/livescript"]
             ["codemirror/mode/lua/lua"]
+            ["codemirror/mode/markdown/markdown"]
             ["codemirror/mode/mathematica/mathematica"]
+            ["codemirror/mode/mbox/mbox"]
+            ["codemirror/mode/meta"]
+            ["codemirror/mode/mirc/mirc"]
+            ["codemirror/mode/mllike/mllike"]
+            ["codemirror/mode/modelica/modelica"]
+            ["codemirror/mode/mscgen/mscgen"]
+            ["codemirror/mode/mumps/mumps"]
+            ["codemirror/mode/nginx/nginx"]
+            ["codemirror/mode/nsis/nsis"]
+            ["codemirror/mode/ntriples/ntriples"]
+            ["codemirror/mode/octave/octave"]
+            ["codemirror/mode/oz/oz"]
+            ["codemirror/mode/pascal/pascal"]
+            ["codemirror/mode/pegjs/pegjs"]
             ["codemirror/mode/perl/perl"]
             ["codemirror/mode/php/php"]
+            ["codemirror/mode/pig/pig"]
             ["codemirror/mode/powershell/powershell"]
+            ["codemirror/mode/properties/properties"]
             ["codemirror/mode/protobuf/protobuf"]
+            ["codemirror/mode/pug/pug"]
+            ["codemirror/mode/puppet/puppet"]
             ["codemirror/mode/python/python"]
+            ["codemirror/mode/q/q"]
             ["codemirror/mode/r/r"]
+            ["codemirror/mode/rpm/rpm"]
+            ["codemirror/mode/rst/rst"]
             ["codemirror/mode/ruby/ruby"]
             ["codemirror/mode/rust/rust"]
+            ["codemirror/mode/sas/sas"]
             ["codemirror/mode/sass/sass"]
             ["codemirror/mode/scheme/scheme"]
             ["codemirror/mode/shell/shell"]
+            ["codemirror/mode/sieve/sieve"]
+            ["codemirror/mode/slim/slim"]
             ["codemirror/mode/smalltalk/smalltalk"]
+            ["codemirror/mode/smarty/smarty"]
+            ["codemirror/mode/solr/solr"]
+            ["codemirror/mode/soy/soy"]
             ["codemirror/mode/sparql/sparql"]
+            ["codemirror/mode/spreadsheet/spreadsheet"]
             ["codemirror/mode/sql/sql"]
+            ["codemirror/mode/stex/stex"]
+            ["codemirror/mode/stylus/stylus"]
             ["codemirror/mode/swift/swift"]
+            ["codemirror/mode/tcl/tcl"]
+            ["codemirror/mode/textile/textile"]
+            ["codemirror/mode/tiddlywiki/tiddlywiki"]
+            ["codemirror/mode/tiki/tiki"]
+            ["codemirror/mode/toml/toml"]
+            ["codemirror/mode/tornado/tornado"]
+            ["codemirror/mode/troff/troff"]
+            ["codemirror/mode/ttcn-cfg/ttcn-cfg"]
+            ["codemirror/mode/ttcn/ttcn"]
             ["codemirror/mode/turtle/turtle"]
+            ["codemirror/mode/twig/twig"]
+            ["codemirror/mode/vb/vb"]
+            ["codemirror/mode/vbscript/vbscript"]
+            ["codemirror/mode/velocity/velocity"]
+            ["codemirror/mode/verilog/verilog"]
+            ["codemirror/mode/vhdl/vhdl"]
             ["codemirror/mode/vue/vue"]
+            ["codemirror/mode/wast/wast"]
+            ["codemirror/mode/webidl/webidl"]
             ["codemirror/mode/xml/xml"]
+            ["codemirror/mode/xquery/xquery"]
+            ["codemirror/mode/yacas/yacas"]
+            ["codemirror/mode/yaml-frontmatter/yaml-frontmatter"]
+            ["codemirror/mode/yaml/yaml"]
+            ["codemirror/mode/z80/z80"]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.db :as db]
@@ -45,6 +133,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
+            [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -57,6 +146,10 @@
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
+(defn- extra-codemirror-options []
+  (get (state/get-config)
+       :editor/extra-codemirror-options {}))
+
 (defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
   (.save editor)
@@ -66,107 +159,109 @@
       (cond
         (:block/uuid config)
         (let [block (db/pull [:block/uuid (:block/uuid config)])
-              format (:block/format block)
               content (:block/content block)
-              full-content (:full_content (last (:rum/args state)))]
-          (when (and full-content (string/includes? content full-content))
-            (let [lines (string/split-lines full-content)
-                  fl (first lines)
-                  ll (last lines)]
-              (when (and fl ll)
-                (let [value' (str (string/trim fl) "\n" value "\n" (string/trim ll))
-                      ;; FIXME: What if there're multiple code blocks with the same value?
-                      content' (string/replace-first content full-content value')]
-                  (editor-handler/save-block-if-changed! block content'))))))
+              {:keys [start_pos end_pos]} (:pos_meta (last (:rum/args state)))
+              offset (if (:block/pre-block? block) 0 2)
+              raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
+              prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
+              surfix (utf8/decode (.slice raw-content (- end_pos offset)))
+              new-content (if (string/blank? value)
+                            (str prefix surfix)
+                            (str prefix value "\n" surfix))]
+          (editor-handler/save-block-if-changed! block new-content))
 
         (:file-path config)
         (let [path (:file-path config)
-              content (db/get-file-no-sub path)
-              value (some-> (gdom/getElement path)
+              content (db/get-file path)
+              [_ id _ _ _] (:rum/args state)
+              value (some-> (gdom/getElement id)
                             (gobj/get "value"))]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
-            (file-handler/alter-file (state/get-current-repo) path (string/trim value)
+            (file-handler/alter-file (state/get-current-repo)
+                                     path
+                                     (str (string/trim value) "\n")
                                      {:re-render-root? true})))
 
         :else
         nil))))
 
 (defn- text->cm-mode
-  [text]
-  (when text
-    (let [mode (string/lower-case text)]
-      (case mode
-        "html" "text/html"
-        "c" "text/x-csrc"
-        "c++" "text/x-c++src"
-        "java" "text/x-java"
-        "c#" "text/x-csharp"
-        "csharp" "text/x-csharp"
-        "objective-c" "text/x-objectivec"
-        "scala" "text/x-scala"
-        "js" "text/javascript"
-        "typescript" "text/typescript"
-        "ts" "text/typescript"
-        "tsx" "text/typescript-jsx"
-        "scss" "text/x-scss"
-        "less" "text/x-less"
-        mode))))
+  ([text]
+   (text->cm-mode text :name))
+  ([text by]
+   (when text
+     (let [mode (string/lower-case text)
+           find-fn-name (case by
+                          :name "findModeByName"
+                          :ext "findModeByExtension"
+                          :file-name "findModeByFileName"
+                          "findModeByName")
+           find-fn (gobj/get cm find-fn-name)
+           cm-mode (find-fn mode)]
+       (if cm-mode
+         (.-mime cm-mode)
+         mode)))))
 
 (defn render!
   [state]
   (let [esc-pressed? (atom nil)
-        dark? (state/dark?)]
-    (let [[config id attr code theme] (:rum/args state)
-          original-mode (get attr :data-lang)
-          mode original-mode
-          clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
-          mode (if clojure? "clojure" (text->cm-mode mode))
-          lisp? (or clojure?
-                    (contains? #{"scheme" "racket" "lisp"} mode))
-          textarea (gdom/getElement id)
-          editor (when textarea
-                   (from-textarea textarea
-                                  #js {:mode mode
-                                       :theme (str "solarized " theme)
-                                       :matchBrackets lisp?
-                                       :autoCloseBrackets true
-                                       :lineNumbers true
-                                       :styleActiveLine true
-                                       :extraKeys #js {"Esc" (fn [cm]
-                                                               (save-file-or-block-when-blur-or-esc! cm textarea config state)
-                                                               (when-let [block-id (:block/uuid config)]
-                                                                 (let [block (db/pull [:block/uuid block-id])
-                                                                       value (.getValue cm)
-                                                                       textarea-value (gobj/get textarea "value")]
-                                                                   (editor-handler/edit-block! block :max block-id)))
-                                                               ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                                               (reset! esc-pressed? true)
-                                                               (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
-      (when editor
-        (let [textarea-ref (rum/ref-node state textarea-ref-name)]
-          (gobj/set textarea-ref codemirror-ref-name editor))
-        (let [element (.getWrapperElement editor)]
-          (when (= mode "calc")
-            (.on editor "change" (fn [_cm e]
-                                   (let [new-code (.getValue editor)]
-                                     (reset! (:calc-atom state) (calc/eval-lines new-code))))))
-          (.on editor "blur" (fn [_cm e]
-                               (when e (util/stop e))
-                               (state/set-block-component-editing-mode! false)
-                               (when-not @esc-pressed?
-                                 (save-file-or-block-when-blur-or-esc! editor textarea config state))))
-          (.addEventListener element "mousedown"
-                             (fn [e]
-                               (state/clear-selection!)
-                               (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
-                                 (state/set-editing! id (.getValue editor) block nil false))
-                               (util/stop e)
-                               (state/set-block-component-editing-mode! true)))
-          (.save editor)
-          (.refresh editor)))
-      editor)))
+        [config id attr _code theme] (:rum/args state)
+        default-open? (and (:editor/code-mode? @state/state)
+                           (= (:block/uuid (state/get-edit-block))
+                              (get-in config [:block :block/uuid])))
+        _ (state/set-state! :editor/code-mode? false)
+        original-mode (get attr :data-lang)
+        mode (if (:file? config)
+               (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
+               (text->cm-mode original-mode :name))
+        lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
+        textarea (gdom/getElement id)
+        default-cm-options {:theme (str "solarized " theme)
+                            :autoCloseBrackets true
+                            :lineNumbers true
+                            :matchBrackets lisp-like?
+                            :styleActiveLine true}
+        cm-options (merge default-cm-options
+                          (extra-codemirror-options)
+                          {:mode mode
+                           :extraKeys #js {"Esc"
+                                        (fn [cm]
+                                          (reset! esc-pressed? true)
+                                          (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                          (when-let [block-id (:block/uuid config)]
+                                            (let [block (db/pull [:block/uuid block-id])]
+                                              (editor-handler/edit-block! block :max block-id)))
+                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
+                                          (js/setTimeout #(reset! esc-pressed? false) 10))}})
+        editor (when textarea
+                 (from-textarea textarea (clj->js cm-options)))]
+    (when editor
+      (let [textarea-ref (rum/ref-node state textarea-ref-name)]
+        (gobj/set textarea-ref codemirror-ref-name editor))
+      (let [element (.getWrapperElement editor)]
+        (when (= mode "calc")
+          (.on editor "change" (fn [_cm _e]
+                                 (let [new-code (.getValue editor)]
+                                   (reset! (:calc-atom state) (calc/eval-lines new-code))))))
+        (.on editor "blur" (fn [_cm e]
+                             (when e (util/stop e))
+                             (state/set-block-component-editing-mode! false)
+                             (when-not @esc-pressed?
+                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
+        (.addEventListener element "mousedown"
+                           (fn [e]
+                             (state/clear-selection!)
+                             (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
+                               (state/set-editing! id (.getValue editor) block nil false))
+                             (util/stop e)
+                             (state/set-block-component-editing-mode! true)))
+        (.save editor)
+        (.refresh editor)))
+    (when default-open?
+      (.focus editor))
+    editor))
 
 (defn- load-and-render!
   [state]
@@ -181,28 +276,32 @@
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
+   :will-update (fn [state]
+                  (when-let [editor @(:editor-atom state)]
+                    (.toTextArea ^js editor)
+                    (let [[_ _ _ code _] (:rum/args state)]
+                      (when-let [textarea (rum/ref-node state textarea-ref-name)]
+                        (gobj/set textarea "defaultValue" code)
+                        (gobj/set textarea "value" code))))
+                  state)
+
    :did-update (fn [state]
-                 (when-let [editor @(:editor-atom state)]
-                   ;; clear the previous instance
-                   (.toTextArea ^js editor))
                  (load-and-render! state)
                  state)}
-  [state config id attr code theme options]
+  [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
        [:div.extensions__code-lang
-        (let [mode (string/lower-case mode)]
-          (if (= mode "text/x-clojure")
-            "clojure"
-            mode))]))
-   [:textarea (merge {:id id
-                      ;; Expose the textarea associated with the CodeMirror instance via
-                      ;; ref so that we can autofocus into the CodeMirror instance later.
-                      :ref textarea-ref-name
-                      :default-value code} attr)]
-   (when (= (:data-lang attr) "calc")
-     (calc/results (:calc-atom state)))])
+        (string/lower-case mode)]))
+   [:div.flex.flex-1.flex-row.w-full.mt-6
+    [:textarea (merge {:id id
+                       ;; Expose the textarea associated with the CodeMirror instance via
+                       ;; ref so that we can autofocus into the CodeMirror instance later.
+                       :ref textarea-ref-name
+                       :default-value code} attr)]
+    (when (= (:data-lang attr) "calc")
+      (calc/results (:calc-atom state)))]])
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

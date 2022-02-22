@@ -40,7 +40,8 @@
                    files)
         files (remove nil? files)]
     (repo-handler/parse-files-and-load-to-db! repo files nil)
-    (let [files (map (fn [{:file/keys [path content]}] [path content]) files)]
+    (let [files (->> (map (fn [{:file/keys [path content]}] (when path [path content])) files)
+                     (remove nil?))]
       (file-handler/alter-files repo files {:add-history? false
                                             :update-db? false
                                             :update-status? false
@@ -49,7 +50,7 @@
                              (map
                               (fn [title]
                                 (let [day (date/journal-title->int title)
-                                      page-name (string/lower-case (date/int->journal-title day))]
+                                      page-name (util/page-name-sanity-lc (date/int->journal-title day))]
                                   {:block/name page-name
                                    :block/journal? true
                                    :block/journal-day day}))
@@ -70,15 +71,16 @@
 ;;; import OPML files
 (defn import-from-opml!
   [data finished-ok-handler]
+  #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
-                          (block/extract-blocks parsed-blocks "" true :markdown)
-                          (mapv editor/wrap-parse-block))
+                         (block/extract-blocks parsed-blocks "" true :markdown)
+                         (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (page/page-exists? page-name))
         (page/create! page-name {:redirect? false}))
-      (let [page-block (db/entity [:block/name (string/lower-case page-name)])
+      (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)
             blocks (db/sort-by-left children page-block)
             last-block (last blocks)

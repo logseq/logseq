@@ -6,6 +6,8 @@
     -webkit-overflow-scrolling: touch;
 
     .menu-link {
+      word-break: break-all;
+
       .has-help {
         display: flex;
         align-items: center;
@@ -45,7 +47,7 @@
 
 .ui__notifications {
   position: fixed;
-  z-index: 99;
+  z-index: var(--ls-z-index-level-4);
   width: 100%;
   top: 3.2em;
   pointer-events: none;
@@ -85,13 +87,7 @@
 }
 
 .ui__modal {
-  @apply fixed bottom-0 inset-x-0 px-4 pb-4;
-
-  @screen sm {
-    & {
-      @apply inset-0 flex items-baseline justify-center top-24;
-    }
-  }
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-24;
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -106,13 +102,23 @@
 
     overflow: hidden;
     background: var(--ls-secondary-background-color);
-    max-width: 96vw;
 
     .panel-content {
-      overflow-y: auto;
-      max-width: 1024px;
+      overflow: overlay;
+      width: 94vw;
       max-height: 85vh;
       padding: 2rem;
+
+      @screen md {
+        min-width: 760px;
+        width: auto;
+
+        .ls-card {
+          width: 740px;
+          min-height: 60vh;
+          max-height: 740px;
+        }
+      }
     }
   }
 
@@ -120,6 +126,48 @@
     @apply text-gray-400 hover:text-gray-500
     focus:outline-none focus:text-gray-500
     transition ease-in-out duration-150;
+  }
+
+  &[label="ls-modal-align-center"] {
+    top: 0;
+
+    .ui__modal-panel {
+      top: 50vh;
+      transform: translateY(-60%);
+    }
+  }
+
+  &[label="diff__cp"] {
+      .panel-content {
+          padding: 2rem 1rem;
+
+          @screen sm {
+              padding: 2rem;
+          }
+      }
+  }
+}
+
+html.is-native-andorid,
+html.is-native-iphone,
+html.is-native-iphone-without-notch
+{
+    .references .foldable-title {
+        margin-left: 0px
+    }
+
+    .cards-review .block-control {
+        margin-left: -24px;
+    }
+
+    .ls-card {
+        min-height: 75vh;
+    }
+}
+
+html.is-mobile {
+  .ui__modal {
+    @apply bottom-0 inset-x-0;
   }
 }
 
@@ -136,18 +184,6 @@
   }
 }
 
-@media (min-width: 1024px) {
-  .panel-content {
-    min-width: 820px;
-  }
-
-  .panel-content .ls-card {
-    width: 740px;
-    min-height: 60vh;
-    max-height: 740px;
-  }
-}
-
 .ui__button {
   @apply items-center px-3 py-2 border border-transparent
   text-sm leading-4 font-medium rounded-md text-white
@@ -155,6 +191,7 @@
 
   &:disabled {
     opacity: 0.5;
+    cursor: not-allowed;
   }
 
   &:hover {
@@ -247,3 +284,4 @@
 .rotating-arrow svg {
   transition: all 100ms ease-in 0ms;
 }
+

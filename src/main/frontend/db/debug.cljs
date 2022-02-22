@@ -23,8 +23,7 @@
                                 :block/parent (:db/id (:block/parent e))}))))
                     (remove nil?))
         count-1 (count blocks)
-        count-2 (count (distinct blocks))
-        result (filter #(> (second %) 1) (frequencies blocks))]
+        count-2 (count (distinct blocks))]
     (assert (= count-1 count-2) (util/format "Blocks count: %d, repeated blocks count: %d"
                                              count-1
                                              (- count-1 count-2)))))

@@ -61,7 +61,7 @@
                       (str-len-distance query str)
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
-        :default (if (= (first q) (first s))
+        :else (if (= (first q) (first s))
                    (recur (rest q)
                           (rest s)
                           (inc mult) ;; increase the multiplier as more query chars are matched
@@ -76,20 +76,20 @@
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (string/lower-case query)]
+  (let [query (util/search-normalize query)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (.toLowerCase s))})))))
+                                     :score (score query (util/search-normalize s))})))))
          (map :data))))
 
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (string/lower-case q)
+    (let [q (util/search-normalize q)
           q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
@@ -100,6 +100,7 @@
     (protocol/transact-blocks! engine data)))
 
 (defn exact-matched?
+  "Check if two strings points toward same search result"
   [q match]
   (when (and (string? q) (string? match))
     (boolean
@@ -109,15 +110,16 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (string/lower-case match))
-      (seq (string/lower-case q))))))
+      (seq (util/search-normalize match))
+      (seq (util/search-normalize q))))))
 
 (defn page-search
+  "Return a list of page names that match the query"
   ([q]
-   (page-search q 3))
+   (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
-     (let [q (string/lower-case q)
+     (let [q (util/search-normalize q)
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
@@ -127,12 +129,13 @@
            ;; TODO: add indexes for highlights
            (->> (map
                   (fn [{:keys [item]}]
-                    (:name item))
+                    (:original-name item))
                  result)
                 (remove nil?)
+                (map string/trim)
                 (distinct)
-                (filter (fn [name]
-                          (exact-matched? q name))))))))))
+                (filter (fn [original-name]
+                          (exact-matched? q original-name))))))))))
 
 (defn file-search
   ([q]
@@ -152,11 +155,11 @@
   ([q]
    (template-search q 10))
   ([q limit]
-   (let [q (clean-str q)]
-     (let [templates (db/get-all-templates)]
-       (when (seq templates)
-         (let [result (fuzzy-search (keys templates) q :limit limit)]
-           (vec (select-keys templates result))))))))
+   (let [q (clean-str q)
+         templates (db/get-all-templates)]
+     (when (seq templates)
+       (let [result (fuzzy-search (keys templates) q :limit limit)]
+         (vec (select-keys templates result)))))))
 
 (defn sync-search-indice!
   [datoms]
@@ -172,8 +175,9 @@
                                       (set))
                 pages-to-add (->> (filter (fn [page]
                                             (contains? pages-to-add-set (:db/id page))) pages-result)
-                                  (map (fn [p] {:name (or (:block/original-name p)
-                                                          (:block/name p))})))
+                                  (map (fn [p] (or (:block/original-name p)
+                                                   (:block/name p))))
+                                  (map search-db/original-page-name->index))
                 pages-to-remove-set (->> (remove :added pages)
                                          (map :v))]
             (swap! search-db/indices update-in [repo :pages]
@@ -182,11 +186,13 @@
                        (doseq [page-name pages-to-remove-set]
                          (.remove indice
                                   (fn [page]
-                                    (= page-name (gobj/get page "name")))))
+                                    (= (util/safe-page-name-sanity-lc page-name)
+                                       (util/safe-page-name-sanity-lc (gobj/get page "original-name"))))))
                        (when (seq pages-to-add)
                          (doseq [page pages-to-add]
                            (.add indice (bean/->js page)))))
                      indice))))
+
         (when (seq blocks)
           (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
                                    (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
@@ -211,11 +217,11 @@
    (when repo
      (when-let [engine (get-engine repo)]
        (let [pages (search-db/make-pages-indice!)]
-        (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
-          (let [result {:pages pages
-                        :blocks blocks}]
-            (swap! indices assoc repo result)
-            indices)))))))
+         (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
+           (let [result {:pages pages
+                         :blocks blocks}]
+             (swap! indices assoc repo result)
+             indices)))))))
 
 (defn reset-indice!
   [repo]

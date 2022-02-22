@@ -1,20 +1,23 @@
 (ns electron.listener
   (:require [frontend.state :as state]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
-            [frontend.idb :as idb]
+            [datascript.core :as d]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
             [frontend.handler.metadata :as metadata-handler]
-            [frontend.ui :as ui]))
+            [frontend.handler.repo :as repo-handler]
+            [frontend.ui :as ui]
+            [frontend.db.persist :as db-persist]))
 
 (defn persist-dbs!
   []
   (->
-   (p/let [repos (idb/get-nfs-dbs)
+   (p/let [repos (db-persist/get-all-graphs)
            repos (-> repos
                      (conj (state/get-current-repo))
                      (distinct))]
@@ -46,12 +49,6 @@
 
 (defn listen-to-electron!
   []
-  (js/window.apis.on "open-dir-confirmed"
-                     (fn []
-                       (state/set-loading-files! true)
-                       (when-not (state/home?)
-                         (route-handler/redirect-to-home!))))
-
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on "file-watcher"
                      (fn [data]
@@ -65,9 +62,34 @@
                              comp [:div (str payload)]]
                          (notification/show! comp type false))))
 
+  (js/window.apis.on "graphUnlinked"
+                     (fn [data]
+                       (let [repo (bean/->clj data)]
+                         (repo-handler/remove-repo! repo))))
+
   (js/window.apis.on "setGitUsernameAndEmail"
                      (fn []
-                       (state/pub-event! [:modal/set-git-username-and-email]))))
+                       (state/pub-event! [:modal/set-git-username-and-email])))
+
+
+  (js/window.apis.on "getCurrentGraph"
+                     (fn []
+                       (when-let [graph (state/get-current-repo)]
+                         (ipc/ipc "setCurrentGraph" graph))))
+
+  (js/window.apis.on "redirect"
+                     (fn [data]
+                       (let [{:keys [payload]} (bean/->clj data)
+                             payload (update payload :to keyword)]
+                         (route-handler/redirect! payload))))
+
+  (js/window.apis.on "dbsync"
+                     (fn [data]
+                       (let [{:keys [graph tx-data]} (bean/->clj data)
+                             tx-data (db/string->db (:data tx-data))]
+                         (when-let [conn (db/get-conn graph false)]
+                           (d/transact! conn tx-data {:dbsync? true}))
+                         (ui-handler/re-render-root!)))))
 
 (defn listen!
   []

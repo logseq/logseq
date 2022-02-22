@@ -1,11 +1,11 @@
 (ns frontend.format.block-test
   (:require [frontend.format.block :as block]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
+            [cljs.test :refer [deftest are]]))
 
 (deftest test-extract-properties
   (are [x y] (= (:properties (block/extract-properties x)) y)
     [["year" "1000"]] {:year 1000}
-    [["year" "\"1000\""]] {:year "1000"}
+    [["year" "\"1000\""]] {:year "\"1000\""}
     [["background-color" "#000000"]] {:background-color "#000000"}
     [["alias" "name/with space"]] {:alias #{"name/with space"}}
     [["year" "1000"] ["alias" "name/with space"]] {:year 1000, :alias #{"name/with space"}}
@@ -32,4 +32,4 @@
     [["foo" "#bar, #baz"]] ["bar" "baz"]
     [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test"]))
 
-#_(run-tests)
+#_(cljs.test/run-tests)

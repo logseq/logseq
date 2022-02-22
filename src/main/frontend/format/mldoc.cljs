@@ -1,6 +1,5 @@
 (ns frontend.format.mldoc
   (:require [cljs-bean.core :as bean]
-            [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.text :as text]
@@ -10,9 +9,7 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
-            [linked.core :as linked]
-            [promesa.core :as p]
-            [frontend.util.pool :as pool]))
+            [linked.core :as linked]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -37,9 +34,10 @@
 (defn default-config
   ([format]
    (default-config format {:export-heading-to-list? false}))
-  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options]}]
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
+           :parse_outline_only (or parse_outline_only? false)
            :heading_number false
            :keep_line_break true
            :format format
@@ -89,39 +87,6 @@
                      config
                      (or references default-references)))
 
-;; Org-roam
-(defn get-tags-from-definition
-  [ast]
-  (loop [ast ast]
-    (if (seq ast)
-      (match (first ast)
-        ["List" l]
-        (when-let [name (:name (first l))]
-          (let [name (and (vector? name)
-                          (last (first name)))]
-            (when (and (string? name)
-                       (= (string/lower-case name) "tags"))
-              (->>
-               (last (first (:content (first l))))
-               (map second)
-               (filter (and map? :url))
-               (map (fn [x]
-                      (let [label (last (first (:label x)))
-                            search (and (= (first (:url x)) "Search")
-                                        (last (:url x)))
-                            tag (if-not (string/blank? label)
-                                  label
-                                  search)]
-                        (when tag (string/lower-case tag)))))
-               (remove nil?)))))
-
-        ["Heading" _h]
-        nil
-
-        :else
-        (recur (rest ast)))
-      nil)))
-
 (defn- ->vec
   [s]
   (if (string? s) [s] s))
@@ -152,9 +117,9 @@
                       properties-ast
                       (map (fn [[k v]]
                              (let [k (keyword (string/lower-case k))
-                                   v (if (contains? #{:title :description :filters :roam_tags :macro} k)
+                                   v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (text/split-page-refs-without-brackets v))]
+                                       (text/parse-property k v))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -162,46 +127,33 @@
                    (->>
                     (map
                      (fn [[_ v]]
-                       (do
-                         (let [[k v] (util/split-first " " v)]
-                          (mapv
-                           string/trim
-                           [k v]))))
+                       (let [[k v] (util/split-first " " v)]
+                         (mapv
+                          string/trim
+                          [k v])))
                      macro-properties)
                     (into {}))
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into (linked/map)))
-          properties (if (seq properties)
-                       (cond-> properties
-                         (:roam_key properties)
-                         (assoc :key (:roam_key properties)))
-                       properties)
-          definition-tags (get-tags-from-definition ast)
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          alias (->> (->vec-concat (:roam_alias properties) (:alias properties))
-                     (remove string/blank?))
+          alias (:alias properties)
+          alias (when alias
+                  (if (coll? alias)
+                    (remove string/blank? alias)
+                    [alias]))
           filetags (when-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
-          roam-tags (when-let [org-roam-tags (:roam_tags properties)]
-                      (let [pat #"\"(.*?)\"" ;; note: lazy, capturing group
-                            quoted (map second (re-seq pat org-roam-tags))
-                            rest   (string/replace org-roam-tags pat "")
-                            rest (->> (string/split rest " ")
-                                      (remove string/blank?))]
-                        (concat quoted rest)))
-          tags (->> (->vec-concat roam-tags (:tags properties) definition-tags filetags)
+          tags (:tags properties)
+          tags (->> (->vec-concat tags filetags)
                     (remove string/blank?))
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
-                         (update :roam_alias ->vec)
-                         (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
-          properties (medley/map-vals util/unquote-string-if-wrapped properties)]
+          properties (medley/remove-kv (fn [_k v] (or (nil? v) (and (coll? v) (empty? v)))) properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
@@ -241,25 +193,9 @@
             (update-src-full-content content)
             (collect-page-properties)))
       (catch js/Error e
-        (log/error :edn/convert-failed e)
+        (js/console.error e)
         []))
     (log/error :edn/wrong-content-type content)))
-
-(defn ->edn-async
-  [content config]
-  (if util/node-test?
-    (p/resolved (->edn content config))
-    (try
-      (if (string/blank? content)
-        (p/resolved [])
-        (p/let [v (pool/add-parse-job! content config)]
-          (-> v
-              (util/json->clj)
-              (update-src-full-content content)
-              (collect-page-properties))))
-      (catch js/Error e
-        (log/error :edn/convert-failed e)
-        (p/resolved [])))))
 
 (defn opml->edn
   [content]
@@ -285,17 +221,17 @@
 
 (defrecord MldocMode []
   protocol/Format
-  (toEdn [this content config]
+  (toEdn [_this content config]
     (->edn content config))
-  (toHtml [this content config references]
+  (toHtml [_this content config references]
     (export "html" content config references))
-  (loaded? [this]
+  (loaded? [_this]
     true)
-  (lazyLoad [this ok-handler]
+  (lazyLoad [_this _ok-handler]
     true)
-  (exportMarkdown [this content config references]
+  (exportMarkdown [_this content config references]
     (parse-export-markdown content config references))
-  (exportOPML [this content config title references]
+  (exportOPML [_this content config title references]
     (parse-export-opml content config title references)))
 
 (defn plain->text

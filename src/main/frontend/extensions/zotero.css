@@ -1,6 +1,6 @@
 .zotero-settings {
   .row {
-    @apply sm:grid sm:grid-cols-3 sm:gap-4 mb-4 flex items-center;
+    @apply sm:grid sm:grid-cols-3 sm:gap-4 mb-4 flex flex-wrap items-center;
   }
 
   .title {
@@ -8,7 +8,13 @@
   }
 
   .form-select {
-    @apply py-2;
+      @apply py-2;
+      min-width: 20rem;
+  }
+
+  .form-input {
+      @apply py-2;
+      min-width: 20rem;
   }
 
   svg {

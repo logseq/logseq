@@ -19,10 +19,10 @@
   (when (email? email)
     (util/post (str config/api "email")
                {:email email}
-               (fn [result]
+               (fn [_result]
                  (db/transact! [{:me/email email}])
                  (swap! state/state assoc-in [:me :email] email))
-               (fn [error]
+               (fn [_error]
                  (notification/show! "Email already exists!"
                                      :error)))))
 
@@ -30,7 +30,7 @@
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
              {:cors-proxy cors-proxy}
-             (fn [result]
+             (fn [_result]
                (db/transact! [{:me/cors_proxy cors-proxy}])
                (swap! state/state assoc-in [:me :cors_proxy] cors-proxy))
              (fn [error]

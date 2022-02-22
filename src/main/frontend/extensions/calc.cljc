@@ -93,12 +93,12 @@
        ;; the editor's parent will go into edit mode if any elements are clicked
        ;; if we stop click propagation on this element, we allow the user to
        ;; copy and paste the calc results
-       [:div.extensions__code-calc {:on-mouse-down (fn [e]
-                                                     (.stopPropagation e))}
+       [:div.extensions__code-calc.pr-2 {:on-mouse-down (fn [e]
+                                                          (.stopPropagation e))}
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
-          [:div.extensions__code-calc-output-line {:key i}
+          [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
            [:span (cond
                     (nil? line)           ""
-                    (or  (failure? line)) "?"
+                    (failure? line) "?"
                     :else                 line)]])])))

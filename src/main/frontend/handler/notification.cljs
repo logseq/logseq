@@ -7,10 +7,6 @@
   (let [contents (state/get-notification-contents)]
     (state/set-state! :notification/contents (dissoc contents uid))))
 
-(defn clear-all!
-  []
-  (state/set-state! :notification/contents nil))
-
 (defn show!
   ([content status]
    (show! content status true nil))
@@ -23,7 +19,7 @@
                                                      uid {:content content
                                                           :status status}))
 
-     (when clear?
-       (js/setTimeout #(clear! uid) 3000))
+     (when (and clear? (not= status :error))
+       (js/setTimeout #(clear! uid) 1500))
 
      uid)))

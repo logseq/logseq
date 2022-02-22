@@ -103,6 +103,7 @@
     white-space: nowrap;
     top: -1px;
     padding-bottom: 10px;
+    z-index: 1;
 
     @screen md {
       display: flex;
@@ -254,6 +255,25 @@
   transform: scale(0.7);
 }
 
+.ls-page-title {
+  @apply rounded-sm;
+  
+  padding: 5px 8px;
+  margin: 0 -6px;
+  
+  &.title {
+    margin-bottom: 12px;
+  }
+
+  > .edit-input {
+    width: 100%;
+  }
+
+  &.editing {
+    background-color: var(--ls-secondary-background-color);
+  }
+}
+
 /* Change to another cursor style if Shift key is active */
 [data-active-keystroke*="Shift" i]
 :is(.journal-title, .page-title,
@@ -264,7 +284,6 @@
 
 .add-button-link {
   opacity: 0;
-  margin-left: 10px;
   color: var(--ls-primary-text-color);
   transform: scale(.8);
 
@@ -280,9 +299,31 @@
 
   &-wrap {
     cursor: pointer;
+  }
+}
 
-    &:hover .add-button-link {
-      opacity: .3;
+.cp__right-sidebar .add-button-link {
+    margin-left: 21px;
+}
+
+html.is-native-android,
+html.is-native-ios {
+  .cp__all_pages {
+    .actions > .r {
+      position: relative;
+      padding: 15px 0;
+      padding-right: 10px;
+      padding-bottom: 25px;
+      justify-content: space-between;
+
+      .paginates {
+        position: absolute;
+        top: 40px;
+        right: 0;
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+      }
     }
   }
 }

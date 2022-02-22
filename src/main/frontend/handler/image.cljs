@@ -7,11 +7,13 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn render-local-images!
   []
-  (when-not (and (util/electron?)
+  (when-not (and (or (util/electron?)
+                     (mobile-util/native-ios?))
                  (config/local-db? (state/get-current-repo)))
     (try
       (let [images (array-seq (gdom/getElementsByTagName "img"))
@@ -47,7 +49,7 @@
              (fn [error]
                (println "Can't read local image file: ")
                (js/console.dir error))))))
-      (catch js/Error e
+      (catch js/Error _e
         nil))))
 
 (defn request-presigned-url
@@ -74,10 +76,9 @@
                                                (fn [{:keys [signed-url]}]
                                                  (reset! uploading? false)
                                                  (if signed-url
-                                                   (do
-                                                     (url-handler signed-url))
+                                                   (url-handler signed-url)
                                                    (prn "Something error, can't get a valid signed url.")))
-                                               (fn [error]
+                                               (fn [_error]
                                                  (reset! uploading? false)
                                                  (prn "Something error, can't get a valid signed url."))))
                                   (fn [error]

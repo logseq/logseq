@@ -36,11 +36,19 @@ html {
   }
 }
 
-.form-checkbox {
+@media (prefers-color-scheme: dark) {
+  .preboot-loading {
+    color: lightgray;
+  }
+}
+
+.form-checkbox, .form-radio {
   color: var(--ls-page-checkbox-color, #6093a0);
   background-color: var(--ls-page-checkbox-color, #6093a0);
   border-color: var(--ls-page-checkbox-border-color, #6093a0);
   border: none;
+  position: relative;
+  top: -1px;
 }
 
 .form-checkbox:hover {
@@ -65,12 +73,6 @@ html[data-theme='light'] {
   .cp__header {
     a {
       color: var(--ls-primary-text-color);
-    }
-
-    .block-parents {
-      a {
-        color: var(--ls-link-ref-text-color);
-      }
     }
   }
 

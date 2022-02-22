@@ -1,6 +1,7 @@
 (ns frontend.modules.instrumentation.posthog
   (:require [frontend.config :as cfg]
             [frontend.util :as util]
+            [frontend.mobile.util :as mobile]
             [frontend.version :refer [version]]
             ["posthog-js" :as posthog]
             [cljs-bean.core :as bean]))
@@ -11,12 +12,20 @@
 (defn register []
   (posthog/register
    (clj->js
-    {:app_type (if (util/electron?) "electron" "web")
+    {:app_type (let [platform (mobile/platform)]
+                 (cond
+                   (util/electron?)
+                   "electron"
+
+                   platform
+                   platform
+
+                   :else
+                   "web"))
      :app_env (if cfg/dev? "development" "production")
      :app_ver version
      :schema_ver 0
      ;; hack, did not find ways to hack data on-the-fly with posthog-js
-     :$ip masked
      :$current_url masked
      :$pathname masked})))
 
@@ -42,7 +51,8 @@
 (defn capture [id data]
   (try
     (posthog/capture (str id) (bean/->js data))
-    (catch js/Error _e
+    (catch js/Error e
+      (js/console.error e)
       ;; opt out or network issues
       nil)))
 

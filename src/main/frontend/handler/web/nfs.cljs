@@ -15,8 +15,8 @@
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
@@ -28,7 +28,7 @@
                         (let [path (:file/path f)]
                           (or (string/starts-with? path ".git/")
                               (string/includes? path ".git/")
-                              (and (util/ignored-path? "" path)
+                              (and (util-fs/ignored-path? "" path)
                                    (not= (:file/name f) ".gitignore")))))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
@@ -47,8 +47,8 @@
   (->>
    (cond
      mobile-native?
-     (map (fn [{:keys [uri content type size mtime]}]
-            {:file/path             (string/replace uri "file://" "")
+     (map (fn [{:keys [uri content size mtime]}]
+            {:file/path             (util/path-normalize uri)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
@@ -57,7 +57,7 @@
      electron?
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
-              {:file/path             path
+              {:file/path             (util/path-normalize path)
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
@@ -71,7 +71,7 @@
                     path (-> (get-attr "webkitRelativePath")
                              (string/replace-first (str dir-name "/") ""))]
                 {:file/name             (get-attr "name")
-                 :file/path             path
+                 :file/path             (util/path-normalize path)
                  :file/last-modified-at (get-attr "lastModified")
                  :file/size             (get-attr "size")
                  :file/type             (get-attr "type")
@@ -121,22 +121,24 @@
         electron? (util/electron?)
         mobile-native? (mobile-util/is-native-platform?)
         nfs? (and (not electron?)
-                  (not mobile-native?))]
+                  (not mobile-native?))
+        *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
      (p/let [result (fs/open-dir (fn [path handle]
                                    (when nfs?
                                      (swap! path-handles assoc path handle))))
-             _ (state/set-loading-files! true)
-             _ (when-not (state/home?)
-                 (route-handler/redirect-to-home!))
              root-handle (first result)
              dir-name (if nfs?
                         (gobj/get root-handle "name")
-                        root-handle)]
+                        root-handle)
+             repo (str config/local-db-prefix dir-name)
+             _ (state/set-loading-files! repo true)
+             _ (when-not (state/home?)
+                 (route-handler/redirect-to-home! false))]
+       (reset! *repo repo)
        (when-not (string/blank? dir-name)
-         (p/let [repo (str config/local-db-prefix dir-name)
-                 root-handle-path (str config/local-handle-prefix dir-name)
+         (p/let [root-handle-path (str config/local-handle-prefix dir-name)
                  _ (when nfs?
                      (idb/set-item! root-handle-path root-handle)
                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
@@ -172,21 +174,23 @@
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                            (p/let [_ (repo-handler/load-repo-to-db! repo
                                                                     {:first-clone? true
+                                                                     :new-graph?   true
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
-                             (state/set-loading-files! false)
-                             (and ok-handler (ok-handler))
+                             (state/set-loading-files! repo false)
+                             (when ok-handler (ok-handler))
                              (when (util/electron?)
                                (fs/watch-dir! dir-name))
-                             (state/pub-event! [:graph/added repo])))))
+                             (db/persist-if-idle! repo)))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))
      (p/catch (fn [error]
-                (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
-                  (state/set-loading-files! false)
+                (log/error :exception error)
+                (when (contains? #{"AbortError" "Error"} (gobj/get error "name"))
+                  (when @*repo (state/set-loading-files! @*repo false))
                   ;; (log/error :nfs/open-dir-error error)
-                  (log/error :exception error)))))))
+                  ))))))
 
 (defn- compute-diffs
   [old-files new-files]
@@ -220,7 +224,7 @@
                                                   (:file/last-modified-at file)))
                                               new-files))
         get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
-        {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
+        {:keys [added modified deleted]} (compute-diffs old-files new-files)
         ;; Use the same labels as isomorphic-git
         rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file :last-modified-at (get-last-modified-at file)}) col))
         _ (when (and nfs? (seq deleted))
@@ -257,9 +261,12 @@
                                (rename-f "modify" modified))]
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
+                      (comment "re-index a local graph is handled here")
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
+                                                      ;; re-ask encryption
+                                                      :first-clone? re-index?
                                                       :refresh? (not re-index?)}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
@@ -280,9 +287,7 @@
        (when re-index?
          (state/set-graph-syncing? true))
        (->
-        (p/let [handle (-> (idb/get-item handle-path)
-                           (p/catch (fn [_error]
-                                      nil)))]
+        (p/let [handle (when-not electron? (idb/get-item handle-path))]
           (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
                     files-result (fs/get-files (if nfs? handle

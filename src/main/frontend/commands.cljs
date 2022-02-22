@@ -42,7 +42,7 @@
     [:li.mb-1 [:code "{{query (page-tags #tag)}}"]]]
 
    [:p "Check more examples at "
-    [:a {:href "https://logseq.github.io/#/page/queries"
+    [:a {:href "https://docs.logseq.com/#/page/queries"
          :target "_blank"}
      "Queries documentation"]
     "."]])
@@ -335,10 +335,11 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern]
+   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern backward-truncate-number]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (or last-pattern (state/get-editor-command-trigger))
+    (let [last-pattern (when-not backward-truncate-number
+                         (or last-pattern (state/get-editor-command-trigger)))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
@@ -346,41 +347,52 @@
                          (when-let [i (string/index-of (util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
-          prefix (subs edit-content 0 current-pos)
-          space? (when (and last-pattern prefix)
-                   (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
-                             (util/safe-subs prefix 0 last-index))]
+          orig-prefix (subs edit-content 0 current-pos)
+          space? (when (and last-pattern orig-prefix)
+                   (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
+                             (util/safe-subs orig-prefix 0 last-index))]
                      (not
                       (or
                        (and s
                             (string/ends-with? s "(")
                             (or (string/starts-with? last-pattern "((")
                                 (string/starts-with? last-pattern "[[")))
-                       (string/starts-with? s "{{embed")))))
+                       (and s (string/starts-with? s "{{embed"))))))
           space? (if (and space? (string/starts-with? last-pattern "#[["))
                    false
                    space?)
-          prefix (if (string/blank? last-pattern)
+          prefix (cond
+                   (and backward-truncate-number (integer? backward-truncate-number))
+                   (str (util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                        (when-not (zero? backward-truncate-number)
+                          value))
+
+                   (string/blank? last-pattern)
                    (if space?
-                     (util/concat-without-spaces prefix value)
-                     (str prefix value))
-                   (util/replace-last last-pattern prefix value space?))
+                     (util/concat-without-spaces orig-prefix value)
+                     (str orig-prefix value))
+
+                   :else
+                   (util/replace-last last-pattern orig-prefix value space?))
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
+                      (string/blank? postfix)
+                      prefix
+
                       space?
                       (util/concat-without-spaces prefix postfix)
 
                       :else
                       (str prefix postfix))
-          new-pos (- (+ (count prefix)
-                        (or forward-pos 0))
+          new-pos (- (count prefix)
                      (or backward-pos 0))]
       (state/set-block-content-and-last-pos! id new-value new-pos)
       (cursor/move-cursor-to input
-                             (if (or backward-pos forward-pos)
+                             (if (and (or backward-pos forward-pos)
+                                      (not= end-pattern "]]"))
                                new-pos
-                               (+ new-pos 1))))))
+                               (inc new-pos))))))
 
 (defn simple-insert!
   [id value
@@ -401,26 +413,6 @@
     (cursor/move-cursor-to input new-pos)
     (when check-fn
       (check-fn new-value (dec (count prefix)) new-pos))))
-
-(defn insert-before!
-  [id value
-   {:keys [backward-pos forward-pos check-fn]
-    :as _option}]
-  (let [input (gdom/getElement id)
-        edit-content (gobj/get input "value")
-        current-pos (cursor/pos input)
-        suffix (subs edit-content 0 current-pos)
-        new-value (str value
-                       suffix
-                       (subs edit-content current-pos))
-        new-pos (- (+ (count suffix)
-                      (count value)
-                      (or forward-pos 0))
-                   (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when check-fn
-      (check-fn new-value (dec (count suffix)) new-pos))))
 
 (defn simple-replace!
   [id value selected
@@ -468,14 +460,6 @@
                         :extract-fn first
                         :limit 50)))
 
-(defn get-command-input
-  [edit-content]
-  (when-not (string/blank? edit-content)
-    (let [result (last (util/split-last (state/get-editor-command-trigger) edit-content))]
-      (if (string/blank? result)
-        nil
-        result))))
-
 (defmulti handle-step first)
 
 (defmethod handle-step :editor/hook [[_ event {:keys [pid uuid] :as payload}] format]
@@ -491,7 +475,8 @@
                          (not beginning-of-line?))
                   (str "\n" value)
                   value)]
-      (insert! input-id value option))))
+      (insert! input-id value option)
+      (reset! *show-commands false))))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -597,8 +582,7 @@
 (defmethod handle-step :editor/move-cursor-to-properties [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-            edit-content (gobj/get current-input "value")]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))]
         (property/goto-properties-end format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
@@ -639,7 +623,8 @@
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
     (when-let [input (gdom/getElement input-id)]
-      (util/insert-at-current-position! input (str macro " ")))))
+      (when macro
+       (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)

@@ -2,11 +2,12 @@
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [electron.listener :as el]
-            [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
+            [frontend.db.conn :as conn]
+            [frontend.db.react :as db-react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -17,27 +18,27 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.core :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
-            [frontend.search.db :as search-db]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.pool :as pool]
+            [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.persist :as db-persist]))
 
 (defn set-global-error-notification!
   []
   (set! js/window.onerror
-        (fn [message, source, lineno, colno, error]
+        (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
-            (js/console.error error)
+            (log/error :exception error)
             ;; (notification/show!
             ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
             ;;  :error
@@ -47,26 +48,23 @@
 
 (defn- watch-for-date!
   []
-  (let [cards-last-check-time (atom (util/time-ms))
-        f (fn []
+  (let [f (fn []
+            #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
-               ;; Don't create the journal file until user writes something
-                (page-handler/create-today-journal!))
-
-              (when (and (state/input-idle? repo)
-                         (> (- (util/time-ms) @cards-last-check-time)
-                            (* 60 1000)))
-                (let [total (srs/get-srs-cards-total)]
-                  (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))))
-
-              (when (and repo
-                         (search-db/empty? repo)
-                         (state/input-idle? repo))
-                (search/rebuild-indices!))))]
+                ;; Don't create the journal file until user writes something
+                (page-handler/create-today-journal!))))]
     (f)
     (js/setInterval f 5000)))
+
+(defn- instrument!
+  []
+  (let [total (srs/get-srs-cards-total)]
+    (state/set-state! :srs/cards-due-count total)
+    (state/pub-event! [:instrument {:type :flashcards/count
+                                    :payload {:total (or total 0)}}])
+    (state/pub-event! [:instrument {:type :blocks/count
+                                    :payload {:total (db/blocks-count)}}])))
 
 (defn store-schema!
   []
@@ -102,13 +100,15 @@
                             (ui-handler/add-style-if-exists!)
 
                             ;; install after config is restored
+                            (shortcut/unlisten-all)
                             (shortcut/refresh!)
 
                             (cond
                               (and (not logged?)
                                    (not (seq (db/get-files config/local-repo)))
                                    ;; Not native local directory
-                                   (not (some config/local-db? (map :url repos))))
+                                   (not (some config/local-db? (map :url repos)))
+                                   (not (mobile-util/is-native-platform?)))
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else
@@ -129,15 +129,15 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)
-                            ;; (when-not (state/logged?)
-                            ;;   (state/pub-event! [:after-db-restore repos]))
-                            ))
+                            (when (and (state/get-current-repo)
+                                       (mobile-util/native-ios?))
+                              (mobile-util/icloud-sync!))
+                            (file-handler/watch-for-current-graph-dir!)))
                          (p/catch (fn [error]
-                                    (log/error :db/restore-failed error))))))]
+                                    (log/error :exception error))))))
+        interval-id (js/setInterval inner-fn 50)]
     ;; clear this interval
-    (let [interval-id (js/setInterval inner-fn 50)]
-      (reset! interval interval-id))))
+    (reset! interval interval-id)))
 
 (defn- handle-connection-change
   [e]
@@ -149,11 +149,26 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
+(defn enable-datalog-console
+  "Enables datalog console in browser provided by https://github.com/homebaseio/datalog-console"
+  []
+  (js/document.documentElement.setAttribute "__datalog-console-remote-installed__" true)
+  (.addEventListener js/window "message"
+                     (fn [event]
+                       (let [conn (conn/get-conn)]
+                         (when-let [devtool-message (gobj/getValueByKeys event "data" ":datalog-console.client/devtool-message")]
+                           (let [msg-type (:type (read-string devtool-message))]
+                             (case msg-type
+
+                               :datalog-console.client/request-whole-database-as-string
+                               (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str conn)} "*")
+
+                               nil)))))))
 (defn- get-repos
   []
   (let [logged? (state/logged?)
         me (state/get-me)]
-    (p/let [nfs-dbs (idb/get-nfs-dbs)
+    (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]
                            {:url db :nfs? true}) nfs-dbs)]
       (cond
@@ -169,84 +184,66 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn on-load-events
-  []
-  (set! js/window.onload
-        (fn []
-          (instrument/init))))
-
 (defn clear-cache!
   []
-  (p/let [_ (idb/clear-local-storage-and-idb!)
-          _ (when (util/electron?)
-              (ipc/ipc "clearCache"))]
-    (js/setTimeout #(js/window.location.reload %) 3000)))
+  (notification/show! "Clearing..." :warning false)
+  (p/let [_ (when (util/electron?)
+              (ipc/ipc "clearCache"))
+          _ (idb/clear-local-storage-and-idb!)]
+    (js/setTimeout
+      (fn [] (if (util/electron?)
+               (ipc/ipc :reloadWindowPage)
+               (js/window.location.reload)))
+      2000)))
 
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
-  (state/set-editor-cp! editor/box)
   (command-palette/register-global-shortcut-commands))
 
 (defn start!
   [render]
   (set-global-error-notification!)
   (let [db-schema (storage/get :db-schema)
-        {:keys [me logged? repos]} (get-me-and-repos)]
+        {:keys [me logged?]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
-    (on-load-events)
+    (instrument/init)
     (set-network-watcher!)
+
+    (mobile/init!)
 
     (util/indexeddb-check?
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
+    (db-react/run-custom-queries-when-idle!)
+
     (events/run!)
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! me repos logged? db-schema)
-      (when (mobile/is-native-platform?)
-        (p/do! (mobile/hide-splash))))
+      (when (mobile-util/is-native-platform?)
+        (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (pool/init-parser-pool!)
+    (when config/dev?
+      (enable-datalog-console))
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))
 
-(defonce triggered? (atom false))
-(when (util/electron?)
-  (.addEventListener js/window "beforeunload"
-                     (fn [e]
-                       (when-not @triggered?
-                         (.preventDefault e)
-                         (state/pub-event! [:modal/show
-                                            [:div
-                                             [:h1.title "Reload Logseq?"]
-                                             (ui/button
-                                              [:span "Yes " (ui/keyboard-shortcut ["enter"])]
-                                              :autoFocus "on"
-                                              :large? true
-                                              :on-click (fn []
-                                                          (pool/terminate-parser-pool!)
-                                                          (p/let [_ (el/persist-dbs!)]
-                                                            (reset! triggered? true)
-                                                            (js/window.location.reload))))]])
-                         (reset! triggered? false)
-                         (set! (.-returnValue e) "")))))
-
 (defn quit-and-install-new-version!
   []
   (p/let [_ (el/persist-dbs!)
-          _ (reset! triggered? true)
           _ (ipc/invoke "set-quit-dirty-state" false)]
     (ipc/ipc :quitAndInstall)))

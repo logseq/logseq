@@ -5,7 +5,15 @@
 }
 
 .cp__diff-file {
-  @apply mb-3;
+    @apply mb-3;
+
+    textarea {
+        min-height: 20vh;
+
+        @screen sm {
+            min-height: 50vh;
+        }
+    }
  }
 
 .cp__diff-file-header {
@@ -16,8 +24,8 @@
 }
 
 .cp__diff-file-header-content {
-  @apply truncate
-
+    @apply truncate;
+    overflow-wrap: break-word;
 }
 
 .cp__diff-file-header-type {

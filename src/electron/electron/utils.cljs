@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
-            [clojure.string :as string]
             [cljs-bean.core :as bean]
             ["electron" :refer [app BrowserWindow]]))
 
@@ -12,6 +11,11 @@
 (defonce linux? (= (.-platform js/process) "linux"))
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
+
+(defonce ci? (let [v js/process.env.CI]
+               (or (true? v)
+                   (= v "true"))))
+
 (defonce dev? (not prod?))
 (defonce logger (js/require "electron-log"))
 
@@ -29,7 +33,7 @@
 (defn get-ls-default-plugins
   []
   (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
-        _ (if-not (fs/existsSync plugins-root)
+        _ (when-not (fs/existsSync plugins-root)
             (fs/mkdirSync plugins-root))
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
@@ -38,18 +42,21 @@
                   (map #(path/join plugins-root (.-name %))))]
     dirs))
 
+;; keep same as ignored-path? in src/main/frontend/util/fs.cljs
+;; TODO: merge them
 (defn ignored-path?
   [dir path]
   (when (string? path)
     (or
      (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "assets" "node_modules"])
+           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
      (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "assets" "node_modules"])
+           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
      (string/ends-with? path ".DS_Store")
      ;; hidden directory or file
-     (re-find #"/\.[^.]+" path)
-     (re-find #"^\.[^.]+" path)
+     (let [relpath (path/relative dir path)]
+       (or (re-find #"/\.[^.]+" relpath)
+           (re-find #"^\.[^.]+" relpath)))
      (let [path (string/lower-case path)]
        (and
         (not (string/blank? (path/extname path)))
@@ -76,8 +83,21 @@
   []
   (.getFocusedWindow BrowserWindow))
 
+(defn get-win-from-sender
+  [^js evt]
+  (try
+    (.fromWebContents BrowserWindow (.-sender evt))
+    (catch js/Error _
+      nil)))
+
 (defn send-to-renderer
-  [kind payload]
-  (when-let [window (get-focused-window)]
-    (.. ^js window -webContents
-       (send kind (bean/->js payload)))))
+  ([kind payload]
+   (send-to-renderer (get-focused-window) kind payload))
+  ([window kind payload]
+   (when window
+     (.. ^js window -webContents
+         (send kind (bean/->js payload))))))
+
+(defn get-graph-dir
+  [graph-name]
+  (string/replace graph-name "logseq_local_" ""))

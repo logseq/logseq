@@ -2,8 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
@@ -118,71 +117,65 @@
         #())
       [])
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:ul.extensions__pdf-hls-ctx-menu
+     {:ref      *el
+      :style    {:top top :left left}
+      :on-click (fn [^js/MouseEvent e]
+                  (when-let [action (.. e -target -dataset -action)]
+                    (case action
+                      "ref"
+                      (pdf-assets/copy-hl-ref! highlight)
 
-      [:ul.extensions__pdf-hls-ctx-menu
-       {:ref      *el
-        :style    {:top top :left left}
-        :on-click (fn [^js/MouseEvent e]
-                    (when-let [action (.. e -target -dataset -action)]
-                      (case action
-                        "ref"
-                        (pdf-assets/copy-hl-ref! highlight)
+                      "copy"
+                      (do
+                        (front-utils/copy-to-clipboard!
+                         (or (:text content) (.toString range)))
+                        (pdf-utils/clear-all-selection))
 
-                        "copy"
-                        (do
-                          (front-utils/copy-to-clipboard!
-                            (or (:text content) (.toString range)))
-                          (pdf-utils/clear-all-selection))
+                      "link"
+                      (pdf-assets/goto-block-ref! highlight)
 
-                        "link"
-                        (do
-                          (pdf-assets/goto-block-ref! highlight))
+                      "del"
+                      (do
+                        (del-hl! highlight)
+                        (pdf-assets/del-ref-block! highlight)
+                        (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
 
-                        "del"
-                        (do
-                          (del-hl! highlight)
-                          (pdf-assets/del-ref-block! highlight)
-                          (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
+                      ;; colors
+                      (let [properties {:color action}]
+                        (if-not id
+                          ;; add highlight
+                          (let [highlight (merge (if (fn? highlight) (highlight) highlight)
+                                                 {:id         (pdf-utils/gen-uuid)
+                                                  :properties properties})]
+                            (add-hl! highlight)
+                            (pdf-utils/clear-all-selection)
+                            (pdf-assets/copy-hl-ref! highlight))
 
-                        ;; colors
-                        (let [properties {:color action}]
-                          (if-not id
-                            ;; add highlight
-                            (let [highlight (merge (if (fn? highlight) (highlight) highlight)
-                                                   {:id         (pdf-utils/gen-uuid)
-                                                    :properties properties})]
-                              (add-hl! highlight)
-                              (pdf-utils/clear-all-selection)
-                              (pdf-assets/copy-hl-ref! highlight))
+                          ;; update highlight
+                          (upd-hl! (assoc highlight :properties properties))))))
 
-                            ;; update highlight
-                            (do
-                              (upd-hl! (assoc highlight :properties properties)))))))
+                  (clear-ctx-tip!))}
 
-                    (clear-ctx-tip!))}
-
-       [:li.item-colors
-        (for [it ["yellow", "blue", "green", "red", "purple"]]
-          [:a {:key it :data-color it :data-action it} it])]
+     [:li.item-colors
+      (for [it ["yellow", "blue", "green", "red", "purple"]]
+        [:a {:key it :data-color it :data-action it} it])]
 
 
-       (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
+     (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
-       (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+     (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
 
-       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
+     (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
-       (and id [:li.item {:data-action "del"} (t :delete)])
-       ])))
+     (and id [:li.item {:data-action "del"} (t :delete)])
+     ]))
 
 (rum/defc pdf-highlights-text-region
   [^js viewer vw-hl hl
    {:keys [show-ctx-tip!]}]
 
-  (let [id (:id hl)
-        {:keys [rects]} (:position vw-hl)
+  (let [{:keys [rects]} (:position vw-hl)
         {:keys [color]} (:properties hl)
         open-tip! (fn [^js/MouseEvent e]
                     (.preventDefault e)
@@ -203,7 +196,7 @@
            :data-color color}])
        rects)]))
 
-(rum/defc pdf-highlight-area-region
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
   [^js viewer vw-hl hl
    {:keys [show-ctx-tip! upd-hl!]}]
 
@@ -225,7 +218,7 @@
                          (.resizable
                            (bean/->js
                              {:edges     {:left true :right true :top true :bottom true}
-                              :listeners {:start (fn [^js/MouseEvent e]
+                              :listeners {:start (fn [^js/MouseEvent _e]
                                                    (rum/set-ref! *dirty true))
 
                                           :end   (fn [^js/MouseEvent e]
@@ -318,8 +311,8 @@
          (:id hl))
        ))])
 
-(rum/defc pdf-highlight-area-selection
-  [^js viewer {:keys [clear-ctx-tip! show-ctx-tip!] :as ops}]
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
+  [^js viewer {:keys [show-ctx-tip!]}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
         *el (rum/use-ref nil)
@@ -443,7 +436,7 @@
      (when (and start-coord end-coord)
        [:div.shadow-rect {:style (calc-pos start-coord end-coord)}])]))
 
-(rum/defc pdf-highlights
+(rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
   (let [^js doc (.-ownerDocument el)
@@ -633,7 +626,7 @@
         })]))
 
 (rum/defc pdf-settings
-  [^js viewer theme {:keys [hide-settings! select-theme! t]}]
+  [^js _viewer theme {:keys [hide-settings! select-theme! t]}]
 
   (let [*el-popup (rum/use-ref nil)
         [area-dashed? set-area-dashed?] (use-atom *area-dashed?)]
@@ -678,7 +671,7 @@
 
 (rum/defc pdf-outline-item
   [^js viewer
-   {:keys [title items href parent dest expanded] :as node}
+   {:keys [title items parent dest expanded]}
    {:keys [upt-outline-node!] :as ops}]
   (let [has-child? (seq items)
         expanded? (boolean expanded)]
@@ -727,12 +720,13 @@
       (rum/use-effect!
         (fn []
           (p/catch
-            (p/let [^js data (.getOutline pdf-doc)]
-              (when-let [data (and data (.map data (fn [^js it]
-                                                     (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
-                                                     (set! (.-expanded it) false)
-                                                     it)))])
-              (set-outline-data! (bean/->clj data)))
+           (p/let [^js data (.getOutline pdf-doc)]
+                  #_:clj-kondo/ignore
+                  (when-let [data (and data (.map data (fn [^js it]
+                                                         (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
+                                                         (set! (.-expanded it) false)
+                                                         it)))])
+                  (set-outline-data! (bean/->clj data)))
 
             (fn [e]
               (js/console.error "[Load outline Error]" e))))
@@ -784,7 +778,7 @@
                :on-click
                (fn []
                  (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
-                       text (string/replace-all text #"[\n\t]+" "\n")]
+                       text (string/replace text #"[\n\t]+" "\n")]
                    (front-utils/copy-to-clipboard! text)
                    (notification/show! "Copied!" :success)
                    (close-fn!))))]])
@@ -794,7 +788,7 @@
   (fn [close-fn!]
     (docinfo-display info close-fn!)))
 
-(rum/defc pdf-toolbar
+(rum/defc ^:large-vars/cleanup-todo pdf-toolbar
   [^js viewer]
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
@@ -830,90 +824,87 @@
             #(.off bus "pagechanging" page-fn))))
       [viewer])
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div.extensions__pdf-toolbar
+     [:div.inner
+      [:div.r.flex.buttons
 
-      [:div.extensions__pdf-toolbar
-       [:div.inner
-        [:div.r.flex.buttons
+       ;; appearance
+       [:a.button
+        {:title    "More settings"
+         :on-click #(set-settings-visible! (not settings-visible?))}
+        (svg/adjustments 18)]
 
-         ;; appearance
-         [:a.button
-          {:title    "More settings"
-           :on-click #(set-settings-visible! (not settings-visible?))}
-          (svg/adjustments 18)]
+       ;; selection
+       [:a.button
+        {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
+         :class    (when area-mode? "is-active")
+         :on-click #(set-area-mode! (not area-mode?))}
+        (svg/icon-area 18)]
 
-         ;; selection
-         [:a.button
-          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
-           :class    (when area-mode? "is-active")
-           :on-click #(set-area-mode! (not area-mode?))}
-          (svg/icon-area 18)]
+       ;; zoom
+       [:a.button
+        {:title    "Zoom out"
+         :on-click (partial pdf-utils/zoom-out-viewer viewer)}
+        (svg/zoom-out 18)]
 
-         ;; zoom
-         [:a.button
-          {:title    "Zoom out"
-           :on-click (partial pdf-utils/zoom-out-viewer viewer)}
-          (svg/zoom-out 18)]
+       [:a.button
+        {:title    "Zoom in"
+         :on-click (partial pdf-utils/zoom-in-viewer viewer)}
+        (svg/zoom-in 18)]
 
-         [:a.button
-          {:title    "Zoom in"
-           :on-click (partial pdf-utils/zoom-in-viewer viewer)}
-          (svg/zoom-in 18)]
+       [:a.button
+        {:title    "Outline"
+         :on-click #(set-outline-visible! (not outline-visible?))}
+        (svg/view-list 16)]
 
-         [:a.button
-          {:title    "Outline"
-           :on-click #(set-outline-visible! (not outline-visible?))}
-          (svg/view-list 16)]
+       ;; metadata
+       [:a.button.is-info
+        {:title    "Document info"
+         :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                      (state/set-modal! (make-docinfo-in-modal ret)))}
+        (svg/icon-info)]
 
-         ;; metadata
-         [:a.button.is-info
-          {:title    "Document info"
-           :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                        (state/set-modal! (make-docinfo-in-modal ret)))}
-          (svg/icon-info)]
+       ;; annotations
+       [:a.button
+        {:title    "Annotations page"
+         :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+        (svg/annotations 16)]
 
-         ;; annotations
-         [:a.button
-          {:title    "Annotations page"
-           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
-          (svg/annotations 16)]
+       ;; pager
+       [:div.pager.flex.items-center.ml-1
 
-         ;; pager
-         [:div.pager.flex.items-center.ml-1
+        [:span.nu.flex.items-center.opacity-70
+         [:input {:ref            *page-ref
+                  :type           "number"
+                  :default-value  current-page-num
+                  :on-mouse-enter #(.select ^js (.-target %))
+                  :on-key-up      (fn [^js e]
+                                    (let [^js input (.-target e)
+                                          value (front-utils/safe-parse-int (.-value input))]
+                                      (when (and (= (.-keyCode e) 13) value (> value 0))
+                                        (set! (. viewer -currentPageNumber)
+                                              (if (> value total-page-num) total-page-num value)))))}]
+         [:small "/ " total-page-num]]
 
-          [:span.nu.flex.items-center.opacity-70
-           [:input {:ref            *page-ref
-                    :type           "number"
-                    :default-value  current-page-num
-                    :on-mouse-enter #(.select ^js (.-target %))
-                    :on-key-up      (fn [^js e]
-                                      (let [^js input (.-target e)
-                                            value (front-utils/safe-parse-int (.-value input))]
-                                        (when (and (= (.-keyCode e) 13) value (> value 0))
-                                          (set! (. viewer -currentPageNumber)
-                                                (if (> value total-page-num) total-page-num value)))))}]
-           [:small "/ " total-page-num]]
+        [:span.ct.flex.items-center
+         [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+         [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
-          [:span.ct.flex.items-center
-           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
-           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
+       [:a.button
+        {:on-click #(state/set-state! :pdf/current nil)}
+        (t :close)]]]
 
-         [:a.button
-          {:on-click #(state/set-state! :pdf/current nil)}
-          (t :close)]]]
+     ;; contents outline
+     (pdf-outline viewer outline-visible? set-outline-visible!)
 
-       ;; contents outline
-       (pdf-outline viewer outline-visible? set-outline-visible!)
-
-       ;; settings
-       (and settings-visible?
-            (pdf-settings
-              viewer
-              viewer-theme
-              {:t t
-               :hide-settings! #(set-settings-visible! false)
-               :select-theme!  #(set-viewer-theme! %)}))])))
+     ;; settings
+     (and settings-visible?
+          (pdf-settings
+           viewer
+           viewer-theme
+           {:t t
+            :hide-settings! #(set-settings-visible! false)
+            :select-theme!  #(set-viewer-theme! %)}))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
@@ -921,7 +912,6 @@
   ;;(dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
-        [area-dashed?, set-area-dashed?] (use-atom *area-dashed?)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
         [page-ready?, set-page-ready!] (rum/use-state false)]
@@ -959,9 +949,7 @@
     (rum/use-effect!
       (fn []
         (when-let [^js viewer (:viewer state)]
-          (let [^js el (rum/deref *el-ref)
-
-                fn-textlayer-ready
+          (let [fn-textlayer-ready
                 (fn [^js p]
                   (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))
 
@@ -1005,8 +993,6 @@
   (let [*doc-ref (rum/use-ref nil)
         [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil})
-        repo-cur (state/get-current-repo)
-        repo-dir (config/get-repo-dir repo-cur)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! {:initial-hls [] :latest-hls latest-hls}))]
 
@@ -1044,7 +1030,6 @@
     (rum/use-effect!
       (fn []
         (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
-              own-doc (rum/deref *doc-ref)
               opts {:url           url
                     :ownerDocument js/document
                     :cMapUrl       "./js/pdfjs/cmaps/"

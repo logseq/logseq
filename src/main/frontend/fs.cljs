@@ -70,13 +70,18 @@
     (when (= fs bfs-record)
       (protocol/rmdir! fs dir))))
 
+(defn delete-file!
+  [repo dir path opts]
+  (let [fs-record (get-fs dir)]
+    (when (= fs-record mobile-record)
+      (protocol/delete-file! fs-record repo dir path opts))))
+
 (defn write-file!
   [repo dir path content opts]
   (when content
     (let [fs-record (get-fs dir)]
-      (p/let [metadata-or-css? (or (string/ends-with? path (str "/" config/metadata-file))
-                                   (string/ends-with? path (str "/" config/custom-css-file)))
-              content (if metadata-or-css? content (encrypt/encrypt content))]
+      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
+              content (if-not md-or-org? content (encrypt/encrypt content))]
         (->
          (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
            (when (= bfs-record fs-record)
@@ -108,7 +113,12 @@
     (p/resolved nil)
 
     :else
-    (protocol/rename! (get-fs old-path) repo old-path new-path)))
+    (let [[old-path new-path]
+        (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
+                %
+                (str (config/get-repo-dir repo) "/" %))
+             [old-path new-path])]
+     (protocol/rename! (get-fs old-path) repo old-path new-path))))
 
 (defn stat
   [dir path]
@@ -138,12 +148,13 @@
 
 (defn get-files
   [path-or-handle ok-handler]
-  (let [record (get-record)]
+  (let [record (get-record)
+        electron? (util/electron?)
+        mobile? (mobile-util/is-native-platform?)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
-      (if (or (util/electron?)
-              (mobile-util/is-native-platform?))
+      (if (or electron? mobile?)
         (let [result (bean/->clj result)]
-          (rest result))
+          (if electron? (rest result) result))
         result))))
 
 (defn watch-dir!
@@ -157,9 +168,9 @@
      (util/p-handle
       (stat dir nil)
       (fn [_stat])
-      (fn [error]
+      (fn [_error]
         (mkdir! dir))))
-   (p/catch (fn [_error] nil))))
+   (p/catch (fn [error] (js/console.error error)))))
 
 (defn create-if-not-exists
   ([repo dir path]
@@ -170,7 +181,7 @@
                     path
                     (str "/" path)))]
      (->
-      (p/let [stat (stat dir path)]
+      (p/let [_stat (stat dir path)]
         true)
       (p/catch
           (fn [_error]

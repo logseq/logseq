@@ -10,21 +10,20 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
-            [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.mobile.util :as mobile]
+            [clojure.set :as set]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -66,7 +65,7 @@
 (defn restore-config!
   ([repo-url project-changed-check?]
    (restore-config! repo-url nil project-changed-check?))
-  ([repo-url config-content project-changed-check?]
+  ([repo-url config-content _project-changed-check?]
    (let [config-content (if config-content config-content
                             (common-handler/get-config repo-url))]
      (when config-content
@@ -75,7 +74,7 @@
 (defn load-files
   [repo-url]
   (state/set-cloning! false)
-  (state/set-loading-files! true)
+  (state/set-loading-files! repo-url true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
           config-content (load-file repo-url
@@ -98,141 +97,132 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path file
+                                        {:file/path (util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error repo-url)
                    (log/error :exception error))))))
 
-(defn- remove-non-exists-refs!
-  [data]
-  (let [block-ids (->> (map :block/uuid data)
-                       (remove nil?)
-                       (set))
-        keep-block-ref-f (fn [refs]
-                           (filter (fn [ref]
-                                     (cond
-                                       (and (vector? ref) (= :block/uuid (first ref)))
-                                       (let [id (second ref)]
-                                         (or (contains? block-ids id)
-                                             (db/entity [:block/uuid id])))
-                                       (and (map? ref) (contains? ref :block/journal?))
-                                       (db/entity [:block/name (ref :block/name)]))) refs))]
-    (map (fn [item]
-           (update item :block/refs keep-block-ref-f))
-      data)))
-
 (defn- page-exists-in-another-file
-  [page file]
+  "Conflict of files towards same page"
+  [repo-url page file]
   (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (db/get-page-file page-name))]
+    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
        current-file))))
 
 (defn reset-file!
-  [repo-url file content]
-  (let [electron-local-repo? (and (util/electron?)
-                                  (config/local-db? repo-url))
-        ;; FIXME: store relative path in db
-        file (cond
-               (and electron-local-repo?
-                    util/win32?
-                    (utils/win32 file))
-               file
+  ([repo-url file content]
+   (reset-file! repo-url file content false))
+  ([repo-url file content new-graph?]
+   (let [electron-local-repo? (and (util/electron?)
+                                   (config/local-db? repo-url))
+         file (cond
+                (and electron-local-repo?
+                     util/win32?
+                     (utils/win32 file))
+                file
 
-               (and electron-local-repo? (or
-                                          util/win32?
-                                          (not= "/" (first file))))
-               (str (config/get-repo-dir repo-url) "/" file)
+                (and electron-local-repo? (or
+                                           util/win32?
+                                           (not= "/" (first file))))
+                (str (config/get-repo-dir repo-url) "/" file)
 
-               :else
-               file)
-        new? (nil? (db/entity [:file/path file]))]
-    (db/set-file-content! repo-url file content)
-    (let [format (format/get-format file)
-          utf8-content (utf8/encode content)
-          file-content [{:file/path file}]]
-      (p/let [tx (if (contains? config/mldoc-support-formats format)
-                   (p/let [delete-blocks (db/delete-file-blocks! repo-url file)
-                           [pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
-                           _ (when-let [current-file (page-exists-in-another-file (first pages) file)]
-                               (p/rejected (str "Page already exists with another file: " current-file)))
-                           blocks (remove-non-exists-refs! blocks)
-                           block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-                           pages (extract-handler/with-ref-pages pages blocks)]
-                     (concat file-content delete-blocks pages block-ids blocks))
-                   file-content)]
-        (let [tx (concat tx [(let [t (tc/to-long (t/now))]
-                               (cond->
-                                 {:file/path file}
-                                 new?
-                                 (assoc :file/created-at t)))])]
-          (db/transact! repo-url tx))))))
+                (and (mobile/native-android?) (not= "/" (first file)))
+                file
+                
+                (and (mobile/native-ios?) (not= "/" (first file)))
+                file
+
+                :else
+                file)
+         file (util/path-normalize file)
+         new? (nil? (db/entity [:file/path file]))]
+     (db/set-file-content! repo-url file content)
+     (let [format (format/get-format file)
+           file-content [{:file/path file}]
+           tx (if (contains? config/mldoc-support-formats format)
+                (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
+                      first-page (first pages)
+                      delete-blocks (->
+                                     (concat
+                                      (db/delete-file-blocks! repo-url file)
+                                      (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
+                                     (distinct))
+                      _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
+                          (when (not= file current-file)
+                            (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+                              (state/pub-event! [:notification/show
+                                                 {:content error
+                                                  :status :error
+                                                  :clear? false}]))))
+                      block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+                      block-refs-ids (->> (mapcat :block/refs blocks)
+                                          (filter (fn [ref] (and (vector? ref)
+                                                                 (= :block/uuid (first ref)))))
+                                          (map (fn [ref] {:block/uuid (second ref)}))
+                                          (seq))
+                      ;; To prevent "unique constraint" on datascript
+                      block-ids (set/union (set block-ids) (set block-refs-ids))
+                      pages (extract-handler/with-ref-pages pages blocks)
+                      pages-index (map #(select-keys % [:block/name]) pages)]
+                  ;; does order matter?
+                  (concat file-content pages-index delete-blocks pages block-ids blocks))
+                file-content)
+           tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
+                            (cond->
+                              {:file/path file}
+                              new?
+                              (assoc :file/created-at t)))])]
+       (db/transact! repo-url tx (when new-graph? {:new-graph? true}))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? add-history? update-status? from-disk? skip-compare?]
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph?]
                       :or {reset? true
                            re-render-root? false
-                           add-history? true
-                           update-status? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [edit-block (state/get-edit-block)
-        original-content (db/get-file-no-sub repo path)
+  (let [original-content (db/get-file repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
                                        (assoc (when original-content {:old-content original-content})
                                               :skip-compare? skip-compare?)))]
-    (p/let [_ (if reset?
-                (do
-                  (when-let [page-id (db/get-file-page-id path)]
-                    (db/transact! repo
-                      [[:db/retract page-id :block/alias]
-                       [:db/retract page-id :block/tags]]))
-                  (reset-file! repo path content))
-                (db/set-file-content! repo path content))]
-      (util/p-handle (write-file!)
-                     (fn [_]
-                       (when (= path (config/get-config-path repo))
-                         (restore-config! repo true))
-                       (when (= path (config/get-custom-css-path repo))
-                         (ui-handler/add-style-if-exists!))
-                       (when re-render-root? (ui-handler/re-render-root!)))
-                     (fn [error]
-                       (println "Write file failed, path: " path ", content: " content)
-                       (log/error :write/failed error))))))
+    (if reset?
+      (do
+        (when-let [page-id (db/get-file-page-id path)]
+          (db/transact! repo
+            [[:db/retract page-id :block/alias]
+             [:db/retract page-id :block/tags]]))
+        (reset-file! repo path content new-graph?))
+      (db/set-file-content! repo path content))
+    (util/p-handle (write-file!)
+                   (fn [_]
+                     (when (= path (config/get-config-path repo))
+                       (restore-config! repo true))
+                     (when (= path (config/get-custom-css-path repo))
+                       (ui-handler/add-style-if-exists!))
+                     (when re-render-root? (ui-handler/re-render-root!)))
+                   (fn [error]
+                     (println "Write file failed, path: " path ", content: " content)
+                     (log/error :write/failed error)))))
 
 (defn set-file-content!
   [repo path new-content]
   (alter-file repo path new-content {:reset? false
                                      :re-render-root? false}))
 
-(defn create!
-  ([path]
-   (create! path ""))
-  ([path content]
-   (when-let [repo (state/get-current-repo)]
-     (when (and path content)
-       (p/let [_ (alter-file repo path content {:reset? false
-                                                :re-render-root? false
-                                                :update-status? true})]
-         (route-handler/redirect! {:to :file
-                                   :path-params {:path path}}))))))
-
 (defn alter-files
-  [repo files {:keys [add-history? update-status? finish-handler reset? update-db? chan chan-callback resolved-handler]
-               :or {add-history? true
-                    update-status? true
-                    reset? false
+  [repo files {:keys [reset? update-db?]
+               :or {reset? false
                     update-db? true}
                :as opts}]
   ;; old file content
   (let [file->content (let [paths (map first files)]
                         (zipmap paths
-                                (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
+                                (map (fn [path] (db/get-file repo path)) paths)))]
     ;; update db
     (when update-db?
       (doseq [[path content] files]
@@ -249,27 +239,28 @@
 (defn alter-files-handler!
   [repo files {:keys [finish-handler chan]} file->content]
   (let [write-file-f (fn [[path content]]
-                       (let [original-content (get file->content path)]
-                         (-> (p/let [_ (or
-                                        (util/electron?)
-                                        (nfs/check-directory-permission! repo))]
-                               (debug/set-ack-step! path :write-file)
-                               (fs/write-file! repo (config/get-repo-dir repo) path content
-                                               {:old-content original-content}))
-                             (p/catch (fn [error]
-                                        (state/pub-event! [:notification/show
-                                                           {:content (str "Failed to save the file " path ". Error: "
-                                                                          (str error))
-                                                            :status :error
-                                                            :clear? false}])
-                                        (state/pub-event! [:instrument {:type :write-file/failed
-                                                                        :payload {:path path
-                                                                                  :content-length (count content)
-                                                                                  :error-str (str error)
-                                                                                  :error error}}])
-                                        (log/error :write-file/failed {:path path
-                                                                       :content content
-                                                                       :error error}))))))
+                       (when path
+                         (let [original-content (get file->content path)]
+                          (-> (p/let [_ (or
+                                         (util/electron?)
+                                         (nfs/check-directory-permission! repo))]
+                                (debug/set-ack-step! path :write-file)
+                                (fs/write-file! repo (config/get-repo-dir repo) path content
+                                                {:old-content original-content}))
+                              (p/catch (fn [error]
+                                         (state/pub-event! [:notification/show
+                                                            {:content (str "Failed to save the file " path ". Error: "
+                                                                           (str error))
+                                                             :status :error
+                                                             :clear? false}])
+                                         (state/pub-event! [:instrument {:type :write-file/failed
+                                                                         :payload {:path path
+                                                                                   :content-length (count content)
+                                                                                   :error-str (str error)
+                                                                                   :error error}}])
+                                         (log/error :write-file/failed {:path path
+                                                                        :content content
+                                                                        :error error})))))))
         finish-handler (fn []
                          (when finish-handler
                            (finish-handler))
@@ -321,14 +312,11 @@
       (recur))
     chan))
 
-(defn watch-for-local-dirs!
+(defn watch-for-current-graph-dir!
   []
   (when (util/electron?)
-    (let [repos (->> (state/get-repos)
-                     (filter (fn [repo]
-                               (config/local-db? (:url repo)))))
-          directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
-      (doseq [dir directories]
+    (when-let [repo (state/get-current-repo)]
+      (when-let [dir (config/get-repo-dir repo)]
         (fs/watch-dir! dir)))))
 
 (defn create-metadata-file
@@ -356,7 +344,8 @@
 (defn edn-file-set-key-value
   [path k v]
   (when-let [repo (state/get-current-repo)]
-    (when-let [content (db/get-file-no-sub path)]
+    (when-let [content (db/get-file path)]
+      (common-handler/read-config content)
       (let [result (try
                      (rewrite/parse-string content)
                      (catch js/Error e
@@ -364,17 +353,6 @@
                        (js/console.dir e)
                        {}))
             ks (if (vector? k) k [k])
-            new-result (rewrite/assoc-in result ks v)]
-        (let [new-content (str new-result)]
-          (set-file-content! repo path new-content))))))
-
-;; TODO:
-;; (defn compare-latest-pages
-;;   []
-;;   (when-let [repo (state/get-current-repo)]
-;;     (doseq [{:block/keys [file name]} (db/get-latest-changed-pages repo)]
-;;       (when-let [path (:file/path (db/pull (:db/id file)))]
-;;         (p/let [content (load-file repo path)]
-;;           (when (not= (string/trim content) (string/trim (or (db/get-file repo path) "")))
-;;             ;; notify
-;;             ))))))
+            new-result (rewrite/assoc-in result ks v)
+            new-content (str new-result)]
+        (set-file-content! repo path new-content)))))

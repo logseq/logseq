@@ -14,7 +14,6 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
-            [frontend.handler :as handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
@@ -23,6 +22,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.handler.command-palette :as palette-handler]
+            [frontend.modules.shortcut.core :as st]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -32,7 +33,9 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [sci.core :as sci]))
+            [sci.core :as sci]
+            [frontend.handler.shell :as shell]
+            [frontend.modules.layout.core]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -54,6 +57,15 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
+(defn ^:export get_state_from_store
+  [^js path]
+  (when-let [path (if (string? path) [path] (bean/->clj path))]
+    (->> path
+         (map #(if (string/starts-with? % "@")
+                 (subs % 1)
+                 (keyword %)))
+         (get-in @state/state))))
+
 (def ^:export get_user_configs
   (fn []
     (bean/->js
@@ -106,7 +118,9 @@
           _ (when-not exist? (fs/mkdir-recur! path))
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (when-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
+          _ (when-not sub-dir?
+              (log/info :debug user-path)
+              (throw "write file denied"))
           user-path-root (util/node-path.dirname user-path)
           exist? (fs/file-exists? user-path-root "")
           _ (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -115,8 +129,7 @@
 
 (defn ^:private read_dotdir_file
   [file sub-root]
-  (p/let [repo ""
-          path (plugin-handler/get-ls-dotdir-root)
+  (p/let [path (plugin-handler/get-ls-dotdir-root)
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
@@ -195,29 +208,16 @@
         (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            exist? (fs/file-exists? path "settings")
-            _ (when-not exist? (fs/mkdir! (util/node-path.join path "settings")))
-            path (util/node-path.join path "settings" (str key ".json"))
-            _ (fs/create-if-not-exists repo "" path "{}")
-            json (fs/read-file "" path)]
-      [path (js/JSON.parse json)])))
+  ;; results [path data]
+  (plugin-handler/make-fn-to-load-dotdir-json "settings" "{}"))
 
 (def ^:export save_plugin_user_settings
   (fn [key ^js data]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+    ((plugin-handler/make-fn-to-save-dotdir-json "settings")
+     key (js/JSON.stringify data nil 2))))
 
 (def ^:export unlink_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/unlink! repo path nil))))
+  (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
 
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]
@@ -227,10 +227,44 @@
                               (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
-  (fn [pid ^js cmd-action]
+  (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
-      (plugin-handler/register-plugin-simple-command
-        pid cmd (assoc action 0 (keyword (first action)))))))
+      (let [action (assoc action 0 (keyword (first action)))
+            cmd (assoc cmd :key (string/replace (:key cmd) ":" "-"))
+            key (:key cmd)
+            keybinding (:keybinding cmd)
+            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+
+        ;; handle simple commands
+        (plugin-handler/register-plugin-simple-command pid cmd action)
+
+        ;; handle palette commands
+        (when palette-cmd
+          (palette-handler/register palette-cmd))
+
+        ;; handle keybinding commands
+        (when-let [shortcut-args (and palette-cmd keybinding
+                                      (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
+          (let [dispatch-cmd (fn [_ _e] (palette-handler/invoke-command palette-cmd))
+                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
+            (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
+            (st/register-shortcut! handler-id id shortcut-map)))))))
+
+(defn ^:export unregister_plugin_simple_command
+  [pid]
+  ;; remove simple commands
+  (plugin-handler/unregister-plugin-simple-command pid)
+
+  ;; remove palette commands
+  (let [palette-matched (->> (palette-handler/get-commands)
+                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq palette-matched)
+      (doseq [cmd palette-matched]
+        (palette-handler/unregister (:id cmd))
+        ;; remove keybinding commands
+        (when (seq (:shortcut cmd))
+          (js/console.debug :shortcut/unregister-shortcut cmd)
+          (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
@@ -251,6 +285,31 @@
   (fn [url]
     (when (re-find #"https?://" url)
       (js/apis.openExternal url))))
+
+(def ^:export invoke_external_command
+  (fn [type & args]
+    (when-let [id (and (string/starts-with? type "logseq.")
+                       (-> (string/replace type #"^logseq." "")
+                           (util/safe-lower-case)
+                           (keyword)))]
+      (when-let [action (get-in (palette-handler/get-commands-unique) [id :action])]
+        (apply action args)))))
+
+;; flag - boolean | 'toggle'
+(def ^:export set_left_sidebar_visible
+  (fn [flag]
+    (if (= flag "toggle")
+      (state/toggle-left-sidebar!)
+      (state/set-state! :ui/left-sidebar-open? (boolean flag)))
+    nil))
+
+;; flag - boolean | 'toggle'
+(def ^:export set_right_sidebar_visible
+  (fn [flag]
+    (if (= flag "toggle")
+      (state/toggle-sidebar-open?!)
+      (state/set-state! :ui/sidebar-open? (boolean flag)))
+    nil))
 
 (def ^:export push_state
   (fn [^js k ^js params ^js query]
@@ -297,12 +356,14 @@
   (fn []
     (state/get-edit-content)))
 
-(def ^:export get_current_block
+(def ^:export get_selected_blocks
   (fn []
-    (let [block (state/get-edit-block)
-          block (or block (state/get-last-edit-block))
-          block (and block (db-utils/pull (:db/id block)))]
-      (bean/->js (normalize-keyword-for-json block)))))
+    (when-let [blocks (and (state/in-selection-mode?)
+                           (seq (:selection/blocks @state/state)))]
+      (let [blocks (->> blocks
+                        (map (fn [^js el] (some-> (.getAttribute el "blockid")
+                                                  (db-model/query-block-by-uuid)))))]
+        (bean/->js (normalize-keyword-for-json blocks))))))
 
 (def ^:export get_current_page
   (fn []
@@ -328,10 +389,11 @@
     (some-> (if-let [page (db-model/get-page name)]
               page
               (let [properties (bean/->clj properties)
-                    {:keys [redirect createFirstBlock format]} (bean/->clj opts)
+                    {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)
                     name (page-handler/create!
                            name
                            {:redirect?           (if (boolean? redirect) redirect true)
+                            :journal?            journal
                             :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                             :format              format
                             :properties          properties})]
@@ -348,11 +410,16 @@
 (def ^:export rename_page
   page-handler/rename!)
 
+(defn ^:export open_in_right_sidebar
+  [block-uuid]
+  (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
+
 (def ^:export edit_block
-  (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
+  (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (editor-handler/edit-block! block pos block-uuid)))))
+        (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
+          (editor-handler/edit-block! block pos block-uuid))))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
@@ -379,16 +446,16 @@
           nil)))))
 
 (def ^:export remove_block
-  (fn [block-uuid ^js opts]
+  (fn [block-uuid ^js _opts]
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren)
+      nil)))
 
 (def ^:export update_block
-  (fn [block-uuid content ^js opts]
-    (let [opts (and opts (bean/->clj opts))
-          repo (state/get-current-repo)
+  (fn [block-uuid content ^js _opts]
+    (let [repo (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing? (and edit-input (string/ends-with? edit-input block-uuid))]
       (if editing?
@@ -421,10 +488,24 @@
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
                 repo (state/get-current-repo)
-                block (if (not includeChildren)
-                        block (first (outliner-tree/blocks->vec-tree
-                                       (db-model/get-block-and-children repo uuid) uuid)))]
+                block (if includeChildren
+                        ;; nested children results
+                        (first (outliner-tree/blocks->vec-tree
+                                       (db-model/get-block-and-children repo uuid) uuid))
+                        ;; attached shallow children
+                        (assoc block :block/children
+                          (map #(list :uuid (get-in % [:data :block/uuid]))
+                            (db/get-block-immediate-children repo uuid))))]
             (bean/->js (normalize-keyword-for-json block))))))))
+
+(def ^:export get_current_block
+  (fn [^js opts]
+    (let [block (state/get-edit-block)
+          block (or block (some-> (first (:selection/blocks @state/state))
+                            (.getAttribute "blockid")
+                            (db-model/get-block-by-uuid)))
+          block (or block (state/get-last-edit-block))]
+      (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block
   (fn [uuid]
@@ -438,6 +519,16 @@
     (when-let [block (db-model/query-block-by-uuid uuid)]
       (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
         (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
+
+(def ^:export set_block_collapsed
+  (fn [uuid ^js opts]
+    (when-let [block (db-model/get-block-by-uuid uuid)]
+      (let [{:keys [flag]} (bean/->clj opts)
+            flag (if (= "toggle" flag)
+                   (not (util/collapsed? block))
+                   (boolean flag))]
+        (if flag (editor-handler/collapse-block! uuid)
+                 (editor-handler/expand-block! uuid))))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
@@ -486,9 +577,8 @@
 (defn ^:export q
   [query-string]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (db/get-conn repo)]
-      (when-let [result (query-dsl/query repo query-string)]
-        (bean/->js (normalize-keyword-for-json (flatten @result)))))))
+    (when-let [result (query-dsl/query repo query-string)]
+      (bean/->js (normalize-keyword-for-json (flatten @result))))))
 
 (defn ^:export datascript_query
   [query & inputs]
@@ -516,6 +606,11 @@
   (when-let [repo (state/get-current-repo)]
     (export-handler/export-repo-as-zip! repo)))
 
+(defn ^:export exec_git_command
+  [^js args]
+  (when-let [args (and args (seq (bean/->clj args)))]
+    (shell/run-git-command! args)))
+
 ;; helpers
 (defn ^:export show_msg
   ([content] (show_msg content :success))
@@ -523,7 +618,25 @@
                           content (if hiccup? (parse-hiccup-ui content) content)]
                       (notification/show! content (keyword status)))))
 
+(defn ^:export query_element_by_id
+  [id]
+  (let [^js el (gdom/getElement id)]
+    (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export set_focused_settings
+  [pid]
+  (when-let [plugin (state/get-plugin-by-id pid)]
+    (state/set-state! :plugin/focused-settings pid)
+    (state/pub-event! [:go/plugins-settings pid false (or (:name plugin) (:title plugin))])))
+
 (defn ^:export force_save_graph
   []
-  (p/let [_ (el/persist-dbs!)
-          _ (reset! handler/triggered? true)]))
+  (p/let [_ (el/persist-dbs!)]
+    true))
+
+(defn ^:export __debug_state
+  [path]
+  (-> (if (string? path)
+        (get @state/state (keyword path))
+        @state/state)
+      (bean/->js)))

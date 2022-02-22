@@ -1,11 +1,13 @@
 (ns frontend.extensions.video.youtube
   (:require [rum.core :as rum]
-            [cljs.core.async :refer [<! >! chan go go-loop] :as a]
+            [cljs.core.async :refer [<! chan go] :as a]
             [frontend.components.svg :as svg]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.handler.notification :as notification]))
 
 (defn- load-yt-script []
   (js/console.log "load yt script")
@@ -30,7 +32,7 @@
                 (rum/dom-node state)
                 (clj->js
                  {:events
-                  {"onReady" (fn [e] (js/console.log id " ready"))}}))]
+                  {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
     (state/update-state! [:youtube/players]
                          (fn [players]
                            (assoc players id player)))))
@@ -100,8 +102,16 @@
    (seconds->display seconds)])
 
 (defn gen-youtube-ts-macro []
-  (when-let [player (get-player (state/get-input))]
-    (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))))
+  (if-let [player (get-player (state/get-input))]
+    (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))
+    (when (mobile-util/is-native-platform?)
+      (notification/show!
+       "Please embed a YouTube video at first, then use this icon.
+Remember: You can paste a raw YouTube url as embedded video on mobile."
+       :warning
+       false)
+      nil)))
+
 
 (defn parse-timestamp [timestamp]
   (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"

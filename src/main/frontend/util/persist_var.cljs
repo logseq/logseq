@@ -3,6 +3,7 @@
             [frontend.state :as state]
             [frontend.fs :as fs]
             [frontend.util :as util]
+            [cljs.reader :as reader]
             [promesa.core :as p]))
 
 
@@ -19,7 +20,7 @@
   ILoad
   (-load [_]
     (state/add-watch-state (keyword (str "persist-var/" location))
-                           (fn [k r o n]
+                           (fn [_k _r _o n]
                              (let [repo (state/get-current-repo)]
                                (when (and
                                       (not (get-in @*value [repo :loaded?]))
@@ -28,7 +29,7 @@
                                                   (config/get-repo-dir (state/get-current-repo))
                                                   (load-path location))]
                                    (when-let [content (and (some? content)
-                                                           (try (cljs.reader/read-string content)
+                                                           (try (reader/read-string content)
                                                                 (catch js/Error e
                                                                   (println (util/format "load persist-var failed: %s"  (load-path location)))
                                                                   (js/console.dir e))))]
@@ -46,15 +47,16 @@
       (fs/write-file! repo dir path content nil)))
 
   IDeref
-  (-deref [this]
+  (-deref [_this]
     (get-in @*value [(state/get-current-repo) :value]))
 
   IReset
-  (-reset! [o new-value]
-    (swap! *value (fn [o] (assoc-in @*value [(state/get-current-repo) :value] new-value)))))
+  (-reset! [_o new-value]
+    (swap! *value (fn [_o] (assoc-in @*value [(state/get-current-repo) :value] new-value)))))
 
-(defn persist-var [init-value location]
+(defn persist-var
   "This var is stored at logseq/LOCATION.edn"
+  [init-value location]
   (let [var (->PersistVar (atom {(state/get-current-repo)
                                  {:value init-value
                                   :loaded? false}})

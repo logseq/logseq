@@ -7,31 +7,35 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.util.property :as property]))
 
 (defn- indented-block-content
   [content spaces-tabs]
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- allowed-block-as-title?
-  "Allowed to be in the first line of a block (a.k.a block title)"
-  [title body]
-  (and (not (seq title))
-       (contains?
-        #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example"}
-        (ffirst body))))
+(defn- content-with-collapsed-state
+  "Only accept nake content (without any indentation)"
+  [format content collapsed? properties]
+  (cond
+    collapsed?
+    (property/insert-property format content :collapsed true)
+
+    (and (:collapsed properties) (false? collapsed?))
+    (property/remove-property format :collapsed content)
+
+    :else
+    content))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
-        heading-with-title? (seq title)
-        allowed-block-as-title? (allowed-block-as-title? title body)
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
         markdown? (= format :markdown)
         content (cond
-                  (and first-block? pre-block?)
+                  pre-block?
                   (let [content (string/trim content)]
                     (str content "\n"))
 
@@ -64,39 +68,35 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
+                        content (content-with-collapsed-state format content collapsed? properties)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
-                        sep (cond
-                              markdown-top-heading?
+                        sep (if (or markdown-top-heading?
+                                    (string/blank? new-content))
                               ""
-
-                              (or heading-with-title? allowed-block-as-title?)
-                              " "
-
-                              (string/blank? new-content)
-                              ""
-
-                              :else
-                              (str "\n" spaces-tabs))]
+                              " ")]
                     (str prefix sep new-content)))]
     content))
 
+
+(defn- tree->file-content-aux
+  [tree {:keys [init-level] :as opts}]
+  (let [block-contents (transient [])]
+    (loop [[f & r] tree level init-level]
+      (if (nil? f)
+        (->> block-contents persistent! flatten (remove nil?))
+        (let [page? (nil? (:block/page f))
+              content (if page? nil (transform-content f level opts))
+              new-content
+              (if-let [children (seq (:block/children f))]
+                     (cons content (tree->file-content-aux children {:init-level (inc level)}))
+                     [content])]
+          (conj! block-contents new-content)
+          (recur r level))))))
+
 (defn tree->file-content
-  [tree {:keys [init-level heading-to-list?]
-         :or {heading-to-list? false}
-         :as opts}]
-  (loop [block-contents []
-         [f & r] tree
-         level init-level]
-    (if (nil? f)
-      (string/join "\n" block-contents)
-      (let [page? (nil? (:block/page f))
-            content (if page? nil (transform-content f level opts))
-            new-content
-            (->> (if-let [children (seq (:block/children f))]
-                   [content (tree->file-content children {:init-level (inc level)})]
-                   [content])
-                 (remove nil?))]
-        (recur (into block-contents new-content) r level)))))
+  [tree opts]
+  (->> (tree->file-content-aux tree opts) (string/join "\n")))
+
 
 (def init-level 1)
 
@@ -115,24 +115,22 @@
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (let [format (name (get page :block/format
-                            (state/get-preferred-format)))
-          title (string/capitalize (:block/name page))
-          journal-page? (date/valid-journal-title? title)
-          path (str
-                (if journal-page?
-                  (config/get-journals-directory)
-                  (config/get-pages-directory))
-                "/"
-                (if journal-page?
-                  (date/journal-title->default title)
-                  (-> (or (:block/original-name page) (:block/name page))
-                      (util/page-name-sanity))) "."
-                (if (= format "markdown") "md" format))
-          file-path (str "/" path)
-          dir (config/get-repo-dir repo)]
-      (let [file-path (config/get-file-path repo path)
-            page-blocks (db/get-page-blocks-no-cache (:block/name page))
+    (when (:block/name page)
+      (let [format (name (get page :block/format
+                              (state/get-preferred-format)))
+            title (string/capitalize (:block/name page))
+            journal-page? (date/valid-journal-title? title)
+            path (str
+                  (if journal-page?
+                    (config/get-journals-directory)
+                    (config/get-pages-directory))
+                  "/"
+                  (if journal-page?
+                    (date/journal-title->default title)
+                    (-> (or (:block/original-name page) (:block/name page))
+                        (util/page-name-sanity true))) "."
+                  (if (= format "markdown") "md" format))
+            file-path (config/get-file-path repo path)
             file {:file/path file-path}
             tx [{:file/path file-path}
                 {:block/name (:block/name page)

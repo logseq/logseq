@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [rum.core :refer [use-state use-effect!] :as rum]
+            [daiquiri.interpreter :as interpreter]
             [cljs-bean.core :as bean]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
@@ -45,7 +46,7 @@
           ;; we have to make sure to check if the children is sequential
           ;; as a list can be returned, eg: from a (for)
           new-children (if (sequential? type#)
-                         (let [result (daiquiri.interpreter/interpret children)]
+                         (let [result (interpreter/interpret children)]
                            (if (sequential? result)
                              result
                              [result]))
@@ -84,11 +85,6 @@
   "(use-atom my-atom)"
   [a]
   (use-atom-fn a identity (fn [_ v] v)))
-
-(defn use-atom-in
-  "(use-atom my-atom [:path :to :data])"
-  [a path]
-  (use-atom-fn a #(get-in % path) #(assoc-in %1 path %2)))
 
 (defn use-mounted
   []

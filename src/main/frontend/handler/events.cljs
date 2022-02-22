@@ -4,6 +4,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.components.diff :as diff]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
             [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
@@ -19,18 +20,24 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.modules.shortcut.core :as st]
+            [frontend.modules.outliner.file :as outliner-file]
+            [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
             ["semver" :as semver]
-            [clojure.string :as string]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.fs :as fs]))
 
 ;; TODO: should we move all events here?
 
@@ -68,13 +75,34 @@
     close-fn)))
 
 (defmethod handle :graph/added [[_ repo]]
-  ;; add ast/version to db
-  (let [conn (conn/get-conn repo false)
-        ast-version (d/datoms @conn :aevt :ast/version)]
-    (db/set-key-value repo :ast/version db-schema/ast-version)))
+  (db/set-key-value repo :ast/version db-schema/ast-version)
+  (search-handler/rebuild-indices!)
+  (db/persist! repo))
 
-(defmethod handle :graph/migrated [[_ repo]]
+(defn- graph-switch [graph]
+  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
+  (state/set-current-repo! graph)
+  ;; load config
+  (common-handler/reset-config! graph nil)
+  (st/refresh!)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (when-let [dir-name (config/get-repo-dir graph)]
+    (fs/watch-dir! dir-name))
+  (srs/update-cards-due-count!))
+
+(defmethod handle :graph/switch [[_ graph]]
+  (if (outliner-file/writes-finished?)
+    (graph-switch graph)
+    (notification/show!
+     "Please wait seconds until all changes are saved for the current graph."
+     :warning)))
+
+(defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
+
+(defmethod handle :graph/save [_]
+  (db/persist! (state/get-current-repo)))
 
 (defn get-local-repo
   []
@@ -108,7 +136,7 @@
   {:will-unmount (fn [state]
                    (reset! *query-properties {})
                    state)}
-  [block shown-properties all-properties close-fn]
+  [block shown-properties all-properties _close-fn]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
      [:div.font-bold "Properties settings for this query:"]
@@ -145,7 +173,7 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards))
+  (state/set-modal! srs/global-cards {:id :srs}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
@@ -157,28 +185,30 @@
 (defmethod handle :modal/show [[_ content]]
   (state/set-modal! #(modal-output content)))
 
-(defmethod handle :modal/set-git-username-and-email [[_ content]]
+(defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (state/set-modal! git-component/set-git-username-and-email))
 
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 
-(defmethod handle :page/create-today-journal [[_ repo]]
+(defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
-    (when (not= (string/trim disk-content) (string/trim db-content))
-      (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
+    (when (and disk-content db-content
+               (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
+      (state/set-modal! #(diff/local-file repo path disk-content db-content)
+                        {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
-  (mapv (fn [{url :url} repo]
+  (mapv (fn [{url :url}]
           ;; compare :ast/version
           (let [db (conn/get-conn url)
                 ast-version (:v (first (d/datoms db :aevt :ast/version)))]
@@ -204,14 +234,85 @@
                     {:fullscreen? false
                      :close-btn?  false}))
 
+(defmethod handle :go/plugins [_]
+  (plugin/open-plugins-modal!))
+
+(defmethod handle :go/plugins-waiting-lists [_]
+  (plugin/open-waiting-updates-modal!))
+
+(defmethod handle :go/plugins-settings [[_ pid nav? title]]
+  (if pid
+    (do
+     (state/set-state! :plugin/focused-settings pid)
+     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+     (plugin/open-focused-settings-modal! title))
+    (state/close-sub-modal! "ls-focused-settings-modal")))
+
+
+(defmethod handle :redirect-to-home [_]
+  (page-handler/create-today-journal!))
+
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
+
+(defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
+  (commands/exec-plugin-simple-command! pid cmd action))
+
+(defmethod handle :shortcut-handler-refreshed [[_]]
+  (when-not @st/*inited?
+    (reset! st/*inited? true)
+    (st/consume-pending-shortcuts!)))
+
+
+(defmethod handle :mobile/keyboard-will-show [[_]]
+  (when (and (state/get-left-sidebar-open?)
+             (state/editing?))
+    (state/set-left-sidebar-open! false)))
+
+(defmethod handle :mobile/keyboard-did-show [[_]]
+  (when-let [input (state/get-input)]
+    (util/make-el-cursor-position-into-center-viewport input)))
+
+(defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
+  (let [downloading? (:plugin/updates-downloading? @state/state)]
+
+    (when-let [coming (and (not downloading?)
+                           (get-in @state/state [:plugin/updates-coming id]))]
+      (notification/show!
+        (str "Checked: " (:title coming))
+        :success))
+
+    (if (and updated? downloading?)
+      ;; try to start consume downloading item
+      (if-let [n (state/get-next-selected-coming-update)]
+        (plugin-handler/check-or-update-marketplace-plugin
+          (assoc n :only-check false :error-code nil)
+          (fn [^js e] (js/console.error "[Download Err]" n e)))
+        (plugin-handler/close-updates-downloading))
+
+      ;; try to start consume pending item
+      (if-let [n (second (first (:plugin/updates-pending @state/state)))]
+        (plugin-handler/check-or-update-marketplace-plugin
+          (assoc n :only-check true :error-code nil)
+          (fn [^js e]
+            (notification/show! (.toString e) :error)
+            (js/console.error "[Check Err]" n e)))
+        ;; try to open waiting updates list
+        (when (and pending? (seq (state/all-available-coming-updates)))
+          (plugin/open-waiting-updates-modal!))))))
 
 (defn run!
   []
   (let [chan (state/get-events-chan)]
     (async/go-loop []
       (let [payload (async/<! chan)]
-        (handle payload))
+        (try
+          (handle payload)
+          (catch js/Error error
+            (let [type :handle-system-events/failed]
+              (js/console.error (str type) (clj->js payload) "\n" error)
+              (state/pub-event! [:instrument {:type    type
+                                              :payload payload
+                                              :error error}])))))
       (recur))
     chan))

@@ -7,7 +7,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
             [frontend.format :as format]
@@ -37,7 +37,7 @@
       (when-not (protocol/loaded? record)
         (set-format-js-loading! format true)
         (protocol/lazyLoad record
-                           (fn [result]
+                           (fn [_result]
                              (set-format-js-loading! format false)))))))
 
 (defn lazy-load-js
@@ -71,6 +71,10 @@
      {:key "copy block refs"
       :on-click editor-handler/copy-block-refs}
      "Copy block refs")
+    (ui/menu-link
+     {:key "copy block embeds"
+      :on-click editor-handler/copy-block-embeds}
+     "Copy block embeds")
     (ui/menu-link
      {:key "cycle todos"
       :on-click editor-handler/cycle-todos!}
@@ -142,8 +146,8 @@
                     (reset! edit? true))}
        "Make template"))))
 
-(rum/defc block-context-menu-content
-  [target block-id]
+(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
+  [_target block-id]
 
   (let [*el-ref (rum/use-ref nil)]
 
@@ -156,98 +160,115 @@
        #())
      [])
 
-    (rum/with-context [[t] i18n/*tongue-context*]
-      (when-let [block (db/entity [:block/uuid block-id])]
-        (let [properties (:block/properties block)
-              heading? (true? (:heading properties))]
-          [:div#custom-context-menu
-           {:ref *el-ref}
-           [:div.py-1.rounded-md.bg-base-3.shadow-xs
-            [:div.flex-row.flex.justify-between.py-4.pl-2
-             [:div.flex-row.flex.justify-between
-              (for [color block-background-colors]
-                [:a.m-2.shadow-sm
-                 {:on-click (fn [_e]
-                              (editor-handler/set-block-property! block-id "background-color" color))}
-                 [:div.heading-bg {:style {:background-color color}}]])]
-             [:a.text-sm
-              {:title    (t :remove-background)
-               :style    {:margin-right 14
-                          :margin-top   4}
-               :on-click (fn [_e]
-                           (editor-handler/remove-block-property! block-id "background-color"))}
-              "Clear"]]
+    (when-let [block (db/entity [:block/uuid block-id])]
+      (let [properties (:block/properties block)
+            heading? (true? (:heading properties))]
+        [:div#custom-context-menu
+         {:ref *el-ref}
+         [:div.py-1.rounded-md.bg-base-3.shadow-xs
+          [:div.flex-row.flex.justify-between.py-4.pl-2
+           [:div.flex-row.flex.justify-between
+            (for [color block-background-colors]
+              [:a.m-2.shadow-sm
+               {:on-click (fn [_e]
+                            (editor-handler/set-block-property! block-id "background-color" color))}
+               [:div.heading-bg {:style {:background-color color}}]])]
+           [:a.text-sm
+            {:title    (t :remove-background)
+             :style    {:margin-right 14
+                        :margin-top   4}
+             :on-click (fn [_e]
+                         (editor-handler/remove-block-property! block-id "background-color"))}
+            "Clear"]]
 
+          (ui/menu-link
+           {:key      "Convert heading"
+            :on-click (fn [_e]
+                        (if heading?
+                          (editor-handler/remove-block-property! block-id :heading)
+                          (editor-handler/set-block-property! block-id :heading true)))}
+           (if heading?
+             "Convert back to a block"
+             "Convert to a heading"))
+
+          (ui/menu-link
+           {:key      "Open in sidebar"
+            :on-click (fn [_e]
+                        (editor-handler/open-block-in-sidebar! block-id))}
+           "Open in sidebar")
+
+          (ui/menu-link
+           {:key      "Copy block ref"
+            :on-click (fn [_e]
+                        (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
+           "Copy block ref")
+
+          (ui/menu-link
+           {:key      "Copy block embed"
+            :on-click (fn [_e]
+                        (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
+           "Copy block embed")
+
+          (block-template block-id)
+
+          (ui/menu-link
+           {:key      "Copy as"
+            :on-click (fn [_]
+                        (state/set-modal! #(export/export-blocks [block-id])))}
+           "Copy as")
+
+          (if (srs/card-block? block)
             (ui/menu-link
-             {:key      "Convert heading"
-              :on-click (fn [_e]
-                          (if heading?
-                            (editor-handler/remove-block-property! block-id :heading)
-                            (editor-handler/set-block-property! block-id :heading true)))}
-             (if heading?
-               "Convert back to a block"
-               "Convert to a heading"))
-
+             {:key      "Preview Card"
+              :on-click #(srs/preview block-id)}
+             "Preview Card")
             (ui/menu-link
-             {:key      "Open in sidebar"
-              :on-click (fn [_e]
-                          (editor-handler/open-block-in-sidebar! block-id))}
-             "Open in sidebar")
+             {:key      "Make a Card"
+              :on-click #(srs/make-block-a-card! block-id)}
+             "Make a Card"))
 
+          (ui/menu-link
+           {:key      "Cut"
+            :on-click (fn [_e]
+                        (editor-handler/cut-block! block-id))}
+           "Cut")
+
+          (ui/menu-link
+           {:key      "Expand all"
+            :on-click (fn [_e]
+                        (editor-handler/expand-all! block-id))}
+           "Expand all")
+
+          (ui/menu-link
+           {:key      "Collapse all"
+            :on-click (fn [_e]
+                        (editor-handler/collapse-all! block-id))}
+           "Collapse all")
+
+          (when (state/sub [:plugin/simple-commands])
+            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
+              (for [[_ {:keys [key label] :as cmd} action pid] cmds]
+                (ui/menu-link
+                 {:key      key
+                  :on-click #(commands/exec-plugin-simple-command!
+                              pid (assoc cmd :uuid block-id) action)}
+                 label))))
+
+          (when (state/sub [:ui/developer-mode?])
             (ui/menu-link
-             {:key      "Copy block ref"
-              :on-click (fn [_e]
-                          (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
-             "Copy block ref")
-
-            (block-template block-id)
-
-            (ui/menu-link
-             {:key      "Copy as"
-              :on-click (fn [_]
-                          (state/set-modal! #(export/export-blocks [block-id])))}
-             "Copy as")
-
-            (if (srs/card-block? block)
-              (ui/menu-link
-               {:key      "Preview Card"
-                :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
-               "Preview Card")
-              (ui/menu-link
-               {:key      "Make a Card"
-                :on-click #(srs/make-block-a-card! block-id)}
-               "Make a Card"))
-
-            (ui/menu-link
-             {:key      "Cut"
-              :on-click (fn [_e]
-                          (editor-handler/cut-block! block-id))}
-             "Cut")
-
-            (when (state/sub [:plugin/simple-commands])
-              (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
-                (for [[_ {:keys [key label] :as cmd} action pid] cmds]
-                  (ui/menu-link
-                   {:key      key
-                    :on-click #(commands/exec-plugin-simple-command!
-                                pid (assoc cmd :uuid block-id) action)}
-                   label))))
-
-            (when (state/sub [:ui/developer-mode?])
-              (ui/menu-link
-               {:key      "(Dev) Show block data"
-                :on-click (fn []
-                            (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                              (println block-data)
-                              (notification/show!
-                               [:div
-                                [:pre.code block-data]
-                                [:br]
-                                (ui/button "Copy to clipboard"
-                                           :on-click #(.writeText js/navigator.clipboard block-data))]
-                               :success
-                               false)))}
-               "(Dev) Show block data"))]])))))
+             {:key      "(Dev) Show block data"
+              :on-click (fn []
+                          (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
+                            (println block-data)
+                            (notification/show!
+                             [:div
+                              [:pre.code block-data]
+                              [:br]
+                              (ui/button "Copy to clipboard"
+                                :on-click #(.writeText js/navigator.clipboard block-data))]
+                             :success
+                             false)))}
+             "(Dev) Show block data"))]]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
@@ -301,7 +322,7 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "mouseup"
-                    (fn [e]
+                    (fn [_e]
                       (when-not (state/in-selection-mode?)
                         (when-let [blocks (seq (util/get-selected-nodes "ls-block"))]
                           (let [blocks (remove nil? blocks)
@@ -349,7 +370,7 @@
 
                           :else
                           nil))))))
-  [id {:keys [hiccup] :as option}]
+  [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
      hiccup
