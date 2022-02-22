@@ -263,4 +263,6 @@
 (defn link?
   [format link]
   (when (string? link)
-    (= "Link" (ffirst (inline->edn link (default-config format))))))
+    (let [[type link] (first (inline->edn link (default-config format)))]
+      (and (= "Link" type)
+           (not (contains? #{"Page_ref" "Block_ref"} (first (:url link))))))))
