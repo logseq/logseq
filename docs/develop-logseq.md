@@ -23,22 +23,6 @@ Open <http://localhost:3001>.
 yarn release
 ```
 
-### 5. Run tests
-
-Run ClojureScript tests
-
-```bash
-yarn test
-```
-
-Run E2E tests
-
-``` bash
-yarn electron-watch
-# in another shell
-yarn e2e-test # or npx playwright test
-```
-
 ## Desktop app development
 
 ### 1. Compile to JavaScript
