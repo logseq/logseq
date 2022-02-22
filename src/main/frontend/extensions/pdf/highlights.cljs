@@ -20,7 +20,8 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
-(def *highlight-mode? (atom true)) ; this could be a user setting in config.edn
+(def *highlight-mode? (atom true)) ; default state could be a user setting in config.edn
+(def *highlight-color (atom "yellow")) ; default color could be a user setting in config.edn
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
@@ -88,7 +89,7 @@
 (defn add-highlight! [highlight add-hl! & [properties]]
   (let [highlight (merge (if (fn? highlight) (highlight) highlight)
                          {:id         (pdf-utils/gen-uuid)
-                          :properties (or properties {:color "yellow"})})]
+                          :properties (or properties {:color @*highlight-color})})]
     (pdf-assets/copy-hl-ref! highlight)
     (add-hl! highlight)
     (pdf-utils/clear-all-selection)))
@@ -152,6 +153,7 @@
 
                       ;; colors
                       (let [properties {:color action}]
+                        (reset! *highlight-color (:color properties))
                         (if id
                           (upd-hl! (assoc highlight :properties properties)) ; update if it already exists
                           (add-highlight! highlight add-hl! properties)))))
@@ -506,7 +508,7 @@
 
                   (if @*highlight-mode?
                     (when-not (= "" (.toString selection))
-                      (add-highlight! hl-fn add-hl! {:color "yellow"}))
+                      (add-highlight! hl-fn add-hl! {:color @*highlight-color}))
                     (cond
                       (.-isCollapsed selection)
                       (set-sel-state! {:collapsed true})
