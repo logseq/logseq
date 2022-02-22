@@ -88,6 +88,6 @@ shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
 Tests can be automatically compiled and then selectively run on the commandline
 using https://github.com/lucywang000/shadow-test-utils. For this workflow:
 
-1. Run `clj -M:test watch test` in one terminal
+1. Run `clj -M:test watch test` in one shell
 2. Focus a test by adding a `^:focus` metadata flag
-3. In another terminal, run `node node static/tests.js`
+3. In another shell, run `node node static/tests.js`
