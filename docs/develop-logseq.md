@@ -1,23 +1,28 @@
 # Develop Logseq
-### 1. Requirements
+## Requirements
 
 - [Node.js](https://nodejs.org/en/download/) (See [build.yml](.github/workflows/build.yml) for allowed version)  & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
 - [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
 
-### 2. Compile to JavaScript
+## Clone project
 
 ```bash
 git clone https://github.com/logseq/logseq
 cd logseq
+```
+
+## Browser development
+
+### Development
+
+```bash
 yarn
 yarn watch
 ```
 
-### 3. Open the browser
+Then open the browser <http://localhost:3001>.
 
-Open <http://localhost:3001>.
-
-### 4. Build a release
+### Production
 
 ```bash
 yarn release
@@ -25,25 +30,25 @@ yarn release
 
 ## Desktop app development
 
-### 1. Compile to JavaScript
+### Development
+
+1. Install npm packages for building the desktop app
+
+``` bash
+yarn install && cd static && yarn install && cd ..
+```
+2. Compile to JavaScript and open the dev app
 
 ```bash
 yarn watch
-```
-
-### 2. Install npm packages for building the desktop app
-
-``` bash
-cd static && yarn install && cd ..
-```
-
-### 3. Open the dev app
-
-```bash
+# Wait until watch is finished building and then in a different shell
 yarn dev-electron-app
 ```
 
-### 4. Build a release
+Alternatively, run `bb dev:electron-start` to do this step with one command.
+
+### Production
+Build a release:
 
 ```bash
 yarn release-electron
