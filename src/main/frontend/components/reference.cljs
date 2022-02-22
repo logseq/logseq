@@ -68,6 +68,7 @@
 
 (rum/defcs references < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
+  (rum/local false ::force-uncollapsed?)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
@@ -80,6 +81,7 @@
           threshold (state/get-linked-references-collapsed-threshold)
           refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
+          *force-uncollapsed? (::force-uncollapsed? state)
           n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
@@ -126,7 +128,8 @@
                                   references (->> (concat ref-pages references)
                                                   (remove nil?)
                                                   (distinct))]
-                              (state/set-modal! (filter-dialog filters-atom references page-name))))}
+                              (state/set-modal! (filter-dialog filters-atom references page-name))
+                              (reset! *force-uncollapsed? true)))}
                (ui/icon "filter" {:class (cond
                                            (empty? filter-state)
                                            ""
@@ -151,6 +154,7 @@
                              (for [[_ rfs] filtered-ref-blocks]
                                (count rfs)))]
                  (reset! *n-ref n-ref)
+                 (reset! *force-uncollapsed? false)
                  [:div.references-blocks
                   (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                                    {:id page-name
@@ -164,6 +168,7 @@
                                      {:hiccup ref-hiccup}))]))
 
              {:default-collapsed? default-collapsed?
+              :force-uncollapsed? @*force-uncollapsed?
               :title-trigger? true}))]]))))
 
 (rum/defcs unlinked-references-aux
