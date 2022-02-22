@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    # branches: [master]
     paths-ignore:
       - '*.md'
   pull_request:
@@ -66,8 +66,13 @@ jobs:
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
+      - run: git diff --exit-code
       - name: Fetch yarn deps
         run: yarn install
+
+      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
+      - name: Ensure lockfile is up to date
+        run: git diff --exit-code yarn.lock
 
       - name: Run ClojureScript test
         run: |
