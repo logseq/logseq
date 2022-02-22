@@ -49,6 +49,19 @@
   [node]
   {:db/id (:db/id node)})
 
+(declare get-level get-next)
+(defn- skip-children
+  "get the last child node of NODE, or NODE itself when no child"
+  [node db]
+  (let [level (get-level node)]
+    (loop [node node]
+      (if-let [next-node (get-next node db)]
+        (let [next-node-level (get-level next-node)]
+          (if (> next-node-level level)
+            (recur next-node)
+            node))
+        node))))
+
 
 ;;; Node apis
 (defprotocol Node
@@ -248,7 +261,8 @@
          (map-sequential? nodes)]}
   (let [nodes (assign-temp-id nodes)
         target (target-entity target-id-or-entity db)
-        next (get-next target db)
+        target-or-its-last-child (skip-children target db)
+        next (get-next target-or-its-last-child db)
         first-node (first nodes)
         last-node (last nodes)
         diff-level (get-diff-level first-node target sibling?)
@@ -260,7 +274,7 @@
           cat)
          nodes)
         update-next-id-txs
-        [(set-next target first-node)
+        [(set-next target-or-its-last-child first-node)
          (set-next last-node next)]
         update-internal-nodes-next-id-txs
         (for [i (range)
@@ -274,6 +288,7 @@
   "move consecutive sorted NODES after target as sibling or children
   return transaction data."
   [nodes db target-id-or-entity sibling?]
+  ;; TODO: check NODES are consecutive
   {:pre [(seq nodes)
          (s/valid? ::target-id-or-entity target-id-or-entity)]}
   (let [target (target-entity target-id-or-entity db)
@@ -365,6 +380,39 @@
      (when next-node
        (cons next-node (get-page-nodes next-node db))))))
 
+(defn get-prev-sibling-node
+  "return previous node whose :block/level is same as NODE
+  or nil(when NODE is first node in the page or it's the first child of its parent)"
+  [node db]
+  (let [level (get-level node)
+        prev-node (get-prev node db)]
+    (loop [node prev-node]
+      ;; page-node doesn't have :block/level
+      (when-let [level* (:block/level node)]
+        (cond
+          (= level level*)
+          node
+          (< level level*)
+          (recur (get-prev node db))
+          (> level level*)
+          nil)))))
+
+(defn get-next-sibling-node
+  "return next node whose :block/level is same as NODE
+  or nil(when NODE is final one in the page or it's the last child of its parent)"
+  [node db]
+  (let [level (get-level node)
+        next-node (get-next node db)]
+    (loop [node next-node]
+      (when (some? node)
+        (let [level* (:block/level node)]
+          (cond
+            (= level level*)
+            node
+            (< level level*)
+            (recur (get-next node db))
+            (> level level*)
+            nil))))))
 
 ;;; predicates
 (defn contains-node?
