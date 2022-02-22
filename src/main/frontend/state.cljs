@@ -49,7 +49,7 @@
      :draw?                                 false
      :db/restoring?                         nil
 
-     :journals-length                       2
+     :journals-length                       3
 
      :search/q                              ""
      :search/mode                           :global
