@@ -2,7 +2,10 @@
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
+            [frontend.text :as text]
             [clojure.string :as string]))
+
+(set! mldoc/parse-property text/parse-property)
 
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))
