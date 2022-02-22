@@ -2,6 +2,7 @@ import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 
 export type PluginLocalIdentity = string
 
@@ -735,4 +736,5 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   UI: IUIProxy
 
   FileStorage: LSPluginFileStorage
+  Experiments: LSPluginExperiments
 }

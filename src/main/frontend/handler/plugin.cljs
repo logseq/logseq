@@ -228,13 +228,13 @@
   [pid [cmd actions]]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/installed-commands pid]
+      (swap! state/state update-in [:plugin/installed-slash-commands pid]
              (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
       true)))
 
 (defn unregister-plugin-slash-command
   [pid]
-  (swap! state/state md/dissoc-in [:plugin/installed-commands (keyword pid)]))
+  (swap! state/state md/dissoc-in [:plugin/installed-slash-commands (keyword pid)]))
 
 (def keybinding-mode-handler-map
   {:global      :shortcut.handler/editor-global

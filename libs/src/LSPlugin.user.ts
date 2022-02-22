@@ -29,6 +29,7 @@ import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { snakeCase } from 'lodash-es'
+import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 
 declare global {
   interface Window {
@@ -241,7 +242,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    */
   private _ui = new Map<number, uiState>()
 
-  private readonly _fileStorage: LSPluginFileStorage
+  private _mFileStorage: LSPluginFileStorage
+  private _mExperiments: LSPluginExperiments
 
   /**
    * handler of before unload plugin
@@ -283,9 +285,6 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
         actor?.reject(e)
       }
     })
-
-    // modules
-    this._fileStorage = new LSPluginFileStorage(this)
   }
 
   async ready (
@@ -531,7 +530,15 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   }
 
   get FileStorage (): LSPluginFileStorage {
-    return this._fileStorage
+    let m = this._mFileStorage
+    if (!m) m = this._mFileStorage = new LSPluginFileStorage(this)
+    return m
+  }
+
+  get Experiments (): LSPluginExperiments {
+    let m = this._mExperiments
+    if (!m) m = this._mExperiments = new LSPluginExperiments(this)
+    return m
   }
 }
 

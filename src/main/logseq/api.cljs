@@ -654,6 +654,13 @@
   (when (string? key)
     (notification/clear! (keyword key)) nil))
 
+;; experiments
+(defn ^:export exper_load_scripts
+  [pid & scripts]
+  (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
+    (js/console.log "pl=>" pl)
+    (doseq [s scripts]
+      (js/console.log "[load scripts] #" pid " <===>" s))))
 
 ;; helpers
 (defn ^:export query_element_by_id

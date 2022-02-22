@@ -31,7 +31,7 @@
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
-     ;; :repo/loading-files? is only for github repos
+     ;; :repo/loading-files? is only for GitHub repos
      :repo/loading-files?                   {}
      :repo/parsing-files?                   nil
      :repo/changed-files                    nil
@@ -157,8 +157,9 @@
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
-     :plugin/installed-commands             {}
+     :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
+     :plugin/installed-components           {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -1248,7 +1249,7 @@
 
 (defn get-plugins-commands
   []
-  (mapcat seq (flatten (vals (:plugin/installed-commands @state)))))
+  (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
 (defn get-plugins-commands-with-type
   [type]
