@@ -79,7 +79,7 @@ The following is for developers and designers who want to build and run Logseq l
 We have [a dedicated overview page](https://github.com/logseq/logseq/blob/master/CODEBASE_OVERVIEW.md) for Logseq's codebase overview and [a development practices page](docs/dev-practices.md).
 
 ## Set up development environment
-* For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop);
+* For setting up web app / desktop app development environment on macOS / Linux, please refer to [Develop Logseq](docs/develop-logseq.md).
 
 * For Windows users, please refer to [Develop LogSeq on Windows](docs/develop-logseq-on-windows.md) in addition.
 
