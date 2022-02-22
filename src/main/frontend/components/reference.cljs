@@ -66,37 +66,16 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
-(rum/defcs references < rum/reactive db-mixins/query
-  (rum/local nil ::n-ref)
-  (rum/local false ::force-uncollapsed?)
-  {:init (fn [state]
-           (let [page-name (first (:rum/args state))
-                 filters (when page-name
-                           (atom (page-handler/get-filters (string/lower-case page-name))))]
-             (assoc state ::filters filters)))}
-  [state page-name _marker?]
+(rum/defcs scheduled-or-deadlines-aux < rum/reactive db-mixins/query
+  [state page-name]
   (when page-name
     (let [page-name (string/lower-case page-name)
-          repo (state/get-current-repo)
-          threshold (state/get-linked-references-collapsed-threshold)
-          refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
-          *n-ref (::n-ref state)
-          *force-uncollapsed? (::force-uncollapsed? state)
-          n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
-          default-collapsed? (>= (count refed-blocks-ids) threshold)
-          filters-atom (get state ::filters)
-          filter-state (rum/react filters-atom)
-          block? (util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
-          page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
           scheduled-or-deadlines (when (and journal?
                                             (not (true? (state/scheduled-deadlines-disabled?)))
                                             (= page-name (string/lower-case (date/journal-name))))
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
-      (when (or (seq refed-blocks-ids)
-                (seq scheduled-or-deadlines)
-                (seq filter-state))
+      (when (seq scheduled-or-deadlines)
         [:div.references.mt-6.flex-1.flex-row
          [:div.content
           (when (seq scheduled-or-deadlines)
@@ -110,66 +89,97 @@
                                                 :editor-box editor/box}
                                                {})]
                 (content/content page-name {:hiccup ref-hiccup}))]
-             {:title-trigger? true}))
+             {:title-trigger? true}))]]))))
 
-          (when (seq refed-blocks-ids)
-            (ui/foldable
-             [:div.flex.flex-row.flex-1.justify-between.items-center
-              [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
-                                             (when (> n-ref 1) "s"))]
-              [:a.filter.fade-link
-               {:title "Filter"
-                :on-click (fn []
-                            (let [ref-blocks (if block-id
-                                               (db/get-block-referenced-blocks block-id)
-                                               (db/get-page-referenced-blocks page-name))
-                                  ref-pages (map (comp :block/original-name first) ref-blocks)
-                                  references (db/get-page-linked-refs-refed-pages repo page-name)
-                                  references (->> (concat ref-pages references)
-                                                  (remove nil?)
-                                                  (distinct))]
-                              (state/set-modal! (filter-dialog filters-atom references page-name))
-                              (reset! *force-uncollapsed? true)))}
-               (ui/icon "filter" {:class (cond
-                                           (empty? filter-state)
-                                           ""
-                                           (every? true? (vals filter-state))
-                                           "text-green-400"
-                                           (every? false? (vals filter-state))
-                                           "text-red-400"
-                                           :else
-                                           "text-yellow-400")
-                                  :style {:fontSize 24}})]]
+(rum/defcs references-aux < rum/reactive db-mixins/query
+  (rum/local nil ::n-ref)
+  (rum/local false ::force-uncollapsed?)
+  {:init (fn [state]
+           (let [page-name (first (:rum/args state))
+                 filters (when page-name
+                           (atom (page-handler/get-filters (string/lower-case page-name))))]
+             (assoc state ::filters filters)))}
+  [state page-name]
+  (when page-name
+    (let [page-name (string/lower-case page-name)
+          repo (state/get-current-repo)
+          threshold (state/get-linked-references-collapsed-threshold)
+          refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
+          *n-ref (::n-ref state)
+          *force-uncollapsed? (::force-uncollapsed? state)
+          n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
+          default-collapsed? (>= (count refed-blocks-ids) threshold)
+          filters-atom (get state ::filters)
+          filter-state (rum/react filters-atom)
+          block? (util/uuid-string? page-name)
+          block-id (and block? (uuid page-name))]
+      (when (or (seq refed-blocks-ids) (seq filter-state))
+        (ui/foldable
+         [:div.flex.flex-row.flex-1.justify-between.items-center
+          [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
+                                         (when (> n-ref 1) "s"))]
+          [:a.filter.fade-link
+           {:title "Filter"
+            :on-click (fn []
+                        (let [ref-blocks (if block-id
+                                           (db/get-block-referenced-blocks block-id)
+                                           (db/get-page-referenced-blocks page-name))
+                              ref-pages (map (comp :block/original-name first) ref-blocks)
+                              references (db/get-page-linked-refs-refed-pages repo page-name)
+                              references (->> (concat ref-pages references)
+                                              (remove nil?)
+                                              (distinct))]
+                          (state/set-modal! (filter-dialog filters-atom references page-name))
+                          (reset! *force-uncollapsed? true)))}
+           (ui/icon "filter" {:class (cond
+                                       (empty? filter-state)
+                                       ""
+                                       (every? true? (vals filter-state))
+                                       "text-green-400"
+                                       (every? false? (vals filter-state))
+                                       "text-red-400"
+                                       :else
+                                       "text-yellow-400")
+                              :style {:fontSize 24}})]]
 
-             (fn []
-               (let [ref-blocks (if block-id
-                                  (db/get-block-referenced-blocks block-id)
-                                  (db/get-page-referenced-blocks page-name))
-                     filters (when (seq filter-state)
-                               (->> (group-by second filter-state)
-                                    (medley/map-vals #(map first %))))
-                     filtered-ref-blocks (->> (block-handler/filter-blocks repo ref-blocks filters true)
-                                              blocks-with-ref-level)
-                     n-ref (apply +
-                             (for [[_ rfs] filtered-ref-blocks]
-                               (count rfs)))]
-                 (reset! *n-ref n-ref)
-                 (reset! *force-uncollapsed? false)
-                 [:div.references-blocks
-                  (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                                   {:id page-name
-                                                    :ref? true
-                                                    :breadcrumb-show? true
-                                                    :group-by-page? true
-                                                    :editor-box editor/box
-                                                    :filters filters}
-                                                   {})]
-                    (content/content page-name
-                                     {:hiccup ref-hiccup}))]))
+         (fn []
+           (let [ref-blocks (if block-id
+                              (db/get-block-referenced-blocks block-id)
+                              (db/get-page-referenced-blocks page-name))
+                 filters (when (seq filter-state)
+                           (->> (group-by second filter-state)
+                                (medley/map-vals #(map first %))))
+                 filtered-ref-blocks (->> (block-handler/filter-blocks repo ref-blocks filters true)
+                                          blocks-with-ref-level)
+                 n-ref (apply +
+                              (for [[_ rfs] filtered-ref-blocks]
+                                (count rfs)))]
+             (reset! *n-ref n-ref)
+             (reset! *force-uncollapsed? false)
+             [:div.references-blocks
+              (let [ref-hiccup (block/->hiccup filtered-ref-blocks
+                                               {:id page-name
+                                                :ref? true
+                                                :breadcrumb-show? true
+                                                :group-by-page? true
+                                                :editor-box editor/box
+                                                :filters filters}
+                                               {})]
+                (content/content page-name
+                                 {:hiccup ref-hiccup}))]))
 
-             {:default-collapsed? default-collapsed?
-              :force-uncollapsed? @*force-uncollapsed?
-              :title-trigger? true}))]]))))
+         {:default-collapsed? default-collapsed?
+          :force-uncollapsed? @*force-uncollapsed?
+          :title-trigger? true})))))
+
+(rum/defcs references < rum/reactive
+  [state page-name _marker?]
+  (when page-name
+    (let [page-name (string/lower-case page-name)]
+      [:div.references.mt-6.flex-1.flex-row
+       [:div.content
+        (scheduled-or-deadlines-aux page-name)
+        (references-aux page-name)]])))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
