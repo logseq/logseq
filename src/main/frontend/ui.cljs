@@ -659,11 +659,11 @@
                  (let [args (:rum/args state)]
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
-                 state)}
-  {:will-update (fn [state]
-                   (let [args (:rum/args state)]
-                     (when (true? (:force-uncollapsed? (last args)))
-                       (reset! (get state ::collapsed?) false)))
+                 state)
+   :will-update (fn [state]
+                  (let [args (:rum/args state)]
+                    (when (true? (:force-uncollapsed? (last args)))
+                      (reset! (get state ::collapsed?) false)))
                   state)}
   [state header content {:keys [title-trigger? force-uncollapsed?]}]
   (let [control? (get state ::control?)
