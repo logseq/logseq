@@ -269,7 +269,7 @@
         update-level-txs
         (sequence
          (comp
-          (map #(merge % (set-level % (+ diff-level (:block/level %)))))
+          (map #(merge % (set-level % (+ diff-level (get-level %)))))
           (map #(save-aux db %))
           cat)
          nodes)
@@ -311,7 +311,7 @@
           (unset-next last-node))
         (set-next origin-prev-first-node origin-next-last-node)])
      ;; alter :block/level
-     (map #(set-level % (+ diff-level (:block/level %))) nodes))))
+     (map #(set-level % (+ diff-level (get-level %))) nodes))))
 
 
 (defn delete-nodes
@@ -388,7 +388,7 @@
         prev-node (get-prev node db)]
     (loop [node prev-node]
       ;; page-node doesn't have :block/level
-      (when-let [level* (:block/level node)]
+      (when-let [level* (get-level node)]
         (cond
           (= level level*)
           node
@@ -405,7 +405,7 @@
         next-node (get-next node db)]
     (loop [node next-node]
       (when (some? node)
-        (let [level* (:block/level node)]
+        (let [level* (get-level node)]
           (cond
             (= level level*)
             node
@@ -413,6 +413,17 @@
             (recur (get-next node db))
             (> level level*)
             nil))))))
+
+(defn get-parent-node
+  "return NODE's parent node or nil when NODE is the first node of its page"
+  [node db]
+  (let [level (get-level node)]
+    (loop [node node]
+      (let [prev-node (get-prev node db)]
+        (when-let [level* (get-level node)]
+          (if (= level (dec level*))
+            prev-node
+            (recur prev-node)))))))
 
 ;;; predicates
 (defn contains-node?
