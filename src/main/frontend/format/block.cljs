@@ -150,7 +150,7 @@
 
 ;; TODO: we should move this to mldoc
 (defn extract-properties
-  [properties]
+  [format properties]
   (when (seq properties)
     (let [properties (seq properties)
           page-refs (->>
@@ -179,7 +179,7 @@
                                            (remove string/blank? v)
                                            (if (string/blank? v)
                                              nil
-                                             (text/parse-property k v)))
+                                             (text/parse-property format k v)))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)
@@ -413,7 +413,7 @@
                     (if (or (:pre-block? block)
                             (= (:format block) :org))
                       content
-                      (text/remove-indentation-spaces content (inc (:level block)) false))))]
+                      (mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
       content
       (property/->new-properties content))))
@@ -516,7 +516,7 @@
                     (recur headings (rest blocks) timestamps' properties last-pos last-level children (conj block-all-content block-content) body))
 
                   (property/properties-ast? block)
-                  (let [properties (extract-properties (second block))]
+                  (let [properties (extract-properties format (second block))]
                     (recur headings (rest blocks) timestamps properties last-pos last-level children (conj block-all-content block-content) body))
 
                   (heading-block? block)

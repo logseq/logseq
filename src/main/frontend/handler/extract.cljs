@@ -140,6 +140,7 @@
   (if (string/blank? content)
     []
     (let [format (format/get-format file)
+          _ (println "Parsing start: " file)
           ast (mldoc/->edn content (mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
                                                          ))]
@@ -149,7 +150,7 @@
                                              (->> (last first-block)
                                                   (map (fn [[x y]]
                                                          [x (if (string? y)
-                                                              (text/parse-property x y)
+                                                              (text/parse-property format x y)
                                                               y)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]

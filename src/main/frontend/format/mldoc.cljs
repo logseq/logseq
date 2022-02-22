@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
-            [frontend.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -87,6 +86,18 @@
                      config
                      (or references default-references)))
 
+(defn remove-indentation-spaces
+  [s level remove-first-line?]
+  (let [lines (string/split-lines s)
+        [f & r] lines
+        body (map (fn [line]
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
+                      line))
+               (if remove-first-line? lines r))
+        content (if remove-first-line? body (cons f body))]
+    (string/join "\n" content)))
+
 (defn- ->vec
   [s]
   (if (string? s) [s] s))
@@ -99,7 +110,7 @@
        (distinct)))
 
 (defn collect-page-properties
-  [ast]
+  [ast parse-property]
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
@@ -119,7 +130,7 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (text/parse-property k v))]
+                                       (parse-property k v))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -168,7 +179,7 @@
             (let [{:keys [start_pos end_pos]} pos-meta
                   content (utf8/substring content start_pos end_pos)
                   spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
-                  content (if spaces (text/remove-indentation-spaces content (count spaces) true)
+                  content (if spaces (remove-indentation-spaces content (count spaces) true)
                               content)
                   block ["Src" (assoc (second block) :full_content content)]]
               [block pos-meta])
@@ -181,6 +192,8 @@
                "Hiccup"
                "Heading"} type))
 
+(def parse-property nil)
+
 (defn ->edn
   [content config]
   (if (string? content)
@@ -191,7 +204,7 @@
             (parse-json config)
             (util/json->clj)
             (update-src-full-content content)
-            (collect-page-properties)))
+            (collect-page-properties parse-property)))
       (catch js/Error e
         (js/console.error e)
         []))
@@ -203,7 +216,7 @@
     (if (string/blank? content)
       {}
       (let [[headers blocks] (-> content (parse-opml) (util/json->clj))]
-        [headers (collect-page-properties blocks)]))
+        [headers (collect-page-properties blocks parse-property)]))
     (catch js/Error e
       (log/error :edn/convert-failed e)
       [])))
@@ -246,3 +259,8 @@
   [ast typ]
   (and (contains? #{"Drawer"} (ffirst ast))
        (= typ (second (first ast)))))
+
+(defn link?
+  [format link]
+  (when (string? link)
+    (= "Link" (ffirst (inline->edn link (default-config format))))))
