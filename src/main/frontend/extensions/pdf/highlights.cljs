@@ -20,6 +20,7 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
+(def *highlight-mode? (atom true)) ; this could be a user setting in config.edn
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
@@ -84,6 +85,14 @@
       [])
     [:span.extensions__pdf-resizer {:ref el-ref}]))
 
+(defn add-highlight! [highlight add-hl! & [properties]]
+  (let [highlight (merge (if (fn? highlight) (highlight) highlight)
+                         {:id         (pdf-utils/gen-uuid)
+                          :properties (or properties {:color "yellow"})})]
+    (pdf-assets/copy-hl-ref! highlight)
+    (add-hl! highlight)
+    (pdf-utils/clear-all-selection)))
+
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer
    {:keys [highlight point ^js range]}
@@ -143,17 +152,9 @@
 
                       ;; colors
                       (let [properties {:color action}]
-                        (if-not id
-                          ;; add highlight
-                          (let [highlight (merge (if (fn? highlight) (highlight) highlight)
-                                                 {:id         (pdf-utils/gen-uuid)
-                                                  :properties properties})]
-                            (add-hl! highlight)
-                            (pdf-utils/clear-all-selection)
-                            (pdf-assets/copy-hl-ref! highlight))
-
-                          ;; update highlight
-                          (upd-hl! (assoc highlight :properties properties))))))
+                        (if id
+                          (upd-hl! (assoc highlight :properties properties)) ; update if it already exists
+                          (add-highlight! highlight add-hl! properties)))))
 
                   (clear-ctx-tip!))}
 
@@ -458,8 +459,8 @@
 
         add-hl! (fn [hl] (when (:id hl)
                            ;; fix js object
-                           (let [highlights (pdf-utils/fix-nested-js highlights)]
-                             (set-highlights! (conj highlights hl)))
+                           (let [-highlights (pdf-utils/fix-nested-js highlights)]
+                             (set-highlights! (conj -highlights hl)))
 
                            (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
                                                   (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
@@ -491,14 +492,27 @@
         (let [fn-selection-ok
               (fn [^js/MouseEvent e]
                 (let [^js/Selection selection (js/document.getSelection)
-                      ^js/Range sel-range (.getRangeAt selection 0)]
+                      ^js/Range sel-range (.getRangeAt selection 0)
+                      hl-fn #(when-let [page-info (pdf-utils/get-page-from-range sel-range)]
+                                 (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
+                                   (let [page (int (:page-number page-info))
+                                         ^js bounding (pdf-utils/get-bounding-rect sel-rects)
+                                         vw-pos {:bounding bounding :rects sel-rects :page page}
+                                         sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
+                                     {:id         nil
+                                      :page       page
+                                      :position   sc-pos
+                                      :content    {:text (.toString sel-range)}})))]
 
-                  (cond
-                    (.-isCollapsed selection)
-                    (set-sel-state! {:collapsed true})
+                  (if @*highlight-mode?
+                    (when-not (= "" (.toString selection))
+                      (add-highlight! hl-fn add-hl! {:color "yellow"}))
+                    (cond
+                      (.-isCollapsed selection)
+                      (set-sel-state! {:collapsed true})
 
-                    (and sel-range (.contains el (.-commonAncestorContainer sel-range)))
-                    (set-sel-state! {:collapsed false :range sel-range :point {:x (.-clientX e) :y (.-clientY e)}}))))
+                      (and sel-range (.contains el (.-commonAncestorContainer sel-range)))
+                      (set-sel-state! {:collapsed false :range sel-range :point {:x (.-clientX e) :y (.-clientY e)}})))))
 
               fn-selection
               (fn []
@@ -533,7 +547,7 @@
              (doto win
                (.removeEventListener "resize" fn-resize)))))
 
-      [viewer])
+      [viewer highlights])
 
     ;; selection context menu
     (rum/use-effect!
@@ -547,11 +561,10 @@
                                  vw-pos {:bounding bounding :rects sel-rects :page page}
                                  sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
 
-                             ;; TODO: debug
+                             ;; TODO: for debugging
                              ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
                              ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
                              ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
-
 
                              {:id         nil
                               :page       page
@@ -566,7 +579,7 @@
 
       [(:range sel-state)])
 
-    ;; render hls
+    ;; render highlights
     (rum/use-effect!
       (fn []
         ;;(dd "=== rebuild highlights ===" (count highlights))
@@ -575,7 +588,6 @@
           (doseq [page loaded-pages]
             (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
               (let [page-hls (get grouped-hls page)]
-
                 (rum/mount
                   ;; TODO: area & text hls
                   (pdf-highlights-region-container
@@ -603,7 +615,7 @@
 
          (.querySelector el ".pp-holder")))
 
-     ;; debug highlights anchor
+     ;; highlights anchor (for debugging)
      ;;(if (seq highlights)
      ;;  [:ul.extensions__pdf-highlights
      ;;   (for [hl highlights]
@@ -792,6 +804,7 @@
   [^js viewer]
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
+        [highlight-mode?, set-highlight-mode!] (use-atom *highlight-mode?)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
         *page-ref (rum/use-ref nil)
         [current-page-num, set-current-page-num!] (rum/use-state 1)
@@ -851,6 +864,12 @@
         {:title    "Zoom in"
          :on-click (partial pdf-utils/zoom-in-viewer viewer)}
         (svg/zoom-in 18)]
+
+       [:a.button
+        {:title    "Highlight mode"
+         :class    (when highlight-mode? "is-active")
+         :on-click #(set-highlight-mode! (not highlight-mode?))}
+        (svg/highlighter 16)]
 
        [:a.button
         {:title    "Outline"
