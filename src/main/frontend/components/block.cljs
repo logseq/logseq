@@ -2048,7 +2048,8 @@
                                                                  uuid
                                                                  (:block/format block)
                                                                  (:block/pre-block? block)
-                                                                 content)]
+                                                                 content)
+                                     config (assoc config :block/uuid uuid)]
                                  [block
                                   (if (seq title)
                                     (->elem :span (map-inline config title))
