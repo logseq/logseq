@@ -104,9 +104,10 @@
   ;;])
 
   (let [*el (rum/use-ref nil)
-        head-height 0                                       ;; 48 temp
-        top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
-        left (:x point)
+        ^js cnt (.-container viewer)
+        head-height 0          ;; 48 temp
+        top (- (+ (:y point) (.-scrollTop cnt)) head-height)
+        left (+ (:x point) (.-scrollLeft cnt))
         id (:id highlight)
         new? (nil? id)
         content (:content highlight)
@@ -852,6 +853,12 @@
          :on-click #(set-area-mode! (not area-mode?))}
         (svg/icon-area 18)]
 
+       [:a.button
+        {:title    "Highlight mode"
+         :class    (when highlight-mode? "is-active")
+         :on-click #(set-highlight-mode! (not highlight-mode?))}
+        (svg/highlighter 16)]
+
        ;; zoom
        [:a.button
         {:title    "Zoom out"
@@ -862,12 +869,6 @@
         {:title    "Zoom in"
          :on-click (partial pdf-utils/zoom-in-viewer viewer)}
         (svg/zoom-in 18)]
-
-       [:a.button
-        {:title    "Highlight mode"
-         :class    (when highlight-mode? "is-active")
-         :on-click #(set-highlight-mode! (not highlight-mode?))}
-        (svg/highlighter 16)]
 
        [:a.button
         {:title    "Outline"
