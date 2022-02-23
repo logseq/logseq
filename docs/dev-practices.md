@@ -86,8 +86,13 @@ shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
 #### Focus Tests
 
 Tests can be automatically compiled and then selectively run on the commandline
-using https://github.com/lucywang000/shadow-test-utils. For this workflow:
+using our own test runner which emulates most of the options of [cognitect-labs/test
+runner](https://github.com/cognitect-labs/test-runner#invoke-with-clojure--m-clojuremain).
+For this workflow:
 
 1. Run `clj -M:test watch test` in one shell
-2. Focus a test by adding a `^:focus` metadata flag
-3. In another shell, run `node node static/tests.js`
+2. Focus tests or namespaces:
+  1. To focus test(s), add `^:focus` metadata flags. In another shell, run `node static/tests.js -i focus`
+  2. Alternatively, focus namespaces by using the regex option e.g. `node static/tests.js -r text` which runs tests for `frontend.text-test`.
+
+For help on more focusing options, run `node static/tests.js -h`
