@@ -6,6 +6,8 @@
 
 ## Clone project
 
+This is a required step before doing any development or production builds.
+
 ```bash
 git clone https://github.com/logseq/logseq
 cd logseq
@@ -45,7 +47,8 @@ yarn watch
 yarn dev-electron-app
 ```
 
-Alternatively, run `bb dev:electron-start` to do this step with one command.
+Alternatively, run `bb dev:electron-start` to do this step with one command. To
+download bb, see https://github.com/babashka/babashka#installation.
 
 ### Production
 Build a release:
