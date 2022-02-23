@@ -208,26 +208,9 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-;; defunced in https://github.com/logseq/logseq/commit/097d47a860dd234715d670a78f61dddfe7ca698f
-;; (defmethod handle :after-db-restore [[_ repos]]
-;;   (mapv (fn [{url :url}]
-;;           ;; compare :ast/version
-;;           (let [db (conn/get-conn url)
-;;                 ast-version (:v (first (d/datoms db :aevt :ast/version)))]
-;;             (when (and (not= config/local-repo url)
-;;                        (or (nil? ast-version)
-;;                            (. semver lt ast-version db-schema/ast-version)))
-;;               (notification/show!
-;;                [:p.content
-;;                 (util/format "DB-schema updated, Please re-index repo [%s]" url)]
-;;                :warning
-;;                false))))
-;;         repos))
-
 ;; TODO: when "only restore the current graph instead of all the graphs" is done,
 ;; remove invoke of :graph/ready in graph/switch and restore-and-setup!
 (defmethod handle :graph/ready [[_ repo]]
-  (js/console.log "graph ready")
   (search-handler/rebuild-indices-when-stale! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
