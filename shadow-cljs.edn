@@ -61,7 +61,8 @@
   :test {:target          :node-test
          :output-to       "static/tests.js"
          :closure-defines {frontend.util/NODETEST true}
-         :devtools        {:enabled false}}
+         :devtools        {:enabled false}
+         :main            frontend.test-runner/main}
 
   :publishing {:target        :browser
                :module-loader true
