@@ -70,3 +70,15 @@
        (notification-handler/show!
         "Search indices rebuilt successfully!"
         :success)))))
+
+(defn rebuild-indices-when-stale!
+  ([]
+   (rebuild-indices-when-stale! (state/get-current-repo)))
+  ([repo]
+   (p/let [cache-stale? (search/cache-stale? repo)]
+     (when cache-stale?
+       (js/console.log "cache stale: " repo)
+       (p/let [_ (search/rebuild-indices! repo)]
+         (notification-handler/show!
+          "Stale search cache detected. Search indices rebuilt successfully!"
+          :success))))))

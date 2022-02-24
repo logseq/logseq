@@ -201,9 +201,6 @@
 
                (utils/disableXFrameOptions win)
 
-               (when (search/version-changed?)
-                 (search/rm-search-dir!))
-
                (search/ensure-search-dir!)
 
                (search/open-dbs!)

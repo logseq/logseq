@@ -157,7 +157,7 @@
                        :listen-handler listen-and-persist!))))
 
 ;; TODO: only restore the current graph instead of all the graphs to speedup and
-;; reduce memory usage.
+;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
   (let [logged? (:name me)]

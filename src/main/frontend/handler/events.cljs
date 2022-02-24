@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
-            [datascript.core :as d]
+            ;; [datascript.core :as d]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.db.conn :as conn]
+            ;; [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -32,7 +32,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            ["semver" :as semver]
+            ;; ["semver" :as semver]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
@@ -89,7 +89,8 @@
     (route-handler/redirect-to-home!))
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
-  (srs/update-cards-due-count!))
+  (srs/update-cards-due-count!)
+  (state/pub-event! [:graph/ready graph]))
 
 (defmethod handle :graph/switch [[_ graph]]
   (if (outliner-file/writes-finished?)
@@ -207,20 +208,10 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-(defmethod handle :after-db-restore [[_ repos]]
-  (mapv (fn [{url :url}]
-          ;; compare :ast/version
-          (let [db (conn/get-conn url)
-                ast-version (:v (first (d/datoms db :aevt :ast/version)))]
-            (when (and (not= config/local-repo url)
-                       (or (nil? ast-version)
-                           (. semver lt ast-version db-schema/ast-version)))
-              (notification/show!
-               [:p.content
-                (util/format "DB-schema updated, Please re-index repo [%s]" url)]
-               :warning
-               false))))
-        repos))
+;; TODO: when "only restore the current graph instead of all the graphs" is done,
+;; remove invoke of :graph/ready in graph/switch and restore-and-setup!
+(defmethod handle :graph/ready [[_ repo]]
+  (search-handler/rebuild-indices-when-stale! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
