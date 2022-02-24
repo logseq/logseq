@@ -5,6 +5,7 @@
   This gives the user a fair amount of control over which tests and namespaces
   to call from the commandline. Once this test runner is stable enough we should
   contribute it upstream"
+  {:dev/always true} ;; necessary for test-data freshness
   (:require [shadow.test.env :as env]
             [clojure.tools.cli :as cli]
             [shadow.test.node :as node]
@@ -72,9 +73,15 @@ returns run options for selected tests to run"
    ["-r" "--namespace-regex REGEX"
     :parse-fn re-pattern :desc "Regex for namespaces to test"]])
 
+;; Necessary to have test-data in this ns for freshness. Relying on
+;; node/reset-test-data! was buggy
+(defn ^:dev/after-load reset-test-data! []
+  (-> (env/get-test-data)
+      (env/reset-test-data!)))
+
 (defn main [& args]
   ;; Load test data as is done with shadow.test.node/main
-  (node/reset-test-data!)
+  (reset-test-data!)
 
   (let [{:keys [options summary]} (parse-options args cli-options)]
     (if (:help options)
