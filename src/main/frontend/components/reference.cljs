@@ -117,6 +117,7 @@
                                              (when (> n-ref 1) "s"))]
               [:a.filter.fade-link
                {:title "Filter"
+                :on-mouse-down (fn [e] (util/stop-propagation e))
                 :on-click (fn []
                             (let [ref-blocks (if block-id
                                                (db/get-block-referenced-blocks block-id)
