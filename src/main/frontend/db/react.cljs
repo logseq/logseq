@@ -331,11 +331,13 @@
     (let [db (conn/get-conn repo-url)
           affected-keys (get-affected-queries-keys tx)]
       (doseq [[k cache] @query-state]
-        (let [custom? (= :custom (second k))]
+        (let [custom? (= :custom (second k))
+              kv? (= :kv (second k))]
           (when (and
                 (= (first k) repo-url)
                 (or (get affected-keys (vec (rest k)))
-                    custom?))
+                    custom?
+                    kv?))
            (let [{:keys [query query-fn result]} cache]
              (when (or query query-fn)
                (try
