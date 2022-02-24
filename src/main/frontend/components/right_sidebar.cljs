@@ -13,6 +13,7 @@
             [frontend.extensions.slide :as slide]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -24,7 +25,7 @@
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:a.button.fade-link.toggle
-       {:on-click state/toggle-sidebar-open?!}
+       {:on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
 (rum/defc block-cp < rum/reactive
