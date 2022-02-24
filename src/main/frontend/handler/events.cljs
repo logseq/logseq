@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
-            ;; [datascript.core :as d]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -13,7 +12,6 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            ;; [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -32,7 +30,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            ;; ["semver" :as semver]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
