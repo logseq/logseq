@@ -16,14 +16,36 @@
             [frontend.mobile.util :as mobile]
             [electron.ipc :as ipc]))
 
+(defn- get-css-var-value
+  [var-name]
+  (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
+
 ;; sidebars
+(defn- get-right-sidebar-width
+  []
+  (or (.. (js/document.getElementById "right-sidebar") -style -width)
+      (get-css-var-value "--right-sidebar-width")))
+
+(defn- persist-right-sidebar-width!
+  []
+  (storage/set "ls-right-sidebar-width" (get-right-sidebar-width)))
+
+(defn- restore-right-sidebar-width!
+  []
+  (when-let [width (storage/get "ls-right-sidebar-width")]
+    (.setProperty (.-style (js/document.getElementById "right-sidebar")) "width" width)))
+
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
+    (persist-right-sidebar-width!)
     (.click elem)))
 
 (defn toggle-right-sidebar!
   []
+  (if (:ui/sidebar-open? @state/state) 
+    (persist-right-sidebar-width!) 
+    (restore-right-sidebar-width!))
   (state/toggle-sidebar-open?!))
 
 (defn persist-right-sidebar-state!
