@@ -16,6 +16,20 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
+(when (mobile-util/native-ios?)
+  ;; NOTE: avoid circular dependency
+  #_:clj-kondo/ignore
+  (def handle-changed! (delay frontend.fs.watcher-handler/handle-changed!))
+
+  (p/do!
+   (.addListener mobile-util/fs-watcher "watcher"
+                 (fn [^js event]
+                   (@handle-changed!
+                    (.-event event)
+                    (update (js->clj event :keywordize-keys true)
+                            :path
+                            js/decodeURI))))))
+
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
           permission (-> permission
@@ -117,9 +131,9 @@
          (log/error :write-file-failed error))))
 
     (p/let [disk-content (-> (p/chain (.readFile Filesystem (clj->js {:path path
-                                                                   :encoding (.-UTF8 Encoding)}))
-                                   #(js->clj % :keywordize-keys true)
-                                   :data)
+                                                                      :encoding (.-UTF8 Encoding)}))
+                                      #(js->clj % :keywordize-keys true)
+                                      :data)
                              (p/catch (fn [error]
                                         (js/console.error error)
                                         nil)))
@@ -212,30 +226,30 @@
   (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
     (let [path (get-file-path dir path)]
       (p/catch
-          (p/let [result (.deleteFile Filesystem
-                                      (clj->js
-                                       {:path path}))]
-            (when ok-handler
-              (ok-handler repo path result)))
-          (fn [error]
-            (if error-handler
-              (error-handler error)
-              (log/error :delete-file-failed error))))))
+       (p/let [result (.deleteFile Filesystem
+                                   (clj->js
+                                    {:path path}))]
+         (when ok-handler
+           (ok-handler repo path result)))
+       (fn [error]
+         (if error-handler
+           (error-handler error)
+           (log/error :delete-file-failed error))))))
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
-                       (.stat Filesystem (clj->js {:path path}))
-                       (fn [_e] :not-found))]
+                    (.stat Filesystem (clj->js {:path path}))
+                    (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
       (p/catch
-          (p/let [_ (.rename Filesystem
-                             (clj->js
-                              {:from old-path
-                               :to new-path}))])
-          (fn [error]
-            (log/error :rename-file-failed error)))))
+       (p/let [_ (.rename Filesystem
+                          (clj->js
+                           {:from old-path
+                            :to new-path}))])
+       (fn [error]
+         (log/error :rename-file-failed error)))))
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
@@ -255,45 +269,8 @@
       (into [] (concat [{:path path}] files))))
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
-  (watch-dir! [_this _dir]
-    nil))
-
-
-(comment
-  ;;open-dir result
-  #_
-  ["/storage/emulated/0/untitled folder 21"
-   {:type    "file",
-    :size    2,
-    :mtime   1630049904000,
-    :uri     "file:///storage/emulated/0/untitled%20folder%2021/pages/contents.md",
-    :ctime   1630049904000,
-    :content "-\n"}
-   {:type    "file",
-    :size    0,
-    :mtime   1630049904000,
-    :uri     "file:///storage/emulated/0/untitled%20folder%2021/logseq/custom.css",
-    :ctime   1630049904000,
-    :content ""}
-   {:type    "file",
-    :size    2,
-    :mtime   1630049904000,
-    :uri     "file:///storage/emulated/0/untitled%20folder%2021/logseq/metadata.edn",
-    :ctime   1630049904000,
-    :content "{}"}
-   {:type  "file",
-    :size  181,
-    :mtime 1630050535000,
-    :uri
-    "file:///storage/emulated/0/untitled%20folder%2021/journals/2021_08_27.md",
-    :ctime 1630050535000,
-    :content
-    "- xx\n- xxx\n- xxx\n- xxxxxxxx\n- xxx\n- xzcxz\n- xzcxzc\n- asdsad\n- asdsadasda\n- asdsdaasdsad\n- asdasasdas\n- asdsad\n- sad\n- asd\n- asdsad\n- asdasd\n- sadsd\n-\n- asd\n- saddsa\n- asdsaasd\n- asd"}
-   {:type  "file",
-    :size  132,
-    :mtime 1630311293000,
-    :uri
-    "file:///storage/emulated/0/untitled%20folder%2021/journals/2021_08_30.md",
-    :ctime 1630311293000,
-    :content
-    "- ccc\n- sadsa\n- sadasd\n- asdasd\n- asdasd\n\t- asdasd\n\t\t- asdasdsasd\n\t\t\t- sdsad\n\t\t-\n- sadasd\n- asdas\n- sadasd\n-\n-\n\t- sadasdasd\n\t- asdsd"}])
+  (watch-dir! [_this dir]
+    (when (mobile-util/native-ios?)
+      (p/do!
+       (.unwatch mobile-util/fs-watcher)
+       (.watch mobile-util/fs-watcher #js {:path dir})))))
