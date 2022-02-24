@@ -1,6 +1,6 @@
-(ns frontend.test-runner
-  "shadow-cljs test runner for :node-test that provides most of the same options
-  as
+(ns frontend.node-test-runner
+  "shadow-cljs test runner for :node-test that provides the same test selection
+  options as
   https://github.com/cognitect-labs/test-runner#invoke-with-clojure--m-clojuremain.
   This gives the user a fair amount of control over which tests and namespaces
   to call from the commandline. Once this test runner is stable enough we should
@@ -10,6 +10,7 @@
             [clojure.tools.cli :as cli]
             [shadow.test.node :as node]
             [clojure.string :as str]
+            [clojure.set :as set]
             ["util" :as util]))
 
 (defn- print-summary
@@ -40,12 +41,13 @@ returns run options for selected tests to run"
    {:keys [include exclude namespace namespace-regex]}]
   (let [focused-tests (cond
                         (seq include)
-                        (map symbol (filter (fn [v]
-                                              (let [metadata (meta v)]
-                                                (some metadata include)))
-                                            vars))
-                        exclude
-                        (map symbol (remove (comp exclude meta) vars)))
+                        (map symbol (filter
+                                     #(seq (set/intersection include (set (keys (meta %)))))
+                                     vars))
+                        (seq exclude)
+                        (map symbol (remove
+                                     #(seq (set/intersection exclude (set (keys (meta %)))))
+                                     vars)))
         test-syms (cond (some? focused-tests)
                     focused-tests
                     namespace
@@ -63,11 +65,18 @@ returns run options for selected tests to run"
   [["-h" "--help"]
    ["-i" "--include INCLUDE"
     :default #{}
+    :default-desc ""
     :parse-fn keyword
-    :multi true :update-fn conj
-    :desc "Run only tests with this metadata keyword. Can be specified more than once"]
-   ;; TODO: Fix and enable once it's determined if this is an internal or shadow bug
-   #_["-e" "--exclude EXCLUDE" :parse-fn keyword]
+    :multi true
+    :update-fn conj
+    :desc "Run only tests with this metadata keyword"]
+   ["-e" "--exclude EXCLUDE"
+    :default #{}
+    :default-desc ""
+    :parse-fn keyword
+    :multi true
+    :update-fn conj
+    :desc "Exclude tests that have this keyword"]
    ["-n" "--namespace NAMESPACE"
     :parse-fn symbol :desc "Specific namespace to test"]
    ["-r" "--namespace-regex REGEX"
@@ -79,6 +88,23 @@ returns run options for selected tests to run"
   (-> (env/get-test-data)
       (env/reset-test-data!)))
 
+;; This is a patched version of https://github.com/thheller/shadow-cljs/blob/f271b3c40d3ccd4e587b0ffeaa2713d2f642114a/src/main/shadow/test/node.cljs#L44-L56
+;; that consistently works for all symbols
+(defn find-matching-test-vars [test-syms]
+  (let [test-namespaces
+        (->> test-syms (filter simple-symbol?) (set))
+        test-var-syms
+        (->> test-syms (filter qualified-symbol?) (set))]
+    (->> (env/get-test-vars)
+         (filter (fn [the-var]
+                   (let [{:keys [ns] :as m} (meta the-var)]
+                     (or (contains? test-namespaces ns)
+                         ;; PATCH: (symbol SYMBOL SYMBOL) leads to buggy equality behavior
+                         ;; in cljs. In clj, this throws an exception. Modified to
+                         ;; (symbol STRING STRING) to avoid bug
+                         (contains? test-var-syms
+                                    (symbol (name ns) (name (:name m)))))))))))
+
 (defn main [& args]
   ;; Load test data as is done with shadow.test.node/main
   (reset-test-data!)
@@ -89,5 +115,6 @@ returns run options for selected tests to run"
         (print-summary summary
                        "\n\nNone of these options can be composed. Defaults to running all tests")
         (js/process.exit 0))
-      (node/execute-cli
-       (run-test-options (keys (env/get-tests)) (env/get-test-vars) options)))))
+      (with-redefs [node/find-matching-test-vars find-matching-test-vars]
+        (node/execute-cli
+         (run-test-options (keys (env/get-tests)) (env/get-test-vars) options))))))
