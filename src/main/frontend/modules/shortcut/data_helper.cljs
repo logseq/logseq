@@ -140,7 +140,7 @@
   (let [repo (state/get-current-repo)
         path (cfg/get-config-path)]
     (when-let [content (db/get-file path)]
-      (let [result (common-handler/parse-config path content)
+      (let [result (common-handler/parse-config content)
             new-result (rewrite/update
                         result
                         :shortcuts

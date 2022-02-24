@@ -346,7 +346,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file path)]
       (common-handler/read-config content)
-      (let [result (common-handler/parse-config path content)
+      (let [result (common-handler/parse-config content)
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
