@@ -164,7 +164,8 @@
                                      {:hiccup ref-hiccup}))]))
 
              {:default-collapsed? default-collapsed?
-              :title-trigger? true}))]]))))
+              :title-trigger? true
+              :ignore-el-class "ti-filter"}))]]))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

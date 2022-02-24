@@ -660,12 +660,15 @@
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
                  state)}
-  [state header content {:keys [title-trigger?]}]
+  ;; don't collapsed when clicking the element named `ignore-el-class` inside `header`   
+  [state header content {:keys [title-trigger? ignore-el-class]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
-                        (swap! collapsed? not))]
+                        (let [target (.-target e)]
+                          (when-not (.. target -classList (contains ignore-el-class))
+                            (swap! collapsed? not))))]
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title (cond->
