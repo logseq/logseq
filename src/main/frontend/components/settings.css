@@ -256,6 +256,30 @@
       }
     }
   }
+
+  &-network-proxy-panel {
+    margin: -15px;
+
+    label {
+      display: flex;
+      align-items: center;
+
+      > select {
+        min-width: 100px;
+        margin-left: -14px !important;
+        padding: 4px 10px !important;
+      }
+
+      > input[disabled] {
+        opacity: .5;
+      }
+
+      > strong {
+        font-weight: 500;
+        width: 60px;
+      }
+    }
+  }
 }
 
 /* Styles for the category icon on the left of settings-modal */

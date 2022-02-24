@@ -62,8 +62,6 @@
      (ui/toggle state on-toggle true)
      detail-text]]])
 
-
-
 (rum/defcs app-updater < rum/reactive
   [state version]
   (let [update-pending? (state/sub :electron/updater-pending?)
@@ -510,10 +508,59 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")]])]))
 
-(defn plugin-system-switcher-row [t]
+(rum/defc user-proxy-settings-panel
+  [{:keys [protocol host port] :as agent-opts}]
+  (let [[opts set-opts!] (rum/use-state agent-opts)
+        disabled? (string/blank? (:protocol opts))]
+    [:div.cp__settings-network-proxy-panel
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:div.p-2
+      [:p [:label [:strong (t :type)]
+           (ui/select [{:label "Disabled" :value "" :selected disabled?}
+                       {:label "http" :value "http" :selected (= protocol "http")}
+                       {:label "https" :value "https" :selected (= protocol "https")}
+                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
+                      #(set-opts!
+                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+      [:p.flex
+       [:label.pr-4 [:strong (t :host)]
+        [:input.form-input.is-small
+         {:value     (:host opts) :disabled disabled?
+          :on-change #(set-opts!
+                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+
+       [:label [:strong (t :port)]
+        [:input.form-input.is-small
+         {:value (:port opts) :type "number" :disabled disabled?
+          :on-change #(set-opts!
+                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
+
+      [:p.pt-2
+       (ui/button (t :save)
+        :on-click (fn []
+                    (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                      (state/set-state! [:electron/user-cfgs :settings/agent] opts)
+                      (state/close-sub-modal! :https-proxy-panel))))]]]))
+
+(rum/defc user-proxy-settings
+  [{:keys [protocol host port] :as agent-opts}]
+  (ui/button [:span
+              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
+                [:strong.pr-1 e])
+              (ui/icon "edit")]
+             :on-click #(state/set-sub-modal!
+                         (fn [_] (user-proxy-settings-panel agent-opts))
+                         {:id :https-proxy-panel :center? true})))
+
+(defn plugin-system-switcher-row []
   (row-with-button-action
-    {:left-label "Plug-in system"
-     :action (plugin-enabled-switcher t)}))
+   {:left-label (t :settings-page/plugin-system)
+    :action (plugin-enabled-switcher t)}))
+
+(defn https-user-agent-row [agent-opts]
+  (row-with-button-action
+   {:left-label (t :settings-page/network-proxy)
+    :action (user-proxy-settings agent-opts)}))
 
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
@@ -589,12 +636,14 @@
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         cors-proxy (state/sub [:me :cors_proxy])
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         logged? (state/logged?)]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
-     (when (util/electron?) (plugin-system-switcher-row t))
+     (when (util/electron?) (plugin-system-switcher-row))
+     (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
 
      (ui/admonition

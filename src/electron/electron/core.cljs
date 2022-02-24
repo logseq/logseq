@@ -16,7 +16,8 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as utils]
+            [electron.utils :as electron-utils]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -198,6 +199,8 @@
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+
+               (electron-utils/restore-user-fetch-agent)
 
                (utils/disableXFrameOptions win)
 

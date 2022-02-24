@@ -361,6 +361,9 @@
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
 
+(defmethod handle :setHttpsAgent [^js _win [_ opts]]
+  (utils/set-fetch-agent opts))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
