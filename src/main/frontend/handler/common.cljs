@@ -17,7 +17,6 @@
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.handler.notification :as notification]
             [borkdude.rewrite-edn :as rewrite]))
 
 (defn get-ref
@@ -237,7 +236,7 @@
 
 (defn parse-config
   "Parse configuration from file `content` such as from config.edn."
-  [path content]
+  [content]
   (try
     (rewrite/parse-string content)
     (catch js/Error e

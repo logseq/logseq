@@ -21,6 +21,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
@@ -289,15 +290,16 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
-(defmethod handle :backup/broken-config [[_ repo path content]]
+(defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
           broken-path (str path "-broken")]
-      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})]
+      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
+              _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
         (notification/show!
          [:p.content
           "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/config.edn-broken."]
-         :error
+         :warning
          false)))))
 
 (defn run!
