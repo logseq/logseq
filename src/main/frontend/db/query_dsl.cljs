@@ -141,7 +141,7 @@
      l)
     @vars))
 
-;; TODO: Convert -> fns to rules
+;; TODO: Convert ->*query fns to rules
 (defn ->property-query
   ([k v]
    (->property-query k v '?v))
@@ -166,10 +166,158 @@
     [(list '= '?v v)]
     [(list 'contains? '?v v)])])
 
+(defn- build-query-property-two-arg
+  [e current-filter counter]
+  (let [k (string/replace (name (nth e 1)) "_" "-")
+        v (nth e 2)
+        v (if-not (nil? v)
+            (text/parse-property k v)
+            v)
+        v (if (coll? v) (first v) v)
+        sym (if (= current-filter 'or)
+              '?v
+              (uniq-symbol counter "?v"))]
+    (->property-query k v sym)))
+
+(defn- build-query-and-or-not-result
+  [fe clauses current-filter nested-and?]
+  (cond
+    (= fe 'not)
+    (let [clauses (if (coll? (first clauses))
+                    (apply concat clauses)
+                    clauses)
+          clauses (if (and (= 1 (count clauses))
+                           (= 'and (ffirst clauses)))
+                    ;; unflatten
+                    (rest (first clauses))
+                    clauses)]
+      (cons fe (seq clauses)))
+
+    (coll? (first clauses))
+    (cond
+      (= current-filter 'not)
+      (->> (apply concat clauses)
+           (apply list fe))
+
+      (or (= current-filter 'or)
+          nested-and?)
+      (apply concat clauses)
+
+      :else
+      (->> (map (fn [result]
+                  (let [result (if (vector? (ffirst result))
+                                 (apply concat result)
+                                 result)]
+                    (cons 'and (seq result)))) clauses)
+           (apply list fe)))
+
+    :else
+    (apply list fe clauses)))
+
+(declare build-query)
+
+(defn- build-query-and-or-not
+  [repo e {:keys [current-filter vars] :as env} level fe]
+  (let [clauses (->> (map (fn [form]
+                            (build-query repo form (assoc env :current-filter fe) (inc level)))
+                          (rest e))
+                     remove-nil?
+                     (distinct))
+        nested-and? (and (= fe 'and) (= current-filter 'and))]
+    (when (seq clauses)
+      (let [result (build-query-and-or-not-result
+                    fe clauses current-filter nested-and?)
+            vars' (set/union (set @vars) (collect-vars result))]
+        (reset! vars vars')
+        (cond
+          ;; TODO: more thoughts
+          (and (= current-filter 'and)
+               (= 'or fe)
+               (= #{'?b} vars'))
+          [(concat result [['?b]])]
+
+          nested-and?
+          result
+
+          (and (zero? level) (= 'and fe))
+          (distinct (apply concat clauses))
+
+          (and (zero? level) (= 'or fe))
+          result
+
+          :else
+          [result])))))
+
+(defn- build-query-between-two-arg
+  [e]
+  (let [start (->journal-day-int (nth e 1))
+         end (->journal-day-int (nth e 2))
+         [start end] (sort [start end])]
+    [['?b :block/page '?p]
+     ['?p :block/journal? true]
+     ['?p :block/journal-day '?d]
+     [(list '>= '?d start)]
+     [(list '<= '?d end)]]))
+
+(defn- build-query-property-one-arg
+  [e]
+  (let [k (string/replace (name (nth e 1)) "_" "-")]
+    [['?b :block/properties '?prop]
+     [(list 'missing? '$ '?b :block/name)]
+     [(list 'get '?prop (keyword k)) '?prop-v]
+     [true]]))
+
+(defn- build-query-todo
+  [e]
+  (let [markers (if (coll? (first (rest e)))
+                  (first (rest e))
+                  (rest e))]
+    (when (seq markers)
+      (let [markers (set (map (comp string/upper-case name) markers))]
+        [['?b :block/marker '?marker]
+         [(list 'contains? markers '?marker)]]))))
+
+(defn- build-query-priority
+  [e]
+  (let [priorities (if (coll? (first (rest e)))
+                     (first (rest e))
+                     (rest e))]
+    (when (seq priorities)
+      (let [priorities (set (map (comp string/upper-case name) priorities))]
+        [['?b :block/priority '?priority]
+         [(list 'contains? priorities '?priority)]]))))
+
+(defn- build-page-property
+  [e]
+  (let [[k v] (rest e)
+        k (string/replace (name k) "_" "-")]
+    (if-not (nil? v)
+      (let [v (text/parse-property k v)
+            v (if (coll? v) (first v) v)]
+        (->page-property-query k v))
+      [['?p :block/name]
+       ['?p :block/properties '?prop]
+       [(list 'get '?prop (keyword k)) '?prop-v]
+       [true]])))
+
+(defn- build-query-page-tags
+  [e counter]
+  (let [tags (if (coll? (first (rest e)))
+               (first (rest e))
+               (rest e))
+        tags (map (comp string/lower-case name) tags)]
+    (when (seq tags)
+      (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))
+            sym-1 (uniq-symbol counter "?t")
+            sym-2 (uniq-symbol counter "?tag")]
+        [['?p :block/tags sym-1]
+         [sym-1 :block/name sym-2]
+         [(list 'contains? tags sym-2)]]))))
+
 (defn ^:large-vars/cleanup-todo build-query
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
-  ([repo e {:keys [sort-by blocks? sample counter current-filter vars] :as env} level]
+  ([repo e {:keys [sort-by blocks? sample counter current-filter] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
@@ -191,79 +339,14 @@
        (do
          (reset! blocks? true)
          [['?b :block/content '?content]
-         [(list 'clojure.string/includes? '?content e)]])
+          [(list 'clojure.string/includes? '?content e)]])
 
        (contains? #{'and 'or 'not} fe)
-       (let [clauses (->> (map (fn [form]
-                                 (build-query repo form (assoc env :current-filter fe) (inc level)))
-                            (rest e))
-                          remove-nil?
-                          (distinct))
-             nested-and? (and (= fe 'and) (= current-filter 'and))]
-         (when (seq clauses)
-           (let [result (cond
-                          (= fe 'not)
-                          (let [clauses (if (coll? (first clauses))
-                                          (apply concat clauses)
-                                          clauses)
-                                clauses (if (and (= 1 (count clauses))
-                                                 (= 'and (ffirst clauses)))
-                                          ;; unflatten
-                                          (rest (first clauses))
-                                          clauses)]
-                            (cons fe (seq clauses)))
-
-                          (coll? (first clauses))
-                          (cond
-                            (= current-filter 'not)
-                            (->> (apply concat clauses)
-                                 (apply list fe))
-
-                            (or (= current-filter 'or)
-                                nested-and?)
-                            (apply concat clauses)
-
-                            :else
-                            (->> (map (fn [result]
-                                        (let [result (if (vector? (ffirst result))
-                                                       (apply concat result)
-                                                       result)]
-                                          (cons 'and (seq result)))) clauses)
-                                 (apply list fe)))
-
-                          :else
-                          (apply list fe clauses))
-                 vars' (set/union (set @vars) (collect-vars result))]
-             (reset! vars vars')
-             (cond
-               ;; TODO: more thoughts
-               (and (= current-filter 'and)
-                    (= 'or fe)
-                    (= #{'?b} vars'))
-               [(concat result [['?b]])]
-
-               nested-and?
-               result
-
-               (and (zero? level) (= 'and fe))
-               (distinct (apply concat clauses))
-
-               (and (zero? level) (= 'or fe))
-               result
-
-               :else
-               [result]))))
+       (build-query-and-or-not repo e env level fe)
 
        (and (= 'between fe)
             (= 3 (count e)))
-       (let [start (->journal-day-int (nth e 1))
-             end (->journal-day-int (nth e 2))
-             [start end] (sort [start end])]
-         [['?b :block/page '?p]
-          ['?p :block/journal? true]
-          ['?p :block/journal-day '?d]
-          [(list '>= '?d start)]
-          [(list '<= '?d end)]])
+       (build-query-between-two-arg e)
 
        ;; (between created_at -1d today)
        (and (= 'between fe)
@@ -274,7 +357,7 @@
                    (string/replace "-" "_"))]
          (when (contains? #{"created_at" "last_modified_at"} k)
            (let [start (->timestamp (nth e 2))
-                 end (->timestamp (nth e 3))]
+                  end (->timestamp (nth e 3))]
              (when (and start end)
                (let [[start end] (sort [start end])
                      sym '?v]
@@ -285,42 +368,17 @@
 
        (and (= 'property fe)
             (= 3 (count e)))
-       (let [k (string/replace (name (nth e 1)) "_" "-")
-             v (nth e 2)
-             v (if-not (nil? v)
-                 (text/parse-property k v)
-                 v)
-             v (if (coll? v) (first v) v)
-             sym (if (= current-filter 'or)
-                   '?v
-                   (uniq-symbol counter "?v"))]
-         (->property-query k v sym))
+       (build-query-property-two-arg e current-filter counter)
 
        (and (= 'property fe)
             (= 2 (count e)))
-       (let [k (string/replace (name (nth e 1)) "_" "-")]
-         [['?b :block/properties '?prop]
-          [(list 'missing? '$ '?b :block/name)]
-          [(list 'get '?prop (keyword k)) '?prop-v]
-          [true]])
+       (build-query-property-one-arg e)
 
        (or (= 'todo fe) (= 'task fe))
-       (let [markers (if (coll? (first (rest e)))
-                       (first (rest e))
-                       (rest e))]
-         (when (seq markers)
-           (let [markers (set (map (comp string/upper-case name) markers))]
-             [['?b :block/marker '?marker]
-              [(list 'contains? markers '?marker)]])))
+       (build-query-todo e)
 
        (= 'priority fe)
-       (let [priorities (if (coll? (first (rest e)))
-                          (first (rest e))
-                          (rest e))]
-         (when (seq priorities)
-           (let [priorities (set (map (comp string/upper-case name) priorities))]
-             [['?b :block/priority '?priority]
-              [(list 'contains? priorities '?priority)]])))
+       (build-query-priority e)
 
        (= 'sort-by fe)
        (let [[k order] (rest e)
@@ -361,29 +419,10 @@
             ['?parent :block/name page]]))
 
        (= 'page-property fe)
-       (let [[k v] (rest e)
-             k (string/replace (name k) "_" "-")]
-         (if-not (nil? v)
-           (let [v (text/parse-property k v)
-                 v (if (coll? v) (first v) v)]
-             (->page-property-query k v))
-           [['?p :block/name]
-            ['?p :block/properties '?prop]
-            [(list 'get '?prop (keyword k)) '?prop-v]
-            [true]]))
+       (build-page-property e)
 
        (= 'page-tags fe)
-       (let [tags (if (coll? (first (rest e)))
-                    (first (rest e))
-                    (rest e))
-             tags (map (comp string/lower-case name) tags)]
-         (when (seq tags)
-           (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))
-                 sym-1 (uniq-symbol counter "?t")
-                 sym-2 (uniq-symbol counter "?tag")]
-             [['?p :block/tags sym-1]
-              [sym-1 :block/name sym-2]
-              [(list 'contains? tags sym-2)]])))
+       (build-query-page-tags e counter)
 
        (= 'all-page-tags fe)
        [['?e :block/tags '?p]]
