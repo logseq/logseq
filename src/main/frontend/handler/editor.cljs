@@ -769,24 +769,24 @@
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
-                      new-content)]
-    (let [input-id (state/get-edit-input-id)]
-      (if (and input-id
-               (string/ends-with? input-id (str uuid)))
-        (state/set-edit-content! input-id new-content)
-        (save-block-if-changed! block new-content)))))
+                      new-content)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn uncheck
   [{:block/keys [content uuid] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
-        new-content (string/replace-first content "DONE" marker)]
-    (let [input-id (state/get-edit-input-id)]
-      (if (and input-id
-               (string/ends-with? input-id (str uuid)))
-        (state/set-edit-content! input-id new-content)
-        (save-block-if-changed! block new-content)))))
+        new-content (string/replace-first content "DONE" marker)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn set-marker
   [{:block/keys [marker content] :as block} new-marker]
