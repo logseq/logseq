@@ -26,11 +26,11 @@
   (or (.. (js/document.getElementById "right-sidebar") -style -width)
       (get-css-var-value "--right-sidebar-width")))
 
-(defn- persist-right-sidebar-width!
+(defn persist-right-sidebar-width!
   []
   (storage/set "ls-right-sidebar-width" (get-right-sidebar-width)))
 
-(defn- restore-right-sidebar-width!
+(defn restore-right-sidebar-width!
   []
   (when-let [width (storage/get "ls-right-sidebar-width")]
     (.setProperty (.-style (js/document.getElementById "right-sidebar")) "width" width)))
@@ -38,14 +38,11 @@
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
-    (persist-right-sidebar-width!)
     (.click elem)))
 
 (defn toggle-right-sidebar!
   []
-  (if (:ui/sidebar-open? @state/state) 
-    (persist-right-sidebar-width!) 
-    (restore-right-sidebar-width!))
+  (when-not (:ui/sidebar-open? @state/state) (restore-right-sidebar-width!))
   (state/toggle-sidebar-open?!))
 
 (defn persist-right-sidebar-state!
@@ -63,7 +60,8 @@
       (when open?
         (state/set-state! :ui/sidebar-open? open?)
         (state/set-state! :sidebar/blocks blocks)
-        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)))))
+        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)
+        (restore-right-sidebar-width!)))))
 
 (defn toggle-contents!
   []

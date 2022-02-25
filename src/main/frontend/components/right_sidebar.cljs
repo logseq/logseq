@@ -186,7 +186,8 @@
                          right-el (js/document.getElementById "right-sidebar")]
                      (when right-el
                        (let [width (str (* right-el-ratio 100) "%")]
-                         (.setProperty (.-style right-el) "width" width)))))}}))
+                         (.setProperty (.-style right-el) "width" width)
+                         (ui-handler/persist-right-sidebar-width!)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
