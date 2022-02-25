@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
@@ -146,6 +145,7 @@
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- load-pages-metadata!
+  "force?: if set true, skip the metadata timestamp range check"
   ([repo file-paths files]
    (load-pages-metadata! repo file-paths files false))
   ([repo file-paths files force?]
@@ -186,7 +186,6 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (js/console.log "parse-files-and-create-default-files-inner!") ;; TODO JUNYI
   (let [support-files (filter
                        (fn [file]
                          (let [format (format/get-format (:file/path file))]
