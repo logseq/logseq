@@ -1040,13 +1040,15 @@
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
-            content (or (state/get-edit-content) content)
+            content (or content (state/get-edit-content))
             new-content (-> (text/remove-timestamp content key)
                             (text/add-timestamp key value))]
         (when (not= content new-content)
-          (if-let [input-id (state/get-edit-input-id)]
-            (state/set-edit-content! input-id new-content)
-            (save-block-if-changed! block new-content)))))))
+          (let [input-id (state/get-edit-input-id)]
+            (if (and input-id
+                     (string/ends-with? input-id (str block-id)))
+              (state/set-edit-content! input-id new-content)
+              (save-block-if-changed! block new-content))))))))
 
 (defn- set-blocks-id!
   [block-ids]
