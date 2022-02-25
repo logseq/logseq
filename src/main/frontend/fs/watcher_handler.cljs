@@ -88,9 +88,16 @@
 
           ;; When metadata is added to watcher, update timestamps in db accordingly
           ;; This event is not triggered on re-index
+          ;; Persistent metadata is gold standard when db is offline, so it's forced
           (and (contains? #{"add"} type)
                (= path pages-metadata-path))
           (p/do! (repo-handler/update-pages-metadata! repo content true))
+          
+          ;; Change is triggered by external changes, so update to the db
+          ;; Don't forced update when db is online, but resolving conflicts
+          (and (contains? #{"change"} type)
+               (= path pages-metadata-path))
+          (p/do! (repo-handler/update-pages-metadata! repo content false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil
