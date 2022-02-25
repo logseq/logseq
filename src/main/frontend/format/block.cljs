@@ -238,11 +238,13 @@
        [original-page-name page-name day]))))
 
 (defn page-name->map
-  "with-timestamp?: assign timestampes to the map structure. 
+  "Create a page's map structure given a original page name (string).
+   map as input is supported for legacy compatibility.
+   with-timestamp?: assign timestampes to the map structure. 
     Useful when creating new pages from references or namespaces, 
     as there's no chance to introduce timestamps via editing in page"
   ([original-page-name with-id?]
-   (page-name->map original-page-name with-id? false))
+   (page-name->map original-page-name with-id? true))
   ([original-page-name with-id? with-timestamp?]
    (cond
      (and original-page-name (string? original-page-name))
@@ -314,7 +316,7 @@
                               (distinct))
           refs (->> (distinct (concat refs children-pages))
                     (remove nil?))
-          refs (map (fn [ref] (page-name->map ref with-id? true)) refs)]
+          refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
       (assoc block :refs refs))))
 
 (defn with-block-refs
@@ -449,7 +451,7 @@
                                    :else
                                    nil)) (vals properties))
         page-refs (remove string/blank? page-refs)]
-    (map (fn [page] (page-name->map page true true)) page-refs)))
+    (map (fn [page] (page-name->map page true)) page-refs)))
 
 (defn with-page-block-refs
   [block with-id?]

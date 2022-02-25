@@ -112,7 +112,7 @@
                             (when (text/namespace-page? page)
                               (->> (util/split-namespace-pages page)
                                    (map (fn [page]
-                                          (-> (block/page-name->map page true true)
+                                          (-> (block/page-name->map page true)
                                               (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
