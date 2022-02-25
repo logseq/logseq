@@ -781,8 +781,14 @@
     (save-block-if-changed! block new-content)))
 
 (defn set-marker
-  [{:block/keys [marker content] :as block} new-marker]
-  (let [new-content (->
+  [{:block/keys [marker content format] :as block} new-marker]
+  (let [old-header-marker (when (not= format :org)
+                            (re-find (marker/header-marker-pattern true marker) content))
+        new-header-marker (when old-header-marker
+                            (string/replace old-header-marker marker new-marker))
+        marker (or old-header-marker marker)
+        new-marker (or new-header-marker new-marker)
+        new-content (->
                      (if marker
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)
                        (str new-marker " " content))
