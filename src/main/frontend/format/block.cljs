@@ -238,38 +238,47 @@
        [original-page-name page-name day]))))
 
 (defn page-name->map
-  [original-page-name with-id?]
-  (cond
-    (and original-page-name (string? original-page-name))
-    (let [original-page-name (util/remove-boundary-slashes original-page-name)
-          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
-          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
-                          (text/namespace-page? original-page-name))
-          m (merge
-             {:block/name page-name
-              :block/original-name original-page-name}
-             (when with-id?
-               (if (db/entity [:block/name page-name])
-                 {}
-                 {:block/uuid (db/new-block-id)}))
-             (when namespace?
-               (let [namespace (first (util/split-last "/" original-page-name))]
-                 (when-not (string/blank? namespace)
-                   {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}}))))]
-      (if journal-day
-        (merge m
-               {:block/journal? true
-                :block/journal-day journal-day})
-        (assoc m :block/journal? false)))
+  "with-timestamp?: assign timestampes to the map structure. 
+    Useful when creating new pages from references or namespaces, 
+    as there's no chance to introduce timestamps via editing in page"
+  ([original-page-name with-id?]
+   (page-name->map original-page-name with-id? false))
+  ([original-page-name with-id? with-timestamp?]
+   (cond
+     (and original-page-name (string? original-page-name))
+     (let [original-page-name (util/remove-boundary-slashes original-page-name)
+           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
+           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
+                           (text/namespace-page? original-page-name))
+           page-entity (db/entity [:block/name page-name])]
+       (merge
+        {:block/name page-name
+         :block/original-name original-page-name}
+        (when with-id?
+          (if page-entity
+            {}
+            {:block/uuid (db/new-block-id)}))
+        (when namespace?
+          (let [namespace (first (util/split-last "/" original-page-name))]
+            (when-not (string/blank? namespace)
+              {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}})))
+        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
+          (let [current-ms (util/time-ms)]
+            {:block/created-at current-ms
+             :block/updated-at current-ms}))
+        (if journal-day
+          {:block/journal? true
+           :block/journal-day journal-day}
+          {:block/journal? false})))
 
-    (and (map? original-page-name) (:block/uuid original-page-name))
-    original-page-name
+     (and (map? original-page-name) (:block/uuid original-page-name))
+     original-page-name
 
-    (and (map? original-page-name) with-id?)
-    (assoc original-page-name :block/uuid (db/new-block-id))
+     (and (map? original-page-name) with-id?)
+     (assoc original-page-name :block/uuid (db/new-block-id))
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn with-page-refs
   [{:keys [title body tags refs marker priority] :as block} with-id?]
@@ -305,7 +314,7 @@
                               (distinct))
           refs (->> (distinct (concat refs children-pages))
                     (remove nil?))
-          refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
+          refs (map (fn [ref] (page-name->map ref with-id? true)) refs)]
       (assoc block :refs refs))))
 
 (defn with-block-refs
@@ -440,7 +449,7 @@
                                    :else
                                    nil)) (vals properties))
         page-refs (remove string/blank? page-refs)]
-    (map (fn [page] (page-name->map page true)) page-refs)))
+    (map (fn [page] (page-name->map page true true)) page-refs)))
 
 (defn with-page-block-refs
   [block with-id?]

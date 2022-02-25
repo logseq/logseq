@@ -268,7 +268,7 @@
   (if (and (:block/pre-block? block)
            (seq (:block/properties block)))
     (let [page-properties (:block/properties block)
-          str->page (fn [n] (block/page-name->map n true))
+          str->page (fn [n] (block/page-name->map n true true))
           refs (->> page-properties
                     (filter (fn [[_ v]] (coll? v)))
                     (vals)
