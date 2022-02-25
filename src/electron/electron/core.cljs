@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? logger get-win-from-sender]]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -16,8 +16,7 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]
-            [electron.utils :as electron-utils]))
+            ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -200,7 +199,7 @@
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-               (electron-utils/restore-user-fetch-agent)
+               (restore-user-fetch-agent)
 
                (utils/disableXFrameOptions win)
 

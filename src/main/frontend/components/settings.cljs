@@ -509,7 +509,7 @@
                     :small? true :intent "logseq")]])]))
 
 (rum/defc user-proxy-settings-panel
-  [{:keys [protocol host port] :as agent-opts}]
+  [{:keys [protocol] :as agent-opts}]
   (let [[opts set-opts!] (rum/use-state agent-opts)
         disabled? (string/blank? (:protocol opts))]
     [:div.cp__settings-network-proxy-panel
