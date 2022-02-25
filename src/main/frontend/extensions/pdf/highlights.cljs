@@ -20,6 +20,8 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
+(def *highlight-mode? (atom false))
+(def *highlight-last-color (atom :yellow))
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
@@ -102,60 +104,69 @@
   ;;])
 
   (let [*el (rum/use-ref nil)
-        head-height 0                                       ;; 48 temp
-        top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
-        left (:x point)
+        ^js cnt (.-container viewer)
+        head-height 0          ;; 48 temp
+        top (- (+ (:y point) (.-scrollTop cnt)) head-height)
+        left (+ (:x point) (.-scrollLeft cnt))
         id (:id highlight)
-        content (:content highlight)]
+        new? (nil? id)
+        content (:content highlight)
+        action-fn! (fn [action clear?]
+                    (when-let [action (and action (name action))]
+                      (case action
+                        "ref"
+                        (pdf-assets/copy-hl-ref! highlight)
+
+                        "copy"
+                        (do
+                          (front-utils/copy-to-clipboard!
+                            (or (:text content) (.toString range)))
+                          (pdf-utils/clear-all-selection))
+
+                        "link"
+                        (pdf-assets/goto-block-ref! highlight)
+
+                        "del"
+                        (do
+                          (del-hl! highlight)
+                          (pdf-assets/del-ref-block! highlight)
+                          (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
+
+                        ;; colors
+                        (let [properties {:color action}]
+                          (if-not id
+                            ;; add highlight
+                            (let [highlight (merge (if (fn? highlight) (highlight) highlight)
+                                                   {:id         (pdf-utils/gen-uuid)
+                                                    :properties properties})]
+                              (add-hl! highlight)
+                              (pdf-utils/clear-all-selection)
+                              (pdf-assets/copy-hl-ref! highlight))
+
+                            ;; update highlight
+                            (upd-hl! (assoc highlight :properties properties)))
+
+                          (reset! *highlight-last-color (keyword action))))
+
+                      (and clear? (js/setTimeout #(clear-ctx-tip!) 68))))]
 
     (rum/use-effect!
       (fn []
-        (let [^js el (rum/deref *el)
-              {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
-          (set! (.. el -style -transform)
-                (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)")))
+        (if (and @*highlight-mode? new?)
+          (action-fn! @*highlight-last-color true)
+          (let [^js el (rum/deref *el)
+                {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
+            (set! (.. el -style -transform)
+                  (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)"))))
         #())
       [])
 
     [:ul.extensions__pdf-hls-ctx-menu
      {:ref      *el
-      :style    {:top top :left left}
+      :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
       :on-click (fn [^js/MouseEvent e]
                   (when-let [action (.. e -target -dataset -action)]
-                    (case action
-                      "ref"
-                      (pdf-assets/copy-hl-ref! highlight)
-
-                      "copy"
-                      (do
-                        (front-utils/copy-to-clipboard!
-                         (or (:text content) (.toString range)))
-                        (pdf-utils/clear-all-selection))
-
-                      "link"
-                      (pdf-assets/goto-block-ref! highlight)
-
-                      "del"
-                      (do
-                        (del-hl! highlight)
-                        (pdf-assets/del-ref-block! highlight)
-                        (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
-
-                      ;; colors
-                      (let [properties {:color action}]
-                        (if-not id
-                          ;; add highlight
-                          (let [highlight (merge (if (fn? highlight) (highlight) highlight)
-                                                 {:id         (pdf-utils/gen-uuid)
-                                                  :properties properties})]
-                            (add-hl! highlight)
-                            (pdf-utils/clear-all-selection)
-                            (pdf-assets/copy-hl-ref! highlight))
-
-                          ;; update highlight
-                          (upd-hl! (assoc highlight :properties properties))))))
-
-                  (clear-ctx-tip!))}
+                    (action-fn! action true)))}
 
      [:li.item-colors
       (for [it ["yellow", "blue", "green", "red", "purple"]]
@@ -792,6 +803,7 @@
   [^js viewer]
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
+        [highlight-mode?, set-highlight-mode!] (use-atom *highlight-mode?)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
         *page-ref (rum/use-ref nil)
         [current-page-num, set-current-page-num!] (rum/use-state 1)
@@ -841,6 +853,12 @@
          :on-click #(set-area-mode! (not area-mode?))}
         (svg/icon-area 18)]
 
+       [:a.button
+        {:title    "Highlight mode"
+         :class    (when highlight-mode? "is-active")
+         :on-click #(set-highlight-mode! (not highlight-mode?))}
+        (svg/highlighter 16)]
+
        ;; zoom
        [:a.button
         {:title    "Zoom out"
@@ -861,7 +879,7 @@
        [:a.button.is-info
         {:title    "Document info"
          :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                      (state/set-modal! (make-docinfo-in-modal ret)))}
+                           (state/set-modal! (make-docinfo-in-modal ret)))}
         (svg/icon-info)]
 
        ;; annotations
@@ -900,11 +918,11 @@
      ;; settings
      (and settings-visible?
           (pdf-settings
-           viewer
-           viewer-theme
-           {:t t
-            :hide-settings! #(set-settings-visible! false)
-            :select-theme!  #(set-viewer-theme! %)}))]))
+            viewer
+            viewer-theme
+            {:t              t
+             :hide-settings! #(set-settings-visible! false)
+             :select-theme!  #(set-viewer-theme! %)}))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]

@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
+            [frontend.db.react :as db-react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -132,6 +133,7 @@
                                        (mobile-util/native-ios?))
                               (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
+                         (p/then (state/pub-event! [:graph/ready (state/get-current-repo)]))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
         interval-id (js/setInterval inner-fn 50)]
@@ -218,6 +220,8 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
+
+    (db-react/run-custom-queries-when-idle!)
 
     (events/run!)
 

@@ -53,12 +53,46 @@ To configure the linter, see its `config` var.
 
 ## Testing
 
-We have unit and end to end tests as described in https://github.com/logseq/logseq#5-run-tests.
+We have unit and end to end tests.
+
+### End to End Tests
+
+To run end to end tests
+
+``` bash
+yarn electron-watch
+# in another shell
+yarn e2e-test # or npx playwright test
+```
 
 ### Unit Testing
 
-When writing unit tests it is helpful to have tests automatically run on file
-save with `yarn shadow-cljs watch test --config-merge '{:autorun true}'`. The
-test output may appear where shadow-cljs was first invoked e.g. where `yarn
-watch` is running. For more about the shadow-cljs test runner, see [this
-documentation](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing).
+Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing). To run them:
+
+```bash
+yarn test
+```
+
+There are a couple different ways to develop with tests:
+
+#### Autorun Tests
+To run tests automatically on file save, run `yarn
+shadow-cljs watch test --config-merge '{:autorun true}'`. The test output may
+appear where shadow-cljs was first invoked e.g. where `yarn watch` is running.
+Specific namespace(s) can be auto run with the `:ns-regexp` option e.g. `npx
+shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
+"frontend.text-test"}'`.
+
+#### Focus Tests
+
+Tests can be automatically compiled and then selectively run on the commandline
+using our own test runner which emulates most of the options of [cognitect-labs/test
+runner](https://github.com/cognitect-labs/test-runner#invoke-with-clojure--m-clojuremain).
+For this workflow:
+
+1. Run `clj -M:test watch test` in one shell
+2. Focus tests or namespaces:
+  1. To focus test(s), add `^:focus` metadata flags. In another shell, run `node static/tests.js -i focus`
+  2. Alternatively, focus namespaces by using the regex option e.g. `node static/tests.js -r text` which runs tests for `frontend.text-test`.
+
+For help on more focusing options, run `node static/tests.js -h`

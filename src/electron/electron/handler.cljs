@@ -232,6 +232,7 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
+  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -355,6 +356,10 @@
         windows (win/get-graph-all-windows dir)
         windows (filter #(.isVisible %) windows)]
     (> (count windows) 1)))
+
+(defmethod handle :searchVersionChanged?
+  [^js _win [_ graph]]
+  (search/version-changed? graph))
 
 (defmethod handle :reloadWindowPage [^js win]
   (when-let [web-content (.-webContents win)]

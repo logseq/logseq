@@ -879,7 +879,11 @@
               link-depth (or link-depth 0)]
           (if (> link-depth max-depth-of-links)
             [:p.warning.text-sm "Block ref nesting is too deep"]
-            (block-reference (assoc config :reference? true :link-depth (inc link-depth)) id label*)))
+            (block-reference (assoc config
+                                    :reference? true
+                                    :link-depth (inc link-depth) 
+                                    :block/uuid id)
+                             id label*)))
 
         ["Page_ref" page]
         (let [format (get-in config [:block :block/format])]
@@ -2044,7 +2048,8 @@
                                                                  uuid
                                                                  (:block/format block)
                                                                  (:block/pre-block? block)
-                                                                 content)]
+                                                                 content)
+                                     config (assoc config :block/uuid uuid)]
                                  [block
                                   (if (seq title)
                                     (->elem :span (map-inline config title))

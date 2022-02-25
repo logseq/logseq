@@ -153,7 +153,7 @@
                     (remove string/blank?)
                     (filter string?)
                     (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
-                                    :page page}))
+                                     :page page}))
                     (util/distinct-by :lowercase)
                     (map :page))]
      [:ul.text-sm

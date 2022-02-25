@@ -5,7 +5,11 @@
             [clojure.string :as string]
             ["electron" :refer [app]]))
 
-(defonce version "0.0.1")
+;; version of the search cache
+;; ver. 0.0.1: initial version
+;; ver. 0.0.2: bump version as page name breaking changes of LogSeq 0.5.7 ~ 0.5.9
+(defonce version "0.0.2")
+(defonce invalid-version "0.0.0")
 
 (defonce databases (atom nil))
 
@@ -52,8 +56,8 @@
     END;"
                   ]]
     (doseq [trigger triggers]
-     (let [stmt (prepare db trigger)]
-       (.run ^object stmt)))))
+      (let [stmt (prepare db trigger)]
+        (.run ^object stmt)))))
 
 (defn create-blocks-table!
   [db]
@@ -74,35 +78,15 @@
   (let [path (.getPath ^object app "userData")]
     (path/join path "search")))
 
-(defonce search-version "search.version")
-
-(defn get-search-version
+(defn get-search-ver-dir
   []
-  (let [path (.getPath ^object app "userData")
-        path (path/join path search-version)]
-    (when (fs/existsSync path)
-      (.toString (fs/readFileSync path)))))
-
-(defn write-search-version!
-  []
-  (let [path (.getPath ^object app "userData")
-        path (path/join path search-version)]
-    (fs/writeFileSync path version)))
-
-(defn version-changed?
-  []
-  (not= version (get-search-version)))
+  (let [path (.getPath ^object app "userData")]
+    (path/join path "search.versions")))
 
 (defn ensure-search-dir!
   []
-  (write-search-version!)
-  (fs/ensureDirSync (get-search-dir)))
-
-(defn rm-search-dir!
-  []
-  (let [search-dir (get-search-dir)]
-    (when (fs/existsSync search-dir)
-      (fs/removeSync search-dir))))
+  (fs/ensureDirSync (get-search-dir))
+  (fs/ensureDirSync (get-search-ver-dir)))
 
 (defn get-db-full-path
   [db-name]
@@ -110,19 +94,44 @@
         search-dir (get-search-dir)]
     [db-name (path/join search-dir db-name)]))
 
+(defn get-db-version-path
+  "File for storing search cache version"
+  [db-name]
+  (let [db-name (sanitize-db-name db-name)
+        search-dir (get-search-dir)
+        search-ver-dir (get-search-ver-dir)]
+    [db-name (path/join search-dir db-name) (path/join search-ver-dir db-name)]))
+
+(defn get-search-version
+  [db-name]
+  (let [[_db-name db-full-path db-ver-path] (get-db-version-path db-name)]
+    (if (and (fs/existsSync db-ver-path) (fs/existsSync db-full-path)) ;; avoid case that only ver file exists
+      (.toString (fs/readFileSync db-ver-path))
+      invalid-version))) ;; no any cache exists
+
+(defn write-search-version!
+  [db-name]
+  (let [[_db-name _db-full-path db-ver-path] (get-db-version-path db-name)]
+    (fs/writeFileSync db-ver-path version)))
+
+(defn version-changed?
+  [db-name]
+  (not= version (get-search-version db-name)))
+
 (defn open-db!
   [db-name]
-  (let [[db-name db-full-path] (get-db-full-path db-name)
+  (let [[db-sanitized-name db-full-path] (get-db-full-path db-name)
         db (sqlite3 db-full-path nil)
         _ (create-blocks-table! db)
         _ (create-blocks-fts-table! db)
         _ (add-triggers! db)]
-    (swap! databases assoc db-name db)))
+    (swap! databases assoc db-sanitized-name db)))
 
 (defn open-dbs!
   []
   (let [search-dir (get-search-dir)
-        dbs (fs/readdirSync search-dir)]
+        dbs (fs/readdirSync search-dir)
+        dbs (remove (fn [file-name] (.startsWith file-name ".")) dbs)]
     (when (seq dbs)
       (doseq [db-name dbs]
         (open-db! db-name)))))
@@ -145,7 +154,7 @@
   [repo ids]
   (when-let [db (get-db repo)]
     (let [ids (->> (map (fn [id] (str "'" id "'")) ids)
-               (string/join ", "))
+                   (string/join ", "))
           sql (str "DELETE from blocks WHERE id IN (" ids ")")
           stmt (prepare db sql)]
       (.run ^object stmt))))
@@ -211,9 +220,10 @@
   [repo]
   (when-let [database (get-db repo)]
     (.close database)
-    (let [[db-name db-full-path] (get-db-full-path repo)]
+    (let [[db-name db-full-path db-ver-path] (get-db-version-path repo)]
       (println "Delete search indice: " db-full-path)
       (fs/unlinkSync db-full-path)
+      (fs/unlinkSync db-ver-path)
       (swap! databases dissoc db-name))))
 
 (defn query
@@ -225,7 +235,6 @@
 (comment
   (def repo (first (keys @databases)))
   (query repo
-    "select * from blocks_fts")
+         "select * from blocks_fts")
 
-  (delete-db! repo)
-  )
+  (delete-db! repo))

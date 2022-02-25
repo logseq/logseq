@@ -559,7 +559,7 @@
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/update-state! :journals-length inc)))
+    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
 
 (defn update-public-attribute!
   [page-name value]
