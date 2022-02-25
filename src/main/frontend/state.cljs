@@ -160,7 +160,7 @@
      :plugin/installed-themes               []
      :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
-     :plugin/installed-components           {}
+     :plugin/installed-resources            {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -1265,6 +1265,24 @@
   [type]
   (filterv #(= (keyword (first %)) (keyword type))
            (apply concat (vals (:plugin/installed-ui-items @state)))))
+
+(defn get-plugin-resources-with-type
+  [pid type]
+  (when-let [pid (and type (keyword pid))]
+    (get-in @state [:plugin/installed-resources pid (keyword type)])))
+
+(defn get-plugin-resource
+  [pid type key]
+  (when-let [resources (get-plugin-resources-with-type pid type)]
+    (get resources key)))
+
+(defn upt-plugin-resource
+  [pid type key attr val]
+  (when-let [resource (get-plugin-resource pid type key)]
+    (let [resource (assoc resource (keyword attr) val)]
+      (set-state!
+        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+      resource)))
 
 (defn get-scheduled-future-days
   []

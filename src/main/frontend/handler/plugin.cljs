@@ -292,6 +292,20 @@
   [pid]
   (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
 
+(defn register-plugin-resources
+  [pid type {:keys [key] :as opts}]
+  (when-let [pid (keyword pid)]
+    (when-let [type (and key (keyword type))]
+      (swap! state/state update-in [:plugin/installed-resources pid type]
+             (fnil assoc {}) key (merge opts {:pid pid}))
+      true)))
+
+(defn unregister-plugin-resources
+  [pid]
+  (when-let [pid (keyword pid)]
+    (swap! state/state md/dissoc-in [:plugin/installed-resources pid])
+    true))
+
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
   ([pid effect]
@@ -480,7 +494,8 @@
                               ;; commands
                               (unregister-plugin-slash-command pid)
                               (invoke-exported-api "unregister_plugin_simple_command" pid)
-                              (unregister-plugin-ui-items pid))
+                              (unregister-plugin-ui-items pid)
+                              (unregister-plugin-resources pid))
 
             _ (doto js/LSPluginCore
                 (.on "registered"
