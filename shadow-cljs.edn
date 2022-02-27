@@ -3,7 +3,7 @@
  :nrepl {:port 8701}
 
  ;; "." for /static
- :dev-http {3001 ["public" "."]
+ :dev-http {3001 ["static" "."]
             3002 ["public/workspaces" "."]}
 
  :builds
