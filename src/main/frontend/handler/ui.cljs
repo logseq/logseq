@@ -231,6 +231,16 @@
       ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
 
+(defn auto-complete-open-link
+  [state e]
+  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)
+        current-idx (get state :frontend.ui/current-idx)]
+    (util/stop e)
+    (when (and (seq matched)
+             (> (count matched)
+                @current-idx))
+      (on-chosen-open-link (nth matched @current-idx) false))))
+
 ;; date-picker
 ;; TODO: find a better way
 (def *internal-model (rum/cursor state/state :date-picker/date))
