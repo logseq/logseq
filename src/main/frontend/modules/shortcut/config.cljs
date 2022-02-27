@@ -64,6 +64,10 @@
                                   :binding "shift+enter"
                                   :fn      ui-handler/auto-complete-shift-complete}
 
+   :auto-complete/open-link      {:desc    "Auto-complete: Open selected item in browser"
+                                  :binding "mod+o"
+                                  :fn      ui-handler/auto-complete-open-link}
+
    :cards/toggle-answers         {:desc    "Cards: show/hide answers/clozes"
                                   :binding "s"
                                   :fn      srs/toggle-answers}
@@ -482,7 +486,8 @@
     (build-category-map [:auto-complete/complete
                          :auto-complete/prev
                          :auto-complete/next
-                         :auto-complete/shift-complete])
+                         :auto-complete/shift-complete
+                         :auto-complete/open-link])
 
     :shortcut.handler/cards
     (-> (build-category-map [:cards/toggle-answers
@@ -719,6 +724,7 @@
     :auto-complete/next
     :auto-complete/complete
     :auto-complete/shift-complete
+    :auto-complete/open-link
     :date-picker/prev-day
     :date-picker/next-day
     :date-picker/prev-week

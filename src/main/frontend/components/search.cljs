@@ -4,8 +4,10 @@
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
             [frontend.handler.route :as route]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -82,6 +84,31 @@
       (highlight-exact-query content q)]]))
 
 (defonce search-timeout (atom nil))
+
+(defn- search-on-chosen-open-link
+  [repo search-q {:keys [data type alias]}]
+  (search-handler/add-search-to-recent! repo search-q)
+  (search-handler/clear-search!)
+  (cond
+    (= :block type)
+    ;; Open the first link in a block's content
+    (let [block-uuid (uuid (:block/uuid data))
+          block (:block/content (db/entity [:block/uuid block-uuid]))
+          link (re-find editor-handler/url-regex block)]
+      (if link
+        (js/window.open link)
+        (notification/show! "No link found on this block." :warning)))
+
+    (= :page type)
+    ;; Open the first link found in a page's properties
+    (let [data (or alias data)
+          page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))
+          link (some #(re-find editor-handler/url-regex (val %)) (:block/properties page))]
+      (if link
+        (js/window.open link)
+        (notification/show! "No link found on this page's properties." :warning))))
+
+  (state/close-modal!))
 
 (rum/defc ^:large-vars/cleanup-todo search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
@@ -214,7 +241,8 @@
                                                    (search-result-item "Block"
                                                                        (block-search-result-item repo uuid format content search-q search-mode))])
 
-                                                nil)]))})
+                                                nil)]))
+       :on-chosen-open-link #(search-on-chosen-open-link repo search-q %)})
      (when (and has-more? (util/electron?) (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
