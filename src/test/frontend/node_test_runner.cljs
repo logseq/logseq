@@ -11,7 +11,9 @@
             [shadow.test.node :as node]
             [clojure.string :as str]
             [clojure.set :as set]
-            ["util" :as util]))
+            ["util" :as util]
+            ;; activate humane test output for all tests
+            [pjstadig.humane-test-output]))
 
 (defn- print-summary
   "Print help summary given args and opts strings"
@@ -54,9 +56,6 @@ returns run options for selected tests to run"
                     [namespace]
                     namespace-regex
                     (filter #(re-find namespace-regex (str %)) namespaces))]
-    ;; NOTE: If include points to a nonexistent metadata flag, this results in test-syms being '().
-    ;; We would expect no tests to run but instead the node test runner runs all tests.
-    ;; We may want to workaround this
     (cond-> {}
             (some? test-syms)
             (assoc :test-syms test-syms))))
@@ -116,5 +115,10 @@ returns run options for selected tests to run"
                        "\n\nNone of these options can be composed. Defaults to running all tests")
         (js/process.exit 0))
       (with-redefs [node/find-matching-test-vars find-matching-test-vars]
-        (node/execute-cli
-         (run-test-options (keys (env/get-tests)) (env/get-test-vars) options))))))
+        (let [opts (run-test-options (keys (env/get-tests)) (env/get-test-vars) options)]
+          ;; If :test-syms is specified but empty, skip execute-cli because the
+          ;; user has specified an empty test selection
+          (if (and (seq opts) (empty? (:test-syms opts)))
+            (do (println "No tests found.")
+              (js/process.exit 0))
+            (node/execute-cli opts)))))))
