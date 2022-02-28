@@ -208,7 +208,7 @@
                                     :encoding (.-UTF8 Encoding)}))]
          content)
        (p/catch (fn [error]
-                  (js/alert error))))))
+                  (log/error :read-file-failed error))))))
   (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
     (let [path (get-file-path dir path)]
       (p/catch
