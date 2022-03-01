@@ -1186,7 +1186,9 @@
 #?(:cljs
    (defn zh-CN-supported?
      []
-     (contains? (set (system-locales)) "zh-CN")))
+     (let [system-locales (set (system-locales))]
+       (or (contains? system-locales "zh-CN")
+           (contains? system-locales "zh-Hans-CN")))))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
