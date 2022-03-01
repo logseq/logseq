@@ -110,7 +110,7 @@
   [content error-message-or-handler]
   (try
     (reader/read-string content)
-    (catch js/Error e
+    (catch :default e
       (js/console.error e)
       (if (fn? error-message-or-handler)
         (error-message-or-handler e)
@@ -135,9 +135,8 @@
   [content]
   (try
    (reader/read-string content)
-   (catch js/Error e
-     (println "Parsing metadata file failed: ")
-     (js/console.dir e)
+   (catch :default e
+     (log/error :parse/metadata-failed e)
      {})))
 
 (defn request-app-tokens!
@@ -239,8 +238,7 @@
   [content]
   (try
     (rewrite/parse-string content)
-    (catch js/Error e
-      (println "Parsing config file failed: ")
-      (js/console.error e)
+    (catch :default e
+      (log/error :parse/config-failed e)
       (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
       (rewrite/parse-string config/config-default-content))))
