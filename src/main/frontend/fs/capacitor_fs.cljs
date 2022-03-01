@@ -161,6 +161,7 @@
                                  js/decodeURI)
                         [dir path])
         dir (string/replace dir #"/+$" "")
+        path (some-> path (string/replace #"^/+" ""))
         path (cond (nil? path)
                    dir
 
@@ -168,7 +169,7 @@
                    path
 
                    :else
-                   (str dir path))]
+                   (str dir "/" path))]
     (if (mobile-util/native-ios?)
       (js/encodeURI (js/decodeURI path))
       path)))
@@ -205,7 +206,10 @@
                                   (clj->js
                                    {:path path
                                     ;; :directory (.-ExternalStorage Directory)
-                                    :encoding (.-UTF8 Encoding)}))]
+                                    :encoding (.-UTF8 Encoding)}))
+               content (-> (js->clj content :keywordize-keys true)
+                           :data
+                           clj->js)]
          content)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
