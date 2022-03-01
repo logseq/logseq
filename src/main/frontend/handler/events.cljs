@@ -308,7 +308,7 @@
               _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
         (notification/show!
          [:p.content
-          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/config.edn-broken."]
+          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
          :warning
          false)))))
 
