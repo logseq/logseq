@@ -35,7 +35,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
 
@@ -293,7 +294,7 @@
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
-          broken-path (str path "-broken")]
+          broken-path (string/replace path "/config.edn" "/broken-config.edn")]
       (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
               _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
         (notification/show!
