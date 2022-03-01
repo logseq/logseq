@@ -30,3 +30,18 @@
     ;;            (not-join [?e ?v]
     ;;                      [?e ?a ?v]))]
     ])
+
+(def query-dsl-rules
+  "Rules used by frontend.db.query-dsl"
+  {:page-property
+   '[(page-property ?p ?key ?val)
+     [?p :block/name]
+     [?p :block/properties ?prop]
+     [(get ?prop ?key) ?v]
+     (or [(= ?v ?val)] [(contains? ?v ?val)])]
+
+   :has-page-property
+   '[(has-page-property ?p ?key)
+     [?p :block/name]
+     [?p :block/properties ?prop]
+     [(get ?prop ?key)]]})

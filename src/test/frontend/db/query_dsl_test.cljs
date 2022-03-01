@@ -168,9 +168,9 @@ prop-d:: nada"}])
                     {:file/path "pages/page2.md"
                      :file/content "foo:: bar"}
                     {:file/path "pages/page3.md"
-                     :file/content "parent:: [[child page 1]], child page 2"}
+                     :file/content "parent:: [[child page 1]], child page 2\nfoo:: bar"}
                     {:file/path "pages/page4.md"
-                     :file/content "parent:: child page 2"}])
+                     :file/content "parent:: child page 2\nfoo:: baz"}])
   (is (= ["page1" "page3" "page4"]
          (map :block/name (dsl-query "(page-property parent)")))
       "Pages have given property")
@@ -197,7 +197,13 @@ prop-d:: nada"}])
          (map
           :block/name
           (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
-      "Page property queries ORed"))
+      "Page property queries ORed")
+
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
+      "Page property queries NOTed"))
 
 (deftest ^:large-vars/cleanup-todo test-parse
   []
