@@ -41,16 +41,14 @@
 
 (deftest set-marker-org
   (are [marker content new-marker expect] (= expect (set-marker marker content :org new-marker))
-    nil "content" "TODO" "TODO content"
     "TODO" "TODO content" "DOING" "DOING content"
     "TODO" "## TODO content" "DOING" "## TODO content"
-    "DONE" "DONE content" nil "content"))
+    "DONE" "DONE content" "" "content"))
 
 (deftest set-marker-markdown
   (are [marker content new-marker expect] (= expect (set-marker marker content :markdown new-marker))
-    nil "content" "TODO" "TODO content"
     "TODO" "TODO content" "DOING" "DOING content"
     "TODO" "## TODO content" "DOING" "## DOING content"
-    "DONE" "DONE content" nil "content"))
+    "DONE" "DONE content" "" "content"))
 
 #_(cljs.test/run-tests)
