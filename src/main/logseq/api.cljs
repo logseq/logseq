@@ -28,6 +28,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.loader :as loader]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
@@ -658,9 +659,17 @@
 (defn ^:export exper_load_scripts
   [pid & scripts]
   (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
-    (js/console.log "pl=>" pl)
-    (doseq [s scripts]
-      (js/console.log "[load scripts] #" pid " <===>" s))))
+    (doseq [s scripts
+            :let [upt-status #(state/upt-plugin-resource pid :script s :status %)]]
+      (when-let [init? (plugin-handler/register-plugin-resources pid :script {:key s :src s})]
+        (js/console.debug "[try to load script] #" pid " <===>" init? "\n" s)
+        (p/catch
+          (p/then
+            (do
+              (upt-status :pending)
+              (loader/load s nil))
+            #(upt-status :done))
+          #(upt-status :error))))))
 
 ;; helpers
 (defn ^:export query_element_by_id

@@ -296,9 +296,11 @@
   [pid type {:keys [key] :as opts}]
   (when-let [pid (keyword pid)]
     (when-let [type (and key (keyword type))]
-      (swap! state/state update-in [:plugin/installed-resources pid type]
-             (fnil assoc {}) key (merge opts {:pid pid}))
-      true)))
+      (let [path [:plugin/installed-resources pid type]]
+        (when (contains? #{:error nil} (get-in @state/state (conj path key)))
+          (swap! state/state update-in path
+            (fnil assoc {}) key (merge opts {:pid pid}))
+          true)))))
 
 (defn unregister-plugin-resources
   [pid]
