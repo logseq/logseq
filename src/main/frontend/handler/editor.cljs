@@ -339,7 +339,7 @@
   [block value]
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
-    (let [new-marker (last (util/safe-re-find marker/marker-pattern (or value "")))
+    (let [new-marker (last (util/safe-re-find (marker/marker-pattern) (or value "")))
           new-value (with-marker-time value block (:block/format block)
                       new-marker
                       (:block/marker block))]

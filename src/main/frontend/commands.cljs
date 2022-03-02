@@ -554,7 +554,7 @@
                     (count (util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 marker/marker-pattern
+                                                 (marker/marker-pattern)
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
