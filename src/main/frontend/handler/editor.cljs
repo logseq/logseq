@@ -436,7 +436,7 @@
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
         [:p.content
-         (util/format "Block with the id % already exists!" block-id)]
+         (util/format "Block with the id %s already exists!" block-id)]
         :error)
 
        force?
