@@ -611,7 +611,7 @@
             '[:find ?id
               :in $ ?p %
               :where
-              (parent ?p ?c)
+              (child ?p ?c)
               [?c :block/uuid ?id]]
             conn
             eid

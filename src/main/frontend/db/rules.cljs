@@ -7,6 +7,12 @@
      [?c :block/parent ?t]
      (parent ?p ?t)]
 
+    [(child ?p ?c)
+     [?c :block/parent ?p]]
+    [(child ?p ?c)
+     [?t :block/parent ?p]
+     (child ?t ?c)]
+
     [(namespace ?p ?c)
      [?c :block/namespace ?p]]
     [(namespace ?p ?c)
@@ -29,4 +35,7 @@
     ;;            [(identity ?vs) [?v ...]]
     ;;            (not-join [?e ?v]
     ;;                      [?e ?a ?v]))]
+    ;; Recursive optimization
+    ;; https://stackoverflow.com/questions/42457136/recursive-datalog-queries-for-datomic-really-slow
+    ;; Should optimize for query the decendents of a block
     ])
