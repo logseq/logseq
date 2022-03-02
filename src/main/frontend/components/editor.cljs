@@ -230,26 +230,29 @@
             :class       "black"}))))))
 
 (rum/defc mobile-bar-indent-outdent [indent? icon]
-  [:button.bottom-action
-   {:on-mouse-down (fn [e]
-                     (util/stop e)
-                     (state/set-state! :editor/pos (cursor/pos (state/get-input)))
-                     (editor-handler/indent-outdent indent?))}
-   (ui/icon icon {:style {:fontSize ui/icon-size}})])
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (state/set-state! :editor/pos (cursor/pos (state/get-input)))
+                      (editor-handler/indent-outdent indent?))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar-command [command-handler icon]
-  [:button.bottom-action
-   {:on-mouse-down (fn [e]
-                     (util/stop e)
-                     (command-handler))}
-   (ui/icon icon {:style {:fontSize ui/icon-size}})])
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (command-handler))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar-command-with-event [command-handler icon]
-  [:button.bottom-action
-   {:on-mouse-down (fn [e]
-                     (util/stop e)
-                     (command-handler e))}
-   (ui/icon icon {:style {:fontSize ui/icon-size}})])
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (command-handler e))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar < rum/reactive
   [_parent-state parent-id]
@@ -266,28 +269,31 @@
                            (:offset-top vw-state))
                         0)}
       :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
-     [:div (mobile-bar-indent-outdent true "arrow-bar-right")]
-     [:div (mobile-bar-indent-outdent false "arrow-bar-left")]
-     [:div (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")]
-     [:div (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")]
-     [:div (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")]
-     [:div (mobile-bar-command editor-handler/cycle-todo! "checkbox")]
-     [:div (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets")]
-     [:div (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses")]
-     [:div (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command")]
-     [:div (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag")]
-     [:div (mobile-bar-command editor-handler/cycle-priority! "a-b")]
-     [:div (mobile-bar-command editor-handler/toggle-list! "list")]
-     [:div (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")]
-     [:div (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")]
-     [:div (mobile-bar-command editor-handler/html-link-format! "link")]
-     [:div (mobile-bar-command-with-event history/undo! "rotate")]
-     [:div (mobile-bar-command-with-event history/redo! "rotate-clockwise")]
-     [:div (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")]
-     [:div (mobile-bar-command editor-handler/bold-format! "bold")]
-     [:div (mobile-bar-command editor-handler/italics-format! "italic")]
-     [:div (mobile-bar-command editor-handler/strike-through-format! "strikethrough")]
-     [:div (mobile-bar-command editor-handler/highlight-format! "paint")]]))
+     [:div.toolbar-commands
+      (mobile-bar-indent-outdent true "arrow-bar-right")
+      (mobile-bar-indent-outdent false "arrow-bar-left")
+      (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
+      (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
+      (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")
+      (mobile-bar-command editor-handler/cycle-todo! "checkbox")
+      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets")
+      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses")
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command")
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag")
+      (mobile-bar-command editor-handler/cycle-priority! "a-b")
+      (mobile-bar-command editor-handler/toggle-list! "list")
+      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
+      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
+      (mobile-bar-command editor-handler/html-link-format! "link")
+      (mobile-bar-command-with-event history/undo! "rotate")
+      (mobile-bar-command-with-event history/redo! "rotate-clockwise")
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
+      (mobile-bar-command editor-handler/bold-format! "bold")
+      (mobile-bar-command editor-handler/italics-format! "italic")
+      (mobile-bar-command editor-handler/strike-through-format! "strikethrough")
+      (mobile-bar-command editor-handler/highlight-format! "paint")]
+     [:div.toolbar-hide-keyboard
+      (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
