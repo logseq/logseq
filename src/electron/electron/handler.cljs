@@ -6,6 +6,7 @@
             ["fs-extra" :as fs-extra]
             ["path" :as path]
             ["os" :as os]
+            ["diff-match-patch" :as google-diff]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -16,7 +17,8 @@
             [electron.search :as search]
             [electron.git :as git]
             [electron.plugin :as plugin]
-            [electron.window :as win]))
+            [electron.window :as win]
+            [goog.object :as gobj]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -56,21 +58,36 @@
           new-path    (str recycle-dir "/" file-name)]
       (fs/renameSync path new-path))))
 
+(defonce Diff (google-diff.))
+(defn string-some-deleted?
+  [old new]
+  (let [result (.diff_main Diff old new)]
+    (some (fn [a] (= -1 (first a))) result)))
+
+(defn- truncate-old-versioned-files!
+  [file-path]
+  (let [dir (path/dirname file-path)
+        files (fs/readdirSync dir (clj->js {:withFileTypes true}))
+        files (map #(.-name %) files)
+        prefix (str (path/basename file-path) ".")
+        versioned-files (filter #(string/starts-with? % prefix) files)
+        old-versioned-files (drop 10 (reverse (sort versioned-files)))]
+    (doseq [file old-versioned-files]
+      (fs-extra/removeSync (path/join dir file)))))
+
 (defn backup-file
   [repo path content]
-  (let [file-name (-> (string/replace path (str repo "/") "")
-                      (string/replace "/" "_")
-                      (string/replace "\\" "_"))
-        bak-dir (str repo "/logseq/bak")
-        _ (fs-extra/ensureDirSync bak-dir)
-        new-path (str bak-dir "/" file-name "."
-                      (string/replace (.toISOString (js/Date.)) ":" "_"))]
+  (let [new-path (str path "." (string/replace (.toISOString (js/Date.)) ":" "_"))]
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
+    (truncate-old-versioned-files! path)
     new-path))
 
-(defmethod handle :backupDbFile [_window [_ repo path db-content]]
-  (backup-file repo path db-content))
+(defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
+  (when (and (string? db-content)
+             (string? new-content)
+             (string-some-deleted? db-content new-content))
+    (backup-file repo path db-content)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -80,7 +97,7 @@
   (assert (string? path))
   (try
     (fs/accessSync path (aget fs "W_OK"))
-    (catch js/Error _e
+    (catch :default _e
       false)))
 
 (defmethod handle :writeFile [_window [_ repo path content]]
@@ -93,10 +110,10 @@
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
-      (catch js/Error e
+      (catch :default e
         (let [backup-path (try
                             (backup-file repo path content)
-                            (catch js/Error e
+                            (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]
           (utils/send-to-renderer "notification" {:type "error"
