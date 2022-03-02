@@ -1,15 +1,11 @@
 (ns frontend.util.marker
   (:require [clojure.string :as string]
-            [frontend.util :as util]
-            [frontend.db :as db]
-            [frontend.state :as state]))
+            [frontend.util :as util]))
 
-(defn marker-pattern []
-  (let [format (or (db/get-page-format (state/get-current-page))
-                   (state/get-preferred-format))]
-    (re-pattern
-     (str "^" (when-not (= format :org) "(#*\\s*)?")
-          "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\\s?"))))
+(defn marker-pattern [format]
+  (re-pattern
+   (str "^" (when-not (= format :org) "(#*\\s*)?")
+        "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\\s?")))
 
 (def bare-marker-pattern
   #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
@@ -28,7 +24,7 @@
         new-content
         (str (subs content 0 pos)
              (string/replace-first (subs content pos)
-                                   (marker-pattern)
+                                   (marker-pattern format)
                                    (str marker " ")))]
     new-content))
 
