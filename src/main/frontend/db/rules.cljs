@@ -16,8 +16,8 @@
     [(namespace ?p ?c)
      [?c :block/namespace ?p]]
     [(namespace ?p ?c)
-     [?c :block/namespace ?t]
-     (namespace ?p ?t)]
+     [?t :block/namespace ?p]
+     (namespace ?t ?c)]
 
     ;; from https://stackoverflow.com/questions/43784258/find-entities-whose-ref-to-many-attribute-contains-all-elements-of-input
     ;; Quote:
@@ -35,7 +35,18 @@
     ;;            [(identity ?vs) [?v ...]]
     ;;            (not-join [?e ?v]
     ;;                      [?e ?a ?v]))]
+
     ;; Recursive optimization
     ;; https://stackoverflow.com/questions/42457136/recursive-datalog-queries-for-datomic-really-slow
     ;; Should optimize for query the decendents of a block
+    ;; Quote:
+    ;; My theory is that your rules are not written in a way that Datalog can optimize for this read pattern - probably resulting in a traversal of all the entities. I suggest to rewrite them as follows:
+    ;; [[(ubersymbol ?c ?p) 
+    ;;   (?c :ml/parent ?p)]
+    ;;  [(ubersymbol ?c ?p) 
+    ;;   ;; we bind a child of the ancestor, instead of a parent of the descendant
+    ;;   (?c1 :ml/parent ?p)
+    ;;   (ubersymbol ?c ?c1)]]
+    
+    ;; This way of writing the ruleset is optimized to find the descendants of some node. The way you originally wrote it is optimized to find the anscestors of some node.
     ])
