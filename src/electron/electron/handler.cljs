@@ -17,8 +17,7 @@
             [electron.search :as search]
             [electron.git :as git]
             [electron.plugin :as plugin]
-            [electron.window :as win]
-            [goog.object :as gobj]))
+            [electron.window :as win]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -76,7 +75,7 @@
       (fs-extra/removeSync (path/join dir file)))))
 
 (defn backup-file
-  [repo path content]
+  [_repo path content]
   (let [new-path (str path "." (string/replace (.toISOString (js/Date.)) ":" "_"))]
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
