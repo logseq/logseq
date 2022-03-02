@@ -104,6 +104,7 @@
         "react": "17.0.2",
         "react-dom": "17.0.2",
         "react-grid-layout": "0.16.6",
+        "react-icon-base": "^2.1.2",
         "react-icons": "2.2.7",
         "react-resize-context": "3.0.0",
         "react-textarea-autosize": "8.3.3",
