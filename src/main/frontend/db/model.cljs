@@ -1382,8 +1382,8 @@
                          {:block/file [:db/id :file/path]}]) ...]
         :in $ % ?namespace
         :where
-        (namespace ?p ?c)
-        [?p :block/name ?namespace]]
+        [?p :block/name ?namespace]
+        (namespace ?p ?c)]
       (conn/get-conn repo)
       rules
       namespace)))
