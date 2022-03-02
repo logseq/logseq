@@ -1653,16 +1653,7 @@ electron-builder@^22.11.7:
     update-notifier "^5.1.0"
     yargs "^17.0.1"
 
-electron-context-menu@3.1.1:
-  version "3.1.1"
-  resolved "https://registry.yarnpkg.com/electron-context-menu/-/electron-context-menu-3.1.1.tgz#109884e79df293f7e85effcbdbbe45d362987d94"
-  integrity sha512-LJhwaKf6XHwk2LQ5SdwoGNODoA8lRwks9bbEeAqqMf4e3hsrT7pZtX6MaHKYNFZKxF14JjI/VR+VRjGvxmaQoA==
-  dependencies:
-    cli-truncate "^2.1.0"
-    electron-dl "^3.2.1"
-    electron-is-dev "^2.0.0"
-
-electron-dl@^3.2.1:
+electron-dl@3.3.0:
   version "3.3.0"
   resolved "https://registry.yarnpkg.com/electron-dl/-/electron-dl-3.3.0.tgz#4e422e276c627373ba61fcf3f92ffa088988db1a"
   integrity sha512-Zwaz/OMGPIfBLV2SQH4sTsdDOs/U4y5AOHfremMBXEpjIxX+SiTx845DZAvJJwgb5hfowyWOBLiJhd/emBNLLQ==
@@ -1738,11 +1729,6 @@ electron-is-dev@^0.3.0:
   version "0.3.0"
   resolved "https://registry.yarnpkg.com/electron-is-dev/-/electron-is-dev-0.3.0.tgz#14e6fda5c68e9e4ecbeff9ccf037cbd7c05c5afe"
   integrity sha1-FOb9pcaOnk7L7/nM8DfL18BcWv4=
-
-electron-is-dev@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/electron-is-dev/-/electron-is-dev-2.0.0.tgz#833487a069b8dad21425c67a19847d9064ab19bd"
-  integrity sha512-3X99K852Yoqu9AcW50qz3ibYBWY79/pBhlMCab8ToEWS48R0T9tyxRiQhwylE7zQdXrMnx2JKqUJyMPmt5FBqA==
 
 electron-log@4.3.1:
   version "4.3.1"
@@ -2605,7 +2591,7 @@ http2-wrapper@^1.0.0-beta.5.2:
     quick-lru "^5.1.1"
     resolve-alpn "^1.0.0"
 
-https-proxy-agent@^5.0.0:
+https-proxy-agent@5.0.0, https-proxy-agent@^5.0.0:
   version "5.0.0"
   resolved "https://registry.yarnpkg.com/https-proxy-agent/-/https-proxy-agent-5.0.0.tgz#e2a90542abb68a762e0a0850f6c9edadfd8506b2"
   integrity sha512-EkYm5BcKUGiduxzSt3Eppko+PiNWNEpa4ySk9vTC6wDsQJW9rHSa+UhGNJoRYp7bz6Ht1eaRIa6QaJqO5rCFbA==

@@ -21,6 +21,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
@@ -34,7 +35,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
 
@@ -288,6 +290,18 @@
         ;; try to open waiting updates list
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
+
+(defmethod handle :backup/broken-config [[_ repo content]]
+  (when (and repo content)
+    (let [path (config/get-config-path)
+          broken-path (string/replace path "/config.edn" "/broken-config.edn")]
+      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
+              _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
+        (notification/show!
+         [:p.content
+          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
+         :warning
+         false)))))
 
 (defn run!
   []

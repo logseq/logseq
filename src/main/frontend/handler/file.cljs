@@ -346,12 +346,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file path)]
       (common-handler/read-config content)
-      (let [result (try
-                     (rewrite/parse-string content)
-                     (catch js/Error e
-                       (println "Parsing config file failed: ")
-                       (js/console.dir e)
-                       {}))
+      (let [result (common-handler/parse-config content)
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
