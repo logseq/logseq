@@ -82,6 +82,7 @@
   (reset! *timestamp default-timestamp-value)
   (reset! *show-time? false)
   (reset! *show-repeater? false)
+  (state/set-timestamp-block! nil)
   (state/set-state! :date-picker/date nil))
 
 (defn- on-submit
@@ -95,8 +96,8 @@
         text (repeated/timestamp-map->text timestamp)
         block-data (state/get-timestamp-block)
         {:keys [block typ show?]} block-data
-        block-id (or (:block/uuid (state/get-edit-block))
-                     (:block/uuid block))
+        block-id (or (:block/uuid block)
+                     (:block/uuid (state/get-edit-block)))
         typ (or @commands/*current-command typ)]
     (editor-handler/set-block-timestamp! block-id
                                          typ

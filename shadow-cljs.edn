@@ -3,7 +3,7 @@
  :nrepl {:port 8701}
 
  ;; "." for /static
- :dev-http {3001 ["public" "."]
+ :dev-http {3001 ["static" "."]
             3002 ["public/workspaces" "."]}
 
  :builds
@@ -36,7 +36,7 @@
         :closure-defines  {goog.debug.LOGGING_ENABLED      true
                            frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
-        :dev      {:asset-path "js"}
+        :dev      {:asset-path "/static/js"}
         :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
                    :after-load  frontend.core/start ;; after live-reloading finishes call this function
                    :watch-path  "/static"
@@ -62,7 +62,7 @@
          :output-to       "static/tests.js"
          :closure-defines {frontend.util/NODETEST true}
          :devtools        {:enabled false}
-         :main            frontend.test-runner/main}
+         :main            frontend.node-test-runner/main}
 
   :publishing {:target        :browser
                :module-loader true

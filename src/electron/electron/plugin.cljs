@@ -53,7 +53,7 @@
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
-    (p/let [^js res (fetch dl-url #js {:timeout 30000})
+    (p/let [^js res (fetch dl-url {:timeout 30000})
             _ (when-not (.-ok res) (throw (js/Error. :download-network-issue)))
             frm-zip (p/create
                       (fn [resolve1 reject1]

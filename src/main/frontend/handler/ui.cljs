@@ -16,7 +16,25 @@
             [frontend.mobile.util :as mobile]
             [electron.ipc :as ipc]))
 
+(defn- get-css-var-value
+  [var-name]
+  (.getPropertyValue (js/getComputedStyle (.-documentElement js/document)) var-name))
+
 ;; sidebars
+(defn- get-right-sidebar-width
+  []
+  (or (.. (js/document.getElementById "right-sidebar") -style -width)
+      (get-css-var-value "--right-sidebar-width")))
+
+(defn persist-right-sidebar-width!
+  []
+  (storage/set "ls-right-sidebar-width" (get-right-sidebar-width)))
+
+(defn restore-right-sidebar-width!
+  []
+  (when-let [width (storage/get "ls-right-sidebar-width")]
+    (.setProperty (.-style (js/document.getElementById "right-sidebar")) "width" width)))
+
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
@@ -24,6 +42,7 @@
 
 (defn toggle-right-sidebar!
   []
+  (when-not (:ui/sidebar-open? @state/state) (restore-right-sidebar-width!))
   (state/toggle-sidebar-open?!))
 
 (defn persist-right-sidebar-state!
@@ -41,7 +60,8 @@
       (when open?
         (state/set-state! :ui/sidebar-open? open?)
         (state/set-state! :sidebar/blocks blocks)
-        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)))))
+        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)
+        (restore-right-sidebar-width!)))))
 
 (defn toggle-contents!
   []
@@ -210,6 +230,16 @@
                 @current-idx))
       ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
+
+(defn auto-complete-open-link
+  [state e]
+  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)
+        current-idx (get state :frontend.ui/current-idx)]
+    (util/stop e)
+    (when (and (seq matched)
+             (> (count matched)
+                @current-idx))
+      (on-chosen-open-link (nth matched @current-idx) false))))
 
 ;; date-picker
 ;; TODO: find a better way

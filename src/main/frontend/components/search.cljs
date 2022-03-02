@@ -4,8 +4,10 @@
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
             [frontend.handler.route :as route]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -83,7 +85,137 @@
 
 (defonce search-timeout (atom nil))
 
-(rum/defc ^:large-vars/cleanup-todo search-auto-complete
+(defn- search-on-chosen-open-link
+  [repo search-q {:keys [data type alias]}]
+  (search-handler/add-search-to-recent! repo search-q)
+  (search-handler/clear-search!)
+  (case type
+    :block
+    ;; Open the first link in a block's content
+    (let [block-uuid (uuid (:block/uuid data))
+          block (:block/content (db/entity [:block/uuid block-uuid]))
+          link (re-find editor-handler/url-regex block)]
+      (if link
+        (js/window.open link)
+        (notification/show! "No link found on this block." :warning)))
+
+    :page
+    ;; Open the first link found in a page's properties
+    (let [data (or alias data)
+          page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))
+          link (some #(re-find editor-handler/url-regex (val %)) (:block/properties page))]
+      (if link
+        (js/window.open link)
+        (notification/show! "No link found on this page's properties." :warning)))
+
+    nil)
+  (state/close-modal!))
+
+(defn- search-on-chosen
+  [repo search-q {:keys [type data alias]}]
+  (search-handler/add-search-to-recent! repo search-q)
+  (search-handler/clear-search!)
+  (case type
+    :graph-add-filter
+    (state/add-graph-search-filter! search-q)
+
+    :new-page
+    (page-handler/create! search-q)
+
+    :page
+    (let [data (or alias data)]
+      (route/redirect-to-page! data))
+
+    :file
+    (route/redirect! {:to :file
+                      :path-params {:path data}})
+
+    :block
+    (let [block-uuid (uuid (:block/uuid data))
+          collapsed? (db/parents-collapsed? repo block-uuid)
+          page (:block/page (db/entity [:block/uuid block-uuid]))
+          long-page? (block-handler/long-page? repo (:db/id page))]
+      (if page
+        (if (or collapsed? long-page?)
+          (route/redirect-to-page! block-uuid)
+          (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+        ;; search indice outdated
+        (println "[Error] Block page missing: "
+                 {:block-id block-uuid
+                  :block (db/pull [:block/uuid block-uuid])})))
+    nil)
+  (state/close-modal!))
+
+(defn- search-on-shift-chosen
+  [repo search-q {:keys [type data alias]}]
+  (search-handler/add-search-to-recent! repo search-q)
+  (case type
+    :page
+    (let [data (or alias data)
+          page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))]
+      (when page
+        (state/sidebar-add-block!
+         repo
+         (:db/id page)
+         :page
+         {:page page})))
+
+    :block
+    (let [block-uuid (uuid (:block/uuid data))
+          block (db/entity [:block/uuid block-uuid])]
+      (state/sidebar-add-block!
+       repo
+       (:db/id block)
+       :block
+       block))
+
+    :new-page
+    (page-handler/create! search-q)
+
+    :file
+    (route/redirect! {:to :file
+                      :path-params {:path data}})
+
+    nil)
+  (state/close-modal!))
+
+(defn- search-item-render
+  [search-q {:keys [type data alias]}]
+  (let [search-mode (state/get-search-mode)
+        data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
+    [:div {:class "py-2"}
+     (case type
+       :graph-add-filter
+       [:b search-q]
+
+       :new-page
+       [:div.text.font-bold (str (t :new-page) ": ")
+        [:span.ml-1 (str "\"" search-q "\"")]]
+
+       :page
+       [:span {:data-page-ref data}
+        (when alias
+          (let [target-original-name (model/get-page-original-name alias)]
+            [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
+        (search-result-item "Page" (highlight-exact-query data search-q))]
+
+       :file
+       (search-result-item "File" (highlight-exact-query data search-q))
+
+       :block
+       (let [{:block/keys [page uuid]} data  ;; content here is normalized
+             page (util/get-page-original-name page)
+             repo (state/sub :git/current-repo)
+             format (db/get-page-format page)
+             block (model/query-block-by-uuid uuid)
+             content (:block/content block)]
+         [:span {:data-block-ref uuid}
+          (search-result-item "Block"
+                              (block-search-result-item repo uuid format content search-q search-mode))])
+
+       nil)]))
+
+(rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
@@ -117,104 +249,10 @@
      (ui/auto-complete
       result
       {:class "search-results"
-       :on-chosen (fn [{:keys [type data alias]}]
-                    (search-handler/add-search-to-recent! repo search-q)
-                    (search-handler/clear-search!)
-                    (case type
-                      :graph-add-filter
-                      (state/add-graph-search-filter! search-q)
-
-                      :new-page
-                      (page-handler/create! search-q)
-
-                      :page
-                      (let [data (or alias data)]
-                        (route/redirect-to-page! data))
-
-                      :file
-                      (route/redirect! {:to :file
-                                        :path-params {:path data}})
-
-                      :block
-                      (let [repo (state/get-current-repo)
-                            block-uuid (uuid (:block/uuid data))
-                            collapsed? (db/parents-collapsed? repo block-uuid)
-                            page (:block/page (db/entity [:block/uuid block-uuid]))
-                            long-page? (block-handler/long-page? repo (:db/id page))]
-                        (if page
-                          (if (or collapsed? long-page?)
-                            (route/redirect-to-page! block-uuid)
-                            (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
-                          ;; search indice outdated
-                          (println "[Error] Block page missing: "
-                                   {:block-id block-uuid
-                                    :block (db/pull [:block/uuid block-uuid])})))
-                      nil)
-                    (state/close-modal!))
-       :on-shift-chosen (fn [{:keys [type data alias]}]
-                          (search-handler/add-search-to-recent! repo search-q)
-                          (case type
-                            :page
-                            (let [data (or alias data)
-                                  page (when data (db/entity [:block/name (util/page-name-sanity-lc data)]))]
-                              (when page
-                                (state/sidebar-add-block!
-                                 (state/get-current-repo)
-                                 (:db/id page)
-                                 :page
-                                 {:page page})))
-
-                            :block
-                            (let [block-uuid (uuid (:block/uuid data))
-                                  block (db/entity [:block/uuid block-uuid])]
-                              (state/sidebar-add-block!
-                               (state/get-current-repo)
-                               (:db/id block)
-                               :block
-                               block))
-
-                            :new-page
-                            (page-handler/create! search-q)
-
-                            :file
-                            (route/redirect! {:to :file
-                                              :path-params {:path data}})
-
-                            nil)
-                          (state/close-modal!))
-       :item-render (fn [{:keys [type data alias]}]
-                      (let [search-mode (state/get-search-mode)
-                            data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
-                        [:div {:class "py-2"} (case type
-                                                :graph-add-filter
-                                                [:b search-q]
-
-                                                :new-page
-                                                [:div.text.font-bold (str (t :new-page) ": ")
-                                                 [:span.ml-1 (str "\"" search-q "\"")]]
-
-                                                :page
-                                                [:span {:data-page-ref data}
-                                                 (when alias
-                                                   (let [target-original-name (model/get-page-original-name alias)]
-                                                     [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " target-original-name)]))
-                                                 (search-result-item "Page" (highlight-exact-query data search-q))]
-
-                                                :file
-                                                (search-result-item "File" (highlight-exact-query data search-q))
-
-                                                :block
-                                                (let [{:block/keys [page uuid]} data  ;; content here is normalized
-                                                      page (util/get-page-original-name page)
-                                                      repo (state/sub :git/current-repo)
-                                                      format (db/get-page-format page)
-                                                      block (model/query-block-by-uuid uuid)
-                                                      content (:block/content block)]
-                                                  [:span {:data-block-ref uuid}
-                                                   (search-result-item "Block"
-                                                                       (block-search-result-item repo uuid format content search-q search-mode))])
-
-                                                nil)]))})
+       :on-chosen #(search-on-chosen repo search-q %)
+       :on-shift-chosen #(search-on-shift-chosen repo search-q %)
+       :item-render #(search-item-render search-q %)
+       :on-chosen-open-link #(search-on-chosen-open-link repo search-q %)})
      (when (and has-more? (util/electron?) (not all?))
        [:div.px-2.py-4.search-more
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})

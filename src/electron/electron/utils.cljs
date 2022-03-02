@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
+            [electron.configs :as cfgs]
             [cljs-bean.core :as bean]
             ["electron" :refer [app BrowserWindow]]))
 
@@ -18,10 +19,17 @@
 
 (defonce dev? (not prod?))
 (defonce logger (js/require "electron-log"))
+(defonce *fetchAgent (atom nil))
 
 (defonce open (js/require "open"))
-(defonce fetch (js/require "node-fetch"))
+(defonce HttpsProxyAgent (js/require "https-proxy-agent"))
+(defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
+
+(defn fetch
+  ([url] (fetch url nil))
+  ([url options]
+   (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
 (defn get-ls-dotdir-root
   []
@@ -41,6 +49,18 @@
                   (filter #(not (string/starts-with? (.-name %) "_")))
                   (map #(path/join plugins-root (.-name %))))]
     dirs))
+
+(defn set-fetch-agent
+  [{:keys [protocol host port] :as opts}]
+  (reset! *fetchAgent
+          (when (and protocol host port)
+            (new HttpsProxyAgent (str protocol "://" host ":" port))))
+  (cfgs/set-item! :settings/agent opts))
+
+(defn restore-user-fetch-agent
+  []
+  (when-let [agent (cfgs/get-item :settings/agent)]
+    (set-fetch-agent agent)))
 
 ;; keep same as ignored-path? in src/main/frontend/util/fs.cljs
 ;; TODO: merge them
