@@ -765,20 +765,28 @@
     content))
 
 (defn check
-  [{:block/keys [marker content repeated?] :as block}]
+  [{:block/keys [marker content repeated? uuid] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
-                      new-content)]
-    (save-block-if-changed! block new-content)))
+                      new-content)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn uncheck
-  [{:block/keys [content] :as block}]
+  [{:block/keys [content uuid] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
-        new-content (string/replace-first content "DONE" marker)]
-    (save-block-if-changed! block new-content)))
+        new-content (string/replace-first content "DONE" marker)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn set-marker
   [{:block/keys [marker content format] :as block} new-marker]
@@ -1046,13 +1054,15 @@
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
-            content (or (state/get-edit-content) content)
+            content (or content (state/get-edit-content))
             new-content (-> (text/remove-timestamp content key)
                             (text/add-timestamp key value))]
         (when (not= content new-content)
-          (if-let [input-id (state/get-edit-input-id)]
-            (state/set-edit-content! input-id new-content)
-            (save-block-if-changed! block new-content)))))))
+          (let [input-id (state/get-edit-input-id)]
+            (if (and input-id
+                     (string/ends-with? input-id (str block-id)))
+              (state/set-edit-content! input-id new-content)
+              (save-block-if-changed! block new-content))))))))
 
 (defn- set-blocks-id!
   [block-ids]

@@ -45,6 +45,15 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
   return page_name;
 }
 
+
+export async function searchAndJumpToPage(page: Page, pageTitle: string) {
+  await page.click('#search-button')
+  await page.fill('[placeholder="Search or create page"]', pageTitle)
+  await page.waitForSelector(`[data-page-ref="${pageTitle}"]`, { state: 'visible' })
+  await page.click(`[data-page-ref="${pageTitle}"]`)
+  return pageTitle;
+}
+
 /**
 * Locate the last block in the inner editor
 * @param page The Playwright Page object.
