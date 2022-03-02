@@ -23,6 +23,9 @@
                          :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
+                         :depends-on #{:main}}
+                        :mermaid-renderer
+                        {:entries    [frontend.extensions.mermaid]
                          :depends-on #{:main}}}
         :output-dir       "./static/js"
         :asset-path       "/static/js"
@@ -80,6 +83,9 @@
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]
+                                :depends-on #{:main}}
+                               :mermaid-renderer
+                               {:entries    [frontend.extensions.mermaid]
                                 :depends-on #{:main}}}
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
