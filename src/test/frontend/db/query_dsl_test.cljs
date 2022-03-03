@@ -11,58 +11,6 @@
 ;; 2. find illegal queries which can't be executed by datascript
 ;; 3. find filters combinations which might break the current query implementation
 
-(defn import-test-data!
-  []
-  (let [files [{:file/path "journals/2020_12_26.md"
-                :file/content "---
-title: Dec 26th, 2020
-tags: [[page-tag-1]], page-tag-2
----
-- DONE 26-b1 [[page 1]]
-created-at:: 1608968448113
-last-modified-at:: 1608968448113
-- LATER 26-b2-modified-later [[page 2]] #tag1
-created-at:: 1608968448114
-last-modified-at:: 1608968448120
-- DONE [#A] 26-b3 [[page 1]]
-created-at:: 1608968448115
-last-modified-at:: 1608968448115
-"}
-               {:file/path "journals/2020_12_27.md"
-                :file/content "---
-title: Dec 27th, 2020
-tags: page-tag-2, [[page-tag-3]]
----
-- NOW [#A] b1 [[page 1]]
-created-at:: 1609052958714
-last-modified-at:: 1609052958714
-- LATER [#B] b2-modified-later [[page 2]]
-created-at:: 1609052959376
-last-modified-at:: 1609052974285
-- b3 [[page 1]]
-created-at:: 1609052959954
-last-modified-at:: 1609052959954
-- b4 [[page 2]]
-created-at:: 1609052961569
-last-modified-at:: 1609052961569
-- b5
-created-at:: 1609052963089
-last-modified-at:: 1609052963089"}
-               {:file/path "journals/2020_12_28.md"
-                :file/content "---
-title: Dec 28th, 2020
----
-- 28-b1 [[page 1]]
-created-at:: 1609084800000
-last-modified-at:: 1609084800000
-- 28-b2-modified-later [[page 2]]
-created-at:: 1609084800001
-last-modified-at:: 1609084800020
-- 28-b3 [[page 1]]
-created-at:: 1609084800002
-last-modified-at:: 1609084800002"}]]
-    (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
-
 ;; Test helpers
 ;; ============
 (defn- load-test-files [files]
@@ -171,6 +119,7 @@ prop-d:: nada"}])
                      :file/content "parent:: [[child page 1]], child page 2\nfoo:: bar"}
                     {:file/path "pages/page4.md"
                      :file/content "parent:: child page 2\nfoo:: baz"}])
+
   (is (= ["page1" "page3" "page4"]
          (map :block/name (dsl-query "(page-property parent)")))
       "Pages have given property")
@@ -243,6 +192,7 @@ prop-d:: nada"}])
 - [#A] b1
 - [#B] b2
 - [#A] b3"}])
+
   (testing "one arg queries"
     (is (= ["[#A] b1" "[#A] b3"]
            (map :block/content (dsl-query "(priority A)"))))
@@ -257,7 +207,7 @@ prop-d:: nada"}])
         "Arguments with vector notation"))
 
   (is (= ["[#A] b1" "[#B] b2" "[#A] b3"]
-           (map :block/content (dsl-query "(priority a b c)")))
+         (map :block/content (dsl-query "(priority a b c)")))
       "Three arg queries and args that have no match"))
 
 (deftest nested-boolean-queries
@@ -270,6 +220,7 @@ prop-d:: nada"}])
 - NOW b3 [[page 1]]
 - LATER b4 [[page 2]]
 "}])
+
   (is (= 0
          (count (dsl-query "(and (todo done) (not [[page 1]]))"))))
   (is (= 2
@@ -288,9 +239,94 @@ prop-d:: nada"}])
   ;        (dsl-query "(or (priority a) (not (priority c)))")))
   )
 
-(deftest ^:large-vars/cleanup-todo test-parse
+(deftest page-tags-and-all-page-tags-queries
+  (load-test-files
+   [{:file/path "pages/page1.md"
+     :file/content "---
+tags: [[page-tag-1]], page-tag-2
+---"}
+    {:file/path "pages/page2.md"
+     :file/content "---
+tags: page-tag-2, [[page-tag-3]]
+---"}
+    {:file/path "pages/page3.md"
+     :file/content "---
+tags: other
+---"}])
+
+  (are [x y] (= (set y) (set (map :block/name (dsl-query x))))
+
+       "(page-tags [[page-tag-1]])"
+       ["page1"]
+
+       "(page-tags page-tag-2)"
+       ["page1" "page2"]
+
+       "(page-tags page-tag-1 page-tag-2)"
+       ["page1" "page2"]
+
+       "(page-tags page-TAG-1 page-tag-2)"
+       ["page1" "page2"]
+
+       "(page-tags [page-tag-1 page-tag-2])"
+       ["page1" "page2"]
+
+       "(all-page-tags)"
+       ["page-tag-1" "page-tag-2" "page-tag-3" "other"]))
+
+(defn- load-test-files-for-parse
   []
-  (import-test-data!)
+  (let [files [{:file/path "journals/2020_12_26.md"
+                :file/content "---
+title: Dec 26th, 2020
+---
+- DONE 26-b1 [[page 1]]
+created-at:: 1608968448113
+last-modified-at:: 1608968448113
+- LATER 26-b2-modified-later [[page 2]] #tag1
+created-at:: 1608968448114
+last-modified-at:: 1608968448120
+- DONE [#A] 26-b3 [[page 1]]
+created-at:: 1608968448115
+last-modified-at:: 1608968448115
+"}
+               {:file/path "journals/2020_12_27.md"
+                :file/content "---
+title: Dec 27th, 2020
+---
+- NOW [#A] b1 [[page 1]]
+created-at:: 1609052958714
+last-modified-at:: 1609052958714
+- LATER [#B] b2-modified-later [[page 2]]
+created-at:: 1609052959376
+last-modified-at:: 1609052974285
+- b3 [[page 1]]
+created-at:: 1609052959954
+last-modified-at:: 1609052959954
+- b4 [[page 2]]
+created-at:: 1609052961569
+last-modified-at:: 1609052961569
+- b5
+created-at:: 1609052963089
+last-modified-at:: 1609052963089"}
+               {:file/path "journals/2020_12_28.md"
+                :file/content "---
+title: Dec 28th, 2020
+---
+- 28-b1 [[page 1]]
+created-at:: 1609084800000
+last-modified-at:: 1609084800000
+- 28-b2-modified-later [[page 2]]
+created-at:: 1609084800001
+last-modified-at:: 1609084800020
+- 28-b3 [[page 1]]
+created-at:: 1609084800002
+last-modified-at:: 1609084800002"}]]
+    (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
+
+(deftest test-parse
+  []
+  (load-test-files-for-parse)
 
   (testing "nil or blank strings should be ignored"
     (are [x y] (= (q x) y)
@@ -312,46 +348,6 @@ prop-d:: nada"}])
          "[[page 2]]"
          {:query '[[?b :block/path-refs [:block/name "page 2"]]]
           :count 4}))
-
-  (testing "all-page-tags queries"
-    (are [x y] (= (q-count x) y)
-         "(all-page-tags)"
-         {:query '[[?e :block/tags ?p]]
-          :count 3}))
-
-  (testing "page-tags queries"
-    (are [x y] (= (q-count x) y)
-         "(page-tags [[page-tag-1]])"
-         {:query '[[?p :block/tags ?t]
-                   [?t :block/name ?tag1]
-                   [(contains? #{"page-tag-1"} ?tag1)]]
-          :count 1}
-
-         "(page-tags page-tag-2)"
-         {:query '[[?p :block/tags ?t]
-                   [?t :block/name ?tag1]
-                   [(contains? #{"page-tag-2"} ?tag1)]]
-          :count 2}
-
-         "(page-tags page-tag-1 page-tag-2)"
-         {:query '[[?p :block/tags ?t]
-                   [?t :block/name ?tag1]
-                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-          :count 2}
-
-         "(page-tags page-TAG-1 page-tag-2)"
-         {:query '[[?p :block/tags ?t]
-                   [?t :block/name ?tag1]
-                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-          :count 2}
-
-         "(page-tags [page-tag-1 page-tag-2])"
-         {:query '[[?p :block/tags ?t]
-                   [?t :block/name ?tag1]
-                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-          :count 2}))
-
-
 
   ;; boolean queries
   (testing "AND queries"
@@ -380,7 +376,7 @@ prop-d:: nada"}])
          "(not [[page 1]])"
          {:query '([?b :block/uuid]
                    (not [?b :block/path-refs [:block/name "page 1"]]))
-          :count 31}))
+          :count 28}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
