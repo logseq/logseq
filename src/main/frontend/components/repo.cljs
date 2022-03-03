@@ -206,7 +206,7 @@
                          :options {:class "ml-1"
                                    :on-click (fn [e]
                                                (if (gobj/get e "shiftKey")
-                                                 (ui-handler/open-new-window! url)
+                                                 (ui-handler/open-new-window! e url)
                                                  (state/pub-event! [:graph/switch url])))}}))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]

@@ -301,7 +301,9 @@
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window!
-  [repo]
-  ; TODO: find out a better way to open a new window with a different repo path
-  (when repo (storage/set :git/current-repo repo))
-  (ipc/ipc "openNewWindow"))
+  ([_e]
+   (open-new-window! _e nil))
+  ([_e repo]
+   ; TODO: find out a better way to open a new window with a different repo path
+   (when (string? repo) (storage/set :git/current-repo repo))
+   (ipc/ipc "openNewWindow")))
