@@ -313,6 +313,22 @@
   ([pid effect]
    (js/LSPluginCore.unregisterTheme (name pid) effect)))
 
+(def *fenced-code-providers (atom #{}))
+
+(defn register_fenced_code_renderer
+  [pid type {:keys [before subs render] :as _opts}]
+  (when-let [key (and type (keyword type))]
+    (register-plugin-resources pid :fenced-code-renderers
+      {:key key :before before :subs subs :render render})
+    (swap! *fenced-code-providers conj pid)
+    #(swap! *fenced-code-providers disj pid)))
+
+(defn hook-fenced-code-by-type
+  [type]
+  (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
+    (first (map #(state/get-plugin-resource % :fenced-code-renderers key)
+                @*fenced-code-providers))))
+
 (defn select-a-plugin-theme
   [pid]
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]

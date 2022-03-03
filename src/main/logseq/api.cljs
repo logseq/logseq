@@ -206,7 +206,7 @@
       (p/let [repo ""
               path (plugin-handler/get-ls-dotdir-root)
               path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
+             (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
   ;; results [path data]
@@ -625,7 +625,7 @@
             dir (config/get-repo-dir repo)
             _ (fs/create-if-not-exists repo dir file)
             content (fs/read-file dir file)]
-      content)))
+           content)))
 
 (defn ^:export git_save_ignore_file
   [content]
@@ -658,10 +658,10 @@
 ;; experiments
 (defn ^:export exper_load_scripts
   [pid & scripts]
-  (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
     (doseq [s scripts
-            :let [upt-status #(state/upt-plugin-resource pid :script s :status %)
-                  init? (plugin-handler/register-plugin-resources pid :script {:key s :src s})]]
+            :let [upt-status #(state/upt-plugin-resource pid :scripts s :status %)
+                  init? (plugin-handler/register-plugin-resources pid :scripts {:key s :src s})]]
       (when init?
         (p/catch
           (p/then
@@ -670,6 +670,12 @@
               (loader/load s nil {:attributes {:data-ref (name pid)}}))
             #(upt-status :done))
           #(upt-status :error))))))
+
+(defn ^:export exper_register_fenced_code_renderer
+  [pid type ^js opts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (plugin-handler/register_fenced_code_renderer
+      (keyword pid) type (bean/->clj opts))))
 
 ;; helpers
 (defn ^:export query_element_by_id
@@ -686,7 +692,7 @@
 (defn ^:export force_save_graph
   []
   (p/let [_ (el/persist-dbs!)]
-    true))
+         true))
 
 (defn ^:export __debug_state
   [path]

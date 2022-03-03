@@ -692,10 +692,7 @@
       [:span])))
 
 (rum/defcs hook-ui-items < rum/reactive
-                           "type
-                                                        - :toolbar
-                                                        - :pagebar
-                                                     "
+ "type: :toolbar, :pagebar"
   [_state type]
   (when (state/sub [:plugin/installed-ui-items])
     (let [items (state/get-plugins-ui-items-with-type type)]
@@ -704,6 +701,33 @@
                :data-type (name type)}
          (for [[_ {:keys [key] :as opts} pid] items]
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
+
+(rum/defcs hook-ui-fenced-code < rum/reactive
+  [_state content {:keys [key render] :as opts}]
+
+  [:div
+   {:class (str "of-" (name key))}
+   (when (fn? render) (render content))])
+
+;;;; test fenced-code renderer
+(rum/defc mermaid-renderer
+  [content]
+
+  (let [*el (rum/create-ref)]
+
+    ;; update
+    (rum/use-effect!
+      (fn []
+        (let [^js/Element el (rum/deref *el)]
+          (js/setTimeout #(.init js/window.mermaid) 100)
+          (when el (js-delete (.-dataset el) "processed")))
+        #())
+      
+      [content])
+
+    [:div.mermaid
+     {:ref *el}
+     content]))
 
 (rum/defc plugins-page
   []

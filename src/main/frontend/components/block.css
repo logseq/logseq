@@ -565,3 +565,8 @@ span.cloze-revealed {
 .block-parents a:hover {
   opacity: 1;
 }
+
+.cp__fenced-code-block {
+  background-color: #dbe6f3;
+  padding: 20px;
+}
