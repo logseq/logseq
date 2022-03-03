@@ -205,6 +205,89 @@ prop-d:: nada"}])
           (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
       "Page property queries NOTed"))
 
+(deftest task-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- NOW b1
+- TODO b2
+- LATER b3
+- LATER [#A] b4"}])
+
+  (testing "Lowercase query"
+    (is (= ["NOW b1"]
+           (map :block/content (dsl-query "(task now)"))))
+
+    (is (= ["LATER b3" "LATER [#A] b4"]
+           (map :block/content (dsl-query "(task later)")))))
+
+  (is (= ["LATER b3" "LATER [#A] b4"]
+         (map :block/content (dsl-query "(task LATER)")))
+      "Uppercase query")
+
+  (testing "Multiple specified tasks results in ORed results"
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+           (map :block/content (dsl-query "(task now later)"))))
+
+    (is (= ["NOW b1" "LATER b3" "LATER [#A] b4"]
+           (map :block/content (dsl-query "(task [now later])")))
+        "Multiple arguments specified with vector notation"))
+
+  (is (= ["NOW b1" "LATER [#A] b4"]
+         (map :block/content
+              (dsl-query "(or (todo now) (and (todo later) (priority a)))")))
+      "Multiple boolean operators with todo and priority operators"))
+
+(deftest priority-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- [#A] b1
+- [#B] b2
+- [#A] b3"}])
+  (testing "one arg queries"
+    (is (= ["[#A] b1" "[#A] b3"]
+           (map :block/content (dsl-query "(priority A)"))))
+    (is (= ["[#A] b1" "[#A] b3"]
+           (map :block/content (dsl-query "(priority a)")))))
+
+  (testing "two arg queries"
+    (is (= ["[#A] b1" "[#B] b2" "[#A] b3"]
+           (map :block/content (dsl-query "(priority a b)"))))
+    (is (= ["[#A] b1" "[#B] b2" "[#A] b3"]
+           (map :block/content (dsl-query "(priority [a b])")))
+        "Arguments with vector notation"))
+
+  (is (= ["[#A] b1" "[#B] b2" "[#A] b3"]
+           (map :block/content (dsl-query "(priority a b c)")))
+      "Three arg queries and args that have no match"))
+
+(deftest nested-boolean-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- DONE b1 [[page 1]]
+- DONE b2 [[page 1]]"}
+                    {:file/path "pages/page2.md"
+                     :file/content "foo::bar
+- NOW b3 [[page 1]]
+- LATER b4 [[page 2]]
+"}])
+  (is (= 0
+         (count (dsl-query "(and (todo done) (not [[page 1]]))"))))
+  (is (= 2
+         (count (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+
+  (is (= 4
+         (count (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"))))
+
+  ;; TODO
+  #_(is (= 34
+           (count (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))"))))
+
+  ;; FIXME: not working
+  ;; Requires or-join and not-join which aren't supported yet
+  ; (is (= []
+  ;        (dsl-query "(or (priority a) (not (priority c)))")))
+  )
+
 (deftest ^:large-vars/cleanup-todo test-parse
   []
   (import-test-data!)
@@ -229,62 +312,6 @@ prop-d:: nada"}])
          "[[page 2]]"
          {:query '[[?b :block/path-refs [:block/name "page 2"]]]
           :count 4}))
-
-
-
-  (testing "task queries"
-    (are [x y] (= (q-count x) y)
-         "(task now)"
-         {:query '[[?b :block/marker ?marker]
-                   [(contains? #{"NOW"} ?marker)]]
-          :count 1}
-
-         "(task NOW)"
-         {:query '[[?b :block/marker ?marker]
-                   [(contains? #{"NOW"} ?marker)]]
-          :count 1}
-
-         "(task later)"
-         {:query '[[?b :block/marker ?marker]
-                   [(contains? #{"LATER"} ?marker)]]
-          :count 2}
-
-         "(task now later)"
-         {:query '[[?b :block/marker ?marker]
-                   [(contains? #{"NOW" "LATER"} ?marker)]]
-          :count 3}
-
-         "(task [now later])"
-         {:query '[[?b :block/marker ?marker]
-                   [(contains? #{"NOW" "LATER"} ?marker)]]
-          :count 3}))
-
-  (testing "Priority queries"
-    (are [x y] (= (q-count x) y)
-         "(priority A)"
-         {:query '[[?b :block/priority ?priority]
-                   [(contains? #{"A"} ?priority)]]
-          :count 2}
-
-         "(priority a)"
-         {:query '[[?b :block/priority ?priority]
-                   [(contains? #{"A"} ?priority)]]
-          :count 2}
-
-         "(priority a b)"
-         {:query '[[?b :block/priority ?priority]
-                   [(contains? #{"A" "B"} ?priority)]]
-          :count 3}
-
-         "(priority [a b])"
-         {:query '[[?b :block/priority ?priority]
-                   [(contains? #{"A" "B"} ?priority)]]
-          :count 3}
-
-         "(priority a b c)"
-         {:query '[[?b :block/priority ?priority]
-                   [(contains? #{"A" "B" "C"} ?priority)]]
-          :count 3}))
 
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
@@ -372,60 +399,9 @@ prop-d:: nada"}])
          ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
          ;; 5
          ))
+  )
 
-  (testing "Nested boolean queries"
-    (are [x y] (= (q-count x) y)
-         "(and (todo done) (not [[page 1]]))"
-         {:query '([?b :block/uuid]
-                   [?b :block/marker ?marker]
-                   [(contains? #{"DONE"} ?marker)]
-                   (not [?b :block/path-refs [:block/name "page 1"]]))
-          :count 0})
-
-    (are [x y] (= (q-count x) y)
-         "(and (todo now later) (or [[page 1]] [[page 2]]))"
-         {:query '([?b :block/marker ?marker]
-                   [(contains? #{"NOW" "LATER"} ?marker)]
-                   (or (and [?b :block/path-refs [:block/name "page 1"]])
-                       (and [?b :block/path-refs [:block/name "page 2"]])
-                       [?b]))
-          :count 3})
-
-    (are [x y] (= (q-count x) y)
-         "(not (and (todo now later) (or [[page 1]] [[page 2]])))"
-         {:query '([?b :block/uuid]
-                   (not
-                    [?b :block/marker ?marker]
-                    [(contains? #{"NOW" "LATER"} ?marker)]
-                    (or
-                     (and [?b :block/path-refs [:block/name "page 1"]])
-                     (and [?b :block/path-refs [:block/name "page 2"]])
-                     [?b])))
-          :count 34})
-
-    ;; FIXME: not working
-    ;; (are [x y] (= (q-count x) y)
-    ;;   "(or (priority a) (not (priority a)))"
-    ;;   {:query '[(or-join [?b]
-    ;;                      (and
-    ;;                       [?b :block/priority ?priority]
-    ;;                       [(contains? #{"A"} ?priority)])
-    ;;                      (not-join [?b]
-    ;;                                [?b :block/priority ?priority]
-    ;;                                [(contains? #{"A"} ?priority)]))]
-    ;;    :count 5})
-
-    (are [x y] (= (q-count x) y)
-         "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"
-         {:query '([?b :block/uuid]
-                   [?b :block/marker ?marker]
-                   [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                   (or
-                    (and [?b :block/path-refs [:block/name "page 1"]])
-                    (and (not [?b :block/path-refs [:block/name "page 1"]]))
-                    [?b]))
-          :count 5}))
-
+#_(deftest sort-by-queries
   ;; (testing "sort-by (created-at defaults to desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (task now later done)

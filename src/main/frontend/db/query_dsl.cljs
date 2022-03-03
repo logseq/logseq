@@ -196,7 +196,9 @@
 
       (or (= current-filter 'or)
           nested-and?)
-      (apply concat clauses)
+      (if (list? (first clauses))
+          (cons 'and clauses)
+          (apply concat clauses))
 
       :else
       (->> (map (fn [result]
@@ -277,8 +279,8 @@
                   (rest e))]
     (when (seq markers)
       (let [markers (set (map (comp string/upper-case name) markers))]
-        [['?b :block/marker '?marker]
-         [(list 'contains? markers '?marker)]]))))
+        {:query (list 'task '?b markers)
+         :rules [:task]}))))
 
 (defn- build-query-priority
   [e]
@@ -287,8 +289,8 @@
                      (rest e))]
     (when (seq priorities)
       (let [priorities (set (map (comp string/upper-case name) priorities))]
-        [['?b :block/priority '?priority]
-         [(list 'contains? priorities '?priority)]]))))
+        {:query (list 'priority '?b priorities)
+         :rules [:priority]}))))
 
 (defn- build-page-property
   [e]
@@ -378,10 +380,10 @@
        {:query (build-query-property-one-arg e)}
 
        (or (= 'todo fe) (= 'task fe))
-       {:query (build-query-todo e)}
+       (build-query-todo e)
 
        (= 'priority fe)
-       {:query (build-query-priority e)}
+       (build-query-priority e)
 
        (= 'sort-by fe)
        (let [[k order] (rest e)
