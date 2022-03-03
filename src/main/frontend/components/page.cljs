@@ -339,17 +339,16 @@
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
        [:div.relative
-        (when (and (not sidebar?)
-                   (not block?))
+        (when (and (not sidebar?) (not block?))
           [:div.flex.flex-row.space-between
-           (when (mobile-util/is-native-platform?)
-            [:div.flex.flex-row.pr-2
-             {:style {:margin-left -15}
-              :on-mouse-over (fn [e]
-                               (page-mouse-over e *control-show? *all-collapsed?))
-              :on-mouse-leave (fn [e]
-                                (page-mouse-leave e *control-show?))}
-             (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+           (when (or (mobile-util/is-native-platform?) (util/mobile?))
+             [:div.flex.flex-row.pr-2
+              {:style {:margin-left -15}
+               :on-mouse-over (fn [e]
+                                (page-mouse-over e *control-show? *all-collapsed?))
+               :on-mouse-leave (fn [e]
+                                 (page-mouse-leave e *control-show?))}
+              (page-blocks-collapse-control title *control-show? *all-collapsed?)])
            [:div.flex-1.flex-row
             (page-title page-name icon title format fmt-journal?)]
            (when (not config/publishing?)
