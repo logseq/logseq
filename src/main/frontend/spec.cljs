@@ -1,4 +1,5 @@
 (ns frontend.spec
+  (:require-macros [frontend.spec])
   (:require [cljs.spec.alpha :as s]
             [frontend.config :as config]
             [lambdaisland.glogi :as log]
@@ -19,6 +20,7 @@
        (log/error :exception ex :spec/validate-failed error-message)
        false)
      true)))
+
 
 ;; repo
 
