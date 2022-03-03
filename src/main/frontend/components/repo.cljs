@@ -195,7 +195,7 @@
     :else
     (db/get-repo-path repo)))
 
-(rum/defcs repos-dropdown < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
   [state]
   (let [multiple-windows? (::electron-multiple-windows? state)]
