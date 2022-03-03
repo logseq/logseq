@@ -327,3 +327,16 @@ html.is-native-ios {
     }
   }
 }
+
+.page-blocks-collapse-control, .page-blocks-collapse-control:hover {
+  text-decoration: none;
+  cursor: default;
+  min-width: 22px;
+  padding-top: 22px;
+  color: initial;
+  user-select: none;
+
+  .control-hide {
+    display: none;
+  }
+ }
