@@ -305,18 +305,41 @@
        :rules [:has-page-property]})))
 
 (defn- build-query-page-tags
-  [e counter]
+  [e]
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
                (rest e))
         tags (map (comp string/lower-case name) tags)]
     (when (seq tags)
-      (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))
-            sym-1 (uniq-symbol counter "?t")
-            sym-2 (uniq-symbol counter "?tag")]
-        [['?p :block/tags sym-1]
-         [sym-1 :block/name sym-2]
-         [(list 'contains? tags sym-2)]]))))
+      (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
+        {:query (list 'page-tags '?p tags)
+         :rules [:page-tags]}))))
+
+(defn- build-query-sort-by
+  [e sort-by]
+  (let [[k order] (rest e)
+             order (if (and order (contains? #{:asc :desc}
+                                             (keyword (string/lower-case (name order)))))
+                     (keyword (string/lower-case (name order)))
+                     :desc)
+             k (-> (string/lower-case (name k))
+                   (string/replace "_" "-"))
+             get-value (cond
+                         (= k "created-at")
+                         :block/created-at
+
+                         (= k "updated-at")
+                         :block/updated-at
+
+                         :else
+                         #(get-in % [:block/properties k]))
+             comp (if (= order :desc) >= <=)]
+         (reset! sort-by
+                 (fn [result]
+                   (->> result
+                        flatten
+                        (clojure.core/sort-by get-value comp))))
+         nil))
 
 (defn ^:large-vars/cleanup-todo build-query
   ([repo e env]
@@ -386,29 +409,7 @@
        (build-query-priority e)
 
        (= 'sort-by fe)
-       (let [[k order] (rest e)
-             order (if (and order (contains? #{:asc :desc}
-                                             (keyword (string/lower-case (name order)))))
-                     (keyword (string/lower-case (name order)))
-                     :desc)
-             k (-> (string/lower-case (name k))
-                   (string/replace "_" "-"))
-             get-value (cond
-                         (= k "created-at")
-                         :block/created-at
-
-                         (= k "updated-at")
-                         :block/updated-at
-
-                         :else
-                         #(get-in % [:block/properties k]))
-             comp (if (= order :desc) >= <=)]
-         (reset! sort-by
-                 (fn [result]
-                   (->> result
-                        flatten
-                        (clojure.core/sort-by get-value comp))))
-         nil)
+       (build-query-sort-by e sort-by)
 
        (= 'page fe)
        (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
@@ -427,10 +428,11 @@
        (build-page-property e)
 
        (= 'page-tags fe)
-       {:query (build-query-page-tags e counter)}
+       (build-query-page-tags e)
 
        (= 'all-page-tags fe)
-       {:query [['?e :block/tags '?p]]}
+       {:query (list 'all-page-tags '?p)
+        :rules [:all-page-tags]}
 
        (= 'sample fe)
        (when-let [num (second e)]
