@@ -190,7 +190,9 @@
 
 (defn shortcuts->commands [handler-id]
   (let [m (get @config/config handler-id)]
+    ;; NOTE: remove nil vals, since some commands are conditional
     (->> m
+         (filter (comp some? val))
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)
                                (rename-keys {:binding :shortcut
