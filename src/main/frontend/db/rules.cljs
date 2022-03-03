@@ -81,4 +81,14 @@
    :priority
    '[(priority ?b ?priorities)
      [?b :block/priority ?priority]
-     [(contains? ?priorities ?priority)]]})
+     [(contains? ?priorities ?priority)]]
+
+   :page-tags
+   '[(page-tags ?p ?tags)
+     [?p :block/tags ?t]
+     [?t :block/name ?tag]
+     [(contains? ?tags ?tag)]]
+
+   :all-page-tags
+   '[(all-page-tags ?p)
+     [?e :block/tags ?p]]})
