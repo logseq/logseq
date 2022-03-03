@@ -71,4 +71,14 @@
    '[(has-page-property ?p ?key)
      [?p :block/name]
      [?p :block/properties ?prop]
-     [(get ?prop ?key)]]})
+     [(get ?prop ?key)]]
+
+   :task
+   '[(task ?b ?markers)
+     [?b :block/marker ?marker]
+     [(contains? ?markers ?marker)]]
+
+   :priority
+   '[(priority ?b ?priorities)
+     [?b :block/priority ?priority]
+     [(contains? ?priorities ?priority)]]})
