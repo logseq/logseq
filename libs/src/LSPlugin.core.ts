@@ -12,7 +12,7 @@ import {
   PROTOCOL_FILE, URL_LSP,
   safetyPathJoin,
   path, safetyPathNormalize,
-  mergeSettingsWithSchema, IS_DEV
+  mergeSettingsWithSchema, IS_DEV, cleanInjectedScripts
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -818,6 +818,8 @@ class PluginLocal
       this._dispose(async () => {
         await this._caller?.destroy()
       })
+
+      this._dispose(cleanInjectedScripts.bind(this))
     } catch (e) {
       debug('[Load Plugin Error] ', e)
       this.logger?.error(e)

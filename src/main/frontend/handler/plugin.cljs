@@ -113,7 +113,7 @@
 (defn get-plugin-inst
   [id]
   (try
-    (js/LSPluginCore.ensurePlugin id)
+    (js/LSPluginCore.ensurePlugin (name id))
     (catch js/Error _e
       nil)))
 

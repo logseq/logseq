@@ -660,14 +660,14 @@
   [pid & scripts]
   (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
     (doseq [s scripts
-            :let [upt-status #(state/upt-plugin-resource pid :script s :status %)]]
-      (when-let [init? (plugin-handler/register-plugin-resources pid :script {:key s :src s})]
-        (js/console.debug "[try to load script] #" pid " <===>" init? "\n" s)
+            :let [upt-status #(state/upt-plugin-resource pid :script s :status %)
+                  init? (plugin-handler/register-plugin-resources pid :script {:key s :src s})]]
+      (when init?
         (p/catch
           (p/then
             (do
               (upt-status :pending)
-              (loader/load s nil))
+              (loader/load s nil {:attributes {:data-ref (name pid)}}))
             #(upt-status :done))
           #(upt-status :error))))))
 

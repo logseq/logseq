@@ -332,6 +332,16 @@ export function setupInjectedUI (
   return teardownUI
 }
 
+export function cleanInjectedScripts (
+  this: PluginLocal
+) {
+  const scripts = document.head.querySelectorAll(
+    `script[data-ref=${this.id}]`
+  )
+  
+  scripts?.forEach(it => it.remove())
+}
+
 export function transformableEvent (target: HTMLElement, e: Event) {
   const obj: any = {}
 
