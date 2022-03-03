@@ -24,7 +24,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]
             [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [goog.object :as gobj]))
 
 (rum/defc add-repo
   [args]
@@ -211,7 +212,10 @@
                             {:title short-repo-name
                              :hover-detail repo-path ;; show full path on hover
                              :options {:class "ml-1"
-                                       :on-click #(state/pub-event! [:graph/switch url])}}))
+                                       :on-click (fn [e]
+                                                   (if (gobj/get e "shiftKey")
+                                                     (ui-handler/open-new-window! url)
+                                                     (state/pub-event! [:graph/switch url])))}}))
                         switch-repos)
             links (->>
                    (concat repo-links

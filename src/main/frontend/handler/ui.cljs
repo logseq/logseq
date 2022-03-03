@@ -301,5 +301,6 @@
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window!
-  []
+  [repo]
+  (when repo (storage/set :git/current-repo repo))
   (ipc/ipc "openNewWindow"))
