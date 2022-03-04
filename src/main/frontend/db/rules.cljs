@@ -32,7 +32,9 @@
     ])
 
 (def query-dsl-rules
-  "Rules used by frontend.db.query-dsl"
+  "Rules used by frontend.db.query-dsl. The symbols ?b and ?p respectively refer
+  to block and page. Do not alter them as they are programatically built by the
+  query-dsl ns"
   {:page-property
    '[(page-property ?p ?key ?val)
      [?p :block/name]
@@ -64,4 +66,32 @@
 
    :all-page-tags
    '[(all-page-tags ?p)
-     [?e :block/tags ?p]]})
+     [?e :block/tags ?p]]
+
+   :between
+   '[(between ?b ?start ?end)
+     [?b :block/page ?p]
+     [?p :block/journal? true]
+     [?p :block/journal-day ?d]
+     [(>= ?d ?start)]
+     [(<= ?d ?end)]]
+
+   :has-property
+   '[(has-property ?b ?prop)
+     [?b :block/properties ?bp]
+     [(missing? $ ?b :block/name)]
+     [(get ?bp ?prop)]]
+
+   :block-content
+   '[(block-content ?b ?query)
+     [?b :block/content ?content]
+     [(clojure.string/includes? ?content ?query)]]
+
+   :page
+   '[(page ?b ?page-name)
+     [?b :block/page [:block/name ?page-name]]]
+
+   :namespace
+   '[(namespace ?p ?namespace)
+     [?p :block/namespace ?parent]
+     [?parent :block/name ?namespace]]})

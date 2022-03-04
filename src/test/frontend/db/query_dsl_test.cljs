@@ -19,7 +19,8 @@
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (map first (deref (dsl/query test-db s))))
+  (when-let [result (dsl/query test-db s)]
+    (map first (deref result))))
 
 (def parse (partial dsl/parse test-db))
 
@@ -42,8 +43,6 @@
 (defn count-only
   [s]
   (:count (q-count s)))
-
-(defonce empty-result {:query nil :result nil})
 
 ;; Tests
 ;; =====
@@ -108,7 +107,12 @@ prop-d:: nada"}])
   (is (= ["b3"]
          (map (comp first str/split-lines :block/content)
               (dsl-query "(property prop-d no-space-link)")))
-      "Blocks have property value with no space"))
+      "Blocks have property value with no space")
+
+  (is (= ["b3" "b4"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(property prop-d)")))
+      "Blocks that have a property"))
 
 (deftest page-property-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -185,6 +189,19 @@ prop-d:: nada"}])
          (map :block/content
               (dsl-query "(or (todo now) (and (todo later) (priority a)))")))
       "Multiple boolean operators with todo and priority operators"))
+
+(deftest sample-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- TODO b1
+- TODO b2"}])
+
+  (is (= 1
+         (count (dsl-query "(and (task todo) (sample 1))")))
+      "Correctly limits results")
+  (is (= 2
+         (count (dsl-query "(and (task todo) (sample blarg))")))
+      "Non-integer arg is ignored"))
 
 (deftest priority-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -274,6 +291,60 @@ tags: other
        "(all-page-tags)"
        ["page-tag-1" "page-tag-2" "page-tag-3" "other"]))
 
+(deftest block-content-query
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "- b1 Hit\n- b2 Another"}])
+
+  (is (= ["b1 Hit"]
+         (map :block/content (dsl-query "\"Hit\""))))
+
+  (is (= []
+         (map :block/content (dsl-query "\"miss\"")))
+      "Correctly returns no results"))
+
+(deftest page-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo"}
+                    {:file/path "pages/page2.md"
+                     :file/content "bar"}])
+
+  (is (= ["page1"]
+         (map #(get-in % [:block/page :block/name])
+              (dsl-query "(page page1)"))))
+
+  (is (= []
+         (map #(get-in % [:block/page :block/name])
+              (dsl-query "(page nope)")))
+      "Correctly returns no results"))
+
+(deftest namespace-queries
+  (load-test-files [{:file/path "pages/ns1.page1.md"
+                     :file/content "foo"}
+                    {:file/path "pages/ns1.page2.md"
+                     :file/content "bar"}
+                    {:file/path "pages/ns2.page1.md"
+                     :file/content "baz"}])
+
+  (is (= #{"ns1/page1" "ns1/page2"}
+         (set (map :block/name (dsl-query "(namespace ns1)")))))
+
+  (is (= #{}
+         (set (map :block/name (dsl-query "(namespace blarg)"))))
+      "Correctly returns no results"))
+
+(deftest empty-queries
+  (let [empty-result {:query nil :result nil}]
+    (testing "nil or blank strings should be ignored"
+      (are [x y] (= (q x) y)
+           nil empty-result
+           "" empty-result
+           " " empty-result))
+
+    (testing "Non exists page should be ignored"
+      (are [x y] (nil? (:result (q x)))
+           "[[page-not-exist]]" empty-result
+           "[[another-page-not-exist]]" empty-result))))
+
 (defn- load-test-files-for-parse
   []
   (let [files [{:file/path "journals/2020_12_26.md"
@@ -325,19 +396,7 @@ last-modified-at:: 1609084800002"}]]
     (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
 
 (deftest test-parse
-  []
   (load-test-files-for-parse)
-
-  (testing "nil or blank strings should be ignored"
-    (are [x y] (= (q x) y)
-         nil empty-result
-         "" empty-result
-         " " empty-result))
-
-  (testing "Non exists page should be ignored"
-    (are [x y] (nil? (:result (q x)))
-         "[[page-not-exist]]" empty-result
-         "[[another-page-not-exist]]" empty-result))
 
   (testing "Single page query"
     (are [x y] (= (q-count x) y)
@@ -398,66 +457,67 @@ last-modified-at:: 1609084800002"}]]
   )
 
 #_(deftest sort-by-queries
-  ;; (testing "sort-by (created-at defaults to desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (task now later done)
-  ;;                              (sort-by created-at))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+    (load-test-files-for-parse)
+    ;; (testing "sort-by (created-at defaults to desc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (task now later done)
+    ;;                              (sort-by created-at))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "created-at"])))]
+    ;;     (is (= result
+    ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  ;; (testing "sort-by (created-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created-at desc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+    ;; (testing "sort-by (created-at desc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;                              (sort-by created-at desc))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "created-at"])))]
+    ;;     (is (= result
+    ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  ;; (testing "sort-by (created-at asc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created-at asc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
+    ;; (testing "sort-by (created-at asc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;                              (sort-by created-at asc))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "created-at"])))]
+    ;;     (is (= result
+    ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
-  ;; (testing "sort-by (last-modified-at defaults to desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+    ;; (testing "sort-by (last-modified-at defaults to desc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;                              (sort-by last-modified-at))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
+    ;;     (is (= result
+    ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  ;; (testing "sort-by (last-modified-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at desc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+    ;; (testing "sort-by (last-modified-at desc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;                              (sort-by last-modified-at desc))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
+    ;;     (is (= result
+    ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  ;; (testing "sort-by (last-modified-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at asc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
-  )
+    ;; (testing "sort-by (last-modified-at desc)"
+    ;;   (db/clear-query-state!)
+    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;                              (sort-by last-modified-at asc))")
+    ;;                     :result
+    ;;                     deref
+    ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
+    ;;     (is (= result
+    ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
+    )
 
 (use-fixtures :each
               {:before config/start-test-db!
@@ -466,20 +526,28 @@ last-modified-at:: 1609084800002"}]]
 #_(cljs.test/run-tests)
 
 (comment
-  (require '[clojure.pprint :as pprint])
-  (config/start-test-db!)
-  (import-test-data!)
+ (require '[clojure.pprint :as pprint])
+ (config/start-test-db!)
+ (import-test-data!)
 
-  (dsl/query test-db "(all-page-tags)")
+ (dsl/query test-db "(all-page-tags)")
 
-  ;; (or (priority a) (not (priority a)))
-  ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
-  (pprint/pprint
-   (d/q
-     '[:find (pull ?b [*])
-       :where
-       [?b :block/uuid]
-       (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-           (not [?b :block/priority #{"A"}]
-                [(contains? #{"A"} ?priority)]))]
-     (frontend.db/get-conn test-db))))
+ ;; Useful for debugging
+ (prn
+  (datascript.core/q
+   '[:find (pull ?b [*])
+     :where
+     [?b :block/name]]
+   (frontend.db/get-conn test-db)))
+
+ ;; (or (priority a) (not (priority a)))
+ ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
+ (pprint/pprint
+  (d/q
+   '[:find (pull ?b [*])
+     :where
+     [?b :block/uuid]
+     (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
+         (not [?b :block/priority #{"A"}]
+              [(contains? #{"A"} ?priority)]))]
+   (frontend.db/get-conn test-db))))
