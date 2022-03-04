@@ -64,9 +64,9 @@ prop-d:: [[no-space-link]]
 prop-d:: nada"}])
 
   (testing "Blocks have given property value"
-    (is (= ["b1" "b2"]
-           (map (comp first str/split-lines :block/content)
-                (dsl-query "(property prop-a val-a)"))))
+    (is (= #{"b1" "b2"}
+           (set (map (comp first str/split-lines :block/content)
+                 (dsl-query "(property prop-a val-a)")))))
 
     (is (= ["b2"]
            (map (comp first str/split-lines :block/content)
@@ -345,19 +345,52 @@ tags: other
            "[[page-not-exist]]" empty-result
            "[[another-page-not-exist]]" empty-result))))
 
-(defn- load-test-files-for-parse
+(deftest page-ref-and-boolean-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- b1 [[page 1]] #tag2
+- b2 [[page 2]] #tag1
+- b3"}])
+
+  (testing "page-ref queries"
+
+    (is (= ["b2 [[page 2]] #tag1"]
+           (map :block/content (dsl-query "[[page 2]]"))))
+
+    (is (= []
+           (map :block/content (dsl-query "[[blarg]]")))
+        "Correctly returns no results"))
+
+  (testing "basic boolean queries"
+    (is (= ["b2 [[page 2]] #tag1"]
+           (map :block/content
+                (dsl-query "(and [[tag1]] [[page 2]])")))
+        "AND query")
+
+    (is (= ["b1 [[page 1]] #tag2" "b2 [[page 2]] #tag1"]
+           (map :block/content
+                (dsl-query "(or [[tag2]] [[page 2]])")))
+        "OR query")
+
+    (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
+           (map :block/content
+                ;; ANDed page1 to not clutter results with blocks in default db
+                (dsl-query "(and (page page1) (not [[page 2]]))")))
+        "NOT query")))
+
+(defn- load-test-files-with-timestamps
   []
   (let [files [{:file/path "journals/2020_12_26.md"
                 :file/content "---
 title: Dec 26th, 2020
 ---
-- DONE 26-b1 [[page 1]]
+- DONE 26-b1
 created-at:: 1608968448113
 last-modified-at:: 1608968448113
-- LATER 26-b2-modified-later [[page 2]] #tag1
+- LATER 26-b2-modified-later
 created-at:: 1608968448114
 last-modified-at:: 1608968448120
-- DONE [#A] 26-b3 [[page 1]]
+- DONE 26-b3
 created-at:: 1608968448115
 last-modified-at:: 1608968448115
 "}
@@ -365,16 +398,16 @@ last-modified-at:: 1608968448115
                 :file/content "---
 title: Dec 27th, 2020
 ---
-- NOW [#A] b1 [[page 1]]
+- NOW b1
 created-at:: 1609052958714
 last-modified-at:: 1609052958714
-- LATER [#B] b2-modified-later [[page 2]]
+- LATER b2-modified-later
 created-at:: 1609052959376
 last-modified-at:: 1609052974285
-- b3 [[page 1]]
+- b3
 created-at:: 1609052959954
 last-modified-at:: 1609052959954
-- b4 [[page 2]]
+- b4
 created-at:: 1609052961569
 last-modified-at:: 1609052961569
 - b5
@@ -384,80 +417,40 @@ last-modified-at:: 1609052963089"}
                 :file/content "---
 title: Dec 28th, 2020
 ---
-- 28-b1 [[page 1]]
+- 28-b1
 created-at:: 1609084800000
 last-modified-at:: 1609084800000
-- 28-b2-modified-later [[page 2]]
+- 28-b2-modified-later
 created-at:: 1609084800001
 last-modified-at:: 1609084800020
-- 28-b3 [[page 1]]
+- 28-b3
 created-at:: 1609084800002
 last-modified-at:: 1609084800002"}]]
-    (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
+    (load-test-files files)))
 
-(deftest test-parse
-  (load-test-files-for-parse)
+(deftest between-queries
+  (load-test-files-with-timestamps)
 
-  (testing "Single page query"
-    (are [x y] (= (q-count x) y)
-         "[[page 1]]"
-         {:query '[[?b :block/path-refs [:block/name "page 1"]]]
-          :count 6}
+  (are [x y] (= (count-only x) y)
+       "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
+       5
 
-         "[[page 2]]"
-         {:query '[[?b :block/path-refs [:block/name "page 2"]]]
-          :count 4}))
+       ;; between with journal pages
+       "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
+       2
 
-  ;; boolean queries
-  (testing "AND queries"
-    (are [x y] (= (q-count x) y)
-         "(and [[tag1]] [[page 2]])"
-         {:query '([?b :block/path-refs [:block/name "tag1"]]
-                   [?b :block/path-refs [:block/name "page 2"]])
-          :count 1})
+       ;; ;; between with created-at
+       ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
+       ;; 5
 
-    (are [x y] (= (q-count x) y)
-         "(and [[tag1]] [[page 2]])"
-         {:query '([?b :block/path-refs [:block/name "tag1"]]
-                   [?b :block/path-refs [:block/name "page 2"]])
-          :count 1}))
-
-  (testing "OR queries"
-    (are [x y] (= (q-count x) y)
-         "(or [[tag1]] [[page 2]])"
-         {:query '(or
-                   (and [?b :block/path-refs [:block/name "tag1"]])
-                   (and [?b :block/path-refs [:block/name "page 2"]]))
-          :count 4}))
-
-  (testing "NOT queries"
-    (are [x y] (= (q-count x) y)
-         "(not [[page 1]])"
-         {:query '([?b :block/uuid]
-                   (not [?b :block/path-refs [:block/name "page 1"]]))
-          :count 28}))
-
-  (testing "Between query"
-    (are [x y] (= (count-only x) y)
-         "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
-         5
-
-         ;; between with journal pages
-         "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
-         2
-
-         ;; ;; between with created-at
-         ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
-         ;; 5
-
-         ;; ;; between with last-modified-at
-         ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
-         ;; 5
-         ))
+       ;; ;; between with last-modified-at
+       ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
+       ;; 5
+       )
   )
 
 #_(deftest sort-by-queries
-    (load-test-files-for-parse)
+    (load-test-files-with-timestamps)
     ;; (testing "sort-by (created-at defaults to desc)"
     ;;   (db/clear-query-state!)
     ;;   (let [result (->> (q "(and (task now later done)
@@ -528,9 +521,9 @@ last-modified-at:: 1609084800002"}]]
 (comment
  (require '[clojure.pprint :as pprint])
  (config/start-test-db!)
- (import-test-data!)
+ (load-test-files-with-timestamps)
 
- (dsl/query test-db "(all-page-tags)")
+ (dsl/query test-db "(task done)")
 
  ;; Useful for debugging
  (prn

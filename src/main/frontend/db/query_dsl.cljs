@@ -2,7 +2,6 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
-            [clojure.core]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -44,25 +43,10 @@
 
 ;; (sort-by last_modified_at asc)
 
-(defonce remove-nil? (partial remove nil?))
-
-(defn query-wrapper
-  [where blocks?]
-  (when where
-    (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-              `[:find (~'pull ~'?b ~model/block-attrs)
-                :in ~'$ ~'%
-                :where]
-              '[:find (pull ?p [*])
-                :in $ %
-                :where])
-          result (if (coll? (first where))
-                   (apply conj q where)
-                   (conj q where))]
-      (prn "Datascript query: " result)
-      result)))
-
 ;; (between -7d +7d)
+
+;; Time helpers
+;; ============
 (defn- ->journal-day-int [input]
   (let [input (string/lower-case (name input))]
     (cond
@@ -126,13 +110,8 @@
                  t/days)]
         (tc/to-long (t/plus (t/today) (tf duration)))))))
 
-(defn uniq-symbol
-  [counter prefix]
-  (let [result (symbol (str prefix (when-not (zero? @counter)
-                                     @counter)))]
-    (swap! counter inc)
-    result))
-
+;; Boolean operator utils: and, or, not
+;; ======================
 (defn- collect-vars
   [l]
   (let [vars (atom #{})]
@@ -143,34 +122,6 @@
        f)
      l)
     @vars))
-
-;; TODO: Convert ->*query fns to rules
-(defn ->property-query
-  ([k v]
-   (->property-query k v '?v))
-  ([k v sym]
-   [['?b :block/properties '?prop]
-    [(list 'missing? '$ '?b :block/name)]
-    [(list 'get '?prop (keyword k)) sym]
-    (list
-     'or
-     [(list '= sym v)]
-     [(list 'contains? sym v)]
-     ;; For integer pages that aren't strings
-     [(list 'contains? sym (str v))])]))
-
-(defn- build-property-two-arg
-  [e current-filter counter]
-  (let [k (string/replace (name (nth e 1)) "_" "-")
-        v (nth e 2)
-        v (if-not (nil? v)
-            (text/parse-property k v)
-            v)
-        v (if (coll? v) (first v) v)
-        sym (if (= current-filter 'or)
-              '?v
-              (uniq-symbol counter "?v"))]
-    {:query (->property-query k v sym)}))
 
 (defn- build-and-or-not-result
   [fe clauses current-filter nested-and?]
@@ -215,6 +166,8 @@
 
 (declare build-query)
 
+(defonce remove-nil? (partial remove nil?))
+
 (defn- build-and-or-not
   [repo e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
@@ -253,6 +206,8 @@
         {:query query
          :rules (distinct (mapcat :rules raw-clauses))}))))
 
+;; build-query fns
+;; ===============
 (defn- build-between-two-arg
   [e]
   (let [start (->journal-day-int (nth e 1))
@@ -278,11 +233,40 @@
                      [(list '>= sym start)]
                      [(list '< sym end)]]}))))))
 
+(defn- build-between
+  [e]
+  (cond
+    (= 3 (count e))
+    (build-between-two-arg e)
+
+    ;; (between created_at -1d today)
+    (= 4 (count e))
+    (build-between-three-arg e)))
+
+(defn- build-property-two-arg
+  [e]
+  (let [k (string/replace (name (nth e 1)) "_" "-")
+        v (nth e 2)
+        v (if-not (nil? v)
+            (text/parse-property k v)
+            v)
+        v (if (coll? v) (first v) v)]
+    {:query (list 'property '?b (keyword k) v)
+     :rules [:property]}))
+
 (defn- build-property-one-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")]
     {:query (list 'has-property '?b (keyword k))
      :rules [:has-property]}))
+
+(defn- build-property [e]
+  (cond
+    (= 3 (count e))
+    (build-property-two-arg e)
+
+    (= 2 (count e))
+    (build-property-one-arg e)))
 
 (defn- build-task
   [e]
@@ -340,7 +324,7 @@
     nil))
 
 (defn- build-sort-by
-  [e sort-by]
+  [e sort-by_]
   (let [[k order] (rest e)
              order (if (and order (contains? #{:asc :desc}
                                              (keyword (string/lower-case (name order)))))
@@ -358,11 +342,11 @@
                          :else
                          #(get-in % [:block/properties k]))
              comp (if (= order :desc) >= <=)]
-         (reset! sort-by
+         (reset! sort-by_
                  (fn [result]
                    (->> result
                         flatten
-                        (clojure.core/sort-by get-value comp))))
+                        (sort-by get-value comp))))
          nil))
 
 (defn- build-page
@@ -384,23 +368,25 @@
   [e]
   (let [page-name (-> (text/page-ref-un-brackets! e)
                       (util/page-name-sanity-lc))]
-    {:query [['?b :block/path-refs [:block/name page-name]]]}))
+    {:query (list 'page-ref '?b page-name)
+     :rules [:page-ref]}))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
    :rules [:block-content]})
 
 (defn build-query
-  "This fn converts a list in a query e.g. `(operator arg1 arg2)` to its datalog
+  "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
   equivalent. This fn is called recursively on sublists for boolean operators
-  `and`, `or` and `not`. Some bindings in this fn:
+  `and`, `or` and `not`. This fn should return a map with :query and :rules or nil.
+
+Some bindings in this fn:
 
 * e - the list being processed
 * fe - the query operator e.g. `property`"
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
-  ([repo e {:keys [sort-by blocks? sample counter current-filter] :as env} level]
-   ;; TODO: replace with multi-methods for extensibility.
+  ([repo e {:keys [sort-by blocks? sample] :as env} level]
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
@@ -422,22 +408,11 @@
        (contains? #{'and 'or 'not} fe)
        (build-and-or-not repo e env level fe)
 
-       (and (= 'between fe)
-            (= 3 (count e)))
-       (build-between-two-arg e)
+       (= 'between fe)
+       (build-between e)
 
-       ;; (between created_at -1d today)
-       (and (= 'between fe)
-            (= 4 (count e)))
-       (build-between-three-arg e)
-
-       (and (= 'property fe)
-            (= 3 (count e)))
-       (build-property-two-arg e current-filter counter)
-
-       (and (= 'property fe)
-            (= 2 (count e)))
-       (build-property-one-arg e)
+       (= 'property fe)
+       (build-property e)
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
@@ -469,6 +444,9 @@
 
        :else
        nil))))
+
+;; parse fns
+;; =========
 
 (defn- pre-transform
   [s]
@@ -528,47 +506,64 @@
   [repo s]
   (when (and (string? s)
              (not (string/blank? s)))
-    (let [counter (atom 0)]
-      (try
-        (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
-              form (some-> s
-                           (pre-transform)
-                           (reader/read-string))]
-          (if (symbol? form)
-            (str form)
-            (let [sort-by (atom nil)
-                  blocks? (atom nil)
-                  sample (atom nil)
-                  {result :query rules :rules}
-                  (when form (build-query repo form {:sort-by sort-by
-                                                     :blocks? blocks?
-                                                     :counter counter
-                                                     :sample sample}))]
-              (cond
-                (and (nil? result) (string? form))
-                form
+    (try
+      (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
+            form (some-> s
+                         (pre-transform)
+                         (reader/read-string))]
+        (if (symbol? form)
+          (str form)
+          (let [sort-by (atom nil)
+                blocks? (atom nil)
+                sample (atom nil)
+                {result :query rules :rules}
+                (when form (build-query repo form {:sort-by sort-by
+                                                   :blocks? blocks?
+                                                   :sample sample}))]
+            (cond
+              (and (nil? result) (string? form))
+              form
 
-                (string? result)
-                result
+              (string? result)
+              result
 
-                :else
-                (let [result (when (seq result)
-                               (let [key (if (coll? (first result))
-                                           (keyword (ffirst result))
-                                           (keyword (first result)))
-                                     result (case key
-                                              :and
-                                              (rest result)
+              :else
+              (let [result (when (seq result)
+                             (let [key (if (coll? (first result))
+                                         (keyword (ffirst result))
+                                         (keyword (first result)))
+                                   result (case key
+                                            :and
+                                            (rest result)
 
-                                              result)]
-                                 (add-bindings! form result)))]
-                  {:query result
-                   :rules (mapv rules/query-dsl-rules rules)
-                   :sort-by @sort-by
-                   :blocks? (boolean @blocks?)
-                   :sample sample})))))
-        (catch js/Error e
-          (log/error :query-dsl/parse-error e))))))
+                                            result)]
+                               (add-bindings! form result)))]
+                {:query result
+                 :rules (mapv rules/query-dsl-rules rules)
+                 :sort-by @sort-by
+                 :blocks? (boolean @blocks?)
+                 :sample sample})))))
+      (catch js/Error e
+        (log/error :query-dsl/parse-error e)))))
+
+;; Main fns
+;; ========
+
+(defn query-wrapper
+  [where blocks?]
+  (when where
+    (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+              `[:find (~'pull ~'?b ~model/block-attrs)
+                :in ~'$ ~'%
+                :where]
+              '[:find (pull ?p [*])
+                :in $ %
+                :where])
+          result (if (coll? (first where))
+                   (apply conj q where)
+                   (conj q where))]
+      (prn "Datascript query: " result)
+      result)))
 
 (defn query
   ([query-string]
