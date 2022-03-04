@@ -205,26 +205,7 @@
         (back-and-forward))
 
       (new-block-mode)
-
-      (when (and (mobile-util/is-native-platform?) (seq repos))
-        [:a.text-sm.font-medium.button
-         {:on-click
-          (fn []
-            (state/pub-event!
-             [:modal/show
-              [:div {:style {:max-width 700}}
-               [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
-               (ui/button
-                 "Yes"
-                 :on-click (fn []
-                             (state/close-modal!)
-                             (nfs/refresh! (state/get-current-repo) repo/refresh-cb)))]]))}
-         (if refreshing?
-           [:div {:class "animate-spin-reverse"}
-            svg/refresh]
-           [:div.flex.flex-row.text-center.open-button__inner.items-center
-            (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
-
+      
       (repo/sync-status current-repo)
 
       (when show-open-folder?
