@@ -10,9 +10,10 @@ test('keyboard related issues', async ({ page }) => {
   await page.type(':nth-match(textarea, 1)', "【")
 
   await page.type(':nth-match(textarea, 1)', ' | with events: ')
+  await page.type(':nth-match(textarea, 1)', "【")
   await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
+  await page.type(':nth-match(textarea, 1)', "【")
   await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
-  await page.pause()
 })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {

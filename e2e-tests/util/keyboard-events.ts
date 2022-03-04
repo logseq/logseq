@@ -1,55 +1,43 @@
 
 
 // typing 【
-export let press_with_events = async function (page, selector, { typedown, keyboard_events }){
-    await page.type(selector, typedown)
+export let press_with_events = async function (page, selector, keyboard_events ){
     for (let idx in keyboard_events){
-      let ev = keyboard_events[idx]
-      await page.dispatchEvent(selector, ev["type"], ev)
+      let { event_type, event } = keyboard_events[idx]
+      await page.dispatchEvent(selector, event_type, event)
       await page.waitForTimeout(100)
     }
 }
 
-export let macos_pinyin_left_full_bracket = {
-    "typedown": "【",
-    "keyboard_events": [{
-        "altKey": false,
-        "charCode": 0,
-        "ctrlKey": false,
-        "code": "BracketLeft",
-        "composed": true,
-        "detail": 0,
-        "event_": {
-            "code": "BracketLeft",
-            "isComposing": false,
-            "composed": true
-        },
-        "isComposing": false,
-        "isTrusted": true,
-        "key": "【",
-        "keyCode": 219,
-        "metaKey": false,
-        "repeat": false,
-        "returnValue": true,
-        "shiftKey": false,
-        "type": "keydown",
-        "which": 219,
-        "platformModifierKey": false
-    }, {
-        "altKey": false,
-        "charCode": 0,
-        "ctrlKey": false,
-        "event_": {
-            "code": "BracketLeft",
-            "isComposing": false,
-            "composed": true
-        },
-        "key": "【",
-        "keyCode": 219,
-        "metaKey": false,
-        "repeat": false,
-        "shiftKey": false,
-        "type": "keyup",
-        "platformModifierKey": false
+export let macos_pinyin_left_full_bracket = [
+  {
+    "event_type": "keydown",
+    "event": {
+      "key": "【",
+      "code": "BracketLeft",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": false,
+      "composed": true
     }
-]}
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "【",
+      "code": "BracketLeft",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": false,
+      "composed": true
+    }
+  }
+]
