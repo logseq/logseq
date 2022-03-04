@@ -433,7 +433,6 @@
 
 (defmethod handle :update-remote-file [_ args]
   (apply rsapi/update-remote-file (rest args)))
->>>>>>> b06048fa0 (feat(sync): integrate file-sync-rsapi, update sync.cljs)
 
 (defmethod handle :update-remote-files [_ args]
   (apply rsapi/update-remote-files (rest args)))
