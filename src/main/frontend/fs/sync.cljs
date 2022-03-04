@@ -36,6 +36,8 @@
 ;; - every 20s will flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
+;; TODO: currently, renaming a page cause 2 file-watch event: unlink & add,
+;;       we need to a new type event 'rename'
 
 ;;; specs
 (s/def ::state #{::idle

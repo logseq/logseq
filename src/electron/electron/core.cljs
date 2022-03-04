@@ -16,9 +16,7 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]
-            ["electron-context-menu" :as init-context-menu]
-            [goog.object :as gobj]))
+            ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
