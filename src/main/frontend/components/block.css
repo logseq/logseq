@@ -567,6 +567,7 @@ span.cloze-revealed {
 }
 
 .cp__fenced-code-block {
-  background-color: #dbe6f3;
-  padding: 20px;
+  .not-edit {
+    cursor: default;
+  }
 }

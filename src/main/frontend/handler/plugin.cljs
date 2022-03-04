@@ -316,10 +316,10 @@
 (def *fenced-code-providers (atom #{}))
 
 (defn register_fenced_code_renderer
-  [pid type {:keys [before subs render] :as _opts}]
+  [pid type {:keys [before subs render edit] :as _opts}]
   (when-let [key (and type (keyword type))]
     (register-plugin-resources pid :fenced-code-renderers
-      {:key key :before before :subs subs :render render})
+      {:key key :edit edit :before before :subs subs :render render})
     (swap! *fenced-code-providers conj pid)
     #(swap! *fenced-code-providers disj pid)))
 

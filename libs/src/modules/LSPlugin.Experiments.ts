@@ -30,6 +30,20 @@ export class LSPluginExperiments {
     await this.invokeExperMethod('loadScripts', ...scripts)
   }
 
+  registerFencedCodeRenderer (
+    type: string,
+    opts: {
+      edit?: boolean,
+      before?: () => Promise<void>,
+      subs?: Array<string>,
+      render: (props: { content: string }) => any,
+    }) {
+    // @ts-ignore
+    return top.logseq.api.exper_register_fenced_code_renderer(
+      this.ctx.baseInfo.id, type, opts
+    )
+  }
+
   async sayHello () {
     const k = await this.ctx.UI.showMsg('hello experiments')
     console.log('==>', k, this.React, this.ReactDOM)

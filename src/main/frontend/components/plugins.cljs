@@ -703,11 +703,13 @@
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
-  [_state content {:keys [key render] :as opts}]
+  [_state content {:keys [key render edit] :as _opts}]
 
   [:div
-   {:class (str "of-" (name key))}
-   (when (fn? render) (render content))])
+   {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+    :class (util/classnames [{:not-edit (false? edit)}])}
+   (when (fn? render)
+     (js/React.createElement render #js {:content content}))])
 
 ;;;; test fenced-code renderer
 (rum/defc mermaid-renderer
