@@ -1,6 +1,19 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { createRandomPage, IsMac } from './utils'
+import { press_with_events, macos_pinyin_left_full_bracket } from './util/keyboard-events'
+
+test('keyboard related issues', async ({ page }) => {
+  await createRandomPage(page)
+  await page.type(':nth-match(textarea, 1)', 'without events: ')
+  await page.type(':nth-match(textarea, 1)', "【")
+  await page.type(':nth-match(textarea, 1)', "【")
+
+  await page.type(':nth-match(textarea, 1)', ' | with events: ')
+  await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
+  await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
+  await page.pause()
+})
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
@@ -67,3 +80,4 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 //     await page.keyboard.press('Control+Shift+v')
 //   }  
 // })
+  
