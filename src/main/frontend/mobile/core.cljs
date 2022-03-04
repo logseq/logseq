@@ -10,7 +10,6 @@
             [frontend.components.repo :as repo]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.config :as config]))
@@ -61,6 +60,5 @@
                           (p/do!
                            (when (mobile-util/native-ios?)
                                (mobile-util/sync-icloud-repo repo-dir))
-                           (nfs-handler/refresh! repo repo/refresh-cb)
-                           (notification/show! "Notes updated!" :success true))
+                           (nfs-handler/refresh! repo repo/refresh-cb))
                           (editor-handler/save-current-block!))))))))

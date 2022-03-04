@@ -161,8 +161,7 @@
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
                                (not (mobile-util/is-native-platform?))
-                               (not config/publishing?))
-        refreshing? (state/sub :nfs/refreshing?)]
+                               (not config/publishing?))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
