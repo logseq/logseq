@@ -314,10 +314,9 @@
 
 (defn watch-for-current-graph-dir!
   []
-  (when (util/electron?)
-    (when-let [repo (state/get-current-repo)]
-      (when-let [dir (config/get-repo-dir repo)]
-        (fs/watch-dir! dir)))))
+  (when-let [repo (state/get-current-repo)]
+    (when-let [dir (config/get-repo-dir repo)]
+      (fs/watch-dir! dir))))
 
 (defn create-metadata-file
   [repo-url encrypted?]

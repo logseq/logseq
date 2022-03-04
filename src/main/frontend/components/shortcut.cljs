@@ -132,7 +132,7 @@
                          :pre "```clojure\n  (println \"Hello world!\")\n```"
                          :img "![image](https://asset.logseq.com/static/img/logo.png)"}
               :org {:bold (str "*" (t :bold) "*")
-                    :italic (str "/" (t :italics) "/")
+                    :italics (str "/" (t :italics) "/")
                     :del (str "+" (t :strikethrough) "+")
                     :pre [:pre "#+BEGIN_SRC clojure\n  (println \"Hello world!\")\n#+END_SRC"]
                     :link "[[https://www.example.com][Link]]"

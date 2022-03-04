@@ -561,12 +561,19 @@
                                         (take @sample (shuffle col)))
                                       identity)
                      transform-fn (comp sort-by random-samples)]
-                 (react/react-query repo
-                                    {:query query
-                                     :rules rules
-                                     :query-string query-string}
-                                    {:use-cache? false
-                                     :transform-fn transform-fn}))))))))))
+                 (try
+                   (react/react-query repo
+                                      {:query query
+                                       :query-string query-string
+                                       :rules rules
+                                       :throw-exception true}
+                                      {:use-cache? false
+                                       :transform-fn transform-fn})
+                   (catch ExceptionInfo e
+                     ;; Allow non-existent page queries to be ignored
+                     (if (string/includes? (str (.-message e)) "Nothing found for entity")
+                       (log/error :query-dsl-error e)
+                       (throw e)))))))))))))
 
 (defn custom-query
   [repo query-m query-opts]

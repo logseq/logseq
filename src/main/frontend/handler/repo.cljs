@@ -145,29 +145,44 @@
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- load-pages-metadata!
-  [repo file-paths files]
-  (try
-    (let [file (config/get-pages-metadata-path)]
-      (when (contains? (set file-paths) file)
-        (when-let [content (some #(when (= (:file/path %) file) (:file/content %)) files)]
-          (let [metadata (common-handler/safe-read-string content "Parsing pages metadata file failed: ")
-                pages (db/get-all-pages repo)
-                pages (zipmap (map :block/name pages) pages)
-                metadata (->>
-                          (filter (fn [{:block/keys [name created-at updated-at]}]
-                                    (when-let [page (get pages name)]
-                                      (and
-                                       (or
-                                        (nil? (:block/created-at page))
-                                        (>= created-at (:block/created-at page)))
-                                       (or
-                                        (nil? (:block/updated-at page))
-                                        (>= updated-at (:block/created-at page)))))) metadata)
-                          (remove nil?))]
-            (when (seq metadata)
-              (db/transact! repo metadata))))))
-    (catch js/Error e
-      (log/error :exception e))))
+  "force?: if set true, skip the metadata timestamp range check"
+  ([repo file-paths files]
+   (load-pages-metadata! repo file-paths files false))
+  ([repo file-paths files force?]
+   (try
+     (let [file (config/get-pages-metadata-path)]
+       (when (contains? (set file-paths) file)
+         (when-let [content (some #(when (= (:file/path %) file) (:file/content %)) files)]
+           (let [metadata (common-handler/safe-read-string content "Parsing pages metadata file failed: ")
+                 pages (db/get-all-pages repo)
+                 pages (zipmap (map :block/name pages) pages)
+                 metadata (->>
+                           (filter (fn [{:block/keys [name created-at updated-at]}]
+                                     (when-let [page (get pages name)]
+                                       (and
+                                        (>= updated-at created-at) ;; metadata validation
+                                        (or force? ;; when force is true, shortcut timestamp range check
+                                            (and (or (nil? (:block/created-at page))
+                                                     (>= created-at (:block/created-at page)))
+                                                 (or (nil? (:block/updated-at page))
+                                                     (>= updated-at (:block/created-at page)))))
+                                        (or ;; persistent metadata is the gold standard
+                                         (not= created-at (:block/created-at page))
+                                         (not= updated-at (:block/created-at page)))))) metadata)
+                           (remove nil?))]
+             (when (seq metadata)
+               (db/transact! repo metadata))))))
+     (catch js/Error e
+       (log/error :exception e)))))
+
+(defn update-pages-metadata!
+  "update pages meta content -> db. Only accept non-encrypted content!"
+  [repo content force?]
+  (let [path (config/get-pages-metadata-path)
+        files [{:file/path path
+                :file/content content}]
+        file-paths [path]]
+    (util/profile "update-pages-metadata!" (load-pages-metadata! repo file-paths files force?))))
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
@@ -189,7 +204,7 @@
                                 :re-render-root? false
                                 :from-disk? true
                                 :metadata metadata}))
-    (load-pages-metadata! repo-url file-paths files)
+    (load-pages-metadata! repo-url file-paths files true)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
         (state/pub-event! [:modal/encryption-setup-dialog repo-url
@@ -249,7 +264,7 @@
 
   (let [config (or (state/get-config repo-url)
                    (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
-                                        :file/content)]
+                                              :file/content)]
                      (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)

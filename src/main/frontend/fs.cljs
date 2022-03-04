@@ -114,11 +114,11 @@
 
     :else
     (let [[old-path new-path]
-        (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
-                %
-                (str (config/get-repo-dir repo) "/" %))
-             [old-path new-path])]
-     (protocol/rename! (get-fs old-path) repo old-path new-path))))
+          (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
+                  %
+                  (str (config/get-repo-dir repo) "/" %))
+               [old-path new-path])]
+      (protocol/rename! (get-fs old-path) repo old-path new-path))))
 
 (defn stat
   [dir path]
@@ -159,7 +159,7 @@
 
 (defn watch-dir!
   [dir]
-  (protocol/watch-dir! node-record dir))
+  (protocol/watch-dir! (get-record) dir))
 
 (defn mkdir-if-not-exists
   [dir]
@@ -184,9 +184,9 @@
       (p/let [_stat (stat dir path)]
         true)
       (p/catch
-          (fn [_error]
-            (p/let [_ (write-file! repo dir path initial-content nil)]
-              false)))))))
+       (fn [_error]
+         (p/let [_ (write-file! repo dir path initial-content nil)]
+           false)))))))
 
 (defn file-exists?
   [dir path]

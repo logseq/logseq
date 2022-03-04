@@ -45,7 +45,7 @@
                        ^js parent (.closest target ".nav-content-item")]
                    (.toggle (.-classList parent) "is-expand")))}
 
-    [:a.font-medium.fade-link name]
+    [:div.font-medium.fade-link name]
     [:span
      [:a.more svg/arrow-down-v2]]]
    [:div.bd child]])

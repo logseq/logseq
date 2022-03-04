@@ -29,7 +29,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
@@ -339,8 +339,9 @@
   [block value]
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
-    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value block (:block/format block)
+    (let [format (:block/format block)
+          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]
       new-value)
@@ -436,7 +437,7 @@
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
         [:p.content
-         (util/format "Block with the id % already exists!" block-id)]
+         (util/format "Block with the id %s already exists!" block-id)]
         :error)
 
        force?
@@ -789,8 +790,14 @@
       (save-block-if-changed! block new-content))))
 
 (defn set-marker
-  [{:block/keys [marker content] :as block} new-marker]
-  (let [new-content (->
+  [{:block/keys [marker content format] :as block} new-marker]
+  (let [old-header-marker (when (not= format :org)
+                            (re-find (marker/header-marker-pattern true marker) content))
+        new-header-marker (when old-header-marker
+                            (string/replace old-header-marker marker new-marker))
+        marker (or old-header-marker marker)
+        new-marker (or new-header-marker new-marker)
+        new-content (->
                      (if marker
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)
                        (str new-marker " " content))
@@ -1575,13 +1582,8 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile/native-android?)
-      (mobile/convert-file-src
-       (str "file://" repo-dir path))
-
-      (mobile/native-ios?)
-      (mobile/convert-file-src
-       (str repo-dir path))
+      (mobile-util/is-native-platform?)
+      (mobile-util/convert-file-src (str repo-dir path))
 
       :else
       (let [handle-path (str "handle" repo-dir path)
@@ -2856,10 +2858,10 @@
         (or ctrlKey metaKey)
         nil
 
-        ;; FIXME: On iOS, a backspace click to call keydown-backspace-handler
+        ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work sometimes in an empty block, hence the empty block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile/native-ios?)
+        (and (mobile-util/is-native-platform?)
              (= key "Backspace")
              (= value ""))
         (do
@@ -3130,12 +3132,12 @@
       (and (util/url? text)
            (or (string/includes? text "youtube.com")
                (string/includes? text "youtu.be"))
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
 
       (and (util/url? text)
            (string/includes? text "twitter.com")
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
 
       (and (text/block-ref? text)

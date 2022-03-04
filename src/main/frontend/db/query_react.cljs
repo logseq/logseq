@@ -112,7 +112,7 @@
          f)) query)))
 
 (defn react-query
-  [repo {:keys [query inputs rules] :as query'} query-opts]
+  [repo {:keys [query inputs throw-exception rules] :as query'} query-opts]
   (let [pprint (if config/dev? (fn [_] nil) debug/pprint)]
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
@@ -129,5 +129,7 @@
         (pprint "query-opts:" query-opts)
         (apply react/q repo k query-opts query inputs))
       (catch js/Error e
+        (when throw-exception
+          (throw (ex-info (.-message e) {})))
         (pprint "Custom query failed: " {:query query'})
         (js/console.dir e)))))

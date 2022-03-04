@@ -99,3 +99,11 @@ appear where shadow-cljs was first invoked e.g. where `yarn watch` is running.
 Specific namespace(s) can be auto run with the `:ns-regexp` option e.g. `npx
 shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
 "frontend.text-test"}'`.
+
+## Logging
+
+For logging, we use https://github.com/lambdaisland/glogi. When in development,
+be sure to have [enabled custom
+formatters](https://github.com/binaryage/cljs-devtools/blob/master/docs/installation.md#enable-custom-formatters-in-chrome)
+in the desktop app and browser. Without this enabled, most of the log messages
+aren't readable.
