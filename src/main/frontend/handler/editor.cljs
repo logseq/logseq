@@ -29,7 +29,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
@@ -1582,12 +1582,12 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile/native-android?)
-      (mobile/convert-file-src
+      (mobile-util/native-android?)
+      (mobile-util/convert-file-src
        (str "file://" repo-dir path))
 
-      (mobile/native-ios?)
-      (mobile/convert-file-src
+      (mobile-util/native-ios?)
+      (mobile-util/convert-file-src
        (str repo-dir path))
 
       :else
@@ -2863,10 +2863,10 @@
         (or ctrlKey metaKey)
         nil
 
-        ;; FIXME: On iOS, a backspace click to call keydown-backspace-handler
+        ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work sometimes in an empty block, hence the empty block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile/native-ios?)
+        (and (mobile-util/is-native-platform?)
              (= key "Backspace")
              (= value ""))
         (do
@@ -3137,12 +3137,12 @@
       (and (util/url? text)
            (or (string/includes? text "youtube.com")
                (string/includes? text "youtu.be"))
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
 
       (and (util/url? text)
            (string/includes? text "twitter.com")
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
 
       (and (text/block-ref? text)

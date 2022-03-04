@@ -1,6 +1,6 @@
 (ns frontend.handler.editor-test
   (:require [frontend.handler.editor :as editor]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing are]]))
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -41,3 +41,24 @@
          (editor/extract-nearest-link-from-text
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
+
+(defn- set-marker
+  [marker content format new-marker]
+  (let [actual-content (atom nil)]
+    (with-redefs [editor/save-block-if-changed! (fn [_ content]
+                                                  (reset! actual-content content))]
+      (editor/set-marker {:block/marker marker :block/content content :block/format format}
+                         new-marker)
+      @actual-content)))
+
+(deftest set-marker-org
+  (are [marker content new-marker expect] (= expect (set-marker marker content :org new-marker))
+    "TODO" "TODO content" "DOING" "DOING content"
+    "TODO" "## TODO content" "DOING" "## TODO content"
+    "DONE" "DONE content" "" "content"))
+
+(deftest set-marker-markdown
+  (are [marker content new-marker expect] (= expect (set-marker marker content :markdown new-marker))
+    "TODO" "TODO content" "DOING" "DOING content"
+    "TODO" "## TODO content" "DOING" "## DOING content"
+    "DONE" "DONE content" "" "content"))
