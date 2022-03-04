@@ -94,4 +94,21 @@
    :namespace
    '[(namespace ?p ?namespace)
      [?p :block/namespace ?parent]
-     [?parent :block/name ?namespace]]})
+     [?parent :block/name ?namespace]]
+
+   :property
+   '[(property ?b ?key ?val)
+     [?b :block/properties ?prop]
+     [(missing? $ ?b :block/name)]
+     [(get ?prop ?key) ?v]
+     (or-join [?v]
+              [(= ?v ?val)]
+              [(contains? ?v ?val)]
+              ;; For integer pages that aren't strings
+              (and
+               [(str ?val) ?str-val]
+               [(contains? ?v ?str-val)]))]
+
+   :page-ref
+   '[(page-ref ?b ?page-name)
+     [?b :block/path-refs [:block/name ?page-name]]]})
