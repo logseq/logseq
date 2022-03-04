@@ -159,7 +159,7 @@
      ;; For integer pages that aren't strings
      [(list 'contains? sym (str v))])]))
 
-(defn- build-query-property-two-arg
+(defn- build-property-two-arg
   [e current-filter counter]
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
@@ -170,9 +170,9 @@
         sym (if (= current-filter 'or)
               '?v
               (uniq-symbol counter "?v"))]
-    (->property-query k v sym)))
+    {:query (->property-query k v sym)}))
 
-(defn- build-query-and-or-not-result
+(defn- build-and-or-not-result
   [fe clauses current-filter nested-and?]
   (cond
     (= fe 'not)
@@ -215,7 +215,7 @@
 
 (declare build-query)
 
-(defn- build-query-and-or-not
+(defn- build-and-or-not
   [repo e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
                            (build-query repo form (assoc env :current-filter fe) (inc level)))
@@ -226,7 +226,7 @@
                      (distinct))
         nested-and? (and (= fe 'and) (= current-filter 'and))]
     (when (seq clauses)
-      (let [result (build-query-and-or-not-result
+      (let [result (build-and-or-not-result
                     fe clauses current-filter nested-and?)
             vars' (set/union (set @vars) (collect-vars result))
             query (cond
@@ -253,26 +253,38 @@
         {:query query
          :rules (distinct (mapcat :rules raw-clauses))}))))
 
-(defn- build-query-between-two-arg
+(defn- build-between-two-arg
   [e]
   (let [start (->journal-day-int (nth e 1))
          end (->journal-day-int (nth e 2))
          [start end] (sort [start end])]
-    [['?b :block/page '?p]
-     ['?p :block/journal? true]
-     ['?p :block/journal-day '?d]
-     [(list '>= '?d start)]
-     [(list '<= '?d end)]]))
+    {:query (list 'between '?b start end)
+     :rules [:between]}))
 
-(defn- build-query-property-one-arg
+(defn- build-between-three-arg
+  [e]
+  (let [k (-> (second e)
+              (name)
+              (string/lower-case)
+              (string/replace "-" "_"))]
+    (when (contains? #{"created_at" "last_modified_at"} k)
+      (let [start (->timestamp (nth e 2))
+             end (->timestamp (nth e 3))]
+        (when (and start end)
+          (let [[start end] (sort [start end])
+                sym '?v]
+            {:query [['?b :block/properties '?prop]
+                     [(list 'get '?prop k) sym]
+                     [(list '>= sym start)]
+                     [(list '< sym end)]]}))))))
+
+(defn- build-property-one-arg
   [e]
   (let [k (string/replace (name (nth e 1)) "_" "-")]
-    [['?b :block/properties '?prop]
-     [(list 'missing? '$ '?b :block/name)]
-     [(list 'get '?prop (keyword k)) '?prop-v]
-     [true]]))
+    {:query (list 'has-property '?b (keyword k))
+     :rules [:has-property]}))
 
-(defn- build-query-todo
+(defn- build-task
   [e]
   (let [markers (if (coll? (first (rest e)))
                   (first (rest e))
@@ -282,7 +294,7 @@
         {:query (list 'task '?b markers)
          :rules [:task]}))))
 
-(defn- build-query-priority
+(defn- build-priority
   [e]
   (let [priorities (if (coll? (first (rest e)))
                      (first (rest e))
@@ -304,7 +316,7 @@
       {:query (list 'has-page-property '?p (keyword k))
        :rules [:has-page-property]})))
 
-(defn- build-query-page-tags
+(defn- build-page-tags
   [e]
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
@@ -315,7 +327,19 @@
         {:query (list 'page-tags '?p tags)
          :rules [:page-tags]}))))
 
-(defn- build-query-sort-by
+(defn- build-all-page-tags
+  []
+  {:query (list 'all-page-tags '?p)
+   :rules [:all-page-tags]} )
+
+(defn- build-sample
+  [e sample]
+  (when-let [num (second e)]
+    (when (integer? num)
+      (reset! sample num))
+    nil))
+
+(defn- build-sort-by
   [e sort-by]
   (let [[k order] (rest e)
              order (if (and order (contains? #{:asc :desc}
@@ -341,7 +365,38 @@
                         (clojure.core/sort-by get-value comp))))
          nil))
 
-(defn ^:large-vars/cleanup-todo build-query
+(defn- build-page
+  [e]
+  (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+        page-name (util/page-name-sanity-lc page-name)]
+    {:query (list 'page '?b page-name)
+     :rules [:page]}))
+
+(defn- build-namespace
+  [e]
+  (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
+        page (util/page-name-sanity-lc page-name)]
+    (when-not (string/blank? page)
+      {:query (list 'namespace '?p page)
+       :rules [:namespace]})))
+
+(defn- build-page-ref
+  [e]
+  (let [page-name (-> (text/page-ref-un-brackets! e)
+                      (util/page-name-sanity-lc))]
+    {:query [['?b :block/path-refs [:block/name page-name]]]}))
+
+(defn- build-block-content [e]
+  {:query (list 'block-content '?b e)
+   :rules [:block-content]})
+
+(defn build-query
+  "This fn converts a list in a query e.g. `(operator arg1 arg2)` to its datalog
+  equivalent. This fn is called recursively on sublists for boolean operators
+  `and`, `or` and `not`. Some bindings in this fn:
+
+* e - the list being processed
+* fe - the query operator e.g. `property`"
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
   ([repo e {:keys [sort-by blocks? sample counter current-filter] :as env} level]
@@ -351,94 +406,66 @@
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe))
+               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe)
+               (and (not page-ref?) (string? e)))
        (reset! blocks? true))
      (cond
        (nil? e)
        nil
 
        page-ref?
-       (let [page-name (-> (text/page-ref-un-brackets! e)
-                           (util/page-name-sanity-lc))]
-         {:query [['?b :block/path-refs [:block/name page-name]]]})
+       (build-page-ref e)
 
        (string? e)                      ; block content full-text search, could be slow
-       (do
-         (reset! blocks? true)
-         {:query
-          [['?b :block/content '?content]
-           [(list 'clojure.string/includes? '?content e)]]})
+       (build-block-content e)
 
        (contains? #{'and 'or 'not} fe)
-       (build-query-and-or-not repo e env level fe)
+       (build-and-or-not repo e env level fe)
 
        (and (= 'between fe)
             (= 3 (count e)))
-       {:query (build-query-between-two-arg e)}
+       (build-between-two-arg e)
 
        ;; (between created_at -1d today)
        (and (= 'between fe)
             (= 4 (count e)))
-       (let [k (-> (second e)
-                   (name)
-                   (string/lower-case)
-                   (string/replace "-" "_"))]
-         (when (contains? #{"created_at" "last_modified_at"} k)
-           (let [start (->timestamp (nth e 2))
-                  end (->timestamp (nth e 3))]
-             (when (and start end)
-               (let [[start end] (sort [start end])
-                     sym '?v]
-                 {:query [['?b :block/properties '?prop]
-                          [(list 'get '?prop k) sym]
-                          [(list '>= sym start)]
-                          [(list '< sym end)]]})))))
+       (build-between-three-arg e)
 
        (and (= 'property fe)
             (= 3 (count e)))
-       {:query (build-query-property-two-arg e current-filter counter)}
+       (build-property-two-arg e current-filter counter)
 
        (and (= 'property fe)
             (= 2 (count e)))
-       {:query (build-query-property-one-arg e)}
+       (build-property-one-arg e)
 
+       ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
-       (build-query-todo e)
+       (build-task e)
 
        (= 'priority fe)
-       (build-query-priority e)
+       (build-priority e)
 
        (= 'sort-by fe)
-       (build-query-sort-by e sort-by)
+       (build-sort-by e sort-by)
 
        (= 'page fe)
-       (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
-             page-name (util/page-name-sanity-lc page-name)]
-         {:query [['?b :block/page [:block/name page-name]]]})
+       (build-page e)
 
-       (and (= 'namespace fe)
-            (= 2 (count e)))
-       (let [page-name (text/page-ref-un-brackets! (str (first (rest e))))
-             page (util/page-name-sanity-lc page-name)]
-         (when-not (string/blank? page)
-           {:query [['?p :block/namespace '?parent]
-                    ['?parent :block/name page]]}))
+       (= 'namespace fe)
+       (build-namespace e)
 
        (= 'page-property fe)
        (build-page-property e)
 
        (= 'page-tags fe)
-       (build-query-page-tags e)
+       (build-page-tags e)
 
        (= 'all-page-tags fe)
-       {:query (list 'all-page-tags '?p)
-        :rules [:all-page-tags]}
+       (build-all-page-tags)
 
        (= 'sample fe)
-       (when-let [num (second e)]
-         (when (integer? num)
-           (reset! sample num))
-         nil)
+       (build-sample e sample)
 
        :else
        nil))))
