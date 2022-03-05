@@ -22,6 +22,8 @@
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
+		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
+		FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF527BDFEF500F3206B /* FsWatcher.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +49,8 @@
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
+		FE647FF327BDFEDE00F3206B /* FsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsWatcher.swift; sourceTree = "<group>"; };
+		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +100,8 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				7435D10B2704659F00AB88E0 /* FolderPicker.swift */,
+				FE647FF327BDFEDE00F3206B /* FsWatcher.swift */,
+				FE647FF527BDFEF500F3206B /* FsWatcher.m */,
 				7435D10E2704660B00AB88E0 /* FolderPicker.m */,
 				D3D62A09275C92880003FBDC /* FileContainer.swift */,
 				D3D62A0B275C928F0003FBDC /* FileContainer.m */,
@@ -241,11 +247,13 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */,
+				FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */,
 				5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */,
 				D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
 				D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,
 				7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */,
 				7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */,
+				FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
