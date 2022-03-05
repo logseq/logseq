@@ -36,7 +36,7 @@
 ;; - every 20s will flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
-;; TODO: currently, renaming a page cause 2 file-watch event: unlink & add,
+;; TODO: currently, renaming a page produce 2 file-watch event: unlink & add,
 ;;       we need to a new type event 'rename'
 
 ;;; specs
@@ -237,6 +237,25 @@
          (do (vswap! seen-update&delete-filetxns conj filetxn)
              (rf result filetxn)))))))
 
+(defn- remove-deleted-filetxns-xf
+  "transducer.
+  remove update&rename filetxns if they are deleted later(in greater txid filetxn)."
+  [rf]
+  (let [seen-deleted-paths (volatile! #{})]
+    (fn
+      ([] (rf))
+      ([result] (rf result))
+      ([result ^FileTxn filetxn]
+       (let [to-path (.-to-path filetxn)
+             from-path (.-from-path filetxn)]
+         (if (contains? @seen-deleted-paths to-path)
+           (do (when (not= to-path from-path)
+                 (vswap! seen-deleted-paths disj to-path)
+                 (vswap! seen-deleted-paths conj from-path))
+               result)
+           (do (vswap! seen-deleted-paths conj to-path)
+               (rf result filetxn))))))))
+
 (defn- partition-filetxns
   "return transducer.
   partition filetxns, at most N update-filetxns in each partition,
@@ -257,12 +276,14 @@
   3. partition filetxns, each partition contains same type filetxns,
      for update type, at most N items in each partition
      for delete & rename type, only 1 item in each partition.
+  4. remove update or rename filetxns if they are deleted in later filetxns.
   NOTE: this xf should apply on reversed diffs sequence (sort by txid)"
   [n]
   (comp
     (map diff->filetxns)
     cat
     distinct-update-filetxns-xf
+    remove-deleted-filetxns-xf
     (partition-filetxns n)))
 
 (defn- filepath->diff
