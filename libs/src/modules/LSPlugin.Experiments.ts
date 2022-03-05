@@ -1,5 +1,6 @@
 import { LSPluginUser } from '../LSPlugin.user'
 import { snakeCase } from 'lodash-es'
+import { PluginLocal } from '../LSPlugin.core'
 
 /**
  * Some experiment features
@@ -19,6 +20,10 @@ export class LSPluginExperiments {
     return top.ReactDOM
   }
 
+  get pluginLocal (): PluginLocal {
+    return top.LSPluginCore.ensurePlugin(this.ctx.baseInfo.id)
+  }
+
   private invokeExperMethod (type: string, ...args: Array<any>) {
     type = snakeCase(type)?.toLowerCase()
     // @ts-ignore
@@ -26,6 +31,14 @@ export class LSPluginExperiments {
   }
 
   async loadScripts (...scripts: Array<string>) {
+    scripts = scripts.map(it => {
+      if (!it?.startsWith('http')) {
+        return this.ctx.resolveResourceFullUrl(it)
+      }
+
+      return it
+    })
+
     scripts.unshift(this.ctx.baseInfo.id)
     await this.invokeExperMethod('loadScripts', ...scripts)
   }
@@ -42,10 +55,5 @@ export class LSPluginExperiments {
     return top.logseq.api.exper_register_fenced_code_renderer(
       this.ctx.baseInfo.id, type, opts
     )
-  }
-
-  async sayHello () {
-    const k = await this.ctx.UI.showMsg('hello experiments')
-    console.log('==>', k, this.React, this.ReactDOM)
   }
 }
