@@ -959,16 +959,16 @@
                                   (and (= "File" (first url)) ["file" (second url)]))]
           (cond
             (and (= (get-in config [:block :block/format]) :org)
-                 (= "Complex" (first url))
-                 (= (string/lower-case protocol) "id")
-                 (string? (:link (second url)))
-                 (util/uuid-string? (:link (second url)))) ; org mode id
-            (let [id (uuid (:link (second url)))
+                 (= "Complex" protocol)
+                 (= (string/lower-case (:protocol path)) "id")
+                 (string? (:link path))
+                 (util/uuid-string? (:link path))) ; org mode id
+            (let [id (uuid (:link path))
                   block (db/entity [:block/uuid id])]
               (if (:block/pre-block? block)
                 (let [page (:block/page block)]
                   (page-reference html-export? (:block/name page) config label))
-                (block-reference config (:link (second url)) label)))
+                (block-reference config (:link path) label)))
 
             (= protocol "file")
             (cond
