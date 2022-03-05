@@ -214,7 +214,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium {:style {:margin 0 :white-space "pre-line"}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
                                                  :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
