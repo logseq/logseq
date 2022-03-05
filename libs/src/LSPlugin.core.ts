@@ -1013,7 +1013,7 @@ class PluginLocal
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInDotRoot
-    json.lsr = this._resolveResourceFullUrl('')
+    json.lsr = this._resolveResourceFullUrl('/')
     return json
   }
 }
