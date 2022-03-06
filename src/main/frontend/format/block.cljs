@@ -159,7 +159,8 @@
                                (contains? #{:background-color :background_color} (keyword k))))
                      (map last)
                      (map (fn [v]
-                            (when (string? v)
+                            (when (and (string? v)
+                                       (not (mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
