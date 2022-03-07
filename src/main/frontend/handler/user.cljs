@@ -3,34 +3,30 @@
             [frontend.db :as db]
             [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
-            [frontend.idb :as idb]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.debug :as debug]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
             [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go go-loop <! timeout]])
-  (:import [goog.format EmailAddress]))
+            [cljs.core.async :as async :refer [go go-loop <! timeout]]))
 
-(defn- email? [v]
-  (and v
-       (.isValid (EmailAddress. v))))
+;; (defn- email? [v]
+;;   (and v
+;;        (.isValid (EmailAddress. v))))
 
-(defn deprecated-set-email!
-  [email]
-  (when (email? email)
-    (util/post (str config/api "email")
-               {:email email}
-               (fn [_result]
-                 (db/transact! [{:me/email email}])
-                 (swap! state/state assoc-in [:me :email] email))
-               (fn [_error]
-                 (notification/show! "Email already exists!"
-                                     :error)))))
+;; (defn deprecated-set-email!
+;;   [email]
+;;   (when (email? email)
+;;     (util/post (str config/api "email")
+;;                {:email email}
+;;                (fn [_result]
+;;                  (db/transact! [{:me/email email}])
+;;                  (swap! state/state assoc-in [:me :email] email))
+;;                (fn [_error]
+;;                  (notification/show! "Email already exists!"
+;;                                      :error)))))
 
 (defn set-cors!
   [cors-proxy]
@@ -70,28 +66,28 @@
     ;;              (fn [_e])))
     ))
 
-(defn deprecated-sign-out!
-  ([]
-   (deprecated-sign-out! true))
-  ([confirm?]
-   (when (or (not confirm?)
-             (js/confirm "Your local notes will be completely removed after signing out. Continue?"))
-     (->
-      (idb/clear-local-storage-and-idb!)
-      (p/catch (fn [e]
-                 (println "sign out error: ")
-                 (js/console.dir e)))
-      (p/finally (fn []
-                   (set! (.-href js/window.location) "/logout")))))))
+;; (defn deprecated-sign-out!
+;;   ([]
+;;    (deprecated-sign-out! true))
+;;   ([confirm?]
+;;    (when (or (not confirm?)
+;;              (js/confirm "Your local notes will be completely removed after signing out. Continue?"))
+;;      (->
+;;       (idb/clear-local-storage-and-idb!)
+;;       (p/catch (fn [e]
+;;                  (println "sign out error: ")
+;;                  (js/console.dir e)))
+;;       (p/finally (fn []
+;;                    (set! (.-href js/window.location) "/logout")))))))
 
-(defn deprecated-delete-account!
-  []
-  (p/let [_ (idb/clear-local-storage-and-idb!)]
-    (util/delete (str config/api "account")
-                 (fn []
-                   (deprecated-sign-out! false))
-                 (fn [error]
-                   (log/error :user/delete-account-failed error)))))
+;; (defn deprecated-delete-account!
+;;   []
+;;   (p/let [_ (idb/clear-local-storage-and-idb!)]
+;;     (util/delete (str config/api "account")
+;;                  (fn []
+;;                    (deprecated-sign-out! false))
+;;                  (fn [error]
+;;                    (log/error :user/delete-account-failed error)))))
 
 
 
