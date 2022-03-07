@@ -60,19 +60,19 @@
   (are [x y] (= (text/split-page-refs-without-brackets x) y)
     "foobar" "foobar"
     "foo bar" "foo bar"
-    "foo, bar" #{"foo" "bar"}
-    "[[foo]] [[bar]]" #{"foo" "bar"}
-    "[[foo]],[[bar]]" #{"foo", "bar"}
-    "[[foo]], [[bar]]" #{"foo", "bar"}
-    "[[foo]]" #{"foo"}
-    "[[nested [[foo]]]]" #{"nested [[foo]]"}
-    "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
-    "[[nested [[foo]] [[bar]]]], [[foo]]" #{"nested [[foo]] [[bar]]" "foo"}
-    "[[nested [[foo]], [[bar]]]], [[foo]]" #{"nested [[foo]], [[bar]]" "foo"}
-    "#tag," #{"tag"}
-    "#tag" #{"tag"}
-    "#tag1,#tag2" #{"tag1" "tag2"}
-    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
+    "foo, bar" '("foo" "bar")
+    "[[foo]] [[bar]]" '("foo" "bar")
+    "[[foo]],[[bar]]" '("foo", "bar")
+    "[[foo]], [[bar]]" '("foo", "bar")
+    "[[foo]]" '("foo")
+    "[[nested [[foo]]]]" '("nested [[foo]]")
+    "[[nested [[foo]]]], [[foo]]" '("nested [[foo]]" "foo")
+    "[[nested [[foo]] [[bar]]]], [[foo]]" '("nested [[foo]] [[bar]]" "foo")
+    "[[nested [[foo]], [[bar]]]], [[foo]]" '("nested [[foo]], [[bar]]" "foo")
+    "#tag," '("tag")
+    "#tag" '("tag")
+    "#tag1,#tag2" '("tag1" "tag2")
+    "[[Jan 26th, 2021]], hello" '("Jan 26th, 2021" "hello")))
 
 (deftest extract-level-spaces
   []
@@ -141,19 +141,19 @@
   (testing "parse-property"
     (are [k v y] (= (text/parse-property k v) y)
       :tags "foo" "foo"
-      :tags "foo, bar" #{"foo" "bar"}
-      :tags "foo,bar" #{"foo" "bar"}
-      :tags "[[foo]]" #{"foo"}
-      :tags "[[foo]] [[bar]]" #{"foo" "bar"}
-      :tags "[[foo]], [[bar]]" #{"foo" "bar"}
-      :tags "[[foo]], [[bar]], #baz" #{"foo" "bar" "baz"}
-      :tags "#baz, [[foo]], [[bar]]" #{"foo" "bar" "baz"}
-      :tags "[[foo [[bar]]]]" #{"foo [[bar]]"}
-      :tags "[[foo [[bar]]]], baz" #{"baz" "foo [[bar]]"}))
+      :tags "foo, bar" '("foo" "bar")
+      :tags "foo,bar" '("foo" "bar")
+      :tags "[[foo]]" '("foo")
+      :tags "[[foo]] [[bar]]" '("foo" "bar")
+      :tags "[[foo]], [[bar]]" '("foo" "bar")
+      :tags "[[foo]], [[bar]], #baz" '("foo" "bar" "baz")
+      :tags "#baz, [[foo]], [[bar]]" '("baz" "foo" "bar")
+      :tags "[[foo [[bar]]]]" '("foo [[bar]]")
+      :tags "[[foo [[bar]]]], baz" '("foo [[bar]]" "baz")))
   (testing "parse-property with quoted strings"
     (are [k v y] (= (text/parse-property k v) y)
       :tags "\"foo, bar\"" "\"foo, bar\""
       :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
-      :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
+      :tags "baz, \"[[foo]], [[bar]]\"" '("baz"))))
 
 #_(cljs.test/test-ns 'frontend.text-test)

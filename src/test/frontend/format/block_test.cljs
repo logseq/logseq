@@ -7,22 +7,22 @@
     [["year" "1000"]] {:year 1000}
     [["year" "\"1000\""]] {:year "\"1000\""}
     [["background-color" "#000000"]] {:background-color "#000000"}
-    [["alias" "name/with space"]] {:alias #{"name/with space"}}
-    [["year" "1000"] ["alias" "name/with space"]] {:year 1000, :alias #{"name/with space"}}
-    [["year" "1000"] ["tags" "name/with space"]] {:year 1000, :tags #{"name/with space"}}
-    [["year" "1000"] ["tags" "name/with space, another"]] {:year 1000, :tags #{"name/with space" "another"}}
-    [["year" "1000"] ["alias" "name/with space, another"]] {:year 1000, :alias #{"name/with space" "another"}}
-    [["year" "1000"] ["alias" "name/with space, [[another [[nested]]]]"]] {:year 1000, :alias #{"name/with space" "another [[nested]]"}}
-    [["year" "1000"] ["alias" "name/with space, [[[[nested]] another]]"]] {:year 1000, :alias #{"name/with space" "[[nested]] another"}}
+    [["alias" "name/with space"]] {:alias '("name/with space")}
+    [["year" "1000"] ["alias" "name/with space"]] {:year 1000, :alias '("name/with space")}
+    [["year" "1000"] ["tags" "name/with space"]] {:year 1000, :tags '("name/with space")}
+    [["year" "1000"] ["tags" "name/with space, another"]] {:year 1000, :tags '("name/with space" "another")}
+    [["year" "1000"] ["alias" "name/with space, another"]] {:year 1000, :alias '("name/with space" "another")}
+    [["year" "1000"] ["alias" "name/with space, [[another [[nested]]]]"]] {:year 1000, :alias '("name/with space" "another [[nested]]")}
+    [["year" "1000"] ["alias" "name/with space, [[[[nested]] another]]"]] {:year 1000, :alias '("name/with space" "[[nested]] another")}
     [["foo" "bar"]] {:foo "bar"}
-    [["foo" "bar, baz"]] {:foo #{"bar" "baz"}}
-    [["foo" "bar, [[baz]]"]] {:foo #{"bar" "baz"}}
-    [["foo" "[[bar]], [[baz]]"]] {:foo #{"bar" "baz"}}
-    [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
-    [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
-    [["foo" "bar, [[baz, test]]"]] {:foo #{"bar" "baz, test"}}
-    [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}})
-
+    [["foo" "bar, baz"]] {:foo '("bar" "baz")}
+    [["foo" "bar, [[baz]]"]] {:foo '("bar" "baz")}
+    [["foo" "[[bar]], [[baz]]"]] {:foo '("bar" "baz")}
+    [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo '("bar" "nested [[baz]]")}
+    [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo '("bar" "nested [[baz]]")}
+    [["foo" "bar, [[baz, test]]"]] {:foo '("bar" "baz, test")}
+    [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo '("bar" "baz, test, [[nested]]")})
+  
   (are [x y] (= (vec (:page-refs (block/extract-properties :markdown x))) y)
     [["year" "1000"]] []
     [["year" "\"1000\""]] []
