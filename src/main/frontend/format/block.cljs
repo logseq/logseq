@@ -184,9 +184,9 @@
                                        v (if (and
                                               (string? v)
                                               (contains? #{:alias :aliases :tags} k))
-                                           [v]
+                                           (set [v])
                                            v)
-                                       v (if (coll? v) (distinct v) v)]
+                                       v (if (coll? v) (set v) v)]
                                    [k v])))
                           (remove #(nil? (second %))))]
       {:properties (into {} properties)
