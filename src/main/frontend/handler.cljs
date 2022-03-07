@@ -168,7 +168,7 @@
                                nil)))))))
 (defn- get-repos
   []
-  (let [logged? (state/logged?)
+  (let [logged? (state/deprecated-logged?)
         me (state/get-me)]
     (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]

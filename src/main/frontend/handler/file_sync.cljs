@@ -1,7 +1,7 @@
 (ns frontend.handler.file-sync
   (:require ["path" :as path]
             [cljs-time.coerce :as tc]
-            [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async :as async :refer [go <!]]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]

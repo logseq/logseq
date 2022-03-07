@@ -114,7 +114,7 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [logged? (user-handler/logged?)
+  (let [;; logged? (user-handler/logged?)
         page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
@@ -155,10 +155,11 @@
                   :title (t :discord-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
-       (when logged?
-         {:title (t :sign-out)
-          :options {:on-click user-handler/sign-out!}
-          :icon svg/logout-sm})]
+       ;; (when logged?
+       ;;   {:title (t :sign-out)
+       ;;    :options {:on-click user-handler/sign-out!}
+       ;;    :icon svg/logout-sm})
+       ]
       (concat page-menu-and-hr)
       (remove nil?))
      {}
