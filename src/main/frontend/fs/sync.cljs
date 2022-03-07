@@ -29,16 +29,22 @@
 ;; files in these `get-monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
-;; - when toggle file-sync on, trigger a full-sync first,
-;;   full-sync will compare local-files with remote-files (by md5 & size),
+;; - when toggle file-sync on, trigger a local->remote-full-sync first,
+;;   local->remote-full-sync will compare local-files with remote-files (by md5 & size),
 ;;   and upload new-added-files to remote server.
-;; - full-sync will be triggered after 20min of idle
-;; - every 20s will flush local changes, and sync to remote
+;; - if local->remote sync(normal-sync or full-sync) return :need-sync-remote,
+;;   then trigger a remote->local sync
+;; - if remote->local sync return :need-remote->local-full-sync,
+;;   then we need a remote->local-full-sync,
+;;   which compare local-files with remote-files, sync diff-remote-files to local
+;; - local->remote-full-sync will be triggered after 20min of idle
+;; - every 20s, flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
 ;; TODO: currently, renaming a page produce 2 file-watch event: unlink & add,
 ;;       we need to a new type event 'rename'
-
+;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
+;;       and re-produce a new same-file-delete diff.
 ;;; specs
 (s/def ::state #{::idle
                  ;; sync local-changed files
@@ -90,7 +96,6 @@
   (reset! *ws {:ws (js/WebSocket. (util/format ws-addr graph-uuid)) :stop false})
   (set! (.-onopen (:ws @*ws)) #(println (util/format "ws opened: graph '%s'" graph-uuid %)))
   (set! (.-onclose (:ws @*ws)) (fn [e]
-                                 (println (util/format "ws close: graph '%s'" graph-uuid e))
                                  (when-not (true? (:stop @*ws))
                                    (go
                                      (timeout 1000)
