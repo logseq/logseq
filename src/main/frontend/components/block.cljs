@@ -912,6 +912,10 @@
                (not= \* (last s)))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
+          (text/block-ref? s)
+          (let [id (text/get-block-ref s)]
+            (block-reference config id label))
+
           (not (string/includes? s "."))
           (page-reference (:html-export? config) s config label)
 
