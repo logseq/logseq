@@ -7,7 +7,7 @@ import * as kb_events from './util/keyboard-events'
 test(
   "press Chinese parenthesis 【 by 2 times #3251 should trigger [[]], " +
   "but dont trigger RIME #3440 ",
-  // cases should trigger [[]]
+  // cases should trigger [[]] #3251
   async ({ page }) => {
     for (let left_full_bracket of [
       kb_events.macos_pinyin_left_full_bracket,
@@ -22,16 +22,22 @@ test(
       await page.type(':nth-match(textarea, 1)', "【")
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', left_full_bracket)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('[[]]')
-    }
+    };
 
-    // cases should NOT trigger [[]]
-    await createRandomPage(page)
-    await page.type(':nth-match(textarea, 1)', "【")
-    await dispatch_kb_events(page, ':nth-match(textarea, 1)', kb_events.win10_RIME_left_full_bracket)
-    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【')
-    await page.type(':nth-match(textarea, 1)', "【")
-    await dispatch_kb_events(page, ':nth-match(textarea, 1)', kb_events.win10_RIME_left_full_bracket)
-    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【【')
+    // dont trigger RIME #3440
+    for (let [idx, selecting_candidate_left_bracket] of [
+      kb_events.macos_pinyin_selecting_candidate_left_bracket,
+      kb_events.win10_RIME_selecting_candidate_left_bracket
+    ].entries()) {
+      await createRandomPage(page)
+      let prefix = "#3440 test " + idx + ": "
+      await page.type(':nth-match(textarea, 1)', prefix + "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(prefix + '【')
+      await page.type(':nth-match(textarea, 1)', "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(prefix + '【【')
+    }
   })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
