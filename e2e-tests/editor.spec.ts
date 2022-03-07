@@ -26,17 +26,16 @@ test(
 
     // dont trigger RIME #3440
     for (let [idx, selecting_candidate_left_bracket] of [
-      kb_events.macos_pinyin_selecting_candidate_left_bracket,
-      kb_events.win10_RIME_selecting_candidate_left_bracket
+      kb_events.macos_pinyin_selecting_candidate_double_left_bracket,
+      kb_events.win10_RIME_selecting_candidate_double_left_bracket
     ].entries()) {
       await createRandomPage(page)
-      let prefix = "#3440 test " + idx + ": "
-      await page.type(':nth-match(textarea, 1)', prefix + "【")
+      let check_text = "#3440 test " + idx
+      await page.type(':nth-match(textarea, 1)', check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(prefix + '【')
-      await page.type(':nth-match(textarea, 1)', "【")
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(prefix + '【【')
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
     }
   })
 

@@ -123,12 +123,12 @@ export let win10_legacy_pinyin_left_full_bracket = [
   }
 ]
 
-export let macos_pinyin_selecting_candidate_left_bracket = [
+export let macos_pinyin_selecting_candidate_double_left_bracket = [
   {
     "event_type": "keydown",
     "event": {
-      "key": "a",
-      "code": "KeyA",
+      "key": "b",
+      "code": "KeyB",
       "location": 0,
       "ctrlKey": false,
       "shiftKey": false,
@@ -142,8 +142,98 @@ export let macos_pinyin_selecting_candidate_left_bracket = [
   {
     "event_type": "keyup",
     "event": {
-      "key": "a",
-      "code": "KeyA",
+      "key": "b",
+      "code": "KeyB",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keydown",
+    "event": {
+      "key": "】",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "】",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keydown",
+    "event": {
+      "key": "】",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "】",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keydown",
+    "event": {
+      "key": "【",
+      "code": "BracketLeft",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "【",
+      "code": "BracketLeft",
       "location": 0,
       "ctrlKey": false,
       "shiftKey": false,
@@ -186,7 +276,7 @@ export let macos_pinyin_selecting_candidate_left_bracket = [
   }
 ]
 
-export let win10_RIME_selecting_candidate_left_bracket = [
+export let win10_RIME_selecting_candidate_double_left_bracket = [
   {
     "event_type": "keydown",
     "event": {
@@ -222,6 +312,51 @@ export let win10_RIME_selecting_candidate_left_bracket = [
     "event": {
       "key": "a",
       "code": "KeyA",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keydown",
+    "event": {
+      "key": "Process",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "Process",
+      "code": "BracketRight",
+      "location": 0,
+      "ctrlKey": false,
+      "shiftKey": false,
+      "altKey": false,
+      "metaKey": false,
+      "repeat": false,
+      "isComposing": true,
+      "composed": true
+    }
+  },
+  {
+    "event_type": "keyup",
+    "event": {
+      "key": "]",
+      "code": "BracketRight",
       "location": 0,
       "ctrlKey": false,
       "shiftKey": false,
