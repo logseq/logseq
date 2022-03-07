@@ -16,11 +16,6 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
-(when (mobile-util/is-native-platform?)
-  (.addListener mobile-util/fs-watcher "watcher"
-                (fn [event]
-                  (state/pub-event! [:file-watcher/changed event]))))
-
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
           permission (-> permission
