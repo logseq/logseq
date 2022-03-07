@@ -11,9 +11,30 @@
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
+            [frontend.fs.watcher-handler :as watcher-handler]
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.config :as config]))
+
+(defn- ios-init
+  []
+  (let [path (fs/iOS-ensure-documents!)]
+    (println "iOS container path: " path))
+
+  ;; Keyboard watcher
+  ;; (.addListener Keyboard "keyboardWillShow"
+  ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
+  (.addListener Keyboard "keyboardDidShow"
+                #(state/pub-event! [:mobile/keyboard-did-show]))
+
+  (p/do!
+   (.addListener mobile-util/fs-watcher "watcher"
+                 (fn [^js event]
+                   (watcher-handler/handle-changed!
+                    (.-event event)
+                    (update (js->clj event :keywordize-keys true)
+                            :path
+                            js/decodeURI))))))
 
 (defn init!
   []
@@ -38,15 +59,9 @@
                                (not (string/includes? href "#/")))
                          (.exitApp App)
                          (js/window.history.back))))))
-  (when (mobile-util/native-ios?)
-    (let [path (fs/iOS-ensure-documents!)]
-      (println "iOS container path: " path))
 
-    ;; Keyboard watcher
-    ;; (.addListener Keyboard "keyboardWillShow"
-    ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
-    (.addListener Keyboard "keyboardDidShow"
-                  #(state/pub-event! [:mobile/keyboard-did-show])))
+  (when (mobile-util/native-ios?)
+    (ios-init))
 
   (when (mobile-util/is-native-platform?)
     (.addEventListener js/window "statusTap"
@@ -60,7 +75,7 @@
                         (if is-active?
                           (p/do!
                            (when (mobile-util/native-ios?)
-                               (mobile-util/sync-icloud-repo repo-dir))
+                             (mobile-util/sync-icloud-repo repo-dir))
                            (nfs-handler/refresh! repo repo/refresh-cb)
                            (notification/show! "Notes updated!" :success true))
                           (editor-handler/save-current-block!))))))))
