@@ -1048,9 +1048,8 @@
   []
   (:name (get-me)))
 
-(defn logged?
+(defn deprecated-logged?
   "Whether the user has logged in."
-  {:deprecated "-"}
   []
   (some? (get-name)))
 

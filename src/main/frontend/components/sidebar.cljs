@@ -9,7 +9,6 @@
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
-            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -346,7 +345,7 @@
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        preferred-format (state/sub [:me :preferred_format])
+        ;; preferred-format (state/sub [:me :preferred_format])
         logged? (user-handler/logged?)]
     [:div
      (cond

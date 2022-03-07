@@ -34,7 +34,7 @@
         repo (state/sub :git/current-repo)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
-        intro? (and (not (state/logged?))
+        intro? (and (not (state/deprecated-logged?))
                     (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)

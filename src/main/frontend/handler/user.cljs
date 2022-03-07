@@ -13,15 +13,14 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go go-loop <! >! chan timeout]])
+            [cljs.core.async :as async :refer [go go-loop <! timeout]])
   (:import [goog.format EmailAddress]))
 
 (defn- email? [v]
   (and v
        (.isValid (EmailAddress. v))))
 
-(defn set-email!
-  {:deprecated "-"}
+(defn deprecated-set-email!
   [email]
   (when (email? email)
     (util/post (str config/api "email")
@@ -34,7 +33,6 @@
                                      :error)))))
 
 (defn set-cors!
-  {:deprecated "-"}
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
              {:cors-proxy cors-proxy}
@@ -72,10 +70,9 @@
     ;;              (fn [_e])))
     ))
 
-(defn sign-out!
-  {:deprecated "-"}
+(defn deprecated-sign-out!
   ([]
-   (sign-out! true))
+   (deprecated-sign-out! true))
   ([confirm?]
    (when (or (not confirm?)
              (js/confirm "Your local notes will be completely removed after signing out. Continue?"))
@@ -87,13 +84,12 @@
       (p/finally (fn []
                    (set! (.-href js/window.location) "/logout")))))))
 
-(defn delete-account!
-  {:deprecated "-"}
+(defn deprecated-delete-account!
   []
   (p/let [_ (idb/clear-local-storage-and-idb!)]
     (util/delete (str config/api "account")
                  (fn []
-                   (sign-out! false))
+                   (deprecated-sign-out! false))
                  (fn [error]
                    (log/error :user/delete-account-failed error)))))
 
@@ -115,8 +111,9 @@
    (tc/from-long)
    (t/before? (t/now))))
 
-(defn- almost-expired? [parsed-jwt]
+(defn- almost-expired?
   "return true when jwt will expire after 1h"
+  [parsed-jwt]
   (some->
    (* 1000 (:exp parsed-jwt))
    (tc/from-long)
@@ -160,17 +157,17 @@
   (go
     (let [resp (<! (http/get (str "https://api.logseq.com/auth_callback?code=" code)))]
       (if (= 200 (:status resp))
-        (do
-          (-> resp
+        (-> resp
               (:body)
               (js/JSON.parse)
               (js->clj :keywordize-keys true)
-              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))))
+              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
         (debug/pprint "login-callback" resp)))))
 
-(defn refresh-id-token&access-token []
+(defn refresh-id-token&access-token
   "refresh id-token and access-token, if refresh_token expired, clear all tokens
    return true if success, else false"
+  []
   (when-let [refresh-token (state/get-auth-refresh-token)]
     (go
       (let [resp (<! (http/get (str "https://api.logseq.com/auth_refresh_token?refresh_token=" refresh-token)))]
@@ -195,7 +192,7 @@
   (debug/pprint "start refresh-tokens-loop")
   (go-loop []
     (<! (timeout 60000))
-    (when-some [refresh-token (state/get-auth-refresh-token)]
+    (when (state/get-auth-refresh-token)
       (let [id-token (state/get-auth-id-token)]
         (when (or (nil? id-token)
                   (-> id-token (parse-jwt) (almost-expired?)))
