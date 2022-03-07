@@ -1417,12 +1417,13 @@
   (when-let [db (conn/get-conn repo)]
     (when-not (string/blank? page)
       (let [page (util/page-name-sanity-lc (string/trim page))
-            page-exist? (db-utils/entity [:block/name page])
-            ids (->> (d/datoms db :aevt :block/name)
-                     (filter (fn [datom]
-                               (when-not page-exist?
-                                 (string/ends-with? (:v datom) (str "/" page)))))
-                     (map :e))]
+            page-exist? (db-utils/entity repo [:block/name page])
+            ids (if page-exist?
+                  '()
+                  (->> (d/datoms db :aevt :block/name)
+                       (filter (fn [datom]
+                                 (string/ends-with? (:v datom) (str "/" page))))
+                       (map :e)))]
         (when (seq ids)
           (db-utils/pull-many repo
                               '[:db/id :block/name :block/original-name
