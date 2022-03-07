@@ -802,8 +802,9 @@
 (defn- contains-path? [regexps path]
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
-(deftype Local->RemoteSyncer [graph-uuid base-path repo *sync-state
-                              ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
+(deftype ^:large-vars/cleanup-todo
+    Local->RemoteSyncer [graph-uuid base-path repo *sync-state
+                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
   Object
   (filter-file-change-events-fn [this]
     (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
@@ -994,11 +995,12 @@
 
 ;;; put all stuff together
 
-(deftype SyncManager [graph-uuid base-path *sync-state
-                      ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
-                      full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                      local-changes-chan ^:mutable ratelimit-local-changes-chan
-                      *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable stopped]
+(deftype ^:large-vars/cleanup-todo
+    SyncManager [graph-uuid base-path *sync-state
+                 ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
+                 full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
+                 local-changes-chan ^:mutable ratelimit-local-changes-chan
+                 *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable stopped]
   Object
   (schedule [this next-state & args]
     {:pre [(s/valid? ::state next-state)]}
