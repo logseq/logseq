@@ -178,7 +178,7 @@
                     (string/starts-with? result "#")))
          (let [result (if coll? result [result])
                result (map (fn [s] (string/replace s #"^#+" "")) result)]
-           (set result))
+           (distinct result))
          (first result)))
 
      :else
