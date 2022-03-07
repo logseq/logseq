@@ -169,12 +169,8 @@
 
 (defn toggle-wide-mode!
   []
-  (let [wide? (state/get-wide-mode?)
-        elements (array-seq (js/document.getElementsByClassName "cp__sidebar-main-content"))
-        max-width (if wide? "var(--ls-main-content-max-width)" "var(--ls-main-content-max-width-wide)")]
-    (when-let [element (first elements)]
-      (dom/set-style! element :max-width max-width))
-    (state/toggle-wide-mode!)))
+  (storage/set :ui/wide-mode (not (state/get-wide-mode?)))
+  (state/toggle-wide-mode!))
 
 ;; auto-complete
 (defn auto-complete-prev
