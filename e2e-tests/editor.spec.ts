@@ -1,20 +1,38 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { createRandomPage, IsMac } from './utils'
-import { press_with_events, macos_pinyin_left_full_bracket } from './util/keyboard-events'
+import { dispatch_kb_events, press_with_events, macos_pinyin_left_full_bracket } from './util/keyboard-events'
+import * as kb_events from './util/keyboard-events'
 
-test('keyboard related issues', async ({ page }) => {
-  await createRandomPage(page)
-  await page.type(':nth-match(textarea, 1)', 'without events: ')
-  await page.type(':nth-match(textarea, 1)', "【")
-  await page.type(':nth-match(textarea, 1)', "【")
+test(
+  "press Chinese parenthesis 【 by 2 times #3251 should trigger [[]], " +
+  "but dont trigger RIME #3440 ",
+  // cases should trigger [[]]
+  async ({ page }) => {
+    for (let left_full_bracket of [
+      kb_events.macos_pinyin_left_full_bracket,
+      kb_events.win10_pinyin_left_full_bracket,
+      // TODO: support #3741
+      // kb_events.win10_legacy_pinyin_left_full_bracket,
+    ]) {
+      await createRandomPage(page)
+      await page.type(':nth-match(textarea, 1)', "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', left_full_bracket)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【')
+      await page.type(':nth-match(textarea, 1)', "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', left_full_bracket)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('[[]]')
+    }
 
-  await page.type(':nth-match(textarea, 1)', ' | with events: ')
-  await page.type(':nth-match(textarea, 1)', "【")
-  await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
-  await page.type(':nth-match(textarea, 1)', "【")
-  await press_with_events(page, ':nth-match(textarea, 1)', macos_pinyin_left_full_bracket)
-})
+    // cases should NOT trigger [[]]
+    await createRandomPage(page)
+    await page.type(':nth-match(textarea, 1)', "【")
+    await dispatch_kb_events(page, ':nth-match(textarea, 1)', kb_events.win10_RIME_left_full_bracket)
+    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【')
+    await page.type(':nth-match(textarea, 1)', "【")
+    await dispatch_kb_events(page, ':nth-match(textarea, 1)', kb_events.win10_RIME_left_full_bracket)
+    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【【')
+  })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
