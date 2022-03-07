@@ -1521,9 +1521,6 @@
    (set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
 
-(defn add-watch-state [key f]
-  (add-watch state key f))
-
 (defn remove-watch-state [key]
   (remove-watch state key))
 
@@ -1667,30 +1664,15 @@
 (defn get-auth-id-token []
   (:auth/id-token @state))
 
-(defn get-auth-access-token []
-  (:auth/access-token @state))
-
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
 (defn set-file-sync-manager [v]
   (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state-manager [v]
-  (set-state! :file-sync/sync-state-manager v))
 (defn set-file-sync-state [v]
   (set-state! :file-sync/sync-state v))
-(defn set-file-sync-uploading-files [v]
-  (set-state! :file-sync/sync-uploading-files v))
-(defn set-file-sync-downloading-files [v]
-  (set-state! :file-sync/sync-downloading-files v))
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
-(defn get-file-sync-state-manager []
-  (:file-sync/sync-state-manager @state))
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
-(defn get-file-sync-uploading-files []
-  (:file-sync/sync-uploading-files @state))
-(defn get-file-sync-downloading-files []
-  (:file-sync/sync-downloading-files @state))

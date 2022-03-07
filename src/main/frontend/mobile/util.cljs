@@ -21,8 +21,6 @@
   (.convertFileSrc Capacitor path-str))
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
-(when (native-android?)
-  (defonce file-sync (registerPlugin "GraphFileSync")))
 (when (native-ios?)
   (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
   (defonce ios-file-container (registerPlugin "FileContainer")))

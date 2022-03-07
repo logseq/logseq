@@ -9,6 +9,7 @@
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -345,7 +346,7 @@
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        ;; preferred-format (state/sub [:me :preferred_format])
+        preferred-format (state/sub [:me :preferred_format])
         logged? (user-handler/logged?)]
     [:div
      (cond
@@ -369,8 +370,8 @@
          ;; (and (not logged?) (seq latest-journals))
          ;; (journal/journals latest-journals)
 
-         ;; (and logged? (not preferred-format))
-         ;; (widgets/choose-preferred-format)
+       (and logged? (not preferred-format))
+       (widgets/choose-preferred-format)
 
                          ;; TODO: delay this
          ;; (and logged? (nil? (:email me)))
@@ -525,6 +526,7 @@
         (ui/modal)
         (ui/sub-modal)
         (command-palette/command-palette-modal)
+        (select/select-modal)
         (custom-context-menu)
         (plugins/custom-js-installer {:t t
                                       :current-repo current-repo
