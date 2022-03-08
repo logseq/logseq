@@ -4,7 +4,7 @@
             [clojure.string :as string]
             [cljs.reader :as reader]
             [frontend.db.query-react :as react]
-            [frontend.db.query-dsl :as dsl]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.db.model :as model]
             [clojure.walk :as walk]))
 
@@ -40,5 +40,5 @@
            query' (replace-star-with-block-attrs! query)]
        (if (or (list? (:query query'))
                (not= :find (first (:query query')))) ; dsl query
-         (dsl/custom-query repo query' query-opts )
+         (query-dsl/custom-query repo query' query-opts)
          (react/react-query repo query' query-opts))))))

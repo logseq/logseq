@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [frontend.db :as db]
             [frontend.db.config :refer [test-db] :as config]
-            [frontend.db.query-dsl :as dsl]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.repo :as repo-handler]))
 
 ;; TODO: quickcheck
@@ -19,30 +19,22 @@
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (when-let [result (dsl/query test-db s)]
+  (when-let [result (query-dsl/query test-db s)]
     (map first (deref result))))
 
-(def parse (partial dsl/parse test-db))
+(defn- custom-query
+  [query]
+  (db/clear-query-state!)
+  (when-let [result (query-dsl/custom-query test-db query {})]
+    (map first (deref result))))
 
 (defn- q
   [s]
   (db/clear-query-state!)
-  (let [parse-result (parse s)
+  (let [parse-result (query-dsl/parse s)
         query (:query parse-result)]
     {:query (if (seq query) (vec query) query)
-     :result (dsl/query test-db s)}))
-
-(defn q-count
-  [s]
-  (let [{:keys [query result]} (q s)]
-    {:query query
-     :count (if result
-              (count @result)
-              0)}))
-
-(defn count-only
-  [s]
-  (:count (q-count s)))
+     :result (query-dsl/query test-db s)}))
 
 ;; Tests
 ;; =====
@@ -431,7 +423,7 @@ last-modified-at:: 1609084800002"}]]
 (deftest between-queries
   (load-test-files-with-timestamps)
 
-  (are [x y] (= (count-only x) y)
+  (are [x y] (= (count (dsl-query x)) y)
        "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
        5
 
@@ -448,6 +440,21 @@ last-modified-at:: 1609084800002"}]]
        ;; 5
        )
   )
+
+(deftest custom-query-test
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- NOW b1
+- TODO b2
+- LATER b3
+- b3"}])
+
+  (is (= ["LATER b3"]
+         (map :block/content (custom-query {:query '(task later)}))))
+
+  (is (= ["LATER b3"]
+         (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
+      "Try"))
 
 #_(deftest sort-by-queries
     (load-test-files-with-timestamps)
@@ -523,7 +530,7 @@ last-modified-at:: 1609084800002"}]]
  (config/start-test-db!)
  (load-test-files-with-timestamps)
 
- (dsl/query test-db "(task done)")
+ (query-dsl/query test-db "(task done)")
 
  ;; Useful for debugging
  (prn

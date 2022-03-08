@@ -13,7 +13,6 @@
             [frontend.template :as template]
             [frontend.text :as text]
             [frontend.util :as util]
-            [frontend.state :as state]
             [lambdaisland.glogi :as log]))
 
 
@@ -169,9 +168,9 @@
 (defonce remove-nil? (partial remove nil?))
 
 (defn- build-and-or-not
-  [repo e {:keys [current-filter vars] :as env} level fe]
+  [e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
-                           (build-query repo form (assoc env :current-filter fe) (inc level)))
+                           (build-query form (assoc env :current-filter fe) (inc level)))
                          (rest e))
         clauses (->> raw-clauses
                      (map :query)
@@ -384,9 +383,9 @@ Some bindings in this fn:
 
 * e - the list being processed
 * fe - the query operator e.g. `property`"
-  ([repo e env]
-   (build-query repo e (assoc env :vars (atom {})) 0))
-  ([repo e {:keys [sort-by blocks? sample] :as env} level]
+  ([e env]
+   (build-query e (assoc env :vars (atom {})) 0))
+  ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
@@ -406,7 +405,7 @@ Some bindings in this fn:
        (build-block-content e)
 
        (contains? #{'and 'or 'not} fe)
-       (build-and-or-not repo e env level fe)
+       (build-and-or-not e env level fe)
 
        (= 'between fe)
        (build-between e)
@@ -503,7 +502,7 @@ Some bindings in this fn:
       q)))
 
 (defn parse
-  [repo s]
+  [s]
   (when (and (string? s)
              (not (string/blank? s)))
     (try
@@ -517,9 +516,9 @@ Some bindings in this fn:
                 blocks? (atom nil)
                 sample (atom nil)
                 {result :query rules :rules}
-                (when form (build-query repo form {:sort-by sort-by
-                                                   :blocks? blocks?
-                                                   :sample sample}))]
+                (when form (build-query form {:sort-by sort-by
+                                              :blocks? blocks?
+                                              :sample sample}))]
             (cond
               (and (nil? result) (string? form))
               form
@@ -566,58 +565,58 @@ Some bindings in this fn:
       result)))
 
 (defn query
-  ([query-string]
-   (query (state/get-current-repo) query-string))
-  ([repo query-string]
-   (when (string? query-string)
-     (let [query-string (template/resolve-dynamic-template! query-string)]
-       (when-not (string/blank? query-string)
-         (let [{:keys [query rules sort-by blocks? sample] :as result} (parse repo query-string)
-               query (if (string? query) (string/trim query) query)
-               full-text-query? (and (string? result)
-                                     (not (string/includes? result " ")))]
-           (if full-text-query?
-             (if (= "\"" (first result) (last result))
-               (subs result 1 (dec (count result)))
-               result)
-             (when-let [query (query-wrapper query blocks?)]
-               (let [sort-by (or sort-by identity)
-                     random-samples (if @sample
-                                      (fn [col]
-                                        (take @sample (shuffle col)))
-                                      identity)
-                     transform-fn (comp sort-by random-samples)]
-                 (try
-                   (react/react-query repo
-                                      {:query query
-                                       :query-string query-string
-                                       :rules rules
-                                       :throw-exception true}
-                                      {:use-cache? false
-                                       :transform-fn transform-fn})
-                   (catch ExceptionInfo e
-                     ;; Allow non-existent page queries to be ignored
-                     (if (string/includes? (str (.-message e)) "Nothing found for entity")
-                       (log/error :query-dsl-error e)
-                       (throw e)))))))))))))
+  "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
+  [repo query-string]
+  (when (string? query-string)
+    (let [query-string (template/resolve-dynamic-template! query-string)]
+      (when-not (string/blank? query-string)
+        (let [{:keys [query rules sort-by blocks? sample] :as result} (parse query-string)
+              query (if (string? query) (string/trim query) query)
+              full-text-query? (and (string? result)
+                                    (not (string/includes? result " ")))]
+          (if full-text-query?
+            (if (= "\"" (first result) (last result))
+              (subs result 1 (dec (count result)))
+              result)
+            (when-let [query (query-wrapper query blocks?)]
+              (let [sort-by (or sort-by identity)
+                    random-samples (if @sample
+                                     (fn [col]
+                                       (take @sample (shuffle col)))
+                                     identity)
+                    transform-fn (comp sort-by random-samples)]
+                (try
+                  (react/react-query repo
+                                     {:query query
+                                      :query-string query-string
+                                      :rules rules
+                                      :throw-exception true}
+                                     {:use-cache? false
+                                      :transform-fn transform-fn})
+                  (catch ExceptionInfo e
+                    ;; Allow non-existent page queries to be ignored
+                    (if (string/includes? (str (.-message e)) "Nothing found for entity")
+                      (log/error :query-dsl-error e)
+                      (throw e))))))))))))
 
 (defn custom-query
+  "Runs a dsl query with query as a seq. Primary use is from advanced query"
   [repo query-m query-opts]
   (when (seq (:query query-m))
-    (let [query-string (pr-str (:query query-m))
-          query-string (template/resolve-dynamic-template! query-string)
-          {:keys [query sort-by blocks?]} (parse repo query-string)
+    (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
+          {:keys [query sort-by blocks? rules]} (parse query-string)
           query (if (string? query) (string/trim query) query)]
-      (when query
-        (when-let [query (query-wrapper query blocks?)]
-          (react/react-query repo
-                             (merge
-                              query-m
-                              {:query query})
-                             (merge
-                              query-opts
-                              (when sort-by
-                                {:transform-fn sort-by}))))))))
+      (when-let [query (query-wrapper query blocks?)]
+        (react/react-query repo
+                           (merge
+                            query-m
+                            {:query query
+                             :rules rules
+                             :throw-exception true})
+                           (merge
+                            query-opts
+                            (when sort-by
+                              {:transform-fn sort-by})))))))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

@@ -13,7 +13,8 @@
   {:aliases {datascript.core d
              datascript.transit dt
              datascript.db ddb
-             lambdaisland.glogi log}}}
+             lambdaisland.glogi log
+             frontend.db.query-dsl query-dsl}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}

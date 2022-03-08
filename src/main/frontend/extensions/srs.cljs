@@ -253,7 +253,7 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
-           {:keys [query sort-by]} (query-dsl/parse repo query-string)
+           {:keys [query sort-by]} (query-dsl/parse query-string)
            query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
                           (if (coll? (first query))
                             query
