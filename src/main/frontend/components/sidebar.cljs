@@ -447,7 +447,8 @@
 (defn- hide-context-menu-and-clear-selection
   [e]
   (state/hide-custom-context-menu!)
-  (when-not (gobj/get e "shiftKey")
+  (when (and (not (state/selection-pending?))
+             (not (gobj/get e "shiftKey")))
     (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <

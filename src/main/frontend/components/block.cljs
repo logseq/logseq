@@ -1808,7 +1808,9 @@
                 (f)
                 (js/setTimeout f 5))
 
-              (when block-id (state/set-selection-start-block! block-id)))))))))
+              (when block-id
+                (state/set-selection-start-block! block-id)
+                (state/set-state! :selection/pending? true)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -1883,7 +1885,11 @@
                                     (not (string/includes? content "```"))
                                     (not (gobj/get e "shiftKey")))
                                ;; clear highlighted text
-                               (util/clear-selection!)))}
+                               (util/clear-selection!))
+
+                             ;; yield for other micro tasks
+                             (js/setTimeout
+                               #(state/set-state! :selection/pending? false) 32))}
        (not slide?)
        (merge attrs))
 

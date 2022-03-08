@@ -131,6 +131,7 @@
      :db/persisted?                         {}
      :cursor-range                          nil
 
+     :selection/pending?                    false
      :selection/mode                        false
      :selection/blocks                      []
      :selection/start-block                 nil
@@ -683,6 +684,10 @@
 (defn in-selection-mode?
   []
   (:selection/mode @state))
+
+(defn selection-pending?
+  []
+  (:selection/pending? @state))
 
 (defn selection?
   "True sense of selection mode with valid selected block"
