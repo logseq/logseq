@@ -524,7 +524,7 @@ Some bindings in this fn:
               form
 
               (string? result)
-              result
+              (string/trim result)
 
               :else
               (let [result (when (seq result)
@@ -571,7 +571,6 @@ Some bindings in this fn:
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
         (let [{:keys [query rules sort-by blocks? sample] :as result} (parse query-string)
-              query (if (string? query) (string/trim query) query)
               full-text-query? (and (string? result)
                                     (not (string/includes? result " ")))]
           (if full-text-query?
@@ -604,8 +603,7 @@ Some bindings in this fn:
   [repo query-m query-opts]
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
-          {:keys [query sort-by blocks? rules]} (parse query-string)
-          query (if (string? query) (string/trim query) query)]
+          {:keys [query sort-by blocks? rules]} (parse query-string)]
       (when-let [query (query-wrapper query blocks?)]
         (react/react-query repo
                            (merge
