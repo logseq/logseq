@@ -588,8 +588,7 @@ Some bindings in this fn:
                   (react/react-query repo
                                      {:query query
                                       :query-string query-string
-                                      :rules rules
-                                      :throw-exception true}
+                                      :rules rules}
                                      {:use-cache? false
                                       :transform-fn transform-fn})
                   (catch ExceptionInfo e
@@ -609,8 +608,7 @@ Some bindings in this fn:
                            (merge
                             query-m
                             {:query query
-                             :rules rules
-                             :throw-exception true})
+                             :rules rules})
                            (merge
                             query-opts
                             (when sort-by

@@ -261,8 +261,7 @@
        (when-let [query (query-dsl/query-wrapper query* true)]
          (let [result (react/react-query repo
                                          {:query query
-                                          :rules (or rules [])
-                                          :throw-exception true}
+                                          :rules (or rules [])}
                                          (merge
                                           {:use-cache? use-cache?}
                                           (cond->
