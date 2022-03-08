@@ -244,8 +244,8 @@
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
-   with-timestamp?: assign timestampes to the map structure. 
-    Useful when creating new pages from references or namespaces, 
+   with-timestamp?: assign timestampes to the map structure.
+    Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
   ([original-page-name with-id?]
    (page-name->map original-page-name with-id? true))
@@ -474,8 +474,9 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         id (get-custom-id-or-new-id {:properties @pre-block-properties})
-                         property-refs (->> (get-page-refs-from-properties @pre-block-properties)
+                         {:keys [properties properties-order]} @pre-block-properties
+                         id (get-custom-id-or-new-id {:properties properties})
+                         property-refs (->> (get-page-refs-from-properties properties)
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content
@@ -483,8 +484,8 @@
                                 :meta {:start-pos 0
                                        :end-pos (or first-block-start-pos
                                                     (utf8/length encoded-content))}
-                                :properties @pre-block-properties
-                                :properties-order (keys @pre-block-properties)
+                                :properties properties
+                                :properties-order properties-order
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
@@ -601,8 +602,7 @@
                          (conj body block))))
               (do
                 (when (seq properties)
-                  (let [properties (:properties properties)]
-                    (reset! pre-block-properties properties)))
+                  (reset! pre-block-properties properties))
                 [(-> (reverse headings)
                      safe-blocks) body])))]
       (extract-blocks* blocks body pre-block-properties encoded-content with-body?))
