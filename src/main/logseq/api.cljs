@@ -477,7 +477,7 @@
                     nil)
           src-block-uuid (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
           target-block-uuid (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
-      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to))))
+      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to) nil)))
 
 (def ^:export get_block
   (fn [id-or-uuid ^js opts]
