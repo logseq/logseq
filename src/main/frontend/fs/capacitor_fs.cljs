@@ -17,18 +17,9 @@
     (.ensureDocuments mobile-util/ios-file-container)))
 
 (when (mobile-util/native-ios?)
-  ;; NOTE: avoid circular dependency
-  #_:clj-kondo/ignore
-  (def handle-changed! (delay frontend.fs.watcher-handler/handle-changed!))
-
-  (p/do!
-   (.addListener mobile-util/fs-watcher "watcher"
-                 (fn [^js event]
-                   (@handle-changed!
-                    (.-event event)
-                    (update (js->clj event :keywordize-keys true)
-                            :path
-                            js/decodeURI))))))
+  (.addListener mobile-util/fs-watcher "watcher"
+                (fn [event]
+                  (state/pub-event! [:file-watcher/changed event]))))
 
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
