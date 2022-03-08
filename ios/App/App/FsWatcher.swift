@@ -195,10 +195,10 @@ public class PollingWatcher {
         print("debug ticker elapsed=\(elapsedInMs)ms")
         
         if #available(iOS 13.0, *) {
-            timer!.schedule(deadline: .now().advanced(by: .seconds(2)), leeway: .milliseconds(100))
+            timer?.schedule(deadline: .now().advanced(by: .seconds(2)), leeway: .milliseconds(100))
         } else {
             // Fallback on earlier versions
-            timer!.schedule(deadline: .now() + 2.0, leeway: .milliseconds(100))
+            timer?.schedule(deadline: .now() + 2.0, leeway: .milliseconds(100))
         }
     }
     
