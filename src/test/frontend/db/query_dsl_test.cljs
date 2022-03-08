@@ -1,10 +1,10 @@
 (ns frontend.db.query-dsl-test
-  (:require [cljs.test :refer [are async deftest testing use-fixtures]]
+  (:require [cljs.test :refer [are deftest testing use-fixtures is]]
+            [clojure.string :as str]
             [frontend.db :as db]
             [frontend.db.config :refer [test-db] :as config]
             [frontend.db.query-dsl :as dsl]
-            [frontend.handler.repo :as repo-handler]
-            [promesa.core :as p]))
+            [frontend.handler.repo :as repo-handler]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -17,20 +17,13 @@
                 :file/content "---
 title: Dec 26th, 2020
 tags: [[page-tag-1]], page-tag-2
-parent: [[child page 1]], [[child-no-space]]
 ---
 - DONE 26-b1 [[page 1]]
 created-at:: 1608968448113
 last-modified-at:: 1608968448113
-prop-a:: val-a
-prop-c:: [[page a]], [[page b]], [[page c]]
-prop-num:: 2000
-prop-linked-num:: [[3000]]
-prop-d:: [[no-space-link]]
 - LATER 26-b2-modified-later [[page 2]] #tag1
 created-at:: 1608968448114
 last-modified-at:: 1608968448120
-prop-b:: val-b
 - DONE [#A] 26-b3 [[page 1]]
 created-at:: 1608968448115
 last-modified-at:: 1608968448115
@@ -39,7 +32,6 @@ last-modified-at:: 1608968448115
                 :file/content "---
 title: Dec 27th, 2020
 tags: page-tag-2, [[page-tag-3]]
-parent: [[child page 1]], child page 2
 ---
 - NOW [#A] b1 [[page 1]]
 created-at:: 1609052958714
@@ -50,7 +42,6 @@ last-modified-at:: 1609052974285
 - b3 [[page 1]]
 created-at:: 1609052959954
 last-modified-at:: 1609052959954
-prop-a:: val-a
 - b4 [[page 2]]
 created-at:: 1609052961569
 last-modified-at:: 1609052961569
@@ -60,7 +51,6 @@ last-modified-at:: 1609052963089"}
                {:file/path "journals/2020_12_28.md"
                 :file/content "---
 title: Dec 28th, 2020
-parent: child page 2
 ---
 - 28-b1 [[page 1]]
 created-at:: 1609084800000
@@ -72,6 +62,16 @@ last-modified-at:: 1609084800020
 created-at:: 1609084800002
 last-modified-at:: 1609084800002"}]]
     (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
+
+;; Test helpers
+;; ============
+(defn- load-test-files [files]
+  (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false}))
+
+(defn- dsl-query
+  [s]
+  (db/clear-query-state!)
+  (map first (deref (dsl/query test-db s))))
 
 (def parse (partial dsl/parse test-db))
 
@@ -97,292 +97,311 @@ last-modified-at:: 1609084800002"}]]
 
 (defonce empty-result {:query nil :result nil})
 
+;; Tests
+;; =====
+
 (deftest block-property-queries
-  (are [x y] (= (q-count x) y)
-       "(property prop-a val-a)"
-       {:query (dsl/->property-query "prop-a" "val-a")
-        :count 2}
+  (load-test-files [{:file/path "journals/2022_02_28.md"
+                     :file/content "a:: b
+- b1
+prop-a:: val-a
+prop-num:: 2000
+- b2
+prop-a:: val-a
+prop-b:: val-b
+- b3
+prop-c:: [[page a]], [[page b]], [[page c]]
+prop-linked-num:: [[3000]]
+prop-d:: [[no-space-link]]
+- b4
+prop-d:: nada"}])
 
-       "(property prop-b val-b)"
-       {:query (dsl/->property-query "prop-b" "val-b")
-        :count 1}
+  (testing "Blocks have given property value"
+    (is (= ["b1" "b2"]
+           (map (comp first str/split-lines :block/content)
+                (dsl-query "(property prop-a val-a)"))))
 
-       "(and (property prop-b val-b))"
-       {:query '([?b :block/properties ?prop]
-                 [(missing? $ ?b :block/name)]
-                 [(get ?prop :prop-b) ?v]
-                 (or [(= ?v "val-b")] [(contains? ?v "val-b")] [(contains? ?v "val-b")]))
-        :count 1}
+    (is (= ["b2"]
+           (map (comp first str/split-lines :block/content)
+                (dsl-query "(property prop-b val-b)")))))
 
-       "(and (property prop-c \"page c\"))"
-       {:query (dsl/->property-query "prop-c" "page c")
-        :count 1}
+  (is (= ["b2"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(and (property prop-b val-b))")))
+      "Blocks have property value with empty AND")
 
-       ;; TODO: optimize
-       "(and (property prop-c \"page c\") (property prop-c \"page b\"))"
-       {:query '[[?b :block/properties ?prop]
-                 [(missing? $ ?b :block/name)]
-                 [(get ?prop :prop-c) ?v]
-                 (or [(= ?v "page c")] [(contains? ?v "page c")] [(contains? ?v "page c")])
-                 [(get ?prop :prop-c) ?v1]
-                 (or [(= ?v1 "page b")] [(contains? ?v1 "page b")] [(contains? ?v1 "page b")])]
-        :count 1}
+  (is (= ["b3"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(and (property prop-c \"page c\"))")))
+      "Blocks have property value from a set of values")
 
-       "(or (property prop-c \"page c\") (property prop-b val-b))"
-       {:query '[[?b :block/content ?content]
-                 (or
-                  (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")] [(contains? ?v "page c")]))
-                  (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")] [(contains? ?v "val-b")])))]
-        :count 2}
+  ;; TODO: optimize
+  (is (= ["b3"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(and (property prop-c \"page c\") (property prop-c \"page b\"))")))
+      "Blocks have ANDed property values")
 
-       "(property prop-num 2000)"
-       {:query (dsl/->property-query "prop-num" 2000)
-        :count 1}
+  (is (= #{"b2" "b3"}
+         (set
+          (map (comp first str/split-lines :block/content)
+               (dsl-query "(or (property prop-c \"page c\") (property prop-b val-b))"))))
+      "Blocks have ORed property values")
 
-       "(property prop-linked-num 3000)"
-       {:query (dsl/->property-query "prop-linked-num" 3000)
-        :count 1}
+  (is (= ["b1"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(property prop-num 2000)")))
+      "Blocks have integer property value")
 
-       "(property prop-d no-space-link)"
-       {:query (dsl/->property-query "prop-d" "no-space-link")
-        :count 1}))
+  (is (= ["b3"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(property prop-linked-num 3000)")))
+      "Blocks have property with integer page value")
+
+  (is (= ["b3"]
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(property prop-d no-space-link)")))
+      "Blocks have property value with no space"))
 
 (deftest page-property-queries
-  (are [x y] (= (q-count x) y)
-       "(page-property parent)"
-       {:query '[[?p :block/name]
-                 [?p :block/properties ?prop]
-                 [(get ?prop :parent) ?prop-v]
-                 [true]], :count 3}
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "parent:: [[child page 1]], [[child-no-space]]"}
+                    {:file/path "pages/page2.md"
+                     :file/content "foo:: bar"}
+                    {:file/path "pages/page3.md"
+                     :file/content "parent:: [[child page 1]], child page 2\nfoo:: bar"}
+                    {:file/path "pages/page4.md"
+                     :file/content "parent:: child page 2\nfoo:: baz"}])
+  (is (= ["page1" "page3" "page4"]
+         (map :block/name (dsl-query "(page-property parent)")))
+      "Pages have given property")
 
-       "(page-property parent [[child page 1]])"
-       {:query (dsl/->page-property-query "parent" "child page 1")
-        :count 2}
+  (is (= ["page1" "page3"]
+         (map :block/name (dsl-query "(page-property parent [[child page 1]])")))
+      "Pages have property value that is a page and query is a page")
 
-       "(page-property parent [[child-no-space]])"
-       {:query (dsl/->page-property-query "parent" "child-no-space")
-        :count 1}
+  (is (= ["page1" "page3"]
+         (map :block/name (dsl-query "(page-property parent \"child page 1\")")))
+      "Pages have property value that is a page and query is a string")
 
-       "(page-property parent \"child page 1\")"
-       {:query (dsl/->page-property-query "parent" "child page 1")
-        :count 2}
+  (is (= ["page1"]
+         (map :block/name (dsl-query "(page-property parent [[child-no-space]])")))
+      "Pages have property value that is a page with no spaces")
 
-       "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-       {:query '([?p :block/name]
-                 [?p :block/properties ?prop]
-                 [(get ?prop :parent) ?v]
-                 (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
-                 (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
-        :count 1}
+  (is (= ["page3"]
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
+      "Page property queries ANDed")
 
-       "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-       {:query '(or (and
-                     [?p :block/name]
-                     [?p :block/properties ?prop]
-                     [(get ?prop :parent) ?v]
-                     (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
-                    (and
-                     [?p :block/name]
-                     [?p :block/properties ?prop]
-                     [(get ?prop :parent) ?v]
-                     (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
-        :count 3}))
+  (is (= ["page1" "page3" "page4"]
+         (map
+          :block/name
+          (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
+      "Page property queries ORed")
+
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
+      "Page property queries NOTed"))
 
 (deftest ^:large-vars/cleanup-todo test-parse
   []
+  (import-test-data!)
+
   (testing "nil or blank strings should be ignored"
     (are [x y] (= (q x) y)
-      nil empty-result
-      "" empty-result
-      " " empty-result))
+         nil empty-result
+         "" empty-result
+         " " empty-result))
 
   (testing "Non exists page should be ignored"
     (are [x y] (nil? (:result (q x)))
-      "[[page-not-exist]]" empty-result
-      "[[another-page-not-exist]]" empty-result))
+         "[[page-not-exist]]" empty-result
+         "[[another-page-not-exist]]" empty-result))
 
   (testing "Single page query"
     (are [x y] (= (q-count x) y)
-      "[[page 1]]"
-      {:query '[[?b :block/path-refs [:block/name "page 1"]]]
-       :count 6}
+         "[[page 1]]"
+         {:query '[[?b :block/path-refs [:block/name "page 1"]]]
+          :count 6}
 
-      "[[page 2]]"
-      {:query '[[?b :block/path-refs [:block/name "page 2"]]]
-       :count 4}))
+         "[[page 2]]"
+         {:query '[[?b :block/path-refs [:block/name "page 2"]]]
+          :count 4}))
 
 
 
   (testing "task queries"
     (are [x y] (= (q-count x) y)
-      "(task now)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW"} ?marker)]]
-       :count 1}
+         "(task now)"
+         {:query '[[?b :block/marker ?marker]
+                   [(contains? #{"NOW"} ?marker)]]
+          :count 1}
 
-      "(task NOW)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW"} ?marker)]]
-       :count 1}
+         "(task NOW)"
+         {:query '[[?b :block/marker ?marker]
+                   [(contains? #{"NOW"} ?marker)]]
+          :count 1}
 
-      "(task later)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"LATER"} ?marker)]]
-       :count 2}
+         "(task later)"
+         {:query '[[?b :block/marker ?marker]
+                   [(contains? #{"LATER"} ?marker)]]
+          :count 2}
 
-      "(task now later)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]]
-       :count 3}
+         "(task now later)"
+         {:query '[[?b :block/marker ?marker]
+                   [(contains? #{"NOW" "LATER"} ?marker)]]
+          :count 3}
 
-      "(task [now later])"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]]
-       :count 3}))
+         "(task [now later])"
+         {:query '[[?b :block/marker ?marker]
+                   [(contains? #{"NOW" "LATER"} ?marker)]]
+          :count 3}))
 
   (testing "Priority queries"
     (are [x y] (= (q-count x) y)
-      "(priority A)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A"} ?priority)]]
-       :count 2}
+         "(priority A)"
+         {:query '[[?b :block/priority ?priority]
+                   [(contains? #{"A"} ?priority)]]
+          :count 2}
 
-      "(priority a)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A"} ?priority)]]
-       :count 2}
+         "(priority a)"
+         {:query '[[?b :block/priority ?priority]
+                   [(contains? #{"A"} ?priority)]]
+          :count 2}
 
-      "(priority a b)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B"} ?priority)]]
-       :count 3}
+         "(priority a b)"
+         {:query '[[?b :block/priority ?priority]
+                   [(contains? #{"A" "B"} ?priority)]]
+          :count 3}
 
-      "(priority [a b])"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B"} ?priority)]]
-       :count 3}
+         "(priority [a b])"
+         {:query '[[?b :block/priority ?priority]
+                   [(contains? #{"A" "B"} ?priority)]]
+          :count 3}
 
-      "(priority a b c)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B" "C"} ?priority)]]
-       :count 3}))
+         "(priority a b c)"
+         {:query '[[?b :block/priority ?priority]
+                   [(contains? #{"A" "B" "C"} ?priority)]]
+          :count 3}))
 
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
-      "(all-page-tags)"
-      {:query '[[?e :block/tags ?p]]
-       :count 3}))
+         "(all-page-tags)"
+         {:query '[[?e :block/tags ?p]]
+          :count 3}))
 
   (testing "page-tags queries"
     (are [x y] (= (q-count x) y)
-      "(page-tags [[page-tag-1]])"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1"} ?tag1)]]
-       :count 1}
+         "(page-tags [[page-tag-1]])"
+         {:query '[[?p :block/tags ?t]
+                   [?t :block/name ?tag1]
+                   [(contains? #{"page-tag-1"} ?tag1)]]
+          :count 1}
 
-      "(page-tags page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-2"} ?tag1)]]
-       :count 2}
+         "(page-tags page-tag-2)"
+         {:query '[[?p :block/tags ?t]
+                   [?t :block/name ?tag1]
+                   [(contains? #{"page-tag-2"} ?tag1)]]
+          :count 2}
 
-      "(page-tags page-tag-1 page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}
+         "(page-tags page-tag-1 page-tag-2)"
+         {:query '[[?p :block/tags ?t]
+                   [?t :block/name ?tag1]
+                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
+          :count 2}
 
-      "(page-tags page-TAG-1 page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}
+         "(page-tags page-TAG-1 page-tag-2)"
+         {:query '[[?p :block/tags ?t]
+                   [?t :block/name ?tag1]
+                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
+          :count 2}
 
-      "(page-tags [page-tag-1 page-tag-2])"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}))
+         "(page-tags [page-tag-1 page-tag-2])"
+         {:query '[[?p :block/tags ?t]
+                   [?t :block/name ?tag1]
+                   [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
+          :count 2}))
 
 
 
   ;; boolean queries
   (testing "AND queries"
     (are [x y] (= (q-count x) y)
-      "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-refs [:block/name "tag1"]]
-                [?b :block/path-refs [:block/name "page 2"]])
-       :count 1})
+         "(and [[tag1]] [[page 2]])"
+         {:query '([?b :block/path-refs [:block/name "tag1"]]
+                   [?b :block/path-refs [:block/name "page 2"]])
+          :count 1})
 
     (are [x y] (= (q-count x) y)
-      "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-refs [:block/name "tag1"]]
-                [?b :block/path-refs [:block/name "page 2"]])
-       :count 1}))
+         "(and [[tag1]] [[page 2]])"
+         {:query '([?b :block/path-refs [:block/name "tag1"]]
+                   [?b :block/path-refs [:block/name "page 2"]])
+          :count 1}))
 
   (testing "OR queries"
     (are [x y] (= (q-count x) y)
-      "(or [[tag1]] [[page 2]])"
-      {:query '(or
-                (and [?b :block/path-refs [:block/name "tag1"]])
-                (and [?b :block/path-refs [:block/name "page 2"]]))
-       :count 4}))
+         "(or [[tag1]] [[page 2]])"
+         {:query '(or
+                   (and [?b :block/path-refs [:block/name "tag1"]])
+                   (and [?b :block/path-refs [:block/name "page 2"]]))
+          :count 4}))
 
   (testing "NOT queries"
     (are [x y] (= (q-count x) y)
-      "(not [[page 1]])"
-      {:query '([?b :block/uuid]
-                (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 39}))
+         "(not [[page 1]])"
+         {:query '([?b :block/uuid]
+                   (not [?b :block/path-refs [:block/name "page 1"]]))
+          :count 31}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
-      "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
-      5
+         "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
+         5
 
-      ;; between with journal pages
-      "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
-      2
+         ;; between with journal pages
+         "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
+         2
 
-      ;; ;; between with created-at
-      ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
-      ;; 5
+         ;; ;; between with created-at
+         ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
+         ;; 5
 
-      ;; ;; between with last-modified-at
-      ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
-      ;; 5
-      ))
+         ;; ;; between with last-modified-at
+         ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
+         ;; 5
+         ))
 
   (testing "Nested boolean queries"
     (are [x y] (= (q-count x) y)
-      "(and (todo done) (not [[page 1]]))"
-      {:query '([?b :block/uuid]
-                [?b :block/marker ?marker]
-                [(contains? #{"DONE"} ?marker)]
-                (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 0})
+         "(and (todo done) (not [[page 1]]))"
+         {:query '([?b :block/uuid]
+                   [?b :block/marker ?marker]
+                   [(contains? #{"DONE"} ?marker)]
+                   (not [?b :block/path-refs [:block/name "page 1"]]))
+          :count 0})
 
     (are [x y] (= (q-count x) y)
-      "(and (todo now later) (or [[page 1]] [[page 2]]))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]
-                (or (and [?b :block/path-refs [:block/name "page 1"]])
-                    (and [?b :block/path-refs [:block/name "page 2"]])
-                    [?b]))
-       :count 3})
+         "(and (todo now later) (or [[page 1]] [[page 2]]))"
+         {:query '([?b :block/marker ?marker]
+                   [(contains? #{"NOW" "LATER"} ?marker)]
+                   (or (and [?b :block/path-refs [:block/name "page 1"]])
+                       (and [?b :block/path-refs [:block/name "page 2"]])
+                       [?b]))
+          :count 3})
 
     (are [x y] (= (q-count x) y)
-      "(not (and (todo now later) (or [[page 1]] [[page 2]])))"
-      {:query '([?b :block/uuid]
-                (not
-                 [?b :block/marker ?marker]
-                 [(contains? #{"NOW" "LATER"} ?marker)]
-                 (or
-                  (and [?b :block/path-refs [:block/name "page 1"]])
-                  (and [?b :block/path-refs [:block/name "page 2"]])
-                  [?b])))
-       :count 42})
+         "(not (and (todo now later) (or [[page 1]] [[page 2]])))"
+         {:query '([?b :block/uuid]
+                   (not
+                    [?b :block/marker ?marker]
+                    [(contains? #{"NOW" "LATER"} ?marker)]
+                    (or
+                     (and [?b :block/path-refs [:block/name "page 1"]])
+                     (and [?b :block/path-refs [:block/name "page 2"]])
+                     [?b])))
+          :count 34})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
@@ -397,15 +416,15 @@ last-modified-at:: 1609084800002"}]]
     ;;    :count 5})
 
     (are [x y] (= (q-count x) y)
-      "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"
-      {:query '([?b :block/uuid]
-                [?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                (or
-                 (and [?b :block/path-refs [:block/name "page 1"]])
-                 (and (not [?b :block/path-refs [:block/name "page 1"]]))
-                 [?b]))
-       :count 5}))
+         "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"
+         {:query '([?b :block/uuid]
+                   [?b :block/marker ?marker]
+                   [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
+                   (or
+                    (and [?b :block/path-refs [:block/name "page 1"]])
+                    (and (not [?b :block/path-refs [:block/name "page 1"]]))
+                    [?b]))
+          :count 5}))
 
   ;; (testing "sort-by (created-at defaults to desc)"
   ;;   (db/clear-query-state!)
@@ -468,13 +487,9 @@ last-modified-at:: 1609084800002"}]]
   ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
   )
 
-(use-fixtures :once
-  {:before (fn []
-             (async done
-                    (config/start-test-db!)
-                    (p/let [_ (import-test-data!)]
-                      (done))))
-   :after config/destroy-test-db!})
+(use-fixtures :each
+              {:before config/start-test-db!
+               :after config/destroy-test-db!})
 
 #_(cljs.test/run-tests)
 
