@@ -33,7 +33,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- get-page-name
   [state]
@@ -260,8 +261,39 @@
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
+(defn- page-mouse-over
+  [e *control-show? *all-collapsed?]
+  (util/stop e)
+  (reset! *control-show? true)
+  (let [all-collapsed?
+        (->> (editor-handler/all-blocks-with-level {:collapse? true})
+             (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
+             (empty?))]
+    (reset! *all-collapsed? all-collapsed?)))
+
+(defn- page-mouse-leave
+  [e *control-show?]
+  (util/stop e)
+  (reset! *control-show? false))
+
+(rum/defcs page-blocks-collapse-control <
+  [state title *control-show? *all-collapsed?]
+  [:a.page-blocks-collapse-control
+   {:id (str "control-" title)
+    :on-click (fn [event]
+                (util/stop event)
+                (if @*all-collapsed?
+                  (editor-handler/expand-all!)
+                  (editor-handler/collapse-all!))
+                (swap! *all-collapsed? not))}
+   [:span.mt-6 {:class (if @*control-show?
+                         "control-show cursor-pointer" "control-hide")}
+    (ui/rotating-arrow @*all-collapsed?)]])
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
+  (rum/local false ::all-collapsed?)
+  (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
@@ -294,7 +326,9 @@
           icon (or icon "")
           today? (and
                   journal?
-                  (= page-name (util/page-name-sanity-lc (date/journal-name))))]
+                  (= page-name (util/page-name-sanity-lc (date/journal-name))))
+          *control-show? (::control-show? state)
+          *all-collapsed? (::all-collapsed? state)]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -305,9 +339,16 @@
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
        [:div.relative
-        (when (and (not sidebar?)
-                   (not block?))
+        (when (and (not sidebar?) (not block?))
           [:div.flex.flex-row.space-between
+           (when (or (mobile-util/is-native-platform?) (util/mobile?))
+             [:div.flex.flex-row.pr-2
+              {:style {:margin-left -15}
+               :on-mouse-over (fn [e]
+                                (page-mouse-over e *control-show? *all-collapsed?))
+               :on-mouse-leave (fn [e]
+                                 (page-mouse-leave e *control-show?))}
+              (page-blocks-collapse-control title *control-show? *all-collapsed?)])
            [:div.flex-1.flex-row
             (page-title page-name icon title format fmt-journal?)]
            (when (not config/publishing?)

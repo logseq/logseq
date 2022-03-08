@@ -912,6 +912,10 @@
                (not= \* (last s)))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
+          (text/block-ref? s)
+          (let [id (text/get-block-ref s)]
+            (block-reference config id label))
+
           (not (string/includes? s "."))
           (page-reference (:html-export? config) s config label)
 
@@ -959,16 +963,16 @@
                                   (and (= "File" (first url)) ["file" (second url)]))]
           (cond
             (and (= (get-in config [:block :block/format]) :org)
-                 (= "Complex" (first url))
-                 (= (string/lower-case protocol) "id")
-                 (string? (:link (second url)))
-                 (util/uuid-string? (:link (second url)))) ; org mode id
-            (let [id (uuid (:link (second url)))
+                 (= "Complex" protocol)
+                 (= (string/lower-case (:protocol path)) "id")
+                 (string? (:link path))
+                 (util/uuid-string? (:link path))) ; org mode id
+            (let [id (uuid (:link path))
                   block (db/entity [:block/uuid id])]
               (if (:block/pre-block? block)
                 (let [page (:block/page block)]
                   (page-reference html-export? (:block/name page) config label))
-                (block-reference config (:link (second url)) label)))
+                (block-reference config (:link path) label)))
 
             (= protocol "file")
             (cond

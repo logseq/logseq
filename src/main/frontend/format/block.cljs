@@ -46,35 +46,38 @@
   [block]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
-               (let [typ (first (:url (second block)))]
+               (let [typ (first (:url (second block)))
+                     value (second (:url (second block)))]
                  ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
                   (and
                    (= typ "Page_ref")
-                   (string? (second (:url (second block))))
-                   (second (:url (second block))))
+                   (and (string? value)
+                        (not (or (config/local-asset? value)
+                                 (config/draw? value))))
+                   value)
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? (second (:url (second block))))
-                   (text/page-ref-un-brackets! (second (:url (second block)))))
+                   (text/page-ref? value)
+                   (text/page-ref-un-brackets! value))
 
                   (and
                    (= typ "Search")
-                   (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
-                   (let [page (second (:url (second block)))
-                         ext (some-> (util/get-file-ext page) keyword)]
-                     (when (and (not (util/starts-with? page "http:"))
-                                (not (util/starts-with? page "https:"))
-                                (not (util/starts-with? page "file:"))
+                   (not (contains? #{\# \* \/ \[} (first value)))
+                   (let [ext (some-> (util/get-file-ext value) keyword)]
+                     (when (and (not (util/starts-with? value "http:"))
+                                (not (util/starts-with? value "https:"))
+                                (not (util/starts-with? value "file:"))
+                                (not (config/local-asset? value))
                                 (or (= ext :excalidraw)
                                     (not (contains? (config/supported-formats) ext))))
-                       page)))
+                       value)))
 
                   (and
                    (= typ "Complex")
-                   (= (:protocol (second (:url (second block)))) "file")
-                   (:link (second (:url (second block)))))
+                   (= (:protocol value) "file")
+                   (:link value))
 
                   (and
                    (= typ "File")
@@ -159,7 +162,8 @@
                                (contains? #{:background-color :background_color} (keyword k))))
                      (map last)
                      (map (fn [v]
-                            (when (string? v)
+                            (when (and (string? v)
+                                       (not (mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)

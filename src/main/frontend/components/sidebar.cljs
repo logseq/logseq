@@ -468,6 +468,7 @@
         sidebar-open?  (state/sub :ui/sidebar-open?)
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
+        wide-mode? (state/sub :ui/wide-mode?)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
@@ -496,7 +497,8 @@
 
      [:div.theme-inner
       {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
-                                 :ls-right-sidebar-open sidebar-open?}])}
+                                 :ls-right-sidebar-open sidebar-open?
+                                 :ls-wide-mode wide-mode?}])}
 
       [:div.#app-container
        [:div#left-container
