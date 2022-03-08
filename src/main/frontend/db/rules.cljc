@@ -1,4 +1,4 @@
-(ns frontend.db.rules)
+(ns ^:bb-compatible frontend.db.rules)
 
 (def rules
   ;; rule "parent" is optimized for child node -> parent node nesting queries
@@ -31,9 +31,9 @@
     ;; Should optimize for query the decendents of a block
     ;; Quote:
     ;; My theory is that your rules are not written in a way that Datalog can optimize for this read pattern - probably resulting in a traversal of all the entities. I suggest to rewrite them as follows:
-    ;; [[(ubersymbol ?c ?p) 
+    ;; [[(ubersymbol ?c ?p)
     ;;   (?c :ml/parent ?p)]
-    ;;  [(ubersymbol ?c ?p) 
+    ;;  [(ubersymbol ?c ?p)
     ;;   ;; we bind a child of the ancestor, instead of a parent of the descendant
     ;;   (?c1 :ml/parent ?p)
     ;;   (ubersymbol ?c ?c1)]]
@@ -93,7 +93,7 @@
 
    :all-page-tags
    '[(all-page-tags ?p)
-     [?e :block/tags ?p]]
+     [_ :block/tags ?p]]
 
    :between
    '[(between ?b ?start ?end)
