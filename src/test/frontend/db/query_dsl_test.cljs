@@ -454,7 +454,7 @@ last-modified-at:: 1609084800002"}]]
 
   (is (= ["LATER b3"]
          (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
-      "Try"))
+      "Query with rule that can't be derived from the form itself"))
 
 #_(deftest sort-by-queries
     (load-test-files-with-timestamps)
