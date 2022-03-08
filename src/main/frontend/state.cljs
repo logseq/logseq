@@ -18,7 +18,7 @@
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
-  (let [document-mode? (or (storage/get :document/mode?) false)
+  (let [document-mode? (or (storage/get :document/doc-mode?) false)
        current-graph (let [graph (storage/get :git/current-repo)]
                        (when graph (ipc/ipc "setCurrentGraph" graph))
                        graph)]
@@ -98,6 +98,7 @@
      :ui/visual-viewport-state              nil
 
      :document/mode?                        document-mode?
+     :document/reading-mode?                (storage/get :document/reading-mode?)
 
      :github/contents                       {}
      :config                                {}
@@ -1195,7 +1196,17 @@
   []
   (let [mode (document-mode?)]
     (set-state! :document/mode? (not mode))
-    (storage/set :document/mode? (not mode))))
+    (storage/set :document/doc-mode? (not mode))))
+
+(defn reading-mode?
+  []
+  (get @state :document/reading-mode?))
+
+(defn toggle-reading-mode!
+  []
+  (let [m (reading-mode?)]
+    (set-state! :document/reading-mode? (not m))
+    (storage/set :document/reading-mode? (not m))))
 
 (defn shortcut-tooltip-enabled?
   []

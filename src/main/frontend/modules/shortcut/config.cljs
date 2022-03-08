@@ -390,6 +390,10 @@
                                     :binding "t d"
                                     :fn      state/toggle-document-mode!}
 
+   :ui/toggle-reading-mode         {:desc    "Toggle reading mode"
+                                    :binding "t e"
+                                    :fn      state/toggle-reading-mode!}
+   
    :ui/toggle-settings              {:desc    "Toggle settings"
                                      :binding (if mac? "t s" ["t s" "mod+,"])
                                      :fn      ui-handler/toggle-settings-modal!}
@@ -598,6 +602,7 @@
                           :editor/open-file-in-directory
                           :editor/copy-current-file
                           :ui/toggle-wide-mode
+                          :ui/toggle-reading-mode
                           :ui/select-theme-color
                           :ui/goto-plugins
                           :editor/toggle-open-blocks
@@ -701,6 +706,7 @@
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme
+    :ui/toggle-reading-mode
     :ui/toggle-left-sidebar
     :ui/toggle-right-sidebar
     :ui/toggle-settings

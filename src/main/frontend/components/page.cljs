@@ -117,12 +117,14 @@
       (if (empty? page-blocks)
         (dummy-block page-name)
         (let [document-mode? (state/sub :document/mode?)
+              reading-mode?  (state/sub :document/reading-mode?)
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
                               :block? block?
                               :editor-box editor/box
                               :page page
-                              :document/mode? document-mode?}
+                              :document/mode? document-mode?
+                              :document/reading-mode? reading-mode?}
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]

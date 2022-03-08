@@ -1963,8 +1963,9 @@
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
-        slide? (:slide? config)]
-    (if (and edit? editor-box)
+        slide? (:slide? config)
+        reading-mode? (state/sub :document/reading-mode?)]
+    (if (and edit? (not reading-mode?) editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
         [:p.warning "Something wrong in the editor"]
@@ -1988,9 +1989,10 @@
                    (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
-                             (util/stop e)
-                             (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/uuid block))))}
+                             (when-not reading-mode?
+                               (util/stop e)
+                               (when-let [block (:embed-parent config)]
+                                 (editor-handler/edit-block! block :max (:block/uuid block)))))}
            svg/edit])
 
         (block-refs-count block)]])))
