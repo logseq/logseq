@@ -14,6 +14,7 @@
             [frontend.db-schema :as db-schema]
             [frontend.extensions.srs :as srs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -302,6 +303,13 @@
           "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
          :warning
          false)))))
+
+(defmethod handle :file-watcher/changed [[_ ^js event]]
+  (fs-watcher/handle-changed!
+   (.-event event)
+   (update (js->clj event :keywordize-keys true)
+           :path
+           js/decodeURI)))
 
 (defn run!
   []

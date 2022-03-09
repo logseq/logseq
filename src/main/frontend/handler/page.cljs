@@ -611,6 +611,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
+                       (config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 
