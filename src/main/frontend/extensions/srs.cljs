@@ -253,21 +253,22 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
-           {:keys [query sort-by]} (query-dsl/parse repo query-string)
+           {:keys [query sort-by rules]} (query-dsl/parse query-string)
            query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
                           (if (coll? (first query))
                             query
                             [query]))]
        (when-let [query (query-dsl/query-wrapper query* true)]
          (let [result (react/react-query repo
-                                         {:query query}
+                                         {:query query
+                                          :rules (or rules [])}
                                          (merge
                                           {:use-cache? use-cache?}
                                           (cond->
-                                            (when sort-by
-                                              {:transform-fn sort-by})
-                                            disable-reactive?
-                                            (assoc :disable-reactive? true))))]
+                                           (when sort-by
+                                             {:transform-fn sort-by})
+                                           disable-reactive?
+                                           (assoc :disable-reactive? true))))]
            (when result
              (flatten (util/react result)))))))))
 

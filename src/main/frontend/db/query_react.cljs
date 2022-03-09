@@ -112,21 +112,18 @@
          f)) query)))
 
 (defn react-query
-  [repo {:keys [query inputs throw-exception] :as query'} query-opts]
+  [repo {:keys [query inputs rules] :as query'} query-opts]
   (let [pprint (if config/dev? (fn [_] nil) debug/pprint)]
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
-    (try
-      (let [query (resolve-query query)
-            inputs (map resolve-input inputs)
-            repo (or repo (state/get-current-repo))
-            k [:custom query']]
-        (pprint "inputs (post-resolution):" inputs)
-        (pprint "query-opts:" query-opts)
-        (apply react/q repo k query-opts query inputs))
-      (catch js/Error e
-        (when throw-exception
-          (throw (ex-info (.-message e) {})))
-        (pprint "Custom query failed: " {:query query'})
-        (js/console.dir e)))))
+    (let [query (resolve-query query)
+          resolved-inputs (mapv resolve-input inputs)
+          inputs (cond-> resolved-inputs
+                         rules
+                         (conj rules))
+          repo (or repo (state/get-current-repo))
+          k [:custom query']]
+      (pprint "inputs (post-resolution):" resolved-inputs)
+      (pprint "query-opts:" query-opts)
+      (apply react/q repo k query-opts query inputs))))
