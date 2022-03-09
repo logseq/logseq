@@ -1,7 +1,7 @@
 (ns frontend.extensions.srs
   (:require [frontend.template :as template]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as react]
+            [frontend.db.query-react :as query-react]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
@@ -259,7 +259,7 @@
                             query
                             [query]))]
        (when-let [query (query-dsl/query-wrapper query* true)]
-         (let [result (react/react-query repo
+         (let [result (query-react/react-query repo
                                          {:query query
                                           :rules (or rules [])}
                                          (merge

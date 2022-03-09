@@ -1,7 +1,7 @@
 (ns frontend.db.query-custom
   "Handles executing custom queries a.k.a. advanced queries"
   (:require [frontend.state :as state]
-            [frontend.db.query-react :as react]
+            [frontend.db.query-react :as query-react]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.model :as model]
             [frontend.db.rules :as rules]
@@ -47,4 +47,4 @@
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
        (query-dsl/custom-query repo query' query-opts)
-       (react/react-query repo (add-rules-to-query query') query-opts)))))
+       (query-react/react-query repo (add-rules-to-query query') query-opts)))))
