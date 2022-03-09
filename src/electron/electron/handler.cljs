@@ -286,6 +286,7 @@
 
 (defmethod handle :addDirWatcher [window [_ dir]]
   (when dir
+    (watcher/close-watcher! dir)
     (watcher/watch-dir! window dir)))
 
 (defmethod handle :openDialog [^js _window _messages]
