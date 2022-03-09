@@ -1,4 +1,4 @@
-(ns frontend.fixtures
+(ns frontend.test.fixtures
   (:require [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db-schema :as db-schema]

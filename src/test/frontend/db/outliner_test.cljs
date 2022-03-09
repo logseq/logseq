@@ -3,7 +3,7 @@
             [datascript.core :as d]
             [frontend.core-test :as core-test]
             [frontend.db.outliner :as outliner]
-            [frontend.fixtures :as fixtures]))
+            [frontend.test.fixtures :as fixtures]))
 
 (use-fixtures :each fixtures/reset-db)
 
