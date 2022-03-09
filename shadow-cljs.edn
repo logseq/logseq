@@ -36,7 +36,10 @@
         :closure-defines  {goog.debug.LOGGING_ENABLED      true
                            frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
-        :dev      {:asset-path "/static/js"}
+        ;; NOTE: electron, browser/mobile-app use different asset-paths.
+        ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
+        ;;   For electron devs, assets are located in ./js(via relative path).
+        ;; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
                    :after-load  frontend.core/start ;; after live-reloading finishes call this function
                    :watch-path  "/static"

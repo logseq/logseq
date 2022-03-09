@@ -50,7 +50,7 @@
         "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app electron",
         "cljs:app-watch": "clojure -M:cljs watch app",
-        "cljs:electron-watch": "clojure -M:cljs watch app electron",
+        "cljs:electron-watch": "clojure -M:cljs watch app electron --config-merge '{:asset-path \"./js\"}'",
         "cljs:release": "clojure -M:cljs release app publishing electron",
         "cljs:release-electron": "clojure -M:cljs release app publishing electron --debug",
         "cljs:release-app": "clojure -M:cljs release app",
