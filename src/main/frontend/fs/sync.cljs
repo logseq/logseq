@@ -94,7 +94,7 @@
 (defn- ws-listen!*
   [graph-uuid *ws remote-changes-chan]
   (reset! *ws {:ws (js/WebSocket. (util/format ws-addr graph-uuid)) :stop false})
-  (set! (.-onopen (:ws @*ws)) #(println (util/format "ws opened: graph '%s'" graph-uuid %)))
+  ;; (set! (.-onopen (:ws @*ws)) #(println (util/format "ws opened: graph '%s'" graph-uuid %)))
   (set! (.-onclose (:ws @*ws)) (fn [_e]
                                  (when-not (true? (:stop @*ws))
                                    (go
@@ -1095,9 +1095,7 @@
               (<! (sync-remote->local! remote->local-syncer))]
           (cond
             need-remote->local-full-sync
-            (if (= next-state ::local->remote-full-sync)
-              (.schedule this ::remote->local-full-sync=>local->remote-full-sync)
-              (.schedule this ::remote->local-full-sync))
+            (.schedule this ::remote->local-full-sync=>local->remote-full-sync)
             succ
             (.schedule this (or next-state ::idle))
             stop
