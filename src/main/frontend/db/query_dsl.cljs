@@ -1,4 +1,5 @@
 (ns frontend.db.query-dsl
+  "Handles executing dsl queries a.k.a. simple queries"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
