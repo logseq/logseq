@@ -89,7 +89,7 @@
            graph-txid-exists?
            (concat
             [{:title "toggle file sync"
-              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))} }]
+              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}]
             [{:hr true}]
             (map (fn [f] {:title f
                           :icon (ui/icon "arrow-narrow-up")}) uploading-files)
@@ -185,17 +185,17 @@
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (rum/use-effect!
-            (fn []
-              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-                (let [callback (fn [_ args]
-                                 (js/console.debug "[new-version downloaded] args:" args)
-                                 (let [args (bean/->clj args)]
-                                   (set-downloaded args)
-                                   (state/set-state! :electron/auto-updater-downloaded args))
-                                 nil)]
-                  (js/apis.addListener channel callback)
-                  #(js/apis.removeListener channel callback))))
-            [])]
+           (fn []
+             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+               (let [callback (fn [_ args]
+                                (js/console.debug "[new-version downloaded] args:" args)
+                                (let [args (bean/->clj args)]
+                                  (set-downloaded args)
+                                  (state/set-state! :electron/auto-updater-downloaded args))
+                                nil)]
+                 (js/apis.addListener channel callback)
+                 #(js/apis.removeListener channel callback))))
+           [])]
 
     (when downloaded
       [:div.cp__header-tips
@@ -242,10 +242,10 @@
            (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
      [:div.r.flex
-      (when (and (not (mobile-util/is-native-platform?))
-                 (not (util/electron?)))
+      (when-not file-sync-handler/hiding-login&file-sync
+        (file-sync))
+      (when-not file-sync-handler/hiding-login&file-sync
         (login))
-
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
