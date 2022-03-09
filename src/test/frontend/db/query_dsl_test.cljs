@@ -15,10 +15,25 @@
 
 ;; Test helpers
 ;; ============
+
+(def dsl-query*
+  "When $EXAMPLE set, prints query result of build query. Useful for
+   documenting examples and debugging"
+  (if (some? js/process.env.EXAMPLE)
+    (fn dsl-query-star [& args]
+      (let [old-build-query query-dsl/build-query]
+       (with-redefs [query-dsl/build-query
+                     (fn [& args']
+                       (let [res (apply old-build-query args')]
+                         (println "EXAMPLE:" (pr-str (:query res)))
+                         res))]
+         (apply query-dsl/query args))))
+    query-dsl/query))
+
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (when-let [result (query-dsl/query test-helper/test-db s)]
+  (when-let [result (dsl-query* test-helper/test-db s)]
     (map first (deref result))))
 
 (defn- custom-query
