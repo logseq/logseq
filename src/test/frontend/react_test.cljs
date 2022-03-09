@@ -3,7 +3,7 @@
   {:clj-kondo/config {:linters {:inline-def {:level :off}}}}
   (:require [frontend.react :as r]
             [cljs.test :refer [deftest is use-fixtures]]
-            [frontend.fixtures :as fixtures]))
+            [frontend.test.fixtures :as fixtures]))
 
 (use-fixtures :each
   fixtures/react-components)

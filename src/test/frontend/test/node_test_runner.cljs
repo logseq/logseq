@@ -1,4 +1,4 @@
-(ns frontend.node-test-runner
+(ns frontend.test.node-test-runner
   "shadow-cljs test runner for :node-test that provides the same test selection
   options as
   https://github.com/cognitect-labs/test-runner#invoke-with-clojure--m-clojuremain.
