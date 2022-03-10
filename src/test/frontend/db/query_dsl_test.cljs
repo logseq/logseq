@@ -245,22 +245,28 @@ prop-d:: nada"}])
 - DONE b1 [[page 1]]
 - DONE b2 [[page 1]]"}
                     {:file/path "pages/page2.md"
-                     :file/content "foo::bar
+                     :file/content "foo:: bar
 - NOW b3 [[page 1]]
 - LATER b4 [[page 2]]
 "}])
 
-  (is (= 0
-         (count (dsl-query "(and (todo done) (not [[page 1]]))"))))
-  (is (= 2
-         (count (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+  (is (= []
+         (dsl-query "(and (todo done) (not [[page 1]]))")))
+  (is (= ["NOW b3 [[page 1]]" "LATER b4 [[page 2]]"]
+         (map :block/content
+              (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
 
-  (is (= 4
-         (count (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"))))
+  (is (= #{"NOW b3 [[page 1]]"
+           "LATER b4 [[page 2]]"
+           "DONE b1 [[page 1]]"
+           "DONE b2 [[page 1]]"}
+         (set (map :block/content
+                   (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
 
-  ;; TODO
-  #_(is (= 34
-           (count (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))"))))
+  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]]" "DONE b2 [[page 1]]"}
+         (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
+              (keep :block/content)
+              set)))
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet
@@ -385,9 +391,10 @@ tags: other
         "OR query")
 
     (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
-           (map :block/content
-                ;; ANDed page1 to not clutter results with blocks in default db
-                (dsl-query "(and (page page1) (not [[page 2]]))")))
+           (->> (dsl-query "(not [[page 2]])")
+                ;; Only filter to page1 to get meaningful results
+                (filter #(= "page1" (get-in % [:block/page :block/name])))
+                (map :block/content)))
         "NOT query")))
 
 (defn- load-test-files-with-timestamps
