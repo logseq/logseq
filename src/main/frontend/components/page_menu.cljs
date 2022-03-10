@@ -51,7 +51,7 @@
          :on-click close-fn}
         (t :cancel)]]]]))
 
-(defn page-menu
+(defn ^:large-vars/cleanup-todo page-menu
   [page-name]
   (when-let [page-name (or
                         page-name
