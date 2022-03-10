@@ -1,7 +1,8 @@
 (ns frontend.components.onboarding.setups
   (:require [frontend.state :as state]
             [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [clojure.string :as string]))
 
 (rum/defc main
   []
@@ -21,5 +22,33 @@
         [:a.open-link.flex.items-center.justify-center.flex-col
          [:strong "Choose a folder"]
          [:small "Open existing directory or Create a new one"]]]]]
-     [:section.b.flex.items-center.justify-center
-      "2"]]]])
+     [:section.b.flex.items-center.flex-col
+      [:p.flex
+       [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
+       [:span.flex-1.flex.flex-col
+        [:strong "How logseq saves your work"]
+        [:small.opacity-60 "Inside the directory you choose, logseq will create 4 folders."]]]
+
+      [:p.text-sm.pt-5.tracking-wide
+       [:span "Each page is a file stored only on your computer."]
+       [:br]
+       [:span "You may choose to sync it later."]]
+
+      [:ul
+       (for [[title label icon]
+             [["Graphics & Documents" "/assets" "artboard"]
+              ["Daily notes" "/journals" "calendar-plus"]
+              ["PAGES" "/pages" "file-text"]
+              []
+              ["APP Internal" "/logseq" "tool"]
+              ["Configs File" "/logseq/config.edn"]]]
+         (if-not title
+           [:li.hr]
+           [:li
+            {:key   title}
+            [:i.as-flex-center
+             {:class (when (string/ends-with? label ".edn") "is-file")}
+             (when icon (ui/icon icon))]
+            [:span
+             [:strong.uppercase title]
+             [:small.opacity-50 label]]]))]]]]])

@@ -14,10 +14,16 @@ body[data-page=repo-add] {
     z-index: 9;
     height: 100vh;
 
+    .as-flex-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     .inner-card {
       transform: translateY(-60px);
 
-      h1 {
+      > h1 {
         font-size: 38px;
         letter-spacing: 1px;
 
@@ -29,7 +35,7 @@ body[data-page=repo-add] {
         }
       }
 
-      h2 {
+      > h2 {
         font-size: 20px;
         margin-top: 20px;
         margin-bottom: 40px;
@@ -65,7 +71,7 @@ body[data-page=repo-add] {
               text-align: center;
             }
 
-            .choose {
+            > .choose {
               padding-top: 48px;
               width: 100%;
 
@@ -108,8 +114,80 @@ body[data-page=repo-add] {
               }
             }
           }
+
+          &.b {
+            padding: 50px 40px;
+
+            > p {
+              width: 100%;
+
+              &:first-child {
+                i {
+                  width: 42px;
+                }
+
+                strong {
+                  font-size: 19px;
+                  line-height: 1.5em;
+                }
+              }
+            }
+
+            ul {
+              margin: 0;
+              padding-top: 20px;
+              width: 100%;
+
+              > li {
+                list-style: none;
+                margin-bottom: 8px;
+                height: 40px;
+                display: flex;
+
+                &.hr {
+                  height: 1px;
+                  border-bottom: 1px solid var(--ls-border-color);
+                  margin: 20px 0px;
+                  opacity: 0.6;
+                }
+
+                > i {
+                  width: 48px;
+                  background-image: url(../img/folder.png);
+                  background-size: contain;
+                  background-repeat: no-repeat;
+                  background-position-y: 2px;
+                  position: relative;
+                  right: -2px;
+
+                  &.is-file {
+                    background-image: url("../img/file-edn.png");
+                    background-size: 50%;
+                    background-position-x: center;
+                  }
+
+                  > .ti {
+                    opacity: .25;
+                    color: black;
+                  }
+                }
+
+                > span {
+                  flex: 1;
+                  padding-left: 15px;
+                  display: flex;
+                  flex-direction: column;
+
+                  strong {
+                    font-size: 11px;
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
   }
+
 }
