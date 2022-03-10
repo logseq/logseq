@@ -167,6 +167,7 @@
         :page/action-publish "Publish"
         :page/make-public "Make it public for publishing"
         :page/version-history "Check page history"
+        :page/open-backup-directory "Open page backups directory"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/publish "Publish this page on Logseq"
@@ -1066,6 +1067,7 @@
            :page/action-publish "发布"
            :page/make-public "导出 HTML 时发布本页面"
            :page/version-history "查看页面历史记录"
+           :page/open-backup-directory "打开页面备份文件夹"
            :page/make-private "导出 HTML 时取消发布本页面"
            :page/delete "删除本页"
            :page/publish "将本页发布至 Logseq"
@@ -3209,7 +3211,7 @@
         :plugin/marketplace-tips "Se o plugin não funcionar corretamente quando instalado pela 1ª vez, tente reiniciar o Logseq."
         :plugin/up-to-date "Está atualizado"
         :plugin/custom-js-alert "Ficheiro custom.js encontrado, quer executá-lo? (Se não compreender o conteúdo do ficheiro, é melhor não executá-lo, pois há certos riscos de segurança ao fazê-lo.)"
-        
+
         :pdf/copy-ref "Copiar referência"
         :pdf/copy-text "Copiar texto"
         :pdf/linked-ref "Referências ligadas"
