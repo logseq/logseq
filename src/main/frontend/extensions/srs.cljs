@@ -368,25 +368,23 @@
                            n))))
 
 (defn- review-finished?
-  [global? cards *card-index]
-  (if global?
-    (<= (count cards) 1)
-    (>= @*card-index (count cards))))
+  [cards]
+  (<= (count cards) 1))
 
-(defn- score-and-next-card [score card *card-index cards *phase *review-records cb global?]
+(defn- score-and-next-card [score card *card-index cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
-  (if (review-finished? global? cards *card-index)
+  (if (review-finished? cards)
     (when cb (cb @*review-records))
     (reset! *phase 1))
   (swap! *card-index inc)
   (when @global-cards-mode?
     (dec-cards-due-count!)))
 
-(defn- skip-card [card *card-index cards *phase *review-records cb global?]
+(defn- skip-card [card *card-index cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
   (swap! *card-index inc)
-  (if (review-finished? global? cards *card-index)
+  (if (review-finished? cards)
     (when cb (cb @*review-records))
     (reset! *phase 1)))
 
@@ -461,7 +459,7 @@
                (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
                  :id "card-next"
                  :class "mr-2"
-                 :on-click #(skip-card card card-index cards phase review-records cb global?)))
+                 :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
                [:div.flex.flex-row.justify-between
@@ -470,20 +468,20 @@
                                     :id         "card-forgotten"
                                     :background "red"
                                     :on-click   (fn []
-                                                  (score-and-next-card 1 card card-index cards phase review-records cb global?)
+                                                  (score-and-next-card 1 card card-index cards phase review-records cb)
                                                   (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                                     (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
                 (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
                                     :shortcut "t"
                                     :id       "card-recall"
-                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb global?)})
+                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
 
                 (btn-with-shortcut {:btn-text   "Remembered"
                                     :shortcut   "r"
                                     :id         "card-remembered"
                                     :background "green"
-                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb global?)})])]
+                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})])]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
