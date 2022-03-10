@@ -42,14 +42,6 @@
   (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
     (map first (deref result))))
 
-(defn- q
-  [s]
-  (db/clear-query-state!)
-  (let [parse-result (query-dsl/parse s)
-        query (:query parse-result)]
-    {:query (if (seq query) (vec query) query)
-     :result (query-dsl/query test-helper/test-db s)}))
-
 ;; Tests
 ;; =====
 
@@ -351,17 +343,17 @@ tags: other
       "Correctly returns no results"))
 
 (deftest empty-queries
-  (let [empty-result {:query nil :result nil}]
-    (testing "nil or blank strings should be ignored"
-      (are [x y] (= (q x) y)
-           nil empty-result
-           "" empty-result
-           " " empty-result))
+  (testing "nil or blank strings should be ignored"
+    (are [x] (nil? (dsl-query x))
+         nil
+         ""
+         " "
+         "\"\""))
 
-    (testing "Non exists page should be ignored"
-      (are [x y] (nil? (:result (q x)))
-           "[[page-not-exist]]" empty-result
-           "[[another-page-not-exist]]" empty-result))))
+  (testing "Non exists page should be ignored"
+    (are [x] (nil? (dsl-query x))
+         "[[page-not-exist]]"
+         "[[another-page-not-exist]]")))
 
 (deftest page-ref-and-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -487,60 +479,48 @@ last-modified-at:: 1609084800002"}]]
     (load-test-files-with-timestamps)
     ;; (testing "sort-by (created-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (task now later done)
+    ;;   (let [result (->> (dsl-query "(and (task now later done)
     ;;                              (sort-by created-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at asc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
     ;; (testing "sort-by (last-modified-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))

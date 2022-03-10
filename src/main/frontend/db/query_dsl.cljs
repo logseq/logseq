@@ -374,6 +374,7 @@ Some bindings in this fn:
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
   ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
+  ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
@@ -506,30 +507,22 @@ Some bindings in this fn:
                 {result :query rules :rules}
                 (when form (build-query form {:sort-by sort-by
                                               :blocks? blocks?
-                                              :sample sample}))]
-            (cond
-              (and (nil? result) (string? form))
-              form
+                                              :sample sample}))
+                result' (when (seq result)
+                          (let [key (if (coll? (first result))
+                                      (keyword (ffirst result))
+                                      (keyword (first result)))
+                                result (case key
+                                         :and
+                                         (rest result)
 
-              (string? result)
-              (string/trim result)
-
-              :else
-              (let [result (when (seq result)
-                             (let [key (if (coll? (first result))
-                                         (keyword (ffirst result))
-                                         (keyword (first result)))
-                                   result (case key
-                                            :and
-                                            (rest result)
-
-                                            result)]
-                               (add-bindings! form result)))]
-                {:query result
-                 :rules (mapv rules/query-dsl-rules rules)
-                 :sort-by @sort-by
-                 :blocks? (boolean @blocks?)
-                 :sample sample})))))
+                                         result)]
+                            (add-bindings! form result)))]
+            {:query result'
+             :rules (mapv rules/query-dsl-rules rules)
+             :sort-by @sort-by
+             :blocks? (boolean @blocks?)
+             :sample sample})))
       (catch js/Error e
         (log/error :query-dsl/parse-error e)))))
 
@@ -538,52 +531,44 @@ Some bindings in this fn:
 
 (defn query-wrapper
   [where blocks?]
-  (when where
-    (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-              `[:find (~'pull ~'?b ~model/block-attrs)
-                :in ~'$ ~'%
-                :where]
-              '[:find (pull ?p [*])
-                :in $ %
-                :where])
-          result (if (coll? (first where))
-                   (apply conj q where)
-                   (conj q where))]
-      (prn "Datascript query: " result)
-      result)))
+  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+            `[:find (~'pull ~'?b ~model/block-attrs)
+              :in ~'$ ~'%
+              :where]
+            '[:find (pull ?p [*])
+              :in $ %
+              :where])
+        result (if (coll? (first where))
+                 (apply conj q where)
+                 (conj q where))]
+    (prn "Datascript query: " result)
+    result))
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
   [repo query-string]
-  (when (string? query-string)
-    (let [query-string (template/resolve-dynamic-template! query-string)]
-      (when-not (string/blank? query-string)
-        (let [{:keys [query rules sort-by blocks? sample] :as result} (parse query-string)
-              full-text-query? (and (string? result)
-                                    (not (string/includes? result " ")))]
-          (if full-text-query?
-            (if (= "\"" (first result) (last result))
-              (subs result 1 (dec (count result)))
-              result)
-            (when-let [query (query-wrapper query blocks?)]
-              (let [sort-by (or sort-by identity)
-                    random-samples (if @sample
-                                     (fn [col]
-                                       (take @sample (shuffle col)))
-                                     identity)
-                    transform-fn (comp sort-by random-samples)]
-                (try
-                  (query-react/react-query repo
-                                     {:query query
+  (when (and (string? query-string) (not= "\"\"" query-string))
+    (let [query-string' (template/resolve-dynamic-template! query-string)
+          {:keys [query rules sort-by blocks? sample]} (parse query-string')]
+      (when-let [query' (some-> query (query-wrapper blocks?))]
+        (let [sort-by (or sort-by identity)
+              random-samples (if @sample
+                               (fn [col]
+                                 (take @sample (shuffle col)))
+                               identity)
+              transform-fn (comp sort-by random-samples)]
+          (try
+            (query-react/react-query repo
+                                     {:query query'
                                       :query-string query-string
                                       :rules rules}
                                      {:use-cache? false
                                       :transform-fn transform-fn})
-                  (catch ExceptionInfo e
-                    ;; Allow non-existent page queries to be ignored
-                    (if (string/includes? (str (.-message e)) "Nothing found for entity")
-                      (log/error :query-dsl-error e)
-                      (throw e))))))))))))
+            (catch ExceptionInfo e
+              ;; Allow non-existent page queries to be ignored
+              (if (string/includes? (str (.-message e)) "Nothing found for entity")
+                (log/error :nothing-found-error e)
+                (throw e)))))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"
@@ -591,11 +576,11 @@ Some bindings in this fn:
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
           {:keys [query sort-by blocks? rules]} (parse query-string)]
-      (when-let [query (query-wrapper query blocks?)]
+      (when-let [query' (some-> query (query-wrapper blocks?))]
         (query-react/react-query repo
                            (merge
                             query-m
-                            {:query query
+                            {:query query'
                              :rules rules})
                            (merge
                             query-opts
