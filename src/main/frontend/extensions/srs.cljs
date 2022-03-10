@@ -554,7 +554,7 @@
         count))))
 
 ;;; register cards macro
-(rum/defcs cards < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
   (rum/local false ::random-mode?)
   [state config options]
