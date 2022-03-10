@@ -56,7 +56,7 @@ const common = {
       () => gulp.src("node_modules/@tabler/icons/iconfont/tabler-icons.min.css")
         .pipe(gulp.dest(path.join(outputPath, 'css'))),
       () => gulp.src("node_modules/@tabler/icons/iconfont/fonts/**")
-        .pipe(gulp.dest(path.join(outputPath, 'fonts'))),
+        .pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
     )(...params)
   },
 
