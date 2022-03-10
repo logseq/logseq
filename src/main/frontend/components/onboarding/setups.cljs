@@ -18,5 +18,8 @@
       [:div.choose.flex.flex-col.items-center
        [:i]
        [:div.control
-        [:a.button "Choose a folder"]]]]
-     [:section.b "2"]]]])
+        [:a.open-link.flex.items-center.justify-center.flex-col
+         [:strong "Choose a folder"]
+         [:small "Open existing directory or Create a new one"]]]]]
+     [:section.b.flex.items-center.justify-center
+      "2"]]]])
