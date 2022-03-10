@@ -414,8 +414,6 @@
                    state)}
   [state blocks {preview? :preview?
                  modal? :modal?
-                 global? :global?
-                 random? :random-mode?
                  cb :callback}
    card-index]
   (let [cards (map ->card blocks)
