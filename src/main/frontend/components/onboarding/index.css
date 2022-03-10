@@ -52,13 +52,13 @@ body[data-page=repo-add] {
             align-items: center;
             padding-top: 75px;
 
-            strong {
+            > strong {
               font-size: 28px;
               padding-bottom: 15px;
               font-weight: 600;
             }
 
-            small {
+            > small {
               font-size: 20px;
               line-height: 30px;
               padding: 0 95px;
@@ -66,7 +66,7 @@ body[data-page=repo-add] {
             }
 
             .choose {
-              padding-top: 46px;
+              padding-top: 48px;
               width: 100%;
 
               i {
@@ -82,19 +82,27 @@ body[data-page=repo-add] {
                 padding-right: 70px;
                 width: 100%;
 
-                a.button {
+                a.open-link {
+                  transition: none;
+                  color: var(--ls-active-primary-color);
                   background-color: var(--ls-quaternary-background-color);
                   height: 68px;
                   width: 100%;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  color: var(--ls-link-ref-text-color);
                   opacity: .8;
                   user-select: none;
+                  border-radius: 12px;
+                  overflow: hidden;
+
+                  small {
+                    font-size: 11px;
+                  }
 
                   &:hover {
                     opacity: 1;
+                  }
+
+                  &:active {
+                    opacity: .5;
                   }
                 }
               }
