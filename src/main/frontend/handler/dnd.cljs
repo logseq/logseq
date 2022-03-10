@@ -7,12 +7,16 @@
             [frontend.util :as util]))
 
 (defn- moveable?
-  [current-block target-block]
+  [current-block target-block nested?]
   (let [current-block-uuid (:block/uuid current-block)]
     (or
      (not= (:block/page current-block) (:block/page target-block))
      (and
       (not= current-block-uuid (:block/uuid target-block))
+      (not (and
+            (= (:db/id (:block/left current-block))
+               (:db/id target-block))
+            (not nested?)))
       (loop [loc target-block]
         (if-let [parent (db/pull (:db/id (:block/parent loc)))]
           (if (= (:block/uuid parent) current-block-uuid)
@@ -53,7 +57,7 @@
           :before? top?}))
 
       (and (every? map? [current-block target-block])
-           (moveable? current-block target-block))
+           (moveable? current-block target-block nested?))
       (let [[current-node target-node]
             (mapv outliner-core/block [current-block target-block])]
         (cond
