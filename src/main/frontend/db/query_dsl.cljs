@@ -192,12 +192,7 @@
                     nested-and?
                     result
 
-                    (and (zero? level) (= 'and fe))
-                    (if (list? (first clauses))
-                      result
-                      (distinct (apply concat clauses)))
-
-                    (and (zero? level) (= 'or fe))
+                    (and (zero? level) (contains? #{'and 'or} fe))
                     result
 
                     :else

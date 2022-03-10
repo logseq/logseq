@@ -162,7 +162,13 @@ prop-d:: nada"}])
          (map
           :block/name
           (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
-      "Page property queries NOTed"))
+      "Page property queries nested NOT in second clause")
+
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
+      "Page property queries nested NOT in first clause"))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"
