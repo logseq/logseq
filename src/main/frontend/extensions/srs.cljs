@@ -260,15 +260,15 @@
                             [query]))]
        (when-let [query (query-dsl/query-wrapper query* true)]
          (let [result (query-react/react-query repo
-                                         {:query query
-                                          :rules (or rules [])}
-                                         (merge
-                                          {:use-cache? use-cache?}
-                                          (cond->
-                                           (when sort-by
-                                             {:transform-fn sort-by})
-                                           disable-reactive?
-                                           (assoc :disable-reactive? true))))]
+                                               {:query (with-meta query {:cards-query? true})
+                                                :rules (or rules [])}
+                                               (merge
+                                                {:use-cache? use-cache?}
+                                                (cond->
+                                                  (when sort-by
+                                                    {:transform-fn sort-by})
+                                                  disable-reactive?
+                                                  (assoc :disable-reactive? true))))]
            (when result
              (flatten (util/react result)))))))))
 
@@ -367,24 +367,27 @@
                            (dec n)
                            n))))
 
-(defn- score-and-next-card [score card *card-index cards *phase *review-records cb]
+(defn- review-finished?
+  [global? cards *card-index]
+  (if global?
+    (<= (count cards) 1)
+    (>= @*card-index (count cards))))
+
+(defn- score-and-next-card [score card *card-index cards *phase *review-records cb global?]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
-  (if (>= (inc @*card-index) (count cards))
-    (when cb
-      (swap! *card-index inc)
-      (cb @*review-records))
-    (do
-      (swap! *card-index inc)
-      (reset! *phase 1)))
+  (if (review-finished? global? cards *card-index)
+    (when cb (cb @*review-records))
+    (reset! *phase 1))
+  (swap! *card-index inc)
   (when @global-cards-mode?
     (dec-cards-due-count!)))
 
-(defn- skip-card [card *card-index cards *phase *review-records cb]
+(defn- skip-card [card *card-index cards *phase *review-records cb global?]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
   (swap! *card-index inc)
-  (if (>= (inc @*card-index) (count cards))
-    (and cb (cb @*review-records))
+  (if (review-finished? global? cards *card-index)
+    (when cb (cb @*review-records))
     (reset! *phase 1)))
 
 (def review-finished
@@ -413,11 +416,15 @@
                    state)}
   [state blocks {preview? :preview?
                  modal? :modal?
+                 global? :global?
                  cb :callback}
    card-index]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
-        card (when card-index (util/nth-safe cards @card-index))]
+        ;; TODO: needs refactor
+        card (if preview?
+               (when card-index (util/nth-safe cards @card-index))
+               (first cards))]
     (if-not card
       review-finished
       (let [phase (::phase state)
@@ -453,7 +460,7 @@
                (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
                  :id "card-next"
                  :class "mr-2"
-                 :on-click #(skip-card card card-index cards phase review-records cb)))
+                 :on-click #(skip-card card card-index cards phase review-records cb global?)))
 
              (when (and (not preview?) (= 1 next-phase))
                [:div.flex.flex-row.justify-between
@@ -462,20 +469,20 @@
                                     :id         "card-forgotten"
                                     :background "red"
                                     :on-click   (fn []
-                                                  (score-and-next-card 1 card card-index cards phase review-records cb)
+                                                  (score-and-next-card 1 card card-index cards phase review-records cb global?)
                                                   (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                                     (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
                 (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
                                     :shortcut "t"
                                     :id       "card-recall"
-                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
+                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb global?)})
 
                 (btn-with-shortcut {:btn-text   "Remembered"
                                     :shortcut   "r"
                                     :id         "card-remembered"
                                     :background "green"
-                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})])]
+                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb global?)})])]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
@@ -495,8 +502,9 @@
   db-mixins/query
   [blocks option card-index]
   (let [blocks (if (fn? blocks) (blocks) blocks)]
-    (when (seq blocks)
-      (view blocks option card-index))))
+    (if (seq blocks)
+      (view blocks option card-index)
+      review-finished)))
 
 (rum/defc preview-cp
   [block-id]
@@ -574,8 +582,7 @@
                       ;; :class "tippy-hover"
                       :interactive true}
                      [:div.opacity-60.text-sm.mr-3
-                      (let [idx (- filtered-total @card-index)]
-                        (max idx 0))
+                      filtered-total
                       [:span "/"]
                       total])
 
@@ -615,7 +622,8 @@
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config
-                              {:callback
+                              {:global? global?
+                               :callback
                                (fn [review-records]
                                  (operation-card-info-summary!
                                   review-records review-cards card-query-block)
