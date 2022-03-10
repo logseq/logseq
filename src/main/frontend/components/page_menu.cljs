@@ -12,7 +12,9 @@
             [frontend.util :as util]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]))
 
 (defn- delete-page!
   [page-name]
@@ -65,7 +67,8 @@
           favorites (:favorites (state/sub-graph-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
-          developer-mode? (state/sub [:ui/developer-mode?])]
+          developer-mode? (state/sub [:ui/developer-mode?])
+          file-path (when (util/electron?) (page-handler/get-page-file-path))]
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
@@ -90,7 +93,7 @@
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+          (when file-path
             [{:title   (t :page/open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
@@ -120,6 +123,12 @@
              :options {:on-click
                        (fn []
                          (shell/get-file-latest-git-log page 100))}})
+
+          (when (and (util/electron?) file-path)
+            {:title   (t :page/open-backup-directory)
+             :options {:on-click
+                       (fn []
+                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
 
           (when plugin-handler/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
