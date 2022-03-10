@@ -70,13 +70,18 @@
         files (map #(.-name %) files)
         prefix (str (path/basename file-path) ".")
         versioned-files (filter #(string/starts-with? % prefix) files)
-        old-versioned-files (drop 10 (reverse (sort versioned-files)))]
+        old-versioned-files (drop 3 (reverse (sort versioned-files)))]
     (doseq [file old-versioned-files]
       (fs-extra/removeSync (path/join dir file)))))
 
 (defn backup-file
-  [_repo path content]
-  (let [new-path (str path "." (string/replace (.toISOString (js/Date.)) ":" "_"))]
+  [repo path content]
+  (let [path (string/replace path repo "")
+        bak-dir (str repo "/logseq/bak")
+        path (str bak-dir path)
+        new-path (str path "." (string/replace (.toISOString (js/Date.)) ":" "_"))
+        dir (path/dirname new-path)]
+    (fs-extra/ensureDirSync dir)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
     (truncate-old-versioned-files! path)
