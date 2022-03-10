@@ -142,23 +142,21 @@
     (coll? (first clauses))
     (cond
       (= current-filter 'not)
-      (->> (apply concat clauses)
-           (apply list fe))
+      (cons 'and clauses)
 
       (or (= current-filter 'or)
           nested-and?)
-      (if (list? (first clauses))
-          (cons 'and clauses)
-          (apply concat clauses))
+      (cons 'and clauses)
 
       :else
-      (->> (map (fn [result]
+      (->> clauses
+           (map (fn [result]
                   (if (list? result)
                     result
                     (let [result (if (vector? (ffirst result))
                                    (apply concat result)
                                    result)]
-                      (cons 'and (seq result))))) clauses)
+                      (cons 'and (seq result))))))
            (apply list fe)))
 
     :else
@@ -183,12 +181,6 @@
                     fe clauses current-filter nested-and?)
             vars' (set/union (set @vars) (collect-vars result))
             query (cond
-                    ;; TODO: more thoughts
-                    (and (= current-filter 'and)
-                         (= 'or fe)
-                         (= #{'?b} vars'))
-                    [(concat result [['?b]])]
-
                     nested-and?
                     result
 
