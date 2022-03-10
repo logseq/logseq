@@ -10,6 +10,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]
             [frontend.components.shortcut :as shortcut]
+            [frontend.components.onboarding.setups :as ob-setups]
             [frontend.extensions.zotero :as zotero]))
 
 ;; http://localhost:3000/#?anchor=fn.1
@@ -24,7 +25,7 @@
 
    ["/repo/add"
     {:name :repo-add
-     :view repo/add-repo}]
+     :view ob-setups/main}]
 
    ["/all-files"
     {:name :all-files
