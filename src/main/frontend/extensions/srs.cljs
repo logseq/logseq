@@ -417,6 +417,7 @@
   [state blocks {preview? :preview?
                  modal? :modal?
                  global? :global?
+                 random? :random-mode?
                  cb :callback}
    card-index]
   (let [cards (map ->card blocks)
@@ -501,7 +502,11 @@
   rum/reactive
   db-mixins/query
   [blocks option card-index]
-  (let [blocks (if (fn? blocks) (blocks) blocks)]
+  (let [option (update option :random-mode? (fn [v] (if (boolean? v) v @v)))
+        blocks (if (fn? blocks) (blocks) blocks)
+        blocks (if (:random-mode? option)
+                 (shuffle blocks)
+                 blocks)]
     (if (seq blocks)
       (view blocks option card-index)
       review-finished)))
@@ -555,8 +560,10 @@
 ;;; register cards macro
 (rum/defcs cards < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
+  (rum/local false ::random-mode?)
   [state config options]
-  (let [repo (state/get-current-repo)
+  (let [*random-mode? (::random-mode? state)
+        repo (state/get-current-repo)
         query-string (string/join ", " (:arguments options))
         query-result (query repo query-string)
         card-index (::card-index state)
@@ -598,10 +605,25 @@
                           (let [blocks-f (fn [] (query repo query-string))]
                             (state/set-modal! #(view-modal
                                                 blocks-f
-                                                {:preview? true}
+                                                {:preview? true
+                                                 :random-mode? *random-mode?}
                                                 card-index)
                                               {:id :srs})))}
-             "A"])]]
+             "A"])
+
+           (ui/tippy
+            {:html [:div.text-sm "Toggle random mode"]
+             :delay [1000, 100]
+             :class "tippy-hover"
+             :interactive true}
+            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100 {:on-mouse-down (fn [e]
+                                                                               (util/stop e)
+                                                                               (swap! *random-mode? not))}
+             (ui/icon "arrows-shuffle" {:style (cond->
+                                                 {:font-size 18
+                                                  :font-weight 600}
+                                                 @*random-mode?
+                                                 (assoc :color "orange"))})])]]
          (if (seq review-cards)
            [:div.px-1
             (when-not modal?
@@ -612,6 +634,7 @@
                              (state/set-modal! #(view-modal
                                                  blocks-f
                                                  {:modal? true
+                                                  :random-mode? *random-mode?
                                                   :callback
                                                   (fn [review-records]
                                                     (operation-card-info-summary!
@@ -623,6 +646,7 @@
               (view-fn review-cards
                        (merge config
                               {:global? global?
+                               :random-mode? @*random-mode?
                                :callback
                                (fn [review-records]
                                  (operation-card-info-summary!
