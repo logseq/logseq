@@ -1,0 +1,107 @@
+body[data-page=repo-add] {
+  #left-sidebar, #right-sidebar {
+    display: none;
+  }
+}
+
+.cp__onboarding {
+  &-setups {
+    background-color: var(--ls-primary-background-color);
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
+    z-index: 9;
+    height: 100vh;
+
+    .inner-card {
+      transform: translateY(-60px);
+
+      h1 {
+        font-size: 38px;
+        letter-spacing: 1px;
+
+        strong {
+          color: var(--ls-active-primary-color);
+          display: inline-block;
+          padding-right: 4px;
+          font-weight: normal;
+        }
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-top: 20px;
+        margin-bottom: 40px;
+      }
+
+      > article {
+        background-color: var(--ls-secondary-background-color);
+        width: 1040px;
+        height: 510px;
+        border-radius: 20px;
+        overflow: hidden;
+
+        > section {
+          flex: 1;
+
+          &.a {
+            background-color: var(--ls-tertiary-background-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 75px;
+
+            strong {
+              font-size: 28px;
+              padding-bottom: 15px;
+              font-weight: 600;
+            }
+
+            small {
+              font-size: 20px;
+              line-height: 30px;
+              padding: 0 95px;
+              text-align: center;
+            }
+
+            .choose {
+              padding-top: 46px;
+              width: 100%;
+
+              i {
+                width: 180px;
+                height: 120px;
+                background-image: url("../img/folder.png");
+                background-size: contain;
+              }
+
+              .control {
+                padding-top: 30px;
+                padding-left: 70px;
+                padding-right: 70px;
+                width: 100%;
+
+                a.button {
+                  background-color: var(--ls-quaternary-background-color);
+                  height: 68px;
+                  width: 100%;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  color: var(--ls-link-ref-text-color);
+                  opacity: .8;
+                  user-select: none;
+
+                  &:hover {
+                    opacity: 1;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
