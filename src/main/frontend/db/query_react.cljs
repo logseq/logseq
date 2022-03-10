@@ -24,7 +24,7 @@
     (= :today input)
     (date->int (t/today))
     (= :yesterday input)
-    (date->int (t/yesterday))
+    (date->int (t/minus (t/today) (t/days 1)))
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
     (= :current-page input)
