@@ -146,7 +146,7 @@
                    (when-let [f @*sync-search-indice-f]
                      (f datoms)))))))
 
-(defn- listen-and-persist!
+(defn listen-and-persist!
   [repo]
   (when-let [conn (get-conn repo false)]
     (repo-listen-to-tx! repo conn)))
