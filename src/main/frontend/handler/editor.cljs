@@ -793,12 +793,12 @@
   [{:block/keys [marker content format] :as block} new-marker]
   (let [old-header-marker (when (not= format :org)
                             (re-find (marker/header-marker-pattern true marker) content))
-        new-header-marker (when old-header-marker
+        new-header-marker (when (not-empty old-header-marker)
                             (string/replace old-header-marker marker new-marker))
         marker (or old-header-marker marker)
         new-marker (or new-header-marker new-marker)
         new-content (->
-                     (if marker
+                     (if (not-empty marker)
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)
                        (str new-marker " " content))
                      (string/triml))]
