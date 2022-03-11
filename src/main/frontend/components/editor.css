@@ -19,6 +19,7 @@
     align-items: center;
     overflow-x: overlay;
     overflow-y: hidden;
+    width: 95%;
   }
 
   .toolbar-hide-keyboard {
