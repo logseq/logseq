@@ -48,6 +48,29 @@
                                                           (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback"))}
          [:span (t :login)]]))))
 
+(rum/defcs file-sync-remote-graphs <
+  (rum/local nil ::remote-graphs)
+  [state]
+  (let [*remote-graphs (::remote-graphs state)
+        refresh-list-fn #(a/go (reset! *remote-graphs (a/<! (file-sync-handler/list-graphs))))]
+    (when (nil? @*remote-graphs)
+      ;; (println "call list-graphs api")
+      (refresh-list-fn))
+    [:div
+     [:div.flex
+      [:h1.title "Remote Graphs"]
+      [:div
+       {:on-click refresh-list-fn}
+       svg/refresh]]
+     [:p.text-sm "click to delete the selected graph"]
+     [:ul
+      (for [graph @*remote-graphs]
+        [:li.mb-4
+         [:a.font-medium
+          {:on-click #(do (println "delete graph" (:GraphName graph) (:GraphUUID graph))
+                          (file-sync-handler/delete-graph (:GraphUUID graph)))}
+          (:GraphName graph)]])]]))
+
 (rum/defcs file-sync <
   rum/reactive
   (rum/local nil ::existed-graphs)
@@ -64,9 +87,7 @@
     (when-not config/publishing?
       (when (user-handler/logged?)
         (when-not (file-sync-handler/graph-txid-exists?)
-          (a/go
-            (let [graphs (a/<! (file-sync-handler/list-graphs))]
-              (reset! *existed-graphs graphs))))
+          (a/go (reset! *existed-graphs (a/<! (file-sync-handler/list-graphs)))))
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (if not-syncing?
@@ -89,7 +110,9 @@
            graph-txid-exists?
            (concat
             [{:title "toggle file sync"
-              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}]
+              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}
+             {:title "remote graph list"
+              :options {:on-click #(state/set-sub-modal! file-sync-remote-graphs)}}]
             [{:hr true}]
             (map (fn [f] {:title f
                           :icon (ui/icon "arrow-narrow-up")}) uploading-files)
@@ -103,6 +126,8 @@
          (cond-> {}
            (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
                                                           "Switch to:"])))))))
+
+
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]

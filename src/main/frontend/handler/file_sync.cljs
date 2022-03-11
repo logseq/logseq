@@ -35,12 +35,18 @@
           (notification/show! (str "create graph failed: already existed graph: " name) :warning)
           (notification/show! (str "create graph failed: " r) :warning))))))
 
+(defn delete-graph
+  [graph-uuid]
+  (sync/sync-stop)
+  (go
+    (let [r (<! (sync/delete-graph sync/remoteapi graph-uuid))]
+      (if (instance? ExceptionInfo r)
+        (notification/show! (str "delete graph failed: " graph-uuid) :warning)
+        (notification/show! (str "graph deleted") :success)))))
 
 (defn list-graphs
   []
-  (go
-    (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
-
+  (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
 
 (defn switch-graph [graph-uuid]
   (persist-var/-reset-value! sync/graphs-txid [graph-uuid 0] (state/get-current-repo))
