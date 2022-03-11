@@ -37,10 +37,7 @@
                         (:db/id (db/entity repo [:block/name (util/page-name-sanity-lc page-db-id)]))
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-       (p/let [blocks (search/block-search repo q opts)
-               blocks (map (fn [b]
-                             (let [format (:block/format (db/entity [:block/uuid (:block/uuid b)]))]
-                               (update b :block/content (partial sanity-search-content format)))) blocks)]
+       (p/let [blocks (search/block-search repo q opts)]
          (let [result (merge
                        {:blocks blocks
                         :has-more? (= limit (count blocks))}
