@@ -385,12 +385,6 @@
     (let [cause (ex-cause (<! (get-local-files-meta rsapi "" base-path file-paths)))]
       (assert (some? cause)))))
 
-(defn- local-file-exists? [base-path relative-path]
-  (go
-    (let [cause (ex-cause (<! (get-local-files-meta rsapi "" base-path relative-path)))]
-      (nil? cause))))
-
-
 (defn- retry-rsapi [f]
   (go-loop [n 3]
     (let [r (<! (f))]
@@ -672,7 +666,7 @@
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:type type :base-path dir :path path}))))
+    (write-all w (str {:type type :base-path dir :path path :size (:size stat)}))))
 
 (defn- partition-file-change-events
   "return transducer.
@@ -765,7 +759,8 @@
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
-                        (prn "partition-filetxns" partitioned-filetxns)
+                        ;; (prn "partition-filetxns" partitioned-filetxns)
+
                         ;; TODO: precheck etag
                         (if (empty? (flatten partitioned-filetxns))
                           (do (update-graphs-txid! latest-txid graph-uuid repo)

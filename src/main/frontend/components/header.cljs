@@ -119,8 +119,8 @@
             (map (fn [f] {:title f
                           :icon (ui/icon "arrow-narrow-down")}) downloading-files)
             (when sync-state
-              (map (fn [f] (:time f)
-                     {:title [:div [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
+              (map-indexed (fn [i f] (:time f)
+                     {:title [:div {:key i} [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
                    (take 10 (:history sync-state))))))
 
          (cond-> {}
