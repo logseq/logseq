@@ -1,4 +1,5 @@
-body[data-page=repo-add] {
+body[data-page=repo-add],
+body[data-page=import] {
   #left-sidebar, #right-sidebar {
     display: none;
   }
@@ -24,8 +25,7 @@ body[data-page=repo-add] {
       transform: translateY(-60px);
 
       > h1 {
-        font-size: 38px;
-        letter-spacing: 1px;
+        font-size: 36px;
 
         strong {
           color: var(--ls-active-primary-color);
@@ -87,30 +87,6 @@ body[data-page=repo-add] {
                 padding-left: 70px;
                 padding-right: 70px;
                 width: 100%;
-
-                a.open-link {
-                  transition: none;
-                  color: var(--ls-active-primary-color);
-                  background-color: var(--ls-quaternary-background-color);
-                  height: 68px;
-                  width: 100%;
-                  opacity: .8;
-                  user-select: none;
-                  border-radius: 12px;
-                  overflow: hidden;
-
-                  small {
-                    font-size: 11px;
-                  }
-
-                  &:hover {
-                    opacity: 1;
-                  }
-
-                  &:active {
-                    opacity: .5;
-                  }
-                }
               }
             }
           }
@@ -186,6 +162,83 @@ body[data-page=repo-add] {
             }
           }
         }
+
+        &.importer {
+          background-color: var(--ls-tertiary-background-color);
+          padding-top: 150px;
+
+          > section {
+            flex: unset;
+
+            h1 {
+              font-size: 28px;
+              font-weight: 500;
+            }
+
+            h2 {
+              font-size: 19px;
+              line-height: 3em;
+            }
+
+            &.d {
+              width: 100%;
+              padding: 40px 150px;
+
+              > label {
+                width: unset;
+                height: 80px;
+                flex: 1;
+                margin: 0 15px;
+
+                > span {
+                  &:first-child {
+                    padding: 16px;
+
+                    i {
+                      height: 30px;
+                      width: 30px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                    }
+                  }
+                }
+
+                strong {
+                  font-size: 18px;
+                }
+
+                small {
+                  font-size: 11px;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    label.action-input {
+      transition: none;
+      color: var(--ls-active-primary-color);
+      background-color: var(--ls-quaternary-background-color);
+      height: 68px;
+      width: 100%;
+      opacity: .8;
+      user-select: none;
+      border-radius: 12px;
+      overflow: hidden;
+
+      small {
+        font-size: 11px;
+      }
+
+      &:hover {
+        opacity: 1;
+      }
+
+      &:active {
+        opacity: .5;
       }
     }
   }

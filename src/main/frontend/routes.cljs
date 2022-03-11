@@ -25,7 +25,7 @@
 
    ["/repo/add"
     {:name :repo-add
-     :view ob-setups/main}]
+     :view ob-setups/picker}]
 
    ["/all-files"
     {:name :all-files
@@ -69,7 +69,7 @@
 
    ["/import"
     {:name :import
-     :view external/import-cp}]
+     :view ob-setups/importer}]
 
    ["/all-journals"
     {:name :all-journals
