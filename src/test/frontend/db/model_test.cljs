@@ -1,11 +1,10 @@
 (ns frontend.db.model-test
   (:require [cljs.test :refer [use-fixtures deftest is]]
             [frontend.db.model :as model]
-            [frontend.db.config :as config]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
-(defn- load-test-files [files]
-  (repo-handler/parse-files-and-load-to-db! config/test-db files {:re-render? false}))
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
 
 (deftest get-page-namespace-routes
   (load-test-files [{:file/path "pages/a.b.c.md"
@@ -16,7 +15,7 @@
                      :file/content "baz"}])
 
   (is (= '()
-         (map :block/name (model/get-page-namespace-routes config/test-db "b/c")))
+         (map :block/name (model/get-page-namespace-routes test-helper/test-db "b/c")))
       "Empty if page exists"))
 
 ;; (deftest test-page-alias-with-multiple-alias
@@ -82,9 +81,5 @@
 ;;       1 (count b-ref-blocks)
 ;;       1 (count a-ref-blocks)
 ;;       (set ["b" "c"]) (set alias-names))))
-
-(use-fixtures :each
-  {:before config/start-test-db!
-   :after config/destroy-test-db!})
 
 #_(cljs.test/test-ns 'frontend.db.model-test)

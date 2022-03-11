@@ -1,4 +1,5 @@
 (ns frontend.db.query-dsl
+  "Handles executing dsl queries a.k.a. simple queries"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
@@ -7,7 +8,7 @@
             [clojure.walk :as walk]
             [frontend.date :as date]
             [frontend.db.model :as model]
-            [frontend.db.query-react :as react]
+            [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.db.rules :as rules]
             [frontend.template :as template]
@@ -585,7 +586,7 @@ Some bindings in this fn:
                                      identity)
                     transform-fn (comp sort-by random-samples)]
                 (try
-                  (react/react-query repo
+                  (query-react/react-query repo
                                      {:query query
                                       :query-string query-string
                                       :rules rules}
@@ -604,7 +605,7 @@ Some bindings in this fn:
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
           {:keys [query sort-by blocks? rules]} (parse query-string)]
       (when-let [query (query-wrapper query blocks?)]
-        (react/react-query repo
+        (query-react/react-query repo
                            (merge
                             query-m
                             {:query query

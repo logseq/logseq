@@ -7,7 +7,7 @@
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
-            [frontend.db.react :as db-react]
+            [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -221,7 +221,7 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (db-react/run-custom-queries-when-idle!)
+    (react/run-custom-queries-when-idle!)
 
     (events/run!)
 

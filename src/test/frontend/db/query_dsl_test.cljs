@@ -2,30 +2,44 @@
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
             [frontend.db :as db]
-            [frontend.db.config :refer [test-db] :as config]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
 ;; 2. find illegal queries which can't be executed by datascript
 ;; 3. find filters combinations which might break the current query implementation
 
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
+
 ;; Test helpers
 ;; ============
-(defn- load-test-files [files]
-  (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false}))
+
+(def dsl-query*
+  "When $EXAMPLE set, prints query result of build query. Useful for
+   documenting examples and debugging"
+  (if (some? js/process.env.EXAMPLE)
+    (fn dsl-query-star [& args]
+      (let [old-build-query query-dsl/build-query]
+       (with-redefs [query-dsl/build-query
+                     (fn [& args']
+                       (let [res (apply old-build-query args')]
+                         (println "EXAMPLE:" (pr-str (:query res)))
+                         res))]
+         (apply query-dsl/query args))))
+    query-dsl/query))
 
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (when-let [result (query-dsl/query test-db s)]
+  (when-let [result (dsl-query* test-helper/test-db s)]
     (map first (deref result))))
 
 (defn- custom-query
   [query]
   (db/clear-query-state!)
-  (when-let [result (query-dsl/custom-query test-db query {})]
+  (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
     (map first (deref result))))
 
 (defn- q
@@ -34,7 +48,7 @@
   (let [parse-result (query-dsl/parse s)
         query (:query parse-result)]
     {:query (if (seq query) (vec query) query)
-     :result (query-dsl/query test-db s)}))
+     :result (query-dsl/query test-helper/test-db s)}))
 
 ;; Tests
 ;; =====
@@ -519,15 +533,11 @@ last-modified-at:: 1609084800002"}]]
     ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
     )
 
-(use-fixtures :each
-              {:before config/start-test-db!
-               :after config/destroy-test-db!})
-
 #_(cljs.test/run-tests)
 
 (comment
  (require '[clojure.pprint :as pprint])
- (config/start-test-db!)
+ (test-helper/start-test-db!)
  (load-test-files-with-timestamps)
 
  (query-dsl/query test-db "(task done)")
