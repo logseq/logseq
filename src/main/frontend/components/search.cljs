@@ -214,7 +214,7 @@
           (search-result-item "Block"  (if block
                                          (block-search-result-item repo uuid format content search-q search-mode)
                                          (do (log/error "search result with non-existing uuid: " data)
-                                             (str "Re-index required! Cache is outdated."))))])
+                                             (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
        nil)]))
 
