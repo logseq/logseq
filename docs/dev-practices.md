@@ -89,6 +89,8 @@ For this workflow:
   tests. To run all tests except those tests run `node static/tests.js -e focus`.
 3. Or focus namespaces: Using the regex option `-r`, run tests for `frontend.text-test` with `node static/tests.js -r text`.
 
+Multiple options can be specified to AND selections. For example, to run all `frontend.text-test` tests except for the focused one: `node static/tests.js -r text -e focus`
+
 For help on more options, run `node static/tests.js -h`.
 
 #### Autorun Tests
