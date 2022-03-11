@@ -14,6 +14,7 @@ body[data-page=import] {
     left: 0;
     z-index: 9;
     height: 100vh;
+    overflow-y: auto;
 
     .as-flex-center {
       display: flex;
@@ -239,6 +240,10 @@ body[data-page=import] {
 
       &:active {
         opacity: .5;
+      }
+
+      &[disabled] {
+        pointer-events: none;
       }
     }
   }

@@ -211,8 +211,8 @@
         (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-parsing-files! false)
-    (state/pub-event! [:graph/added repo-url])))
+    (state/pub-event! [:graph/added repo-url])
+    (state/set-parsing-files! false)))
 
 (defn- parse-files-and-create-default-files!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]

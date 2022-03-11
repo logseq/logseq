@@ -244,6 +244,10 @@
   []
   (= :home (get-current-route)))
 
+(defn setups-picker?
+  []
+  (= :repo-add (get-current-route)))
+
 (defn get-current-page
   []
   (when (= :page (get-current-route))
