@@ -6,38 +6,18 @@
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
             [datascript.core :as d]
-            [promesa.core :as p]
             [electron.ipc :as ipc]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.metadata :as metadata-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.ui :as ui]
-            [frontend.db.persist :as db-persist]))
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]))
 
 (defn persist-dbs!
   []
-  (->
-   (p/let [repos (db-persist/get-all-graphs)
-           repos (-> repos
-                     (conj (state/get-current-repo))
-                     (distinct))]
-     (if (seq repos)
-       (do
-         (notification/show!
-          (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
-          :warning)
-         (doseq [repo repos]
-           (metadata-handler/set-pages-metadata! repo))
-         (js/setTimeout
-          (fn []
-            (-> (p/all (map db/persist! repos))
-                (p/then (fn []
-                          (ipc/ipc "persistent-dbs-saved")))))
-          100))
-       (ipc/ipc "persistent-dbs-saved")))
-   (p/catch (fn [error]
-              (js/console.error error)
-              (ipc/ipc "persistent-dbs-error")))))
+  (repo-handler/persist-dbs! {:before     #(notification/show!
+                                            (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
+                                            :warning)
+                              :on-success #(ipc/ipc "persistent-dbs-saved")
+                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
 (defn listen-persistent-dbs!
   []

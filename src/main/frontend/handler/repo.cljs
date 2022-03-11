@@ -20,6 +20,7 @@
             [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.search :as search]
+            [frontend.storage :as storage]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -648,3 +649,40 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
+
+(defn persist-dbs!
+  [{:keys [before on-success on-error]}]
+  (->
+   (p/let [repos (db-persist/get-all-graphs)
+           repos (-> repos
+                     (conj (state/get-current-repo))
+                     (distinct))]
+     (if (seq repos)
+       (do
+         (before)
+         (doseq [repo repos]
+           (metadata-handler/set-pages-metadata! repo))
+         (js/setTimeout
+          (fn []
+            (-> (p/all (map db/persist! repos))
+                (p/then on-success)))
+          100))
+       (on-success)))
+   (p/catch (fn [error]
+              (js/console.error error)
+              (on-error)))))
+
+(defn open-new-window!
+  ([_e]
+   (open-new-window! _e nil))
+  ([_e repo]
+   ; TODO: find out a better way to open a new window with a different repo path
+   (when (string? repo) (storage/set :git/current-repo repo))
+   (persist-dbs! {:before     #(notification/show!
+                                "Logseq is syncing internal status before opening new window, please wait for several seconds."
+                                :warning)
+                  :on-success #(ipc/ipc "openNewWindow")
+                  :on-error   #(notification/show!
+                                "Logseq internal status syncing failed. Stop opening new window"
+                                :error)})
+   ))

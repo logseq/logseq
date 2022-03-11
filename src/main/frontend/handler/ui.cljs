@@ -13,8 +13,7 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile]
-            [electron.ipc :as ipc]))
+            [frontend.mobile.util :as mobile]))
 
 (defn- get-css-var-value
   [var-name]
@@ -296,10 +295,3 @@
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
 
-(defn open-new-window!
-  ([_e]
-   (open-new-window! _e nil))
-  ([_e repo]
-   ; TODO: find out a better way to open a new window with a different repo path
-   (when (string? repo) (storage/set :git/current-repo repo))
-   (ipc/ipc "openNewWindow")))
