@@ -1,5 +1,6 @@
 (ns frontend.components.search
   (:require [rum.core :as rum]
+            [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
@@ -210,8 +211,10 @@
              block (model/query-block-by-uuid uuid)
              content (:block/content block)]
          [:span {:data-block-ref uuid}
-          (search-result-item "Block"
-                              (block-search-result-item repo uuid format content search-q search-mode))])
+          (search-result-item "Block"  (if block
+                                         (block-search-result-item repo uuid format content search-q search-mode)
+                                         (do (log/error "search result with non-existing uuid: " data)
+                                             (str "Re-index required! Cache is outdated."))))])
 
        nil)]))
 
