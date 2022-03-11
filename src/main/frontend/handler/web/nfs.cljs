@@ -134,7 +134,7 @@
                         root-handle)
              repo (str config/local-db-prefix dir-name)
              _ (state/set-loading-files! repo true)
-             _ (when-not (state/home?)
+             _ (when-not (or (state/home?) (state/setups-picker?))
                  (route-handler/redirect-to-home! false))]
        (reset! *repo repo)
        (when-not (string/blank? dir-name)
