@@ -136,6 +136,12 @@
                [(str ?val) ?str-val]
                [(contains? ?v ?str-val)]))]
 
+   :page-refs
+   '[(page-refs ?b ?page-name)
+     [?b :block/path-refs ?r]
+     [?r :block/name ?tag]
+     [(contains? ?page-name ?tag)]]   
+   
    :page-ref
    '[(page-ref ?b ?page-name)
      [?b :block/path-refs [:block/name ?page-name]]]})
