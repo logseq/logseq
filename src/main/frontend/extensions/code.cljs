@@ -4,6 +4,7 @@
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/selection/active-line"]
+            ["@codewars/codemirror-agda" :as cm-agda]
             ["codemirror/mode/apl/apl"]
             ["codemirror/mode/asciiarmor/asciiarmor"]
             ["codemirror/mode/asn.1/asn.1"]
@@ -271,6 +272,8 @@
 
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
+           (let [agda-define-mode (gobj/get cm-agda "defineMode")]
+             (agda-define-mode cm))
            (let [[_ _ _ code _] (:rum/args state)]
              (assoc state :editor-atom (atom nil) :calc-atom (atom (calc/eval-lines code)))))
    :did-mount (fn [state]

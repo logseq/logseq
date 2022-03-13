@@ -512,6 +512,11 @@
   resolved "https://registry.npmmirror.com/@capacitor/status-bar/download/@capacitor/status-bar-1.0.6.tgz#d58c9087cfc7c7377e8009bea86152e4fdd2939e"
   integrity sha1-1YyQh8/Hxzd+gAm+qGFS5P3Sk54=
 
+"@codewars/codemirror-agda@0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@codewars/codemirror-agda/-/codemirror-agda-0.2.0.tgz#a877cc6f68337f13069745754eea121dd4a333d1"
+  integrity sha512-qMXOdBTM9iVN0AhSxNDr5SE6ZJxbZmnyJf78eebyI3e4FveUJhZz/ON4ubCEJGmuqsxkuoU7nQ9EOpktchvLUA==
+
 "@electron/get@^1.13.0":
   version "1.13.1"
   resolved "https://registry.yarnpkg.com/@electron/get/-/get-1.13.1.tgz#42a0aa62fd1189638bd966e23effaebb16108368"
