@@ -104,7 +104,16 @@
   (js/alert "Graph migrated."))
 
 (defmethod handle :graph/save [_]
-  (db/persist! (state/get-current-repo)))
+  (repo-handler/persist-db! (state/get-current-repo)
+                            {:before     #(notification/show!
+                                           (ui/loading (t :graph/save))
+                                           :warning)
+                             :on-success #(notification/show!
+                                           (ui/loading (t :graph/save-success))
+                                           :warning)
+                             :on-error   #(notification/show!
+                                           (t :graph/save-error)
+                                           :error)}))
 
 (defn get-local-repo
   []
@@ -313,14 +322,16 @@
            js/decodeURI)))
 
 (defmethod handle :graph/open-new-window [[_ repo]]
-   ; TODO: find out a better way to open a new window with a different repo path
-   (repo-handler/persist-dbs! {:before     #(notification/show!
-                                (ui/loading (t :graph/open-new-window))
-                                :warning)
-                  :on-success #(ui-handler/open-new-window! _ repo)
-                  :on-error   #(notification/show!
-                                (t :graph/open-new-window-error)
-                                :error)}))
+   ;; persistent current db, then open new window
+   (let [cur-repo (state/get-current-repo)]
+     (repo-handler/persist-db! cur-repo 
+                               {:before     #(notification/show!
+                                              (ui/loading (t :graph/open-new-window))
+                                              :warning)
+                                :on-success #(ui-handler/open-new-window! _ repo)
+                                :on-error   #(notification/show!
+                                              (t :graph/open-new-window-error)
+                                              :error)})))
 
 (defn run!
   []

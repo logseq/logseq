@@ -13,11 +13,11 @@
 
 (defn persist-dbs!
   []
-  (repo-handler/persist-dbs! {:before     #(notification/show!
-                                            (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
-                                            :warning)
-                              :on-success #(ipc/ipc "persistent-dbs-saved")
-                              :on-error   #(ipc/ipc "persistent-dbs-error")}))
+  (repo-handler/persist-all-dbs! {:before     #(notification/show!
+                                                (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
+                                                :warning)
+                                  :on-success #(ipc/ipc "persistent-dbs-saved")
+                                  :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
 (defn listen-persistent-dbs!
   []
