@@ -649,7 +649,7 @@
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
 
-(defn persist-dbs!
+(defn persist-all-dbs!
   [{:keys [before on-success on-error]}]
   (->
    (p/let [repos (db-persist/get-all-graphs)
@@ -667,6 +667,18 @@
                 (p/then on-success)))
           100))
        (on-success)))
+   (p/catch (fn [error]
+              (js/console.error error)
+              (on-error)))))
+
+(defn persist-db!
+  [repo {:keys [before on-success on-error]}]
+  (->
+   (p/do!
+    (before)
+    (metadata-handler/set-pages-metadata! repo)
+    (db/persist! repo)
+    (on-success))
    (p/catch (fn [error]
               (js/console.error error)
               (on-error)))))
