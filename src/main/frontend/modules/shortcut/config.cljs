@@ -10,7 +10,6 @@
             [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -417,7 +416,7 @@
    :ui/open-new-window              (when (util/electron?)
                                       {:desc    "Open another window"
                                        :binding "mod+n"
-                                       :fn      repo-handler/open-new-window!})
+                                       :fn      #(state/pub-event! [:graph/open-new-window nil])})
 
    :command/toggle-favorite         {:desc    "Add to/remove from favorites"
                                      :binding "mod+shift+f"

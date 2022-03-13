@@ -205,7 +205,7 @@
                          :options {:class "ml-1"
                                    :on-click (fn [e]
                                                (if (gobj/get e "shiftKey")
-                                                 (repo-handler/open-new-window! e url)
+                                                 (state/pub-event! [:graph/open-new-window url])
                                                  (state/pub-event! [:graph/switch url])))}}))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
@@ -253,7 +253,7 @@
                                                       page-handler/create-today-journal!)))]])))})}
         new-window-link (when (util/electron?)
                           {:title        (t :open-new-window)
-                           :options {:on-click repo-handler/open-new-window!}})]
+                           :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})

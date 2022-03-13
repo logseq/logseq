@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -310,6 +311,16 @@
    (update (js->clj event :keywordize-keys true)
            :path
            js/decodeURI)))
+
+(defmethod handle :graph/open-new-window [[_ repo]]
+   ; TODO: find out a better way to open a new window with a different repo path
+   (repo-handler/persist-dbs! {:before     #(notification/show!
+                                (ui/loading (t :graph/open-new-window))
+                                :warning)
+                  :on-success #(ui-handler/open-new-window! _ repo)
+                  :on-error   #(notification/show!
+                                (t :graph/open-new-window-error)
+                                :error)}))
 
 (defn run!
   []
