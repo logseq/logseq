@@ -39,7 +39,7 @@
     (date/get-date-time-string-4)
     (date/get-date-time-string-3)))
 
-(defn- clock-interval
+(defn clock-interval
   [stime etime]
   (let [[stime etime] (map #(tf/parse
                              (if support-seconds?
