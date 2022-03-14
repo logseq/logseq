@@ -75,7 +75,7 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo]]
+(defmethod handle :graph/added [[_ repo opts]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)

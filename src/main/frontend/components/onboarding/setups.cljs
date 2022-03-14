@@ -5,6 +5,9 @@
             [frontend.components.svg :as svg]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [goog.object :as gobj]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.external :as external-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [clojure.string :as string]))
 
@@ -45,7 +48,7 @@
                          (fn []
                            (shortcut/refresh!)))
             :disabled parsing?}
-           
+
            (if parsing?
              (ui/loading "")
              [[:strong "Choose a folder"]
@@ -81,23 +84,79 @@
                [:strong.uppercase title]
                [:small.opacity-50 label]]]))]]])))
 
-(rum/defc importer
-  []
-  (setups-container
-    :importer
-    [:article.flex.flex-col.items-center.importer
-     [:section.c.text-center
-      [:h1 "Do you already have notes that you want to import?"]
-      [:h2 "If they are in a JSON or Markdown format logseq can work with them."]]
-     [:section.d.flex
-      [:label.action-input.flex.items-center
-       [:span.as-flex-center [:i (svg/roam-research 28)]]
-       [:span.flex.flex-col
-        [:strong "RoamResearch"]
-        [:small "Import a JSON Export of your Roam graph"]]]
+(defonce *roam-importing? (atom nil))
+(defonce *opml-importing? (atom nil))
+(defonce *opml-imported-pages (atom nil))
 
-      [:label.action-input.flex.items-center
-       [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
-       [:span.flex.flex-col
-        [:strong "OPML"]
-        [:small " Import OPML files"]]]]]))
+(rum/defc importer < rum/reactive
+  []
+  (let [roam-importing? (rum/react *roam-importing?)
+        opml-importing? (rum/react *opml-importing?)
+        finished-cb     (fn []
+                          (notification/show! "Finished!" :success)
+                          (route-handler/redirect-to-home!))]
+
+    (setups-container
+      :importer
+      [:article.flex.flex-col.items-center.importer
+       [:section.c.text-center
+        [:h1 "Do you already have notes that you want to import?"]
+        [:h2 "If they are in a JSON or Markdown format logseq can work with them."]]
+       [:section.d.flex
+        [:label.action-input.flex.items-center
+         {:disabled (or roam-importing? opml-importing?)}
+         [:span.as-flex-center [:i (svg/roam-research 28)]]
+         [:span.flex.flex-col
+          (if roam-importing?
+            (ui/loading "Importing ...")
+            [[:strong "RoamResearch"]
+             [:small "Import a JSON Export of your Roam graph"]])]
+         [:input.absolute.hidden
+          {:id        "import-roam"
+           :type      "file"
+           :on-change (fn [e]
+                        (let [file      (first (array-seq (.-files (.-target e))))
+                              file-name (gobj/get file "name")]
+                          (if (string/ends-with? file-name ".json")
+                            (do
+                              (reset! *roam-importing? true)
+                              (let [reader (js/FileReader.)]
+                                (set! (.-onload reader)
+                                  (fn [e]
+                                    (let [text (.. e -target -result)]
+                                      (external-handler/import-from-roam-json! text
+                                        #(do (reset! *roam-importing? false) (finished-cb))))))
+                                (.readAsText reader file)))
+                            (notification/show! "Please choose a JSON file."
+                              :error))))}]]
+
+        [:label.action-input.flex.items-center
+         {:disabled (or roam-importing? opml-importing?)}
+         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
+         [:span.flex.flex-col
+          (if opml-importing?
+            (ui/loading "Importing ...")
+            [[:strong "OPML"]
+             [:small " Import OPML files"]])]
+
+         [:input.absolute.hidden
+          {:id        "import-opml"
+           :type      "file"
+           :on-change (fn [e]
+                        (let [file      (first (array-seq (.-files (.-target e))))
+                              file-name (gobj/get file "name")]
+                          (if (string/ends-with? file-name ".opml")
+                            (do
+                              (reset! *opml-importing? true)
+                              (let [reader (js/FileReader.)]
+                                (set! (.-onload reader)
+                                  (fn [e]
+                                    (let [text (.. e -target -result)]
+                                      (external-handler/import-from-opml! text
+                                        (fn [pages]
+                                          (reset! *opml-imported-pages pages)
+                                          (reset! *opml-importing? false)
+                                          (finished-cb))))))
+                                (.readAsText reader file)))
+                            (notification/show! "Please choose a OPML file."
+                              :error))))}]]]])))
