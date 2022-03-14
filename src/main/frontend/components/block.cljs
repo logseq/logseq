@@ -1759,28 +1759,35 @@
                      (reset! show? false))
                    state)}
   [state block typ ast]
-  (let [show? (get state ::show?)]
+  (let [show? (get state ::show?)
+        timestamp (repeated/timestamp->text ast)
+        logbook? (= typ "logbook")]
     [:div.flex.flex-col.timestamp
      [:div.text-sm.flex.flex-row
-      [:div.opacity-50.font-medium.timestamp-label
-       (str typ ": ")]
+      (when-not logbook?
+        [:div.opacity-50.font-medium.timestamp-label
+         (str typ ": ")])
       [:a.opacity-80.hover:opacity-100
        {:on-mouse-down (fn [e]
                          (util/stop e)
                          (if @show?
                            (do
                              (reset! show? false)
+                             (reset! datetime-comp/*current-timestamp nil)
                              (reset! commands/*current-command nil)
                              (state/set-editor-show-date-picker! false)
                              (state/set-timestamp-block! nil))
                            (do
                              (reset! show? true)
+                             (reset! datetime-comp/*current-timestamp timestamp)
                              (reset! commands/*current-command typ)
                              (state/set-editor-show-date-picker! true)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ
                                                           :show? show?}))))}
-       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
+       [:span.time-start (if logbook? "[" "<")]
+       [:time timestamp]
+       [:span.time-stop (if logbook? "]" ">")]]]
      (when (true? @show?)
        (let [ts (repeated/timestamp->map ast)]
          [:div.my-4
@@ -2441,15 +2448,27 @@
        (cons head groups)))]))
 
 (defn logbook-cp
-  [log]
+  [config log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
         clocks (reverse (sort-by str clocks))
         ;; TODO: diplay states change log
-        ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
+                                        ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
         ]
     (when (seq clocks)
-      (let [tr (fn [elm cols] (->elem :tr
-                                      (mapv (fn [col] (->elem elm col)) cols)))
+      (let [tr (fn [elm cols]
+                 (->elem :tr
+                         (mapv
+                          (fn [col]
+                            [elm
+                             (let [block (:block config)
+                                   format (:format block)
+                                   ast (ffirst (mldoc/->edn col (mldoc/default-config format)))
+                                   timestamp? (= "Timestamp" (ffirst (last ast)))
+                                   date (last (last (first (last ast))))]
+                               (if timestamp?
+                                 (timestamp-cp block "logbook" date)
+                                 col))])
+                          cols)))
             head  [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
             clock-tbody (->elem
                          :tbody.overflow-scroll.sm:overflow-auto
@@ -2719,7 +2738,7 @@
                (util/format ":%s:" (string/upper-case name))]
               [:div.opacity-50.font-medium
                (if (= name "logbook")
-                 (logbook-cp lines)
+                 (logbook-cp config lines)
                  (apply str lines))
                [:div ":END:"]]
               {:default-collapsed? true

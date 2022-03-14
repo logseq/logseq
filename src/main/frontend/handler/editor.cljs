@@ -1053,6 +1053,41 @@
               (state/set-edit-content! input-id new-content)
               (save-block-if-changed! block new-content))))))))
 
+(defn update-logbook-summary
+  [block current-timestamp new-timestamp]
+  (let [{:block/keys [body content]} (block/parse-title-and-body block)
+        old-clock-log (->> (drawer/get-logbook body)
+                           last
+                           (filter #(and (string/starts-with? % "CLOCK:")
+                                         (string/includes? % current-timestamp)))
+                           first)
+        new-clock-log (string/replace old-clock-log current-timestamp new-timestamp) 
+        [clock-start clock-end] (re-seq #"\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}:\d{2}" new-clock-log)
+        clock-span (when clock-end
+                        (try
+                          (clock/clock-interval clock-start clock-end)
+                          (catch :default e
+                            (notification/show! "The end time is eariler than start time!" :warning)
+                            nil)))
+        new-clock-log (and clock-end clock-span
+                           (util/format "CLOCK: [%s]--[%s] =>  %s"
+                                        clock-start clock-end clock-span))]
+    (if clock-end
+      (if new-clock-log
+        (string/replace content old-clock-log new-clock-log)
+        content)
+      (string/replace content current-timestamp new-timestamp))))
+
+(defn set-logbook-timestamp!
+  [block-id current-timestamp new-timestamp]
+  (let [block-id (if (string? block-id) (uuid block-id) block-id)
+        new-timestamp (subs (str new-timestamp) 1 (dec (count new-timestamp)))]
+    (when-let [block (db/pull [:block/uuid block-id])]
+      (let [{:block/keys [content]} block
+            new-content (update-logbook-summary block current-timestamp new-timestamp)]
+        (when (not= content new-content)
+          (save-block-if-changed! block new-content))))))
+
 (defn- set-blocks-id!
   [block-ids]
   (let [block-ids (remove nil? block-ids)

@@ -17,6 +17,8 @@
 (defonce *timestamp (atom default-timestamp-value))
 
 (defonce *show-time? (atom false))
+
+(def *current-timestamp (atom nil))
 (rum/defc time-input < rum/reactive
   [default-value]
   (let [show? (rum/react *show-time?)]
@@ -99,9 +101,13 @@
         block-id (or (:block/uuid block)
                      (:block/uuid (state/get-edit-block)))
         typ (or @commands/*current-command typ)]
-    (editor-handler/set-block-timestamp! block-id
-                                         typ
-                                         text)
+    (if (contains? #{"logbook"} typ)
+      (editor-handler/set-logbook-timestamp! block-id
+                                             @*current-timestamp
+                                             text)
+      (editor-handler/set-block-timestamp! block-id
+                                           typ
+                                           text))
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
@@ -115,18 +121,21 @@
        (js/setTimeout #(mixins/on-enter state
                                         :node input
                                         :on-enter on-submit) 100))))
-  []
+  [logbook?]
   (let [{:keys [time repeater]} (rum/react *timestamp)]
-    [:div#time-repeater.py-1.px-4 {:style {:min-width 300}}
-     [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
-     (time-input time)
+    [:div#time-repeater.py-1.px-4
+     [:div
+      [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
+      (time-input time)]
 
-     [:p.text-sm.opacity-50.font-medium.mt-4 "Repeater:"]
-     (repeater-cp repeater)
-
+     (when-not logbook?
+       [:div
+        [:p.text-sm.opacity-50.font-medium.mt-4 "Repeater:"]
+        (repeater-cp repeater)])
+       
      [:p.mt-4
       (ui/button "Submit"
-        :on-click on-submit)]]))
+                 :on-click on-submit)]]))
 
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
@@ -144,12 +153,15 @@
   [id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
-                                   (contains? #{"deadline" "scheduled"}
+                                   (contains? #{"deadline" "scheduled" "logbook"}
                                               (string/lower-case current-command)))
+        logbook? (and current-command
+                      (contains? #{"logbook"} (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
     (when (state/sub :editor/show-date-picker?)
-      [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
-                                            :on-mouse-down (fn [e] (.stopPropagation e))}
+      [:div#date-time-picker.flex.flex-row
+       {:on-click (fn [e] (util/stop e))
+        :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker
         date
         {:deadline-or-schedule? deadline-or-schedule?
@@ -166,5 +178,5 @@
                                                nil)
                (state/set-editor-show-date-picker! false)
                (reset! commands/*current-command nil))))})
-       (when deadline-or-schedule?
-         (time-repeater))])))
+       (when (or deadline-or-schedule? logbook?)
+         (time-repeater logbook?))])))
