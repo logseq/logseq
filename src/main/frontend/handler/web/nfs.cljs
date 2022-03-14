@@ -48,7 +48,7 @@
    (cond
      mobile-native?
      (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (util/path-normalize (string/replace uri "file://" ""))
+            {:file/path             (util/path-normalize uri)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
@@ -174,14 +174,13 @@
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                            (p/let [_ (repo-handler/load-repo-to-db! repo
                                                                     {:first-clone? true
+                                                                     :new-graph?   true
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
                              (state/set-loading-files! repo false)
-                             (and ok-handler (ok-handler))
-                             (when (util/electron?)
-                               (fs/watch-dir! dir-name))
-                             (state/pub-event! [:graph/added repo])
-                             (db/persist! repo)))))
+                             (when ok-handler (ok-handler))
+                             (fs/watch-dir! dir-name)
+                             (db/persist-if-idle! repo)))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))

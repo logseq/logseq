@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
+            [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -26,7 +27,6 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [frontend.util.pool :as pool]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -133,6 +133,7 @@
                                        (mobile-util/native-ios?))
                               (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
+                         (p/then (state/pub-event! [:graph/ready (state/get-current-repo)]))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
         interval-id (js/setInterval inner-fn 50)]
@@ -184,12 +185,6 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn on-load-events
-  []
-  (set! js/window.onload
-        (fn []
-          (instrument/init))))
-
 (defn clear-cache!
   []
   (notification/show! "Clearing..." :warning false)
@@ -216,7 +211,7 @@
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
-    (on-load-events)
+    (instrument/init)
     (set-network-watcher!)
 
     (mobile/init!)
@@ -225,6 +220,8 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
+
+    (react/run-custom-queries-when-idle!)
 
     (events/run!)
 
@@ -237,7 +234,6 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (pool/init-parser-pool!)
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)

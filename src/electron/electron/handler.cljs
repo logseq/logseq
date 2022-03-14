@@ -1,11 +1,12 @@
 (ns electron.handler
-  (:require ["electron" :refer [ipcMain dialog app autoUpdater]]
+  (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["buffer" :as buffer]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
             ["os" :as os]
+            ["diff-match-patch" :as google-diff]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -46,29 +47,62 @@
   (readdir dir))
 
 (defmethod handle :unlink [_window [_ repo path]]
-  (let [file-name (-> (string/replace path (str repo "/") "")
-                      (string/replace "/" "_")
-                      (string/replace "\\" "_"))
-        recycle-dir (str repo "/logseq/.recycle")
-        _ (fs-extra/ensureDirSync recycle-dir)
-        new-path (str recycle-dir "/" file-name)]
-    (fs/renameSync path new-path)))
+  (if (plugin/dotdir-file? path)
+    (fs/unlinkSync path)
+    (let [file-name   (-> (string/replace path (str repo "/") "")
+                        (string/replace "/" "_")
+                        (string/replace "\\" "_"))
+          recycle-dir (str repo "/logseq/.recycle")
+          _           (fs-extra/ensureDirSync recycle-dir)
+          new-path    (str recycle-dir "/" file-name)]
+      (fs/renameSync path new-path))))
+
+(defonce Diff (google-diff.))
+(defn string-some-deleted?
+  [old new]
+  (let [result (.diff_main Diff old new)]
+    (some (fn [a] (= -1 (first a))) result)))
+
+(defn- truncate-old-versioned-files!
+  [dir]
+  (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
+        files (map #(.-name %) files)
+        old-versioned-files (drop 3 (reverse (sort files)))]
+    (doseq [file old-versioned-files]
+      (fs-extra/removeSync (path/join dir file)))))
+
+(defn- get-backup-dir
+  [repo path]
+  (let [path (string/replace path repo "")
+        bak-dir (str repo "/logseq/bak")
+        path (str bak-dir path)
+        parsed-path (path/parse path)]
+    (path/join (.-dir parsed-path)
+               (.-name parsed-path))))
 
 (defn backup-file
   [repo path content]
-  (let [file-name (-> (string/replace path (str repo "/") "")
-                      (string/replace "/" "_")
-                      (string/replace "\\" "_"))
-        bak-dir (str repo "/logseq/bak")
-        _ (fs-extra/ensureDirSync bak-dir)
-        new-path (str bak-dir "/" file-name "."
-                      (string/replace (.toISOString (js/Date.)) ":" "_"))]
+  (let [path-dir (get-backup-dir repo path)
+        ext (path/extname path)
+        new-path (path/join path-dir
+                            (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                                 ext))]
+    (fs-extra/ensureDirSync path-dir)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
+    (truncate-old-versioned-files! path-dir)
     new-path))
 
-(defmethod handle :backupDbFile [_window [_ repo path db-content]]
-  (backup-file repo path db-content))
+(defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
+  (when (and (string? db-content)
+             (string? new-content)
+             (string-some-deleted? db-content new-content))
+    (backup-file repo path db-content)))
+
+(defmethod handle :openFileBackupDir [_window [_ repo path]]
+  (when (string? path)
+    (let [dir (get-backup-dir repo path)]
+      (.openPath shell dir))))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -78,7 +112,7 @@
   (assert (string? path))
   (try
     (fs/accessSync path (aget fs "W_OK"))
-    (catch js/Error _e
+    (catch :default _e
       false)))
 
 (defmethod handle :writeFile [_window [_ repo path content]]
@@ -91,10 +125,10 @@
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
-      (catch js/Error e
+      (catch :default e
         (let [backup-path (try
                             (backup-file repo path content)
-                            (catch js/Error e
+                            (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]
           (utils/send-to-renderer "notification" {:type "error"
@@ -230,6 +264,7 @@
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
   (search/upsert-blocks! repo (bean/->js data))
+  (search/write-search-version! repo)
   [])
 
 (defmethod handle :transact-blocks [_window [_ repo data]]
@@ -266,8 +301,8 @@
   (search/ensure-search-dir!))
 
 (defmethod handle :addDirWatcher [window [_ dir]]
-  (watcher/close-watcher!)
   (when dir
+    (watcher/close-watcher! dir)
     (watcher/watch-dir! window dir)))
 
 (defmethod handle :openDialog [^js _window _messages]
@@ -350,9 +385,16 @@
         windows (filter #(.isVisible %) windows)]
     (> (count windows) 1)))
 
+(defmethod handle :searchVersionChanged?
+  [^js _win [_ graph]]
+  (search/version-changed? graph))
+
 (defmethod handle :reloadWindowPage [^js win]
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
+
+(defmethod handle :setHttpsAgent [^js _win [_ opts]]
+  (utils/set-fetch-agent opts))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

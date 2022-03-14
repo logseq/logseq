@@ -19,7 +19,7 @@
 
 ;; Note – when you change this file, you will need to do a hard reset.
 ;; The commands are registered when the Clojurescript code runs for the first time
-(defonce all-default-keyboard-shortcuts
+(defonce ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:desc    "Date picker: Choose selected day"
                                   :binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -64,6 +64,10 @@
                                   :binding "shift+enter"
                                   :fn      ui-handler/auto-complete-shift-complete}
 
+   :auto-complete/open-link      {:desc    "Auto-complete: Open selected item in browser"
+                                  :binding "mod+o"
+                                  :fn      ui-handler/auto-complete-open-link}
+
    :cards/toggle-answers         {:desc    "Cards: show/hide answers/clozes"
                                   :binding "s"
                                   :fn      srs/toggle-answers}
@@ -86,7 +90,8 @@
 
    :editor/escape-editing        {:desc    "Escape editing"
                                   :binding false
-                                  :fn      (fn [_ _] (editor-handler/escape-editing))}
+                                  :fn      (fn [_ _]
+                                             (editor-handler/escape-editing))}
 
    :editor/backspace             {:desc    "Backspace / Delete backwards"
                                   :binding "backspace"
@@ -275,11 +280,15 @@
 
    :go/search-in-page              {:desc    "Search in the current page"
                                     :binding "mod+shift+k"
-                                    :fn      #(route-handler/go-to-search! :page)}
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (route-handler/go-to-search! :page))}
 
    :go/search                      {:desc    "Full text search"
                                     :binding "mod+k"
-                                    :fn      #(route-handler/go-to-search! :global)}
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (route-handler/go-to-search! :global))}
 
    :go/journals                    {:desc    "Go to journals"
                                     :binding "g j"
@@ -295,7 +304,7 @@
 
    :search/re-index                {:desc    "Rebuild search index"
                                     :binding "mod+c mod+s"
-                                    :fn      search-handler/rebuild-indices!}
+                                    :fn      (fn [_] (search-handler/rebuild-indices! true))}
 
    :sidebar/open-today-page        {:desc    "Open today's page in the right sidebar"
                                     :binding (if mac? "mod+shift+j" "alt+shift+j")
@@ -312,11 +321,29 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (state/toggle! :ui/command-palette-open?))}
 
-   :select-graph/open              {:desc    "Open select graph component"
-                                    :fn      (fn [] (state/set-state! :ui/open-select :select-graph))
+   :graph/open                     {:desc    "Select graph to open"
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (state/set-state! :ui/open-select :graph-open))
                                     :binding "mod+shift+g"}
+
+   :graph/remove                   {:desc    "Remove a graph"
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (state/set-state! :ui/open-select :graph-remove))
+                                    :binding false}
+
+   :graph/add                      {:desc "Add a graph"
+                                    :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+                                    :binding false}
+
+   :graph/save                     {:desc "Save current graph to disk"
+                                    :fn #(state/pub-event! [:graph/save])
+                                    :binding false}
 
    :command/run                    (when (util/electron?)
                                      {:desc    "Run git command"
@@ -441,7 +468,7 @@
   (reduce into {}
           (map (fn [sym] {sym (get all-default-keyboard-shortcuts sym)}) symbols)))
 
-(defonce config
+(defonce ^:large-vars/data-var config
   (atom
    {:shortcut.handler/date-picker
     (build-category-map [:date-picker/complete
@@ -459,14 +486,16 @@
     (build-category-map [:auto-complete/complete
                          :auto-complete/prev
                          :auto-complete/next
-                         :auto-complete/shift-complete])
+                         :auto-complete/shift-complete
+                         :auto-complete/open-link])
 
     :shortcut.handler/cards
-    (build-category-map [:cards/toggle-answers
-                         :cards/next-card
-                         :cards/forgotten
-                         :cards/remembered
-                         :cards/recall])
+    (-> (build-category-map [:cards/toggle-answers
+                             :cards/next-card
+                             :cards/forgotten
+                             :cards/remembered
+                             :cards/recall])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/block-editing-only
     (->
@@ -498,7 +527,10 @@
     :shortcut.handler/editor-global
     (->
      (build-category-map [:command-palette/toggle
-                          :select-graph/open
+                          :graph/open
+                          :graph/remove
+                          :graph/add
+                          :graph/save
                           :editor/cycle-todo
                           :editor/up
                           :editor/down
@@ -574,7 +606,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; Categories for docs purpose
-(def category
+(def ^:large-vars/data-var category
   {:shortcut.category/basics
    ^{:doc "Basics"}
    [:editor/new-block
@@ -680,7 +712,10 @@
     :pdf/next-page
     :command/run
     :command-palette/toggle
-    :select-graph/open
+    :graph/open
+    :graph/remove
+    :graph/add
+    :graph/save
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
@@ -689,6 +724,7 @@
     :auto-complete/next
     :auto-complete/complete
     :auto-complete/shift-complete
+    :auto-complete/open-link
     :date-picker/prev-day
     :date-picker/next-day
     :date-picker/prev-week

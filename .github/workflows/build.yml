@@ -17,7 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.7.3'
+  BABASHKA_VERSION: '0.7.7'
 
 jobs:
 
@@ -69,6 +69,10 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install
 
+      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
+      - name: Ensure yarn.lock is up to date
+        run: git diff --exit-code yarn.lock
+
       - name: Run ClojureScript test
         run: |
           yarn cljs:test
@@ -103,8 +107,14 @@ jobs:
       - name: Carve lint for unused vars
         run: scripts/carve.clj
 
-      - name: Lint invalid dictionary keys
-        run: bb lang:invalid-dicts
+      - name: Lint for vars that are too large
+        run: scripts/large_vars.clj
+
+      - name: Lint invalid translation entries
+        run: bb lang:invalid-translations
+
+      - name: Lint datalog rules
+        run: scripts/lint_rules.clj
 
   e2e-test:
     runs-on: ubuntu-latest

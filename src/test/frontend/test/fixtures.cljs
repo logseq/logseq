@@ -1,11 +1,9 @@
-(ns frontend.fixtures
+(ns frontend.test.fixtures
   (:require [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
-            [frontend.db.react :as db-react]
-            [frontend.react :as react-test]
-            [frontend.react-impls :as react-impls]
+            [frontend.db.react :as react]
             [frontend.state :as state]))
 
 (defn load-test-env
@@ -14,9 +12,9 @@
 
 (defn react-components
   [f]
-  (reset! db-react/query-state {})
+  (reset! react/query-state {})
   (let [r (f)]
-    (reset! db-react/query-state {})
+    (reset! react/query-state {})
     r))
 
 (defn- reset-datascript
@@ -32,10 +30,3 @@
     (reset-datascript repo)
     (let [r (f)]
       (reset-datascript repo) r)))
-
-(defn react-impl
-  [f]
-  (reset! react-impls/react react-test/react)
-  (let [r (f)]
-    (reset! react-impls/react react-impls/react)
-    r))

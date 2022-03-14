@@ -2,7 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
@@ -20,6 +20,8 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
+(def *highlight-mode? (atom false))
+(def *highlight-last-color (atom :yellow))
 (def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
@@ -102,29 +104,15 @@
   ;;])
 
   (let [*el (rum/use-ref nil)
-        head-height 0                                       ;; 48 temp
-        top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
-        left (:x point)
+        ^js cnt (.-container viewer)
+        head-height 0          ;; 48 temp
+        top (- (+ (:y point) (.-scrollTop cnt)) head-height)
+        left (+ (:x point) (.-scrollLeft cnt))
         id (:id highlight)
-        content (:content highlight)]
-
-    (rum/use-effect!
-      (fn []
-        (let [^js el (rum/deref *el)
-              {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
-          (set! (.. el -style -transform)
-                (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)")))
-        #())
-      [])
-
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
-
-      [:ul.extensions__pdf-hls-ctx-menu
-       {:ref      *el
-        :style    {:top top :left left}
-        :on-click (fn [^js/MouseEvent e]
-                    (when-let [action (.. e -target -dataset -action)]
+        new? (nil? id)
+        content (:content highlight)
+        action-fn! (fn [action clear?]
+                    (when-let [action (and action (name action))]
                       (case action
                         "ref"
                         (pdf-assets/copy-hl-ref! highlight)
@@ -156,23 +144,43 @@
                               (pdf-assets/copy-hl-ref! highlight))
 
                             ;; update highlight
-                            (upd-hl! (assoc highlight :properties properties))))))
+                            (upd-hl! (assoc highlight :properties properties)))
 
-                    (clear-ctx-tip!))}
+                          (reset! *highlight-last-color (keyword action))))
 
-       [:li.item-colors
-        (for [it ["yellow", "blue", "green", "red", "purple"]]
-          [:a {:key it :data-color it :data-action it} it])]
+                      (and clear? (js/setTimeout #(clear-ctx-tip!) 68))))]
+
+    (rum/use-effect!
+      (fn []
+        (if (and @*highlight-mode? new?)
+          (action-fn! @*highlight-last-color true)
+          (let [^js el (rum/deref *el)
+                {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
+            (set! (.. el -style -transform)
+                  (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)"))))
+        #())
+      [])
+
+    [:ul.extensions__pdf-hls-ctx-menu
+     {:ref      *el
+      :style    {:top top :left left :visibility (if (and @*highlight-mode? new?) "hidden" "visible")}
+      :on-click (fn [^js/MouseEvent e]
+                  (when-let [action (.. e -target -dataset -action)]
+                    (action-fn! action true)))}
+
+     [:li.item-colors
+      (for [it ["yellow", "blue", "green", "red", "purple"]]
+        [:a {:key it :data-color it :data-action it} it])]
 
 
-       (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
+     (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
-       (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+     (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
 
-       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
+     (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
-       (and id [:li.item {:data-action "del"} (t :delete)])
-       ])))
+     (and id [:li.item {:data-action "del"} (t :delete)])
+     ]))
 
 (rum/defc pdf-highlights-text-region
   [^js viewer vw-hl hl
@@ -199,7 +207,7 @@
            :data-color color}])
        rects)]))
 
-(rum/defc pdf-highlight-area-region
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-region
   [^js viewer vw-hl hl
    {:keys [show-ctx-tip! upd-hl!]}]
 
@@ -314,7 +322,7 @@
          (:id hl))
        ))])
 
-(rum/defc pdf-highlight-area-selection
+(rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-tip!]}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
@@ -439,7 +447,7 @@
      (when (and start-coord end-coord)
        [:div.shadow-rect {:style (calc-pos start-coord end-coord)}])]))
 
-(rum/defc pdf-highlights
+(rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
   (let [^js doc (.-ownerDocument el)
@@ -791,10 +799,11 @@
   (fn [close-fn!]
     (docinfo-display info close-fn!)))
 
-(rum/defc pdf-toolbar
+(rum/defc ^:large-vars/cleanup-todo pdf-toolbar
   [^js viewer]
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
+        [highlight-mode?, set-highlight-mode!] (use-atom *highlight-mode?)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
         *page-ref (rum/use-ref nil)
         [current-page-num, set-current-page-num!] (rum/use-state 1)
@@ -816,9 +825,7 @@
         (when-let [total (and viewer (.-numPages (.-pdfDocument viewer)))]
           (let [^js bus (.-eventBus viewer)
                 page-fn (fn [^js evt]
-                          (let [^js input (rum/deref *page-ref)
-                                num (.-pageNumber evt)]
-                            (set! (. input -value) num)
+                          (let [num (.-pageNumber evt)]
                             (set-current-page-num! num)))]
 
             (set-total-page-num! total)
@@ -827,90 +834,99 @@
             #(.off bus "pagechanging" page-fn))))
       [viewer])
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    (rum/use-effect!
+      (fn []
+        (let [^js input (rum/deref *page-ref)]
+          (set! (. input -value) current-page-num)))
+      [current-page-num])
 
-      [:div.extensions__pdf-toolbar
-       [:div.inner
-        [:div.r.flex.buttons
+    [:div.extensions__pdf-toolbar
+     [:div.inner
+      [:div.r.flex.buttons
 
-         ;; appearance
-         [:a.button
-          {:title    "More settings"
-           :on-click #(set-settings-visible! (not settings-visible?))}
-          (svg/adjustments 18)]
+       ;; appearance
+       [:a.button
+        {:title    "More settings"
+         :on-click #(set-settings-visible! (not settings-visible?))}
+        (svg/adjustments 18)]
 
-         ;; selection
-         [:a.button
-          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
-           :class    (when area-mode? "is-active")
-           :on-click #(set-area-mode! (not area-mode?))}
-          (svg/icon-area 18)]
+       ;; selection
+       [:a.button
+        {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
+         :class    (when area-mode? "is-active")
+         :on-click #(set-area-mode! (not area-mode?))}
+        (svg/icon-area 18)]
 
-         ;; zoom
-         [:a.button
-          {:title    "Zoom out"
-           :on-click (partial pdf-utils/zoom-out-viewer viewer)}
-          (svg/zoom-out 18)]
+       [:a.button
+        {:title    "Highlight mode"
+         :class    (when highlight-mode? "is-active")
+         :on-click #(set-highlight-mode! (not highlight-mode?))}
+        (svg/highlighter 16)]
 
-         [:a.button
-          {:title    "Zoom in"
-           :on-click (partial pdf-utils/zoom-in-viewer viewer)}
-          (svg/zoom-in 18)]
+       ;; zoom
+       [:a.button
+        {:title    "Zoom out"
+         :on-click (partial pdf-utils/zoom-out-viewer viewer)}
+        (svg/zoom-out 18)]
 
-         [:a.button
-          {:title    "Outline"
-           :on-click #(set-outline-visible! (not outline-visible?))}
-          (svg/view-list 16)]
+       [:a.button
+        {:title    "Zoom in"
+         :on-click (partial pdf-utils/zoom-in-viewer viewer)}
+        (svg/zoom-in 18)]
 
-         ;; metadata
-         [:a.button.is-info
-          {:title    "Document info"
-           :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                        (state/set-modal! (make-docinfo-in-modal ret)))}
-          (svg/icon-info)]
+       [:a.button
+        {:title    "Outline"
+         :on-click #(set-outline-visible! (not outline-visible?))}
+        (svg/view-list 16)]
 
-         ;; annotations
-         [:a.button
-          {:title    "Annotations page"
-           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
-          (svg/annotations 16)]
+       ;; metadata
+       [:a.button.is-info
+        {:title    "Document info"
+         :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                           (state/set-modal! (make-docinfo-in-modal ret)))}
+        (svg/icon-info)]
 
-         ;; pager
-         [:div.pager.flex.items-center.ml-1
+       ;; annotations
+       [:a.button
+        {:title    "Annotations page"
+         :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+        (svg/annotations 16)]
 
-          [:span.nu.flex.items-center.opacity-70
-           [:input {:ref            *page-ref
-                    :type           "number"
-                    :default-value  current-page-num
-                    :on-mouse-enter #(.select ^js (.-target %))
-                    :on-key-up      (fn [^js e]
-                                      (let [^js input (.-target e)
-                                            value (front-utils/safe-parse-int (.-value input))]
-                                        (when (and (= (.-keyCode e) 13) value (> value 0))
-                                          (set! (. viewer -currentPageNumber)
-                                                (if (> value total-page-num) total-page-num value)))))}]
-           [:small "/ " total-page-num]]
+       ;; pager
+       [:div.pager.flex.items-center.ml-1
 
-          [:span.ct.flex.items-center
-           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
-           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
+        [:span.nu.flex.items-center.opacity-70
+         [:input {:ref            *page-ref
+                  :type           "number"
+                  :default-value  current-page-num
+                  :on-mouse-enter #(.select ^js (.-target %))
+                  :on-key-up      (fn [^js e]
+                                    (let [^js input (.-target e)
+                                          value (front-utils/safe-parse-int (.-value input))]
+                                      (when (and (= (.-keyCode e) 13) value (> value 0))
+                                        (set! (. viewer -currentPageNumber)
+                                              (if (> value total-page-num) total-page-num value)))))}]
+         [:small "/ " total-page-num]]
 
-         [:a.button
-          {:on-click #(state/set-state! :pdf/current nil)}
-          (t :close)]]]
+        [:span.ct.flex.items-center
+         [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+         [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
-       ;; contents outline
-       (pdf-outline viewer outline-visible? set-outline-visible!)
+       [:a.button
+        {:on-click #(state/set-state! :pdf/current nil)}
+        (t :close)]]]
 
-       ;; settings
-       (and settings-visible?
-            (pdf-settings
-              viewer
-              viewer-theme
-              {:t t
-               :hide-settings! #(set-settings-visible! false)
-               :select-theme!  #(set-viewer-theme! %)}))])))
+     ;; contents outline
+     (pdf-outline viewer outline-visible? set-outline-visible!)
+
+     ;; settings
+     (and settings-visible?
+          (pdf-settings
+            viewer
+            viewer-theme
+            {:t              t
+             :hide-settings! #(set-settings-visible! false)
+             :select-theme!  #(set-viewer-theme! %)}))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]

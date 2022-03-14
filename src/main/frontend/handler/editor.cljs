@@ -27,10 +27,9 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
@@ -70,26 +69,29 @@
     (when (:block/uuid block)
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
-          {:selection-start (util/get-selection-start input)
-           :selection-end (util/get-selection-end input)
-           :format (:block/format block)
-           :value (gobj/get input "value")
-           :block block
-           :edit-id edit-id
-           :input input})))))
-
-(defn- format-new-selection
-  [{:keys [selection-start selection-end value]}]
-  (let [selected (subs value selection-start selection-end)]
-    [(+ selection-start (count (take-while #(= " " %) selected)))
-     (- selection-end (count (take-while #(= " " %) (reverse selected))))]))
+          (let [selection-start (util/get-selection-start input)
+                selection-end (util/get-selection-end input)
+                value (gobj/get input "value")
+                selection (when (not= selection-start selection-end)
+                            (subs value selection-start selection-end))
+                selection-start (+ selection-start
+                                   (count (take-while #(= " " %) selection)))
+                selection-end (- selection-end
+                                 (count (take-while #(= " " %) (reverse selection))))]
+            {:selection-start selection-start
+             :selection-end selection-end
+             :selection (some-> selection
+                                string/trim)
+             :format (:block/format block)
+             :value value
+             :block block
+             :edit-id edit-id
+             :input input}))))))
 
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
-    (let [{:keys [format value edit-id input]} m
-          [selection-start selection-end] (format-new-selection m)
-          empty-selection? (= selection-start selection-end)
+    (let [{:keys [selection-start selection-end format selection value edit-id input]} m
           pattern (pattern-fn format)
           pattern-count (count pattern)
           pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
@@ -101,14 +103,14 @@
           postfix (if already-wrapped?
                     (subs value (+ selection-end pattern-count))
                     (subs value selection-end))
-          inner-value (cond-> (subs value selection-start selection-end)
+          inner-value (cond-> selection
                         (not already-wrapped?)
                         (#(str pattern % pattern)))
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
         already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
-        empty-selection? (cursor/move-cursor-to input (+ selection-end pattern-count))
+        selection (cursor/move-cursor-to input (+ selection-end pattern-count))
         :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
 
 (defn bold-format! []
@@ -130,31 +132,30 @@
    (html-link-format! nil))
   ([link]
    (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format value edit-id input]} m
-          cur-pos (cursor/pos input)
-          empty-selection? (= selection-start selection-end)
-          selection (subs value selection-start selection-end)
-          selection-link? (and selection (or (util/starts-with? selection "http://")
-                                             (util/starts-with? selection "https://")))
-          [content forward-pos] (cond
-                                  empty-selection?
-                                  (config/get-empty-link-and-forward-pos format)
+     (let [{:keys [selection-start selection-end format selection value edit-id input]} m
+           cur-pos (cursor/pos input)
+           empty-selection? (= selection-start selection-end)
+           selection-link? (and selection (or (util/starts-with? selection "http://")
+                                              (util/starts-with? selection "https://")))
+           [content forward-pos] (cond
+                                   empty-selection?
+                                   (config/get-empty-link-and-forward-pos format)
 
-                                  link
-                                  (config/with-label-link format selection link)
+                                   link
+                                   (config/with-label-link format selection link)
 
-                                  selection-link?
-                                  (config/with-default-link format selection)
+                                   selection-link?
+                                   (config/with-default-link format selection)
 
-                                  :else
-                                  (config/with-default-label format selection))
-          new-value (str
-                     (subs value 0 selection-start)
-                     content
-                     (subs value selection-end))
-          cur-pos (or selection-start cur-pos)]
-      (state/set-edit-content! edit-id new-value)
-      (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
+                                   :else
+                                   (config/with-default-label format selection))
+           new-value (str
+                      (subs value 0 selection-start)
+                      content
+                      (subs value selection-end))
+           cur-pos (or selection-start cur-pos)]
+       (state/set-edit-content! edit-id new-value)
+       (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
 (defn open-block-in-sidebar!
   [block-id]
@@ -162,10 +163,10 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
-          (state/get-current-repo)
-          (:db/id block)
-          (if page? :page :block)
-          block)))))
+         (state/get-current-repo)
+         (:db/id block)
+         (if page? :page :block)
+         block)))))
 
 (defn reset-cursor-range!
   [node]
@@ -338,8 +339,9 @@
   [block value]
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
-    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value block (:block/format block)
+    (let [format (:block/format block)
+          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]
       new-value)
@@ -399,8 +401,7 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [repo block value {:keys [refresh?]
-                     :or {refresh? true}}]
+  [repo block value {}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -408,10 +409,6 @@
      (let [block (wrap-parse-block block)]
        (-> (outliner-core/block block)
            (outliner-core/save-node))
-       (when refresh?
-         (let [opts {:key :block/change
-                     :data [block]}]
-           (db/refresh! repo opts)))
 
        ;; sanitized page name changed
        (when-let [title (get-in block [:block/properties :title])]
@@ -440,7 +437,7 @@
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
         [:p.content
-         (util/format "Block with the id % already exists!" block-id)]
+         (util/format "Block with the id %s already exists!" block-id)]
         :error)
 
        force?
@@ -459,7 +456,7 @@
       [fst-block-text snd-block-text])))
 
 (defn outliner-insert-block!
-  [config current-block new-block sibling?]
+  [config current-block new-block {:keys [sibling? txs-state]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         skip-save-current-block? (:skip-save-current-block? config)
@@ -478,9 +475,10 @@
                    true
 
                    :else
-                   (not has-children?))]
+                   (not has-children?))
+        txs-state' (or txs-state (ds/new-outliner-txs-state))]
     (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)]
+     [txs-state txs-state']
      {:outliner-op :save-and-insert-node
       :skip-transact? false}
      (let [*blocks (atom [current-node])]
@@ -503,52 +501,12 @@
                        current-page))]
     (= uuid (and block-id (medley/uuid block-id)))))
 
-;; FIXME: painful
-(defn update-cache-for-block-insert!
-  "Currently, this only affects current editor container to improve the performance."
-  [repo config {:block/keys [page uuid] :as _block} blocks]
-  (let [blocks (map :data blocks)
-        [first-block last-block right-block] blocks
-        child? (= (first (:block/parent last-block))
-                  (:block/uuid first-block))
-        blocks-container-id (when-let [id (:id config)]
-                              (and (util/uuid-string? id) (medley/uuid id)))
-        new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
-                         (assoc last-block
-                                :block/left first-block-id
-                                :block/parent (if child?
-                                                first-block-id
-                                                ;; sibling
-                                                (:block/parent first-block))))
-        blocks [first-block new-last-block]
-        blocks-atom (if blocks-container-id
-                      (db/get-block-blocks-cache-atom repo blocks-container-id)
-                      (db/get-page-blocks-cache-atom repo (:db/id page)))
-        [before-part after-part] (and blocks-atom
-                                      (split-with
-                                       #(not= uuid (:block/uuid %))
-                                       @blocks-atom))
-        after-part (rest after-part)
-        blocks (concat before-part blocks after-part)
-        blocks (if right-block
-                 (map (fn [block]
-                        (if (= (:block/uuid right-block) (:block/uuid block))
-                          (assoc block :block/left (:block/left right-block))
-                          block)) blocks)
-                 blocks)]
-    (when blocks-atom
-      (reset! blocks-atom blocks))))
-
 (defn insert-new-block-before-block-aux!
-  [config
-   {:block/keys [repo]
-    :as block}
-   value
+  [config block value
    {:keys [ok-handler]
     :as _opts}]
   (let [input (gdom/getElement (state/get-edit-input-id))
         pos (cursor/pos input)
-        repo (or repo (state/get-current-repo))
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (assoc block :block/content snd-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
@@ -558,18 +516,19 @@
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
-        left-block (db/pull (:db/id (:block/left block)))
-        _ (outliner-core/save-node (outliner-core/block current-block))
-        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+        left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
-     (outliner-insert-block! config left-block prev-block sibling?))
-    (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
-    (profile "ok handler" (ok-handler prev-block))))
+     (let [txs-state (ds/new-outliner-txs-state)]
+       (outliner-core/save-node (outliner-core/block current-block) {:txs-state txs-state})
+       (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+         (outliner-insert-block! config left-block prev-block {:sibling? sibling?
+                                                               :txs-state txs-state}))))
+    (ok-handler prev-block)))
 
 (defn insert-new-block-aux!
   [config
-   {:block/keys [uuid repo]
+   {:block/keys [uuid]
     :as block}
    value
    {:keys [ok-handler]
@@ -577,33 +536,19 @@
   (let [block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
         pos (cursor/pos input)
-        repo (or repo (state/get-current-repo))
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
         current-block (wrap-parse-block current-block)
-        zooming? (when-let [id (:id config)]
-                   (and (string? id) (util/uuid-string? id)))
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
-        sibling? (when block-self? false)
-        {:keys [sibling? blocks]} (profile
-                                   "outliner insert block"
-                                   (outliner-insert-block! config current-block next-block sibling?))
-        refresh-fn (fn []
-                     (let [opts {:key :block/insert
-                                 :data [current-block next-block]}]
-                       (db/refresh! repo opts)))]
-    (if (or (:ref? config)
-            (not sibling?)
-            zooming?)
-      (refresh-fn)
-      (do
-        (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
-        (state/add-tx! refresh-fn)))
+        sibling? (when block-self? false)]
+    (profile
+     "outliner insert block"
+     (outliner-insert-block! config current-block next-block {:sibling? sibling?}))
     ;; WORKAROUND: The block won't refresh itself even if the content is empty.
     (when block-self?
       (gobj/set input "value" ""))
@@ -726,8 +671,7 @@
                                    nil)]
 
           (when block-m
-            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
-            (db/refresh! (state/get-current-repo) {:key :block/insert :data [block-m new-block]})
+            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?})
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -822,25 +766,39 @@
     content))
 
 (defn check
-  [{:block/keys [marker content repeated?] :as block}]
+  [{:block/keys [marker content repeated? uuid] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
-                      new-content)]
-    (save-block-if-changed! block new-content)))
+                      new-content)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn uncheck
-  [{:block/keys [content] :as block}]
+  [{:block/keys [content uuid] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
-        new-content (string/replace-first content "DONE" marker)]
-    (save-block-if-changed! block new-content)))
+        new-content (string/replace-first content "DONE" marker)
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
 
 (defn set-marker
-  [{:block/keys [marker content] :as block} new-marker]
-  (let [new-content (->
-                     (if marker
+  [{:block/keys [marker content format] :as block} new-marker]
+  (let [old-header-marker (when (not= format :org)
+                            (re-find (marker/header-marker-pattern true marker) content))
+        new-header-marker (when (not-empty old-header-marker)
+                            (string/replace old-header-marker marker new-marker))
+        marker (or old-header-marker marker)
+        new-marker (or new-header-marker new-marker)
+        new-content (->
+                     (if (not-empty marker)
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)
                        (str new-marker " " content))
                      (string/triml))]
@@ -926,8 +884,7 @@
     (when block
       (->
        (outliner-core/block block)
-       (outliner-core/delete-node children?))
-      (db/refresh! repo {:key :block/change :data [block]}))))
+       (outliner-core/delete-node children?)))))
 
 (defn- move-to-prev-block
   [repo sibling-block format id value]
@@ -1019,11 +976,7 @@
             sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
         (if (= start-node end-node)
           (delete-block-aux! (first blocks) true)
-          (when (outliner-core/delete-nodes start-node end-node lookup-refs)
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh! repo opts)
-              (ui-handler/re-render-root!))))
+          (outliner-core/delete-nodes start-node end-node lookup-refs))
         (when sibling-block
           (move-to-prev-block repo sibling-block
                               (:block/format block)
@@ -1061,9 +1014,6 @@
     (let [block-id (ffirst col)
           block-id (if (string? block-id) (uuid block-id) block-id)
           input-pos (or (state/get-edit-pos) :max)]
-      (db/refresh! (state/get-current-repo)
-                   {:key :block/change
-                    :data [(db/pull [:block/uuid block-id])]})
       ;; update editing input content
       (when-let [editing-block (state/get-edit-block)]
         (when (= (:block/uuid editing-block) block-id)
@@ -1105,13 +1055,15 @@
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
-            content (or (state/get-edit-content) content)
+            content (or content (state/get-edit-content))
             new-content (-> (text/remove-timestamp content key)
                             (text/add-timestamp key value))]
         (when (not= content new-content)
-          (if-let [input-id (state/get-edit-input-id)]
-            (state/set-edit-content! input-id new-content)
-            (save-block-if-changed! block new-content)))))))
+          (let [input-id (state/get-edit-input-id)]
+            (if (and input-id
+                     (string/ends-with? input-id (str block-id)))
+              (state/set-edit-content! input-id new-content)
+              (save-block-if-changed! block new-content))))))))
 
 (defn- set-blocks-id!
   [block-ids]
@@ -1217,32 +1169,32 @@
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
                                            :level (int level)}))
-                                     selected-blocks))
+                                  selected-blocks))
                       (remove nil?))
           first-block (first blocks)
           first-root-level-index (ffirst
-                                   (filter (fn [[_ block]] (= (:level block) 1))
-                                           (map-indexed vector blocks)))
+                                  (filter (fn [[_ block]] (= (:level block) 1))
+                                          (map-indexed vector blocks)))
           root-level (atom (:level first-block))
           adjusted-blocks (map-indexed
-                            (fn [index {:keys [id level]}]
-                              {:id id
-                               :level (if (< index first-root-level-index)
-                                        (if (< level @root-level)
-                                          (do
-                                            (reset! root-level level)
-                                            1)
-                                          (inc (- level @root-level)))
-                                        level)})
-                            blocks)
+                           (fn [index {:keys [id level]}]
+                             {:id id
+                              :level (if (< index first-root-level-index)
+                                       (if (< level @root-level)
+                                         (do
+                                           (reset! root-level level)
+                                           1)
+                                         (inc (- level @root-level)))
+                                       level)})
+                           blocks)
           block (db/pull [:block/uuid (:id first-block)])
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
                                    (condp = (:block/format block)
-                                    :org
-                                    (util/format (str (string/join (repeat level "*")) " ((%s))") id)
-                                    :markdown
-                                    (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
+                                     :org
+                                     (util/format (str (string/join (repeat level "*")) " ((%s))") id)
+                                     :markdown
+                                     (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1630,13 +1582,8 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile/native-android?)
-      (mobile/convert-file-src
-       (str "file://" repo-dir path))
-
-      (mobile/native-ios?)
-      (mobile/convert-file-src
-       (str repo-dir path))
+      (mobile-util/is-native-platform?)
+      (mobile-util/convert-file-src (str repo-dir path))
 
       :else
       (let [handle-path (str "handle" repo-dir path)
@@ -1739,7 +1686,7 @@
    "=" "="
    "/" "/"
    "+" "+"})
-   ;; ":" ":"                              ; TODO: only properties editing and org mode tag
+;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 
 (def reversed-autopair-map
@@ -1888,7 +1835,7 @@
   [blocks]
   (let [repo (state/get-current-repo)
         lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                           [:block/uuid (medley/uuid id)])) blocks)
+                                            [:block/uuid (medley/uuid id)])) blocks)
                          (remove nil?))
         blocks (db/pull-many repo '[*] lookup-refs)]
     (reorder-blocks blocks)))
@@ -1897,48 +1844,40 @@
   [up?]
   (fn [event]
     (util/stop event)
-    (when-let [repo (state/get-current-repo)]
-      (let [edit-block-id (:block/uuid (state/get-edit-block))
-            move-nodes (fn [blocks]
-                         (let [nodes (mapv outliner-core/block blocks)
-                               opts {:key :block/change
-                                     :data blocks}]
-                           (outliner-core/move-nodes nodes up?)
-                           (db/refresh! repo opts)
-                           (rehighlight-selected-nodes)
-                           (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                             (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
-        (if edit-block-id
-          (when-let [block (db/pull [:block/uuid edit-block-id])]
-            (let [blocks [block]]
-              (move-nodes blocks))
-            (when-let [input-id (state/get-edit-input-id)]
-              (when-let [input (gdom/getElement input-id)]
-                (.focus input))))
-          (let [blocks (-> (state/get-selection-blocks)
-                           reorder-selected-blocks)
-                blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
-            (when (seq blocks)
-              (move-nodes blocks))))))))
+    (let [edit-block-id (:block/uuid (state/get-edit-block))
+          move-nodes (fn [blocks]
+                       (let [nodes (mapv outliner-core/block blocks)]
+                         (outliner-core/move-nodes nodes up?)
+                         (rehighlight-selected-nodes)
+                         (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
+      (if edit-block-id
+        (when-let [block (db/pull [:block/uuid edit-block-id])]
+          (let [blocks [block]]
+            (move-nodes blocks))
+          (when-let [input-id (state/get-edit-input-id)]
+            (when-let [input (gdom/getElement input-id)]
+              (.focus input))))
+        (let [blocks (-> (state/get-selection-blocks)
+                         reorder-selected-blocks)
+              blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
+          (when (seq blocks)
+            (move-nodes blocks)))))))
 
 ;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
-  (when-let [repo (state/get-current-repo)]
-    (let [blocks-dom-nodes (state/get-selection-blocks)
-          blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
-      (when (seq blocks)
-        (let [end-node (get-top-level-end-node blocks)
-              end-node-parent (tree/-get-parent end-node)
-              top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                               (get-in % [:block/parent :db/id])) blocks)
-                                   (map outliner-core/block))]
-          (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-          (let [opts {:key :block/change
-                      :data blocks}]
-            (db/refresh! repo opts)
-            (rehighlight-selected-nodes)))))))
+  (let [blocks-dom-nodes (state/get-selection-blocks)
+        blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
+    (when (seq blocks)
+      (let [end-node (get-top-level-end-node blocks)
+            end-node-parent (tree/-get-parent end-node)
+            top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                             (get-in % [:block/parent :db/id])) blocks)
+                                 (map outliner-core/block))]
+        (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+        (rehighlight-selected-nodes)))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2193,8 +2132,7 @@
                                    get-pos-fn
                                    page-block]
                             :as _opts}]
-  (let [repo (state/get-current-repo)
-        page (or page-block
+  (let [page (or page-block
                  (:block/page (db/entity (:db/id (state/get-edit-block)))))
         [target-block sibling? delete-editing-block? editing-block]
         ((or get-pos-fn get-block-tree-insert-pos-at-point))]
@@ -2221,9 +2159,7 @@
             _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
             _ (when (and delete-editing-block? editing-block)
                 (when-let [id (:db/id editing-block)]
-                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))
-            new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
-        (db/refresh! repo {:key :block/insert :data new-blocks})
+                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))]
         (last metadata-replaced-blocks)))))
 
 (defn- tree->vec-tree
@@ -2320,7 +2256,6 @@
                    opts)
              last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
          (clear-when-saved!)
-         (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
          (let [block (if (tree/satisfied-inode? last-block)
                        (:data last-block)
                        (:data (last (flatten last-block))))]
@@ -2340,9 +2275,7 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
-      (outliner-core/move-subtree node parent-node true)))
-  (let [repo (state/get-current-repo)]
-    (db/refresh! repo {:key :block/change :data [(:data node)]})))
+      (outliner-core/move-subtree node parent-node true))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2367,8 +2300,7 @@
 
 (defn- keydown-new-line
   []
-  (insert "\n")
-  (ui-handler/try-to-editing-input-into-viewport!))
+  (insert "\n"))
 
 (declare delete-and-update)
 
@@ -2511,10 +2443,10 @@
                                         (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
-              {:keys [selection-start selection-end value]} selection]
-          (if (not= selection-start selection-end)
+              {:keys [selection-start selection-end selection]} selection]
+          (if selection
             (do (delete-and-update input selection-start selection-end)
-                (insert (util/format "[[%s]]" value)))
+                (insert (util/format "[[%s]]" selection)))
             (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
               (let [{:keys [raw-content start end]} embed-ref]
                 (delete-and-update input start end)
@@ -2871,7 +2803,7 @@
       (do
         (util/stop e)
         (delete-and-update
-          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
+         input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
 
 (defn indent-outdent
   [indent?]
@@ -2879,10 +2811,7 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [current-node (outliner-core/block block)]
-        (outliner-core/indent-outdent-nodes [current-node] indent?)
-        (let [repo (state/get-current-repo)]
-          (db/refresh! repo
-                       {:key :block/change :data [(:data current-node)]}))))
+        (outliner-core/indent-outdent-nodes [current-node] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -2929,10 +2858,10 @@
         (or ctrlKey metaKey)
         nil
 
-        ;; FIXME: On iOS, a backspace click to call keydown-backspace-handler
+        ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work sometimes in an empty block, hence the empty block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile/native-ios?)
+        (and (mobile-util/is-native-platform?)
              (= key "Backspace")
              (= value ""))
         (do
@@ -2977,7 +2906,9 @@
         hashtag?
         (do
           (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (cursor/pos input))
+          (if (= key "#")
+            (state/set-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
+            (state/set-last-pos! (cursor/pos input)))
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (let [sym "$"]
@@ -3003,7 +2934,7 @@
         :else
         nil))))
 
-(defn keyup-handler
+(defn ^:large-vars/cleanup-todo keyup-handler
   [_state input input-id search-timeout]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
@@ -3116,12 +3047,27 @@
     (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
 
+(defonce mobile-toolbar-height 40)
+(defn editor-on-height-change!
+  [id]
+  (fn [box-height ^js row-height]
+    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
+          input (gdom/getElement id)
+          caret (cursor/get-caret-pos input)
+          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
+          box-top (gobj/get (.getBoundingClientRect input) "top")
+          cursor-y (+ cursor-bottom box-top)
+          vw-height (.-height js/window.visualViewport)]
+      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
+        (let [main-node (gdom/getElement "main-content-container")
+              scroll-top (.-scrollTop main-node)]
+          (set! (.-scrollTop main-node) (+ scroll-top (/ vw-height 2))))))))
+
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
     (if (state/sub :editor/show-block-search?)
-      (let [blocks-count (or (db/blocks-count) 0)
-            timeout (if (> blocks-count 2000) 300 100)]
+      (let [timeout 300]
         (when @search-timeout
           (js/clearTimeout @search-timeout))
         (reset! search-timeout
@@ -3186,12 +3132,12 @@
       (and (util/url? text)
            (or (string/includes? text "youtube.com")
                (string/includes? text "youtu.be"))
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
 
       (and (util/url? text)
            (string/includes? text "twitter.com")
-           (mobile/is-native-platform?))
+           (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
 
       (and (text/block-ref? text)
@@ -3434,6 +3380,7 @@
    if :root-block is not nil, only return root block with its children
    if :expanded? true, return expanded children
    if :collapse? true, return without any collapsed children
+   if :incremental? true, collapse/expand will be step by step
    for example:
    - a
     - b (collapsed)
@@ -3445,7 +3392,8 @@
     [{:block a :level 1}
      {:block b :level 2}
      {:block e :level 2}]"
-  [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
+  [{:keys [collapse? expanded? incremental? root-block]
+    :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
     (let [block? (util/uuid-string? page)
@@ -3453,36 +3401,49 @@
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page))
-          blocks (tree/blocks->vec-tree blocks (or block-id page))
           root-block (or block-id root-block)]
-      (->>
-       (cond->> blocks
-         root-block
-         (map (fn find [root]
-                (if (= root-block (:block/uuid root))
-                  root
-                  (first (filter find (:block/children root []))))))
+      (if incremental?
+        (let [blocks (tree/blocks->vec-tree blocks (or block-id page))]
+          (->>
+           (cond->> blocks
+             root-block
+             (map (fn find [root]
+                    (if (= root-block (:block/uuid root))
+                      root
+                      (first (filter find (:block/children root []))))))
 
-         collapse?
-         (w/postwalk
-          (fn [b]
-            (if (and (map? b) (util/collapsed? b))
-              (assoc b :block/children []) b)))
+             collapse?
+             (w/postwalk
+              (fn [b]
+                (if (and (map? b)
+                         (util/collapsed? b)
+                         (not= root-block (:block/uuid b)))
+                  (assoc b :block/children []) b)))
 
-         true
-         (mapcat (fn [x] (tree-seq map? :block/children x)))
+             true
+             (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-         expanded?
-         (filter (fn [b] (collapsable? (:block/uuid b))))
+             expanded?
+             (filter (fn [b] (collapsable? (:block/uuid b))))
 
-         true
-         (map (fn [x] (dissoc x :block/children))))
-       (remove nil?)))))
+             true
+             (map (fn [x] (dissoc x :block/children))))
+           (remove nil?)))
+
+        (cond->> blocks
+          collapse?
+          (filter util/collapsed?)
+
+          expanded?
+          (filter (fn [b] (collapsable? (:block/uuid b))))
+
+          true
+          (remove nil?))))))
 
 (defn- skip-collapsing-in-db?
   []
   (let [config (:config (state/get-editor-args))]
-    (or (:ref? config) (:block? config))))
+    (:ref? config)))
 
 (defn- set-blocks-collapsed!
   [block-ids value]
@@ -3497,15 +3458,12 @@
        (doseq [block-id block-ids]
          (when-let [block (db/entity [:block/uuid block-id])]
            (let [current-value (:block/collapsed? block)]
-            (when-not (= current-value value)
-              (let [block (outliner-core/block {:block/uuid block-id
-                                                :block/collapsed? value})]
-                (outliner-core/save-node block {:txs-state txs-state})))))))
+             (when-not (= current-value value)
+               (let [block (outliner-core/block {:block/uuid block-id
+                                                 :block/collapsed? value})]
+                 (outliner-core/save-node block {:txs-state txs-state})))))))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
-        (db/refresh! (state/get-current-repo)
-                    {:key :block/change
-                     :data [(db/pull [:block/uuid block-id])]})
         ;; update editing input content
         (when-let [editing-block (state/get-edit-block)]
           (when (= (:block/uuid editing-block) block-id)
@@ -3516,15 +3474,13 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-block-property! block-id :collapsed true)
       (set-blocks-collapsed! [block-id] true)))
   (state/set-collapsed-block! block-id true))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (set-block-property! block-id :collapsed false)
-    (set-blocks-collapsed! [block-id] false))
-  (state/set-collapsed-block! block-id false))
+    (set-blocks-collapsed! [block-id] false)
+    (state/set-collapsed-block! block-id false)))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3562,7 +3518,7 @@
 (defn collapse!
   ([e] (collapse! e false))
   ([e clear-selection?]
-   (util/stop e)
+   (when e (util/stop e))
    (cond
      (state/editing?)
      (when-let [block-id (:block/uuid (state/get-edit-block))]
@@ -3599,24 +3555,28 @@
   ([]
    (collapse-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:expanded? true :root-block block-id})]
-     (set-blocks-collapsed! (map :block/uuid blocks) true))))
+   (let [blocks (all-blocks-with-level {:incremental? false
+                                        :expanded? true
+                                        :root-block block-id})
+         block-ids (map :block/uuid blocks)]
+     (set-blocks-collapsed! block-ids true))))
 
 (defn expand-all!
   ([]
    (expand-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:root-block block-id})]
-     (set-blocks-collapsed! (map :block/uuid blocks) false))))
+   (let [blocks (all-blocks-with-level {:incremental? false
+                                        :collapse? true
+                                        :root-block block-id})
+         block-ids (map :block/uuid blocks)]
+     (set-blocks-collapsed! block-ids false))))
 
 (defn toggle-open! []
-  (let [all-collapsed?
-        (->> (all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (collapsable? (:block/uuid b))))
-             (empty?))]
-    (if all-collapsed?
-      (expand-all!)
-      (collapse-all!))))
+  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
+                                                      :collapse? true}))]
+    (if all-expanded?
+      (collapse-all!)
+      (expand-all!))))
 
 (defn select-all-blocks!
   []
@@ -3698,27 +3658,15 @@
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.
   Currently, this handles several cases:
-  1. Zoom in mode, it will open the current block if it's collapsed.
-  2. Queries.
-  3. References."
+  1. References.
+  2. Custom queries."
   [block config]
-  (let [collapsed? (cond
-                     (and (:block? config)
-                          (= (:id config) (str (:block/uuid block))))
-                     false
-
-                     (and (:block? config)
-                          (util/collapsed? block))
-                     true
-
-                     :else
-                     (boolean
-                      (and
-                       (seq (:block/children block))
-                       (or (:custom-query? config)
-                           (and (:ref? config)
-                                (>= (:ref/level block)
-                                    (state/get-ref-open-blocks-level)))))))]
-    (if (or (:ref? config) (:block? config))
-      collapsed?
-      (util/collapsed? block))))
+  (if (or (:ref? config)
+          (:custom-query? config))
+    (and
+     (seq (:block/children block))
+     (or
+      (:custom-query? config)
+      (>= (:ref/level block)
+          (state/get-ref-open-blocks-level))))
+    (util/collapsed? block)))

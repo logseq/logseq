@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? logger get-win-from-sender]]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -199,10 +199,9 @@
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-               (utils/disableXFrameOptions win)
+               (restore-user-fetch-agent)
 
-               (when (search/version-changed?)
-                 (search/rm-search-dir!))
+               (utils/disableXFrameOptions win)
 
                (search/ensure-search-dir!)
 

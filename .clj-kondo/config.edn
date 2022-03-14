@@ -7,7 +7,16 @@
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
-                             frontend.util/node-path.name]}}
+                             frontend.util/node-path.name]}
+
+  :consistent-alias
+  {:aliases {datascript.core d
+             datascript.transit dt
+             datascript.db ddb
+             lambdaisland.glogi log
+             frontend.db.query-dsl query-dsl
+             frontend.db.react react
+             frontend.db.query-react query-react}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}
@@ -17,7 +26,6 @@
            garden.def/defstyles clojure.core/def
            garden.def/defkeyframes clojure.core/def
            rum.core/defcc rum.core/defc
-           rum.core/with-context clojure.core/doseq
            rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for

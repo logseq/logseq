@@ -2,7 +2,7 @@
   (:require [cljs.pprint :as pprint]
             [frontend.commands :as commands]
             [frontend.components.export :as export]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -10,10 +10,11 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]))
 
 (defn- delete-page!
   [page-name]
@@ -27,37 +28,35 @@
 (defn delete-page-dialog
   [page-name]
   (fn [close-fn]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div
-       [:div.sm:flex.items-center
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-         [:span.text-red-600.text-xl
-          (ui/icon "alert-triangle")]]
-        [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium
-          (t :page/delete-confirmation)]]]
+    [:div
+     [:div.sm:flex.items-center
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
+       [:span.text-red-600.text-xl
+        (ui/icon "alert-triangle")]]
+      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+       [:h3#modal-headline.text-lg.leading-6.font-medium
+        (t :page/delete-confirmation)]]]
 
-       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :class "ui__modal-enter"
-           :on-click (fn []
-                       (delete-page! page-name))}
-          (t :yes)]]
-        [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :on-click close-fn}
-          (t :cancel)]]]])))
+     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :class "ui__modal-enter"
+         :on-click (fn []
+                     (delete-page! page-name))}
+        (t :yes)]]
+      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click close-fn}
+        (t :cancel)]]]]))
 
-(defn page-menu
+(defn ^:large-vars/cleanup-todo page-menu
   [page-name]
   (when-let [page-name (or
                         page-name
                         (state/get-current-page))]
-    (let [t i18n/t
-          page-name (util/page-name-sanity-lc page-name)
+    (let [page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
@@ -68,7 +67,8 @@
           favorites (:favorites (state/sub-graph-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
-          developer-mode? (state/sub [:ui/developer-mode?])]
+          developer-mode? (state/sub [:ui/developer-mode?])
+          file-path (when (util/electron?) (page-handler/get-page-file-path))]
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
@@ -93,7 +93,7 @@
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+          (when file-path
             [{:title   (t :page/open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
@@ -123,6 +123,12 @@
              :options {:on-click
                        (fn []
                          (shell/get-file-latest-git-log page 100))}})
+
+          (when (and (util/electron?) file-path)
+            {:title   (t :page/open-backup-directory)
+             :options {:on-click
+                       (fn []
+                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
 
           (when plugin-handler/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]

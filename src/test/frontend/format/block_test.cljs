@@ -3,7 +3,7 @@
             [cljs.test :refer [deftest are]]))
 
 (deftest test-extract-properties
-  (are [x y] (= (:properties (block/extract-properties x)) y)
+  (are [x y] (= (:properties (block/extract-properties :markdown x)) y)
     [["year" "1000"]] {:year 1000}
     [["year" "\"1000\""]] {:year "\"1000\""}
     [["background-color" "#000000"]] {:background-color "#000000"}
@@ -23,7 +23,7 @@
     [["foo" "bar, [[baz, test]]"]] {:foo #{"bar" "baz, test"}}
     [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}})
 
-  (are [x y] (= (vec (:page-refs (block/extract-properties x))) y)
+  (are [x y] (= (vec (:page-refs (block/extract-properties :markdown x))) y)
     [["year" "1000"]] []
     [["year" "\"1000\""]] []
     [["foo" "[[bar]] test"]] ["bar" "test"]
@@ -32,4 +32,4 @@
     [["foo" "#bar, #baz"]] ["bar" "baz"]
     [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test"]))
 
-#_(run-tests)
+#_(cljs.test/run-tests)

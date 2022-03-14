@@ -1,12 +1,13 @@
 (ns frontend.extensions.srs
   (:require [frontend.template :as template]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as react]
+            [frontend.db.query-react :as query-react]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
@@ -252,21 +253,22 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
-           {:keys [query sort-by]} (query-dsl/parse repo query-string)
+           {:keys [query sort-by rules]} (query-dsl/parse query-string)
            query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
                           (if (coll? (first query))
                             query
                             [query]))]
        (when-let [query (query-dsl/query-wrapper query* true)]
-         (let [result (react/react-query repo
-                                         {:query query}
-                                         (merge
-                                          {:use-cache? use-cache?}
-                                          (cond->
-                                           (when sort-by
-                                             {:transform-fn sort-by})
-                                           disable-reactive?
-                                           (assoc :disable-reactive? true))))]
+         (let [result (query-react/react-query repo
+                                               {:query (with-meta query {:cards-query? true})
+                                                :rules (or rules [])}
+                                               (merge
+                                                {:use-cache? use-cache?}
+                                                (cond->
+                                                  (when sort-by
+                                                    {:transform-fn sort-by})
+                                                  disable-reactive?
+                                                  (assoc :disable-reactive? true))))]
            (when result
              (flatten (util/react result)))))))))
 
@@ -365,24 +367,25 @@
                            (dec n)
                            n))))
 
+(defn- review-finished?
+  [cards]
+  (<= (count cards) 1))
+
 (defn- score-and-next-card [score card *card-index cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
-  (if (>= (inc @*card-index) (count cards))
-    (when cb
-      (swap! *card-index inc)
-      (cb @*review-records))
-    (do
-      (swap! *card-index inc)
-      (reset! *phase 1)))
+  (if (review-finished? cards)
+    (when cb (cb @*review-records))
+    (reset! *phase 1))
+  (swap! *card-index inc)
   (when @global-cards-mode?
     (dec-cards-due-count!)))
 
 (defn- skip-card [card *card-index cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
   (swap! *card-index inc)
-  (if (>= (inc @*card-index) (count cards))
-    (and cb (cb @*review-records))
+  (if (review-finished? cards)
+    (when cb (cb @*review-records))
     (reset! *phase 1)))
 
 (def review-finished
@@ -394,12 +397,13 @@
     :delay 200
     :theme "monospace"}
    (ui/button btn-text
-              :id id
-              :background background
-              :on-click on-click)))
+     :id id
+     :background background
+     :on-click on-click)))
 
 (rum/defcs view
   < rum/reactive
+  db-mixins/query
   (rum/local 1 ::phase)
   (rum/local {} ::review-records)
   {:will-mount (fn [state]
@@ -414,14 +418,17 @@
    card-index]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
-        card (when card-index (util/nth-safe cards @card-index))]
+        ;; TODO: needs refactor
+        card (if preview?
+               (when card-index (util/nth-safe cards @card-index))
+               (first cards))]
     (if-not card
       review-finished
       (let [phase (::phase state)
             {blocks :value next-phase :next-phase} (show-cycle card @phase)
             root-block (.-block card)
             root-block-id (:block/uuid root-block)]
-        [:div.ls-card
+        [:div.ls-card.content
          {:class (when (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto"))}
          (let [repo (state/get-current-repo)]
@@ -436,20 +443,20 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             [:div.flex-1
-              (when-not (and (not preview?) (= next-phase 1))
-                [:div.flex.flex-row.justify-between
-                 (btn-with-shortcut {:btn-text (case next-phase
-                                                 1 "Hide answers"
-                                                 2 "Show answers"
-                                                 3 "Show clozes")
-                                     :shortcut "s"
-                                     :id       "card-answers"
-                                     :on-click #(reset! phase next-phase)})])
+             (when-not (and (not preview?) (= next-phase 1))
+               [:div.flex.flex-row.justify-between
+                (btn-with-shortcut {:btn-text (case next-phase
+                                                1 "Hide answers"
+                                                2 "Show answers"
+                                                3 "Show clozes")
+                                    :shortcut "s"
+                                    :id       "card-answers"
+                                    :on-click #(reset! phase next-phase)})])
 
              (when (and (> (count cards) 1) preview?)
                (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
-                          :id "card-next"
-                          :class "mr-2"
+                 :id "card-next"
+                 :class "mr-2"
                  :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
@@ -480,21 +487,34 @@
                          :class "tippy-hover"
                          :interactive true}
                         (ui/button "Reset"
-                                   :id "card-reset"
-                                   :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                                   :small? true
-                                   :on-click #(operation-reset! card))))]
+                          :id "card-reset"
+                          :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                          :small? true
+                          :on-click #(operation-reset! card))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
+  rum/reactive
+  db-mixins/query
   [blocks option card-index]
-  (view blocks option card-index))
+  (let [option (update option :random-mode? (fn [v] (if (boolean? v) v @v)))
+        blocks (if (fn? blocks) (blocks) blocks)
+        blocks (if (:random-mode? option)
+                 (shuffle blocks)
+                 blocks)]
+    (if (seq blocks)
+      (view blocks option card-index)
+      review-finished)))
+
+(rum/defc preview-cp
+  [block-id]
+  (let [blocks-f (fn [] (db/sub-block-and-children (state/get-current-repo) block-id))]
+    (view-modal blocks-f {:preview? true} (atom 0))))
 
 (defn preview
-  [blocks]
-  (state/set-modal! #(view blocks {:preview? true} (atom 0))))
-
+  [block-id]
+  (state/set-modal! #(preview-cp block-id) {:id :srs}))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
@@ -534,22 +554,15 @@
         count))))
 
 ;;; register cards macro
-(rum/defcs cards
-  < rum/reactive
-  {:will-mount (fn [state]
-                 (let [[_config options] (:rum/args state)
-                       repo (state/get-current-repo)
-                       query-string (string/join ", " (:arguments options))
-                       blocks (query repo query-string)]
-                   (assoc state
-                          :query-string query-string
-                          :query-result blocks)))}
+(rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
-  [state config _options]
-  (let [repo (state/get-current-repo)
-        query-string (:query-string state)
+  (rum/local false ::random-mode?)
+  [state config options]
+  (let [*random-mode? (::random-mode? state)
+        repo (state/get-current-repo)
+        query-string (string/join ", " (:arguments options))
+        query-result (query repo query-string)
         card-index (::card-index state)
-        query-result (:query-result state)
         global? (:global? config)]
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
@@ -565,7 +578,6 @@
            (ui/icon "infinity" {:style {:font-size 20}})
            [:div.ml-1.text-sm.font-medium query-string]]
 
-
           [:div.flex.flex-row.items-center
 
            ;; FIXME: CSS issue
@@ -573,8 +585,7 @@
                       ;; :class "tippy-hover"
                       :interactive true}
                      [:div.opacity-60.text-sm.mr-3
-                      (let [idx (- filtered-total @card-index)]
-                        (max idx 0))
+                      filtered-total
                       [:span "/"]
                       total])
 
@@ -587,30 +598,52 @@
             [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
              {:id "preview-all-cards"
               :on-click (fn [_]
-                          (let [blocks query-result]
-                            (when (> (count blocks) 0)
-                              (state/set-modal! #(view-modal
-                                                  blocks
-                                                  {:preview? true}
-                                                  card-index)))))}
-             "A"])]]
+                          (let [blocks-f (fn [] (query repo query-string))]
+                            (state/set-modal! #(view-modal
+                                                blocks-f
+                                                {:preview? true
+                                                 :random-mode? *random-mode?}
+                                                card-index)
+                                              {:id :srs})))}
+             "A"])
+
+           (ui/tippy
+            {:html [:div.text-sm "Toggle random mode"]
+             :delay [1000, 100]
+             :class "tippy-hover"
+             :interactive true}
+            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100 {:on-mouse-down (fn [e]
+                                                                               (util/stop e)
+                                                                               (swap! *random-mode? not))}
+             (ui/icon "arrows-shuffle" {:style (cond->
+                                                 {:font-size 18
+                                                  :font-weight 600}
+                                                 @*random-mode?
+                                                 (assoc :color "orange"))})])]]
          (if (seq review-cards)
            [:div.px-1
             (when-not modal?
               {:on-click (fn []
-                           (state/set-modal! #(view-modal
-                                               review-cards
-                                               {:modal? true
-                                                :callback
-                                                (fn [review-records]
-                                                  (operation-card-info-summary!
-                                                   review-records review-cards card-query-block)
-                                                  (persist-var/persist-save of-matrix))}
-                                               card-index)))})
+                           (let [blocks-f (fn []
+                                            (let [query-result (query repo query-string)]
+                                              (:result (query-scheduled repo query-result (tl/local-now)))))]
+                             (state/set-modal! #(view-modal
+                                                 blocks-f
+                                                 {:modal? true
+                                                  :random-mode? *random-mode?
+                                                  :callback
+                                                  (fn [review-records]
+                                                    (operation-card-info-summary!
+                                                     review-records review-cards card-query-block)
+                                                    (persist-var/persist-save of-matrix))}
+                                                 card-index)
+                                               {:id :srs})))})
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config
-                              {:callback
+                              {:global? global?
+                               :random-mode? @*random-mode?
+                               :callback
                                (fn [review-records]
                                  (operation-card-info-summary!
                                   review-records review-cards card-query-block)
@@ -618,7 +651,7 @@
                        card-index))]
            review-finished)])
       (if global?
-        [:div.ls-card
+        [:div.ls-card.content
          [:h1.title "Time to create a card!"]
 
          [:div
@@ -628,7 +661,7 @@
            [:a {:href "https://docs.logseq.com/#/page/cards" :target "_blank"}
             "click this link"]
            " to check the documentation."]]]
-        [:div.opacity-60.custom-query-title.ls-card
+        [:div.opacity-60.custom-query-title.ls-card.content
          [:div.w-full.flex-1
           [:code.p-1 (str "Cards: " query-string)]]
          [:div.mt-2.ml-2.font-medium "No matched cards"]]))))

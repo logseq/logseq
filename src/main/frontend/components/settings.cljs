@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
@@ -13,6 +13,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
@@ -41,10 +42,10 @@
            :on-change (fn [e]
                         (reset! email (util/evalue e)))}]]]]
       (ui/button
-       "Submit"
-       :on-click
-       (fn []
-         (user-handler/set-email! @email)))
+        "Submit"
+        :on-click
+        (fn []
+          (user-handler/set-email! @email)))
 
       [:hr]
 
@@ -61,8 +62,6 @@
      (ui/toggle state on-toggle true)
      detail-text]]])
 
-
-
 (rum/defcs app-updater < rum/reactive
   [state version]
   (let [update-pending? (state/sub :electron/updater-pending?)
@@ -74,10 +73,10 @@
       [:div.mt-1.sm:mt-0.sm:col-span-2
        {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
        [:div (ui/button
-              (if update-pending? "Checking ..." "Check for updates")
-              :class "text-sm p-1 mr-1"
-              :disabled update-pending?
-              :on-click #(js/window.apis.checkForUpdates false))]
+               (if update-pending? "Checking ..." "Check for updates")
+               :class "text-sm p-1 mr-1"
+               :disabled update-pending?
+               :on-click #(js/window.apis.checkForUpdates false))]
 
        [:div.text-sm.opacity-50 (str "Version " version)]]]
 
@@ -109,22 +108,21 @@
 
 (rum/defc delete-account-confirm
   [close-fn]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
-     (ui/admonition
-      :important
-      [:p.text-gray-700 (t :user/delete-account-notice)])
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click user-handler/delete-account!}
-        (t :user/delete-account)]]
-      [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click close-fn}
-        "Cancel"]]]]))
+  [:div
+   (ui/admonition
+     :important
+     [:p.text-gray-700 (t :user/delete-account-notice)])
+   [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+    [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
+     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+      {:type     "button"
+       :on-click user-handler/delete-account!}
+      (t :user/delete-account)]]
+    [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
+     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+      {:type     "button"
+       :on-click close-fn}
+      "Cancel"]]]])
 
 (rum/defc outdenting-hint
   []
@@ -144,41 +142,39 @@
   [{:keys [left-label action button-label href on-click desc -for]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
 
-     ;; left column
+   ;; left column
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for -for}
     left-label]
 
-     ;; right column
+   ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2
     {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div (if action action (ui/button
-                             button-label
-                             :class    "text-sm p-1"
-                             :href     href
-                             :on-click on-click))]
+                              button-label
+                              :class    "text-sm p-1"
+                              :href     href
+                              :on-click on-click))]
     (when-not (or (util/mobile?)
                   (mobile-util/is-native-platform?))
       [:div.text-sm desc])]])
 
 
 (defn edit-config-edn []
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (row-with-button-action
-     {:left-label   (t :settings-page/custom-configuration)
-      :button-label (t :settings-page/edit-config-edn)
-      :href         (rfe/href :file {:path (config/get-config-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for         "config_edn"})))
+  (row-with-button-action
+    {:left-label   (t :settings-page/custom-configuration)
+     :button-label (t :settings-page/edit-config-edn)
+     :href         (rfe/href :file {:path (config/get-config-path)})
+     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :-for         "config_edn"}))
 
 (defn edit-custom-css []
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (row-with-button-action
-     {:left-label   (t :settings-page/custom-theme)
-      :button-label (t :settings-page/edit-custom-css)
-      :href         (rfe/href :file {:path (config/get-custom-css-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for         "customize_css"})))
+  (row-with-button-action
+    {:left-label   (t :settings-page/custom-theme)
+     :button-label (t :settings-page/edit-custom-css)
+     :href         (rfe/href :file {:path (config/get-custom-css-path)})
+     :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+     :-for         "customize_css"}))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -203,13 +199,13 @@
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
-          (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
-                  #(when (js/confirm (t :relaunch-confirm-to-work))
-                     (js/logseq.api.relaunch))))
-        true)]]]))
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
+           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
+                   #(when (js/confirm (t :relaunch-confirm-to-work))
+                      (js/logseq.api.relaunch))))
+         true)]]]))
 
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
@@ -220,11 +216,11 @@
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-          (ipc/ipc "userAppCfgs" :git/disable-auto-commit? enabled?))
-        true)]]]))
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
+           (ipc/ipc "userAppCfgs" :git/disable-auto-commit? enabled?))
+         true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
   [state t]
@@ -311,8 +307,8 @@
                       (when-not (string/blank? format)
                         (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
-                         [:div "You must re-index your graph for this change to take effect"]
-                         :warning false)
+                          [:div "You must re-index your graph for this change to take effect"]
+                          :warning false)
                         (state/close-modal!)
                         (route-handler/redirect! {:to :repos}))))}
       (for [format (sort (date/journal-title-formatters))]
@@ -436,11 +432,11 @@
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
-   {:left-label   (t :settings-page/customize-shortcuts)
-    :button-label (t :settings-page/shortcut-settings)
-    :on-click      #((state/close-settings!)
-                     (route-handler/redirect! {:to :shortcut-setting}))
-    :-for         "customize_shortcuts"}))
+    {:left-label   (t :settings-page/customize-shortcuts)
+     :button-label (t :settings-page/shortcut-settings)
+     :on-click      #((state/close-settings!)
+                      (route-handler/redirect! {:to :shortcut-setting}))
+     :-for         "customize_shortcuts"}))
 
 (defn zotero-settings-row [_t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -450,13 +446,13 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-      "Zotero settings"
-      :class "text-sm p-1"
-      :style {:margin-top "0px"}
-      :on-click
-      (fn []
-        (state/close-settings!)
-        (route-handler/redirect! {:to :zotero-setting})))]]])
+       "Zotero settings"
+       :class "text-sm p-1"
+       :style {:margin-top "0px"}
+       :on-click
+       (fn []
+         (state/close-settings!)
+         (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [_t current-repo enable-git-auto-push?]
   (when (and current-repo (string/starts-with? current-repo "https://"))
@@ -472,7 +468,7 @@
           (t :settings-page/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
-                  (not instrument-disabled?)))
+                   (not instrument-disabled?)))
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
@@ -512,179 +508,254 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")]])]))
 
-(defn plugin-system-switcher-row [t]
-  (row-with-button-action
-    {:left-label "Plug-in system"
-     :action (plugin-enabled-switcher t)}))
+(rum/defc user-proxy-settings-panel
+  [{:keys [protocol] :as agent-opts}]
+  (let [[opts set-opts!] (rum/use-state agent-opts)
+        disabled? (string/blank? (:protocol opts))]
+    [:div.cp__settings-network-proxy-panel
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:div.p-2
+      [:p [:label [:strong (t :type)]
+           (ui/select [{:label "Disabled" :value "" :selected disabled?}
+                       {:label "http" :value "http" :selected (= protocol "http")}
+                       {:label "https" :value "https" :selected (= protocol "https")}
+                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
+                      #(set-opts!
+                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+      [:p.flex
+       [:label.pr-4 [:strong (t :host)]
+        [:input.form-input.is-small
+         {:value     (:host opts) :disabled disabled?
+          :on-change #(set-opts!
+                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
 
-(rum/defcs settings
-  < (rum/local :general ::active)
-  {:will-mount
-   (fn [state]
-     (state/load-app-user-cfgs)
-     state)
-   :will-unmount
-   (fn [state]
-     (state/close-settings!)
-     state)}
-  rum/reactive
-  [state]
-  (let [current-repo (state/sub :git/current-repo)
-        preferred-format (state/get-preferred-format)
+       [:label [:strong (t :port)]
+        [:input.form-input.is-small
+         {:value (:port opts) :type "number" :disabled disabled?
+          :on-change #(set-opts!
+                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
+
+      [:p.pt-2
+       (ui/button (t :save)
+        :on-click (fn []
+                    (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                      (state/set-state! [:electron/user-cfgs :settings/agent] opts)
+                      (state/close-sub-modal! :https-proxy-panel))))]]]))
+
+(rum/defc user-proxy-settings
+  [{:keys [protocol host port] :as agent-opts}]
+  (ui/button [:span
+              (when-let [e (and protocol host port (str protocol "://" host ":" port))]
+                [:strong.pr-1 e])
+              (ui/icon "edit")]
+             :on-click #(state/set-sub-modal!
+                         (fn [_] (user-proxy-settings-panel agent-opts))
+                         {:id :https-proxy-panel :center? true})))
+
+(defn plugin-system-switcher-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/plugin-system)
+    :action (plugin-enabled-switcher t)}))
+
+(defn https-user-agent-row [agent-opts]
+  (row-with-button-action
+   {:left-label (t :settings-page/network-proxy)
+    :action (user-proxy-settings agent-opts)}))
+
+(rum/defcs settings-general < rum/reactive
+  [_state current-repo]
+  (let [preferred-language (state/sub [:preferred-language])
+        theme (state/sub :ui/theme)
+        dark? (= "dark" theme)
+        system-theme? (state/sub :ui/system-theme?)
+        switch-theme (if dark? "white" "dark")]
+    [:div.panel-wrap.is-general
+     (when-not (mobile-util/is-native-platform?)
+       (version-row t version))
+     (language-row t preferred-language)
+     (theme-modes-row t switch-theme system-theme? dark?)
+     (when current-repo (edit-config-edn))
+     (when current-repo (edit-custom-css))
+     (keyboard-shortcuts-row t)]))
+
+(rum/defcs settings-editor < rum/reactive
+  [_state current-repo]
+  (let [preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
-        preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
-        instrument-disabled? (state/sub :instrument/disabled?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        enable-git-auto-push? (state/enable-git-auto-push? current-repo)
-        ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
-        cors-proxy (state/sub [:me :cors_proxy])
-        logged? (state/logged?)
+        enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
+
+    [:div.panel-wrap.is-editor
+     (file-format-row t preferred-format)
+     (date-format-row t preferred-date-format)
+     (workflow-row t preferred-workflow)
+     ;; (enable-block-timestamps-row t enable-block-timestamps?)
+     (show-brackets-row t show-brackets?)
+     (when (util/electron?) (switch-spell-check-row t))
+     (outdenting-row t logical-outdenting?)
+     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+       (shortcut-tooltip-row t enable-shortcut-tooltip?)
+       (tooltip-row t enable-tooltip?))
+     (timetracking-row t enable-timetracking?)
+     (journal-row t enable-journals?)
+     (encryption-row t enable-encryption?)
+     (enable-all-pages-public-row t enable-all-pages-public?)
+     (zotero-settings-row t)
+     (auto-push-row t current-repo enable-git-auto-push?)]))
+
+(rum/defc settings-git
+  []
+  [:div.panel-wrap
+   [:div.text-sm.my-4
+    [:span.text-sm.opacity-50.my-4
+     "You can view a page's edit history by clicking the three vertical dots "
+     "in the top-right corner and selecting \"Check page's history\". "
+     "Logseq uses "]
+    [:a {:href "https://git-scm.com/" :target "_blank"}
+     "Git"]
+    [:span.text-sm.opacity-50.my-4
+     " for version control."]]
+   [:br]
+   (switch-git-auto-commit-row t)
+   (git-auto-commit-seconds t)
+
+   (ui/admonition
+     :warning
+     [:p (t :settings-page/git-confirm)])])
+
+(rum/defcs settings-advanced < rum/reactive
+  [_state]
+  (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
-        theme (state/sub :ui/theme)
-        dark? (= "dark" theme)
-        system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "white" "dark")
+        cors-proxy (state/sub [:me :cors_proxy])
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
+        logged? (state/logged?)]
+    [:div.panel-wrap.is-advanced
+     (when (and util/mac? (util/electron?)) (app-auto-update-row t))
+     (usage-diagnostics-row t instrument-disabled?)
+     (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+     (when (util/electron?) (plugin-system-switcher-row))
+     (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (clear-cache-row t)
+
+     (ui/admonition
+       :warning
+       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
+
+     (when logged?
+       [:div
+        [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+         [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
+          {:for "cors"}
+          (t :settings-page/custom-cors-proxy-server)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
+            {:default-value cors-proxy
+             :on-blur       (fn [event]
+                              (when-let [server (util/evalue event)]
+                                (user-handler/set-cors! server)
+                                (notification/show! "Custom CORS proxy updated successfully!" :success)))
+             :on-key-press  (fn [event]
+                              (let [k (gobj/get event "key")]
+                                (when (= "Enter" k)
+                                  (when-let [server (util/evalue event)]
+                                    (user-handler/set-cors! server)
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+        (ui/admonition
+          :important
+          [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+           [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
+                :target "_blank"}
+            "https://github.com/isomorphic-git/cors-proxy"]])])
+
+     (when logged?
+       [:div
+        [:hr]
+        [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+         [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
+          {:for "delete account"}
+          (t :user/delete-account)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           (ui/button (t :user/delete-your-account)
+                      :on-click (fn []
+                                  (ui-handler/toggle-settings-modal!)
+                                  (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]))
+
+(rum/defcs settings
+  < (rum/local [:general :general] ::active)
+    {:will-mount
+     (fn [state]
+       (state/load-app-user-cfgs)
+       state)
+     :will-unmount
+     (fn [state]
+       (state/close-settings!)
+       state)}
+    rum/reactive
+  [state]
+  (let [current-repo (state/sub :git/current-repo)
+        ;; enable-block-timestamps? (state/enable-block-timestamps?)
+        _installed-plugins (state/sub :plugin/installed-plugins)
+        plugins-of-settings (and plugin-handler/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
 
-    (rum/with-context
-      [[t] i18n/*tongue-context*]
+    [:div#settings.cp__settings-main
+     [:header
+      [:h1.title (t :settings)]]
 
-      [:div#settings.cp__settings-main
-       [:header
-        [:h1.title (t :settings)]]
+     [:div.cp__settings-inner.md:flex
 
-       [:div.cp__settings-inner.md:flex
+      [:aside.md:w-64 {:style {:min-width "10rem"}}
+       [:ul
+        (for [[label text icon]
+              [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+               [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+               (when-not (mobile-util/is-native-platform?)
+                 [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
+               [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
+               (when plugins-of-settings
+                 [:plugins-setting (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
-        [:aside.md:w-64 {:style {:min-width "10rem"}}
-         [:ul
-          (for [[label text icon]
-                [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                 [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                 (when-not (mobile-util/is-native-platform?)
-                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
-                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+          (when label
+            [:li
+             {:key      text
+              :class    (util/classnames [{:active (= label (first @*active))}])
+              :on-click #(reset! *active [label (first @*active)])}
 
-            (when label
-              [:li
-               {:key text
-                :class    (util/classnames [{:active (= label @*active)}])
-                :on-click #(reset! *active label)}
+             [:a.flex.items-center
+              icon
+              [:strong text]]]))]]
 
-               [:a.flex.items-center
-                icon
-                [:strong text]]]))]]
+      [:article
 
-        [:article
+       (case (first @*active)
 
-         (case @*active
+         :plugins-setting
+         (let [label (second @*active)]
+           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
+           (reset! *active [label label])
+           nil)
 
-           :general
-           [:div.panel-wrap.is-general
-            (when-not (mobile-util/is-native-platform?)
-              (version-row t version))
-            (language-row t preferred-language)
-            (theme-modes-row t switch-theme system-theme? dark?)
-            (when current-repo (edit-config-edn))
-            (when current-repo (edit-custom-css))
-            (keyboard-shortcuts-row t)]
+         :general
+         (settings-general current-repo)
 
-           :editor
-           [:div.panel-wrap.is-editor
-            (file-format-row t preferred-format)
-            (date-format-row t preferred-date-format)
-            (workflow-row t preferred-workflow)
-            ;; (enable-block-timestamps-row t enable-block-timestamps?)
-            (show-brackets-row t show-brackets?)
-            (when (util/electron?) (switch-spell-check-row t))
-            (outdenting-row t logical-outdenting?)
-            (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
-              (shortcut-tooltip-row t enable-shortcut-tooltip?)
-              (tooltip-row t enable-tooltip?))
-            (timetracking-row t enable-timetracking?)
-            (journal-row t enable-journals?)
-            (encryption-row t enable-encryption?)
-            (enable-all-pages-public-row t enable-all-pages-public?)
-            (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)]
+         :editor
+         (settings-editor current-repo)
 
-           :git
-           [:div.panel-wrap
-            [:div.text-sm.my-4
-             [:span.text-sm.opacity-50.my-4
-              "You can view a page's edit history by clicking the three vertical dots "
-              "in the top-right corner and selecting \"Check page's history\". "
-              "Logseq uses "]
-             [:a {:href "https://git-scm.com/" :target "_blank"}
-              "Git"]
-             [:span.text-sm.opacity-50.my-4
-              " for version control."]]
-            [:br]
-            (switch-git-auto-commit-row t)
-            (git-auto-commit-seconds t)
+         :git
+         (settings-git)
 
-            (ui/admonition
-             :warning
-             [:p (t :settings-page/git-confirm)])]
+         :advanced
+         (settings-advanced)
 
-           :advanced
-           [:div.panel-wrap.is-advanced
-            (when (and util/mac? (util/electron?)) (app-auto-update-row t))
-            (usage-diagnostics-row t instrument-disabled?)
-            (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
-            (when (util/electron?) (plugin-system-switcher-row t))
-            (clear-cache-row t)
-
-            (ui/admonition
-             :warning
-             [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
-
-            (when logged?
-              [:div
-               [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-                [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
-                 {:for "cors"}
-                 (t :settings-page/custom-cors-proxy-server)]
-                [:div.mt-1.sm:mt-0.sm:col-span-2
-                 [:div.max-w-lg.rounded-md.sm:max-w-xs
-                  [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
-                   {:default-value cors-proxy
-                    :on-blur       (fn [event]
-                                     (when-let [server (util/evalue event)]
-                                       (user-handler/set-cors! server)
-                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))
-                    :on-key-press  (fn [event]
-                                     (let [k (gobj/get event "key")]
-                                       (when (= "Enter" k)
-                                         (when-let [server (util/evalue event)]
-                                           (user-handler/set-cors! server)
-                                           (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-               (ui/admonition
-                :important
-                [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-                 [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                      :target "_blank"}
-                  "https://github.com/isomorphic-git/cors-proxy"]])])
-
-            (when logged?
-              [:div
-               [:hr]
-               [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-                [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
-                 {:for "delete account"}
-                 (t :user/delete-account)]
-                [:div.mt-1.sm:mt-0.sm:col-span-2
-                 [:div.max-w-lg.rounded-md.sm:max-w-xs
-                  (ui/button (t :user/delete-your-account)
-                             :on-click (fn []
-                                         (ui-handler/toggle-settings-modal!)
-                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
-
-           nil)]]])))
+         nil)]]]))

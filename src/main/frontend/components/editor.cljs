@@ -1,5 +1,6 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
+            [goog.string :as gstring]
             [frontend.commands :as commands
              :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
             [frontend.components.block :as block]
@@ -18,7 +19,6 @@
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
-            [frontend.search.db :as search-db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -98,7 +98,7 @@
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
-  "Editor embedded page searching"
+  "Embedded page searching popup"
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -120,20 +120,23 @@
                               (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
                               matched-pages
 
+                              (string/blank? q)
+                              nil
+
                               (empty? matched-pages)
-                              matched-pages
+                              (cons (str "New page: " q) matched-pages)
 
                               ;; reorder, shortest and starts-with first.
                               :else
                               (let [matched-pages (remove nil? matched-pages)
                                     matched-pages (sort-by
                                                    (fn [m]
-                                                     [(not (string/starts-with? m q)) (count m)])
+                                                     [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
                                                    matched-pages)]
-                                (cons (first matched-pages)
-                                      (cons
-                                       (str "New page: " q)
-                                       (rest matched-pages)))))]
+                                (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                                  (cons (first matched-pages)
+                                        (cons  (str "New page: " q) (rest matched-pages)))
+                                  (cons (str "New page: " q) matched-pages))))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -177,8 +180,7 @@
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)
                              block (db-model/query-block-by-uuid uuid)
-                             content (search-db/block->content block)]
-
+                             content (:block/content block)]
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
 
@@ -227,13 +229,32 @@
                            template)
             :class       "black"}))))))
 
+(rum/defc mobile-bar-indent-outdent [indent? icon]
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (state/set-state! :editor/pos (cursor/pos (state/get-input)))
+                      (editor-handler/indent-outdent indent?))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+
+(rum/defc mobile-bar-command [command-handler icon & [event?]]
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (if event?
+                        (command-handler e)
+                       (command-handler)))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+
 (rum/defc mobile-bar < rum/reactive
   [_parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)
         ;; TODO: should we add this focus step to `simple-insert!`?
         viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/make-el-into-center-viewport input)
+                             (util/make-el-cursor-position-into-center-viewport input)
                              (.focus input)))]
     [:div#mobile-editor-toolbar.bg-base-2
      {:style {:bottom (if vw-state
@@ -242,174 +263,31 @@
                            (:offset-top vw-state))
                         0)}
       :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (state/set-state! :editor/pos (cursor/pos (state/get-input)))
-                         (editor-handler/indent-outdent true))}
-       (ui/icon "arrow-bar-right"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (state/set-state! :editor/pos (cursor/pos (state/get-input)))
-                         (editor-handler/indent-outdent false))}
-       (ui/icon "arrow-bar-left"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         ((editor-handler/move-up-down true)))}
-       (ui/icon "arrow-bar-to-up"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         ((editor-handler/move-up-down false)))}
-       (ui/icon "arrow-bar-to-down"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (commands/simple-insert! parent-id "\n" {}))}
-       (ui/icon "arrow-back"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/cycle-todo!))}
-       (ui/icon "checkbox"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (editor-handler/toggle-page-reference-embed parent-id))}
-       (ui/icon "brackets"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (editor-handler/toggle-block-reference-embed parent-id))}
-       (ui/icon "parentheses"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (commands/simple-insert! parent-id "/" {}))}
-       (ui/icon "command"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (commands/simple-insert!
-                          parent-id "#"
-                          {:check-fn  (fn []
-                                        (commands/handle-step [:editor/search-page-hashtag]))}))}
-       (ui/icon "tag"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/cycle-priority!))}
-       (ui/icon "a-b"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/toggle-list!))}
-       (ui/icon "list"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (mobile-camera/embed-photo parent-id))}
-       (ui/icon "camera"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (commands/insert-youtube-timestamp))}
-       (ui/icon "brand-youtube"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/html-link-format!))}
-       (ui/icon "link"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (history/undo! e))}
-       (ui/icon "rotate"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (history/redo! e))}
-       (ui/icon "rotate-clockwise"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (viewport-fn)
-                         (commands/simple-insert!
-                          parent-id "<"
-                          {:check-fn (fn [_]
-                                       (commands/block-commands-map))}))}
-       (ui/icon "code"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/bold-format!))}
-       (ui/icon "bold"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/italics-format!))}
-       (ui/icon "italic"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/strike-through-format!))}
-       (ui/icon "strikethrough"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (editor-handler/highlight-format!))}
-       (ui/icon "paint"
-                {:style {:fontSize ui/icon-size}})]]]))
+     [:div.toolbar-commands
+      (mobile-bar-indent-outdent true "arrow-bar-right")
+      (mobile-bar-indent-outdent false "arrow-bar-left")
+      (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
+      (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
+      (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")
+      (mobile-bar-command editor-handler/cycle-todo! "checkbox")
+      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets")
+      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses")
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command")
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag")
+      (mobile-bar-command editor-handler/cycle-priority! "a-b")
+      (mobile-bar-command editor-handler/toggle-list! "list")
+      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
+      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
+      (mobile-bar-command editor-handler/html-link-format! "link")
+      (mobile-bar-command history/undo! "rotate" true )
+      (mobile-bar-command history/redo! "rotate-clockwise" true)
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
+      (mobile-bar-command editor-handler/bold-format! "bold")
+      (mobile-bar-command editor-handler/italics-format! "italic")
+      (mobile-bar-command editor-handler/strike-through-format! "strikethrough")
+      (mobile-bar-command editor-handler/highlight-format! "paint")]
+     [:div.toolbar-hide-keyboard
+      (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -716,6 +594,7 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
+       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

@@ -46,35 +46,38 @@
   [block]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
-               (let [typ (first (:url (second block)))]
+               (let [typ (first (:url (second block)))
+                     value (second (:url (second block)))]
                  ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
                   (and
                    (= typ "Page_ref")
-                   (string? (second (:url (second block))))
-                   (second (:url (second block))))
+                   (and (string? value)
+                        (not (or (config/local-asset? value)
+                                 (config/draw? value))))
+                   value)
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? (second (:url (second block))))
-                   (text/page-ref-un-brackets! (second (:url (second block)))))
+                   (text/page-ref? value)
+                   (text/page-ref-un-brackets! value))
 
                   (and
                    (= typ "Search")
-                   (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
-                   (let [page (second (:url (second block)))
-                         ext (some-> (util/get-file-ext page) keyword)]
-                     (when (and (not (util/starts-with? page "http:"))
-                                (not (util/starts-with? page "https:"))
-                                (not (util/starts-with? page "file:"))
+                   (not (contains? #{\# \* \/ \[} (first value)))
+                   (let [ext (some-> (util/get-file-ext value) keyword)]
+                     (when (and (not (util/starts-with? value "http:"))
+                                (not (util/starts-with? value "https:"))
+                                (not (util/starts-with? value "file:"))
+                                (not (config/local-asset? value))
                                 (or (= ext :excalidraw)
                                     (not (contains? (config/supported-formats) ext))))
-                       page)))
+                       value)))
 
                   (and
                    (= typ "Complex")
-                   (= (:protocol (second (:url (second block)))) "file")
-                   (:link (second (:url (second block)))))
+                   (= (:protocol value) "file")
+                   (:link value))
 
                   (and
                    (= typ "File")
@@ -150,7 +153,7 @@
 
 ;; TODO: we should move this to mldoc
 (defn extract-properties
-  [properties]
+  [format properties]
   (when (seq properties)
     (let [properties (seq properties)
           page-refs (->>
@@ -159,7 +162,8 @@
                                (contains? #{:background-color :background_color} (keyword k))))
                      (map last)
                      (map (fn [v]
-                            (when (string? v)
+                            (when (and (string? v)
+                                       (not (mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
@@ -179,7 +183,7 @@
                                            (remove string/blank? v)
                                            (if (string/blank? v)
                                              nil
-                                             (text/parse-property k v)))
+                                             (text/parse-property format k v)))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)
@@ -238,38 +242,49 @@
        [original-page-name page-name day]))))
 
 (defn page-name->map
-  [original-page-name with-id?]
-  (cond
-    (and original-page-name (string? original-page-name))
-    (let [original-page-name (util/remove-boundary-slashes original-page-name)
-          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
-          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
-                          (text/namespace-page? original-page-name))
-          m (merge
-             {:block/name page-name
-              :block/original-name original-page-name}
-             (when with-id?
-               (if (db/entity [:block/name page-name])
-                 {}
-                 {:block/uuid (db/new-block-id)}))
-             (when namespace?
-               (let [namespace (first (util/split-last "/" original-page-name))]
-                 (when-not (string/blank? namespace)
-                   {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}}))))]
-      (if journal-day
-        (merge m
-               {:block/journal? true
-                :block/journal-day journal-day})
-        (assoc m :block/journal? false)))
+  "Create a page's map structure given a original page name (string).
+   map as input is supported for legacy compatibility.
+   with-timestamp?: assign timestampes to the map structure.
+    Useful when creating new pages from references or namespaces,
+    as there's no chance to introduce timestamps via editing in page"
+  ([original-page-name with-id?]
+   (page-name->map original-page-name with-id? true))
+  ([original-page-name with-id? with-timestamp?]
+   (cond
+     (and original-page-name (string? original-page-name))
+     (let [original-page-name (util/remove-boundary-slashes original-page-name)
+           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
+           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
+                           (text/namespace-page? original-page-name))
+           page-entity (db/entity [:block/name page-name])]
+       (merge
+        {:block/name page-name
+         :block/original-name original-page-name}
+        (when with-id?
+          (if page-entity
+            {}
+            {:block/uuid (db/new-block-id)}))
+        (when namespace?
+          (let [namespace (first (util/split-last "/" original-page-name))]
+            (when-not (string/blank? namespace)
+              {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}})))
+        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
+          (let [current-ms (util/time-ms)]
+            {:block/created-at current-ms
+             :block/updated-at current-ms}))
+        (if journal-day
+          {:block/journal? true
+           :block/journal-day journal-day}
+          {:block/journal? false})))
 
-    (and (map? original-page-name) (:block/uuid original-page-name))
-    original-page-name
+     (and (map? original-page-name) (:block/uuid original-page-name))
+     original-page-name
 
-    (and (map? original-page-name) with-id?)
-    (assoc original-page-name :block/uuid (db/new-block-id))
+     (and (map? original-page-name) with-id?)
+     (assoc original-page-name :block/uuid (db/new-block-id))
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn with-page-refs
   [{:keys [title body tags refs marker priority] :as block} with-id?]
@@ -413,30 +428,10 @@
                     (if (or (:pre-block? block)
                             (= (:format block) :org))
                       content
-                      (text/remove-indentation-spaces content (inc (:level block)) false))))]
+                      (mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
       content
       (property/->new-properties content))))
-
-(defn- remove-indentations
-  [format level element]
-  (if (= format :org)
-    element
-    (case (first element)
-      "Paragraph"
-      ["Paragraph"
-       (let [level (if (= (ffirst (second element)) "Plain")
-                     (count (re-find #"^[\s\t]+" (second (first (second element)))))
-                     level)]
-         (->> (partition-by #(contains? #{["Break_Line"] ["Hard_Break_Line"]} %) (second element))
-             (map (fn [c]
-                    (if (and (= (ffirst c) "Plain")
-                             (>= (count (re-find #"^[\s\t]+" (second (first c)))) level))
-                      (cons ["Plain" (subs (second (first c)) level)] (rest c))
-                      c)))
-             (apply concat)))]
-
-      element)))
 
 (defn get-custom-id-or-new-id
   [properties]
@@ -471,53 +466,60 @@
           (update :refs (fn [col] (remove nil? col)))))
 
 (defn extract-blocks*
-  [blocks pre-block-body pre-block-properties encoded-content]
+  [blocks body pre-block-properties encoded-content with-body?]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start-pos])
-        blocks (if (or (seq @pre-block-body)
-                       (seq @pre-block-properties))
+        blocks (if (or (> first-block-start-pos 0)
+                       (empty? blocks))
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         id (get-custom-id-or-new-id {:properties @pre-block-properties})
+                         {:keys [properties properties-order]} @pre-block-properties
+                         id (get-custom-id-or-new-id {:properties properties})
+                         property-refs (->> (get-page-refs-from-properties properties)
+                                            (map :block/original-name))
                          block {:uuid id
                                 :content content
                                 :level 1
                                 :meta {:start-pos 0
                                        :end-pos (or first-block-start-pos
                                                     (utf8/length encoded-content))}
-                                :body @pre-block-body
-                                :properties @pre-block-properties
-                                :properties-order (keys @pre-block-properties)
-                                :refs (->> (get-page-refs-from-properties @pre-block-properties)
-                                           (map :block/original-name))
+                                :properties properties
+                                :properties-order properties-order
+                                :refs property-refs
                                 :pre-block? true
-                                :unordered true}
+                                :unordered true
+                                :body body}
                          block (with-page-block-refs block false)]
                      (block-keywordize block))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)
-        blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
+        blocks (map (fn [block]
+                      (let [delete-keys (if with-body?
+                                          [:block/anchor]
+                                          [:block/anchor :block/body])]
+                        (apply dissoc block delete-keys))) blocks)]
     (with-path-refs blocks)))
 
-(defn extract-blocks
-  [blocks content with-id? format]
-  (try
+(defn ^:large-vars/cleanup-todo extract-blocks
+  ([blocks content with-id? format]
+   (extract-blocks blocks content with-id? format false))
+  ([blocks content with-id? format with-body?]
+   (try
     (let [encoded-content (utf8/encode content)
           last-pos (utf8/length encoded-content)
-          pre-block-body (atom nil)
           pre-block-properties (atom nil)
-          blocks
+          [blocks body]
           (loop [headings []
-                 block-body []
                  blocks (reverse blocks)
                  timestamps {}
                  properties {}
                  last-pos last-pos
                  last-level 1000
                  children []
-                 block-all-content []]
+                 block-all-content []
+                 body []]
             (if (seq blocks)
               (let [[block {:keys [start_pos _end_pos] :as block-content}] (first blocks)
                     block-content (when (string? block-content) block-content)
@@ -526,18 +528,12 @@
                 (cond
                   (paragraph-timestamp-block? block)
                   (let [timestamps (extract-timestamps block)
-                        timestamps' (merge timestamps timestamps)
-                        [timestamps others] (split-with #(= "Timestamp" (first %)) (second block))
-                        other-body (->>
-                                    (concat
-                                     timestamps
-                                     (drop-while #(contains? #{"Hard_Break_Line" "Break_Line"} (first %)) others))
-                                    (remove nil?))]
-                    (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children (conj block-all-content block-content)))
+                        timestamps' (merge timestamps timestamps)]
+                    (recur headings (rest blocks) timestamps' properties last-pos last-level children (conj block-all-content block-content) body))
 
                   (property/properties-ast? block)
-                  (let [properties (extract-properties (second block))]
-                    (recur headings block-body (rest blocks) timestamps properties last-pos last-level children (conj block-all-content block-content)))
+                  (let [properties (extract-properties format (second block))]
+                    (recur headings (rest blocks) timestamps properties last-pos last-level children (conj block-all-content block-content) body))
 
                   (heading-block? block)
                   (let [id (get-custom-id-or-new-id properties)
@@ -567,13 +563,10 @@
                            #{}])
                         block (cond->
                                 (assoc block
-                                      :uuid id
-                                      :body (vec
-                                             (->> (reverse block-body)
-                                                  (map #(remove-indentations format (:level block) %))))
-                                      :refs ref-pages-in-properties
-                                      :children (or current-block-children [])
-                                      :format format)
+                                       :uuid id
+                                       :refs ref-pages-in-properties
+                                       :children (or current-block-children [])
+                                       :format format)
                                 (seq (:properties properties))
                                 (assoc :properties (:properties properties))
 
@@ -591,6 +584,7 @@
                         block (if (seq timestamps)
                                 (merge block (timestamps->scheduled-and-deadline timestamps))
                                 block)
+                        block (assoc block :body body)
                         block (with-page-block-refs block with-id?)
                         last-pos' (get-in block [:meta :start-pos])
                         {:keys [created-at updated-at]} (:properties properties)
@@ -600,23 +594,21 @@
 
                                 (and updated-at (integer? updated-at))
                                 (assoc :block/updated-at updated-at))]
-                    (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children []))
+                    (recur (conj headings block) (rest blocks) {} {} last-pos' (:level block) children [] []))
 
                   :else
-                  (let [block-body' (conj block-body block)]
-                    (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children (conj block-all-content block-content)))))
+                  (recur headings (rest blocks) timestamps properties last-pos last-level children
+                         (conj block-all-content block-content)
+                         (conj body block))))
               (do
-                (when (seq block-body)
-                  (reset! pre-block-body (reverse block-body)))
                 (when (seq properties)
-                  (let [properties (:properties properties)]
-                    (reset! pre-block-properties properties)))
-                (-> (reverse headings)
-                    safe-blocks))))]
-      (extract-blocks* blocks pre-block-body pre-block-properties encoded-content))
+                  (reset! pre-block-properties properties))
+                [(-> (reverse headings)
+                     safe-blocks) body])))]
+      (extract-blocks* blocks body pre-block-properties encoded-content with-body?))
     (catch js/Error e
       (js/console.error "extract-blocks-failed")
-      (log/error :exception e))))
+      (log/error :exception e)))))
 
 (defn with-parent-and-left
   [page-id blocks]

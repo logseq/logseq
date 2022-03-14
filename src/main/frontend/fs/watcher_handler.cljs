@@ -8,11 +8,15 @@
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]))
+
+;; all IPC paths must be normalized! (via util/path-normalize)
 
 (defn- set-missing-block-ids!
   [content]
@@ -29,8 +33,8 @@
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
   (p/let [
-          ;; save the previous content in a bak file to avoid data overwritten.
-          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content))
+          ;; save the previous content in a versioned bak file to avoid data overwritten.
+          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)
@@ -39,7 +43,9 @@
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
-    (let [repo (config/get-local-repo dir)
+    (let [path (util/path-normalize path)
+          repo (config/get-local-repo dir)
+          pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
       (when (and (or content (= type "unlink"))
@@ -48,7 +54,7 @@
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
-               (not (string/includes? path "logseq/pages-metadata.edn")))
+               (not= path pages-metadata-path))
           (let [backup? (not (string/blank? db-content))]
             (handle-add-and-change! repo path content db-content mtime backup?))
 
@@ -58,7 +64,7 @@
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
-               (not (string/includes? path "logseq/pages-metadata.edn")))
+               (not= path pages-metadata-path))
           (when-not (and
                      (string/includes? path (str "/" (config/get-journals-directory) "/"))
                      (or
@@ -79,6 +85,19 @@
           (do
             (println "reloading custom.css")
             (ui-handler/add-style-if-exists!))
+
+          ;; When metadata is added to watcher, update timestamps in db accordingly
+          ;; This event is not triggered on re-index
+          ;; Persistent metadata is gold standard when db is offline, so it's forced
+          (and (contains? #{"add"} type)
+               (= path pages-metadata-path))
+          (p/do! (repo-handler/update-pages-metadata! repo content true))
+          
+          ;; Change is triggered by external changes, so update to the db
+          ;; Don't forced update when db is online, but resolving conflicts
+          (and (contains? #{"change"} type)
+               (= path pages-metadata-path))
+          (p/do! (repo-handler/update-pages-metadata! repo content false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

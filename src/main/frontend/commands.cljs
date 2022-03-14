@@ -17,8 +17,7 @@
             [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]))
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -284,14 +283,13 @@
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
-     (when-not (mobile-util/is-native-platform?)
-       ["Draw" (fn []
-                 (let [file (draw/file-name)
-                       path (str config/default-draw-directory "/" file)
-                       text (util/format "[[%s]]" path)]
-                   (p/let [_ (draw/create-draw-with-default-content path)]
-                     (println "draw file created, " path))
-                   text)) "Draw a graph with Excalidraw"])
+     ["Draw" (fn []
+               (let [file (draw/file-name)
+                     path (str config/default-draw-directory "/" file)
+                     text (util/format "[[%s]]" path)]
+                 (p/let [_ (draw/create-draw-with-default-content path)]
+                   (println "draw file created, " path))
+                 text)) "Draw a graph with Excalidraw"]
 
      (when (util/zh-CN-supported?)
        ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
@@ -556,7 +554,7 @@
                     (count (util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 marker/marker-pattern
+                                                 (marker/marker-pattern format)
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker

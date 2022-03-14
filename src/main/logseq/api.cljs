@@ -208,29 +208,16 @@
         (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            exist? (fs/file-exists? path "settings")
-            _ (when-not exist? (fs/mkdir! (util/node-path.join path "settings")))
-            path (util/node-path.join path "settings" (str key ".json"))
-            _ (fs/create-if-not-exists repo "" path "{}")
-            json (fs/read-file "" path)]
-      [path (js/JSON.parse json)])))
+  ;; results [path data]
+  (plugin-handler/make-fn-to-load-dotdir-json "settings" "{}"))
 
 (def ^:export save_plugin_user_settings
   (fn [key ^js data]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+    ((plugin-handler/make-fn-to-save-dotdir-json "settings")
+     key (js/JSON.stringify data nil 2))))
 
 (def ^:export unlink_plugin_user_settings
-  (fn [key]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/unlink! repo path nil))))
+  (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
 
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]
@@ -463,7 +450,8 @@
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren)
+      nil)))
 
 (def ^:export update_block
   (fn [block-uuid content ^js _opts]
@@ -489,7 +477,7 @@
                     nil)
           src-block-uuid (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
           target-block-uuid (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
-      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to))))
+      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to) nil)))
 
 (def ^:export get_block
   (fn [id-or-uuid ^js opts]
@@ -507,7 +495,7 @@
                         ;; attached shallow children
                         (assoc block :block/children
                           (map #(list :uuid (get-in % [:data :block/uuid]))
-                            (outliner/get-children uuid))))]
+                            (db/get-block-immediate-children repo uuid))))]
             (bean/->js (normalize-keyword-for-json block))))))))
 
 (def ^:export get_current_block
@@ -634,6 +622,12 @@
   [id]
   (let [^js el (gdom/getElement id)]
     (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export set_focused_settings
+  [pid]
+  (when-let [plugin (state/get-plugin-by-id pid)]
+    (state/set-state! :plugin/focused-settings pid)
+    (state/pub-event! [:go/plugins-settings pid false (or (:name plugin) (:title plugin))])))
 
 (defn ^:export force_save_graph
   []

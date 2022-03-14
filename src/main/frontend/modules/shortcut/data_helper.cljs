@@ -139,13 +139,8 @@
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
         path (cfg/get-config-path)]
-    (when-let [content (db/get-file-no-sub path)]
-      (let [result (try
-                     (rewrite/parse-string content)
-                     (catch js/Error e
-                       (println "Parsing config file failed: ")
-                       (js/console.dir e)
-                       {}))
+    (when-let [content (db/get-file path)]
+      (let [result (common-handler/parse-config content)
             new-result (rewrite/update
                         result
                         :shortcuts
@@ -195,7 +190,9 @@
 
 (defn shortcuts->commands [handler-id]
   (let [m (get @config/config handler-id)]
+    ;; NOTE: remove nil vals, since some commands are conditional
     (->> m
+         (filter (comp some? val))
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)
                                (rename-keys {:binding :shortcut

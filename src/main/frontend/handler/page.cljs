@@ -559,7 +559,7 @@
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/update-state! :journals-length inc)))
+    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
 
 (defn update-public-attribute!
   [page-name value]
@@ -611,6 +611,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
+                       (config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 
@@ -660,7 +661,7 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
-              chosen (if (string/starts-with? chosen "New page: ")
+              chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
@@ -677,7 +678,7 @@
                                           (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern last-pattern
-                                           :end-pattern "]]"
+                                           :end-pattern (when wrapped? "]]")
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
@@ -715,6 +716,8 @@
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
+                       (not (model/journal-day-exists? repo
+                                                       (date/journal-title->int (date/today))))
                        (or (not file-exists?)
                            (and file-exists? (string/blank? file-content))))
               (create! title {:redirect? false

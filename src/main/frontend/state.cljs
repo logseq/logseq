@@ -17,7 +17,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(defonce state
+(defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
        current-graph (let [graph (storage/get :git/current-repo)]
                        (when graph (ipc/ipc "setCurrentGraph" graph))
@@ -28,11 +28,13 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
+     ;; :repo/loading-files? is only for github repos
      :repo/loading-files?                   {}
-     :repo/importing-to-db?                 nil
+     :repo/parsing-files?                   nil
      :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
@@ -47,7 +49,7 @@
      :draw?                                 false
      :db/restoring?                         nil
 
-     :journals-length                       2
+     :journals-length                       3
 
      :search/q                              ""
      :search/mode                           :global
@@ -55,6 +57,7 @@
      :search/graph-filters                  []
 
      ;; modals
+     :modal/id                              nil
      :modal/label                           ""
      :modal/show?                           false
      :modal/panel-content                   nil
@@ -69,7 +72,7 @@
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-     :ui/wide-mode?                         false
+     :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -168,6 +171,8 @@
      :plugin/updates-coming                 {}
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
+     :plugin/navs-settings?                 true
+     :plugin/focused-settings               nil            ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -202,7 +207,8 @@
      :srs/mode?                             false
 
      :srs/cards-due-count                   nil
-     })))
+
+     :reactive/query-dbs                    {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -1061,6 +1067,7 @@
   (:modal/show? @state))
 
 (declare set-modal!)
+(declare close-modal!)
 
 (defn get-sub-modals
   []
@@ -1093,11 +1100,14 @@
   ([all?-a-id]
    (if (true? all?-a-id)
      (swap! state assoc :modal/subsets [])
-     (let [id all?-a-id
+     (let [id     all?-a-id
+           mid    (:modal/id @state)
            modals (:modal/subsets @state)]
-       (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                             (dec (count modals)))]
-         (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals))))))
+       (if (and id (not (string/blank? mid)) (= id mid))
+         (close-modal!)
+         (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
+                          (dec (count modals)))]
+           (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
    (:modal/subsets @state)))
 
 (defn set-modal!
@@ -1105,10 +1115,11 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [label fullscreen? close-btn? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
+          :modal/id id
           :modal/label (or label (if center? "ls-modal-align-center" ""))
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
@@ -1120,6 +1131,7 @@
   (if (seq (get-sub-modals))
     (close-sub-modal!)
     (swap! state assoc
+           :modal/id nil
            :modal/label ""
            :modal/show? false
            :modal/fullscreen? false
@@ -1134,17 +1146,14 @@
   []
   (:file/writes @state))
 
+(defn get-reactive-custom-queries-chan
+  []
+  (:reactive/custom-queries @state))
+
 (defn get-write-chan-length
   []
   (let [c (get-file-write-chan)]
     (count (gobj/get c "buf"))))
-
-(defn add-tx!
-  ;; TODO: replace f with data for batch transactions
-  [f]
-  (when f
-    (when-let [chan (get-db-batch-txs-chan)]
-      (async/put! chan f))))
 
 (defn get-left-sidebar-open?
   []
@@ -1282,9 +1291,9 @@
   [repo]
   (get-in @state [:repo/loading-files? repo]))
 
-(defn set-importing-to-db!
+(defn set-parsing-files!
   [value]
-  (set-state! :repo/importing-to-db? value))
+  (set-state! :repo/parsing-files? value))
 
 (defn set-editor-last-input-time!
   [repo time]
@@ -1525,13 +1534,19 @@
   []
   (:ui/visual-viewport-state @state))
 
-(defn get-enabled-installed-plugins
-  [theme?]
-  (filterv
-    #(and (:iir %)
-          (not (get-in % [:settings :disabled]))
-          (= (boolean theme?) (:theme %)))
-    (vals (:plugin/installed-plugins @state))))
+(defn get-plugin-by-id
+  [id]
+  (when-let [id (and id (keyword id))]
+    (get-in @state [:plugin/installed-plugins id])))
+
+(defn get-enabled?-installed-plugins
+  ([theme?] (get-enabled?-installed-plugins theme? true false))
+  ([theme? enabled? include-unpacked?]
+   (filterv
+     #(and (if include-unpacked? true (:iir %))
+           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
+           (= (boolean theme?) (:theme %)))
+     (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
   []
@@ -1604,3 +1619,21 @@
 (defn sub-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+
+(defn get-reactive-query-db
+  [ks]
+  (get-in @state [:reactive/query-dbs ks]))
+
+(defn delete-reactive-query-db!
+  [ks]
+  (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
+
+(defn set-reactive-query-db!
+  [ks db-value]
+  (if db-value
+    (set-state! [:reactive/query-dbs ks] db-value)
+    (delete-reactive-query-db! ks)))
+
+(defn get-modal-id
+  []
+  (:modal/id @state))

@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
-            [frontend.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -10,8 +9,7 @@
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
-            [promesa.core :as p]
-            [frontend.util.pool :as pool]))
+            [frontend.config :as config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -36,9 +34,10 @@
 (defn default-config
   ([format]
    (default-config format {:export-heading-to-list? false}))
-  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options]}]
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
+           :parse_outline_only (or parse_outline_only? false)
            :heading_number false
            :keep_line_break true
            :format format
@@ -88,6 +87,18 @@
                      config
                      (or references default-references)))
 
+(defn remove-indentation-spaces
+  [s level remove-first-line?]
+  (let [lines (string/split-lines s)
+        [f & r] lines
+        body (map (fn [line]
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
+                      line))
+               (if remove-first-line? lines r))
+        content (if remove-first-line? body (cons f body))]
+    (string/join "\n" content)))
+
 (defn- ->vec
   [s]
   (if (string? s) [s] s))
@@ -100,7 +111,7 @@
        (distinct)))
 
 (defn collect-page-properties
-  [ast]
+  [ast parse-property]
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
@@ -120,7 +131,7 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (text/parse-property k v))]
+                                       (parse-property k v))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -169,7 +180,7 @@
             (let [{:keys [start_pos end_pos]} pos-meta
                   content (utf8/substring content start_pos end_pos)
                   spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
-                  content (if spaces (text/remove-indentation-spaces content (count spaces) true)
+                  content (if spaces (remove-indentation-spaces content (count spaces) true)
                               content)
                   block ["Src" (assoc (second block) :full_content content)]]
               [block pos-meta])
@@ -182,6 +193,8 @@
                "Hiccup"
                "Heading"} type))
 
+(def parse-property nil)
+
 (defn ->edn
   [content config]
   (if (string? content)
@@ -192,34 +205,11 @@
             (parse-json config)
             (util/json->clj)
             (update-src-full-content content)
-            (collect-page-properties)))
+            (collect-page-properties parse-property)))
       (catch js/Error e
         (js/console.error e)
         []))
     (log/error :edn/wrong-content-type content)))
-
-(defn ->edn-async
-  ([content config]
-   (->edn-async nil content config))
-  ([file content config]
-   (if util/node-test?
-     (p/resolved (->edn content config))
-     (try
-       (if (string/blank? content)
-         (p/resolved [])
-         (p/let [v (pool/add-parse-job! content config)]
-           (try
-             (-> v
-                 (util/json->clj)
-                 (update-src-full-content content)
-                 (collect-page-properties))
-             (catch js/Error e
-               (println :parser/failed file)
-               (js/console.error e)
-               (p/resolved [])))))
-       (catch js/Error e
-         (log/error :parser/failed e)
-         (p/resolved []))))))
 
 (defn opml->edn
   [content]
@@ -227,7 +217,7 @@
     (if (string/blank? content)
       {}
       (let [[headers blocks] (-> content (parse-opml) (util/json->clj))]
-        [headers (collect-page-properties blocks)]))
+        [headers (collect-page-properties blocks parse-property)]))
     (catch js/Error e
       (log/error :edn/convert-failed e)
       [])))
@@ -270,3 +260,21 @@
   [ast typ]
   (and (contains? #{"Drawer"} (ffirst ast))
        (= typ (second (first ast)))))
+
+(defn link?
+  [format link]
+  (when (string? link)
+    (let [[type link] (first (inline->edn link (default-config format)))
+          [ref-type ref-value] (:url link)]
+      (and (= "Link" type)
+           (or
+            ;; 1. url
+            (not (contains? #{"Page_ref" "Block_ref"} ref-type))
+
+            (and (contains? #{"Page_ref"} ref-type)
+                 (or
+                  ;; 2. excalidraw link
+                  (config/draw? ref-value)
+
+                  ;; 3. local asset link
+                  (boolean (config/local-asset? ref-value)))))))))

@@ -32,9 +32,10 @@
   (let [top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        repo (state/get-current-repo)]
+        current-format (:block/format current-block)
+        target-format (:block/format target-block)]
     (cond
-      (not= (:block/format current-block) (:block/format target-block))
+      (and current-format target-format (not= current-format target-format))
       (state/pub-event! [:notification/show
                          {:content [:div "Those two pages have different formats."]
                           :status :warning
@@ -49,9 +50,7 @@
          (util/format "((%s))" (str (:block/uuid current-block)))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
-          :before? top?})
-        (db/refresh! repo {:key :block/change
-                           :data [current-block target-block]}))
+          :before? top?}))
 
       (and (every? map? [current-block target-block])
            (moveable? current-block target-block))
@@ -71,9 +70,7 @@
           (outliner-core/move-subtree current-node target-node false)
 
           :else
-          (outliner-core/move-subtree current-node target-node true))
-        (db/refresh! repo {:key :block/change
-                           :data [(:data current-node) (:data target-node)]}))
+          (outliner-core/move-subtree current-node target-node true)))
 
       :else
       nil)))

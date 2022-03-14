@@ -3,17 +3,28 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  justify-content: space-between;
-  height: 2.5rem;
-  display: flex;
-  align-items: center;
+  /* height: 2.5rem; */
   z-index: 9999;
-  overflow-x: overlay;
-  overflow-y: hidden;
   transition: none;
+  display: flex;
+  justify-content: space-between;
 
   button {
-    padding: 10px;
+    padding: 7px 10px;
+  }
+  
+  .toolbar-commands {
+    justify-content: space-between;
+    display: flex;
+    align-items: center;
+    overflow-x: overlay;
+    overflow-y: hidden;
+    width: 95%;
+  }
+
+  .toolbar-hide-keyboard {
+    border-left: 1px solid;
+    border-color: var(--ls-quaternary-background-color);
   }
 }
 

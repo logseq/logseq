@@ -185,6 +185,17 @@ export type SimpleCommandKeybinding = {
   mac?: string // special for Mac OS
 }
 
+export type SettingSchemaDesc = {
+  key: string
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'object'
+  default: string | number | boolean | Array<any> | object | null
+  title: string
+  description: string // support markdown
+  inputAs?: 'color' | 'date' | 'datetime-local' | 'range'
+  enumChoices?: Array<string>
+  enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
+}
+
 export type ExternalCommandType =
   'logseq.command/run' |
   'logseq.editor/cycle-todo' |
@@ -635,7 +646,15 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    */
   provideUI (ui: UIOptions): this
 
+  useSettingsSchema (schemas: Array<SettingSchemaDesc>): this
+
   updateSettings (attrs: Record<string, any>): void
+
+  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook
+
+  showSettingsUI (): void
+
+  hideSettingsUI (): void
 
   setMainUIAttrs (attrs: Record<string, any>): void
 

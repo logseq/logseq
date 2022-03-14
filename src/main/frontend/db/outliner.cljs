@@ -1,5 +1,6 @@
 (ns frontend.db.outliner
-  (:require [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [clojure.set :as set]))
 
 (defn get-by-id
   [conn id]
@@ -9,13 +10,12 @@
 
 (defn get-by-parent-&-left
   [conn parent-id left-id]
-  (let [r (d/q '[:find (pull ?a [*])
-                 :in $ ?p ?l
-                 :where
-                 [?a :block/left ?l]
-                 [?a :block/parent ?p]]
-            @conn parent-id left-id)]
-    (ffirst r)))
+  (when (and parent-id left-id)
+    (let [lefts (:block/_left (d/entity @conn left-id))
+          children (:block/_parent (d/entity @conn parent-id))
+          ids (set/intersection lefts children)
+          id (:db/id (first ids))]
+      (when id (d/pull @conn '[*] id)))))
 
 ;; key [:block/children parent-id]
 

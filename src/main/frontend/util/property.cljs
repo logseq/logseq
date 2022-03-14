@@ -36,8 +36,9 @@
 
 (defn contains-properties?
   [content]
-  (and (string/includes? content properties-start)
-       (util/safe-re-find properties-end-pattern content)))
+  (when content
+    (and (string/includes? content properties-start)
+         (util/safe-re-find properties-end-pattern content))))
 
 (defn remove-empty-properties
   [content]
@@ -226,6 +227,7 @@
   (string/starts-with? s "---\n"))
 
 (defn insert-property
+  "Only accept nake content (without any indentation)"
   ([format content key value]
    (insert-property format content key value false))
   ([format content key value front-matter?]

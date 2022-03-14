@@ -5,7 +5,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.svg :as svg]
-            [frontend.context.i18n :as i18n]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -13,6 +13,7 @@
             [frontend.extensions.slide :as slide]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -24,7 +25,7 @@
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:a.button.fade-link.toggle
-       {:on-click state/toggle-sidebar-open?!}
+       {:on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
 (rum/defc block-cp < rum/reactive
@@ -185,7 +186,8 @@
                          right-el (js/document.getElementById "right-sidebar")]
                      (when right-el
                        (let [width (str (* right-el-ratio 100) "%")]
-                         (.setProperty (.-style right-el) "width" width)))))}}))
+                         (.setProperty (.-style right-el) "width" width)
+                         (ui-handler/persist-right-sidebar-width!)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
@@ -247,8 +249,7 @@
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen
-       {:class (if sidebar-open? "open" "closed")}
-       (when sidebar-open?
-         (sidebar-inner repo t blocks))])))
+    [:div#right-sidebar.cp__right-sidebar.h-screen
+     {:class (if sidebar-open? "open" "closed")}
+     (when sidebar-open?
+       (sidebar-inner repo t blocks))]))

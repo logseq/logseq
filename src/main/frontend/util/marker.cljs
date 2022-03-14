@@ -2,19 +2,13 @@
   (:require [clojure.string :as string]
             [frontend.util :as util]))
 
-(defn marker?
-  [s]
-  (contains?
-   #{"NOW" "LATER" "TODO" "DOING"
-     "DONE" "WAIT" "WAITING" "CANCELED" "CANCELLED" "STARTED" "IN-PROGRESS"}
-   (string/upper-case s)))
-
-(def marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\s?")
+(defn marker-pattern [format]
+  (re-pattern
+   (str "^" (when-not (= format :org) "(#*\\s*)?")
+        "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\\s?")))
 
 (def bare-marker-pattern
   #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
-
 
 (defn add-or-update-marker
   [content format marker]
@@ -30,7 +24,7 @@
         new-content
         (str (subs content 0 pos)
              (string/replace-first (subs content pos)
-                                   marker-pattern
+                                   (marker-pattern format)
                                    (str marker " ")))]
     new-content))
 

@@ -7,12 +7,13 @@
             [frontend.db.model]
             [frontend.db.query-custom]
             [frontend.db.query-react]
-            [frontend.db.react]
+            [frontend.db.react :as react]
             [frontend.db.utils]
             [frontend.db.persist :as db-persist]
             [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
@@ -35,15 +36,15 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
+  blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
-  get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
+  get-all-templates get-block-and-children sub-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-children-ids get-block-immediate-children get-block-page
   get-blocks-contents get-custom-css
-  get-date-scheduled-or-deadlines get-db-type get-file
-  get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id file-exists?
+  get-date-scheduled-or-deadlines get-db-type
+  get-file-blocks get-file-contents get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
   get-file-pages get-files get-files-blocks get-files-full get-journals-length
   get-latest-journals get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-linked-refs-refed-pages
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
@@ -54,9 +55,9 @@
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority set-key-value
-  transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
-  clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
+  get-current-page set-key-value
+  remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
+  clear-query-state-without-refs-and-embeds! kv q
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh!]
 
  [frontend.db.query-custom
@@ -98,7 +99,7 @@
   (when-let [old-job (get @persistent-jobs repo)]
     (js/clearTimeout old-job)))
 
-(defn- persist-if-idle!
+(defn persist-if-idle!
   [repo]
   (clear-repo-persistent-job! repo)
   (let [job (js/setTimeout
@@ -120,26 +121,32 @@
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (if (util/electron?)
-                 (when-not (:dbsync? (:tx-meta tx-report))
-                   ;; sync with other windows if needed
-                   (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
-                    (when graph-has-other-window?
-                      (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
-                 (do
-                   (state/set-last-transact-time! repo (util/time-ms))
-                   (persist-if-idle! repo)))
+               ;; reactive components
+               (react/refresh! repo tx-report)
 
-               ;; rebuild search indices
-               (let [data (:tx-data tx-report)
-                     datoms (filter
-                             (fn [datom]
-                               (contains? #{:block/name :block/content} (:a datom)))
-                             data)]
-                 (when-let [f @*sync-search-indice-f]
-                   (f datoms))))))
+               (when (and
+                      (not config/publishing?)
+                      (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs
+                 (if (util/electron?)
+                   (when-not (:dbsync? (:tx-meta tx-report))
+                     ;; sync with other windows if needed
+                     (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
+                       (when graph-has-other-window?
+                         (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
+                   (do
+                     (state/set-last-transact-time! repo (util/time-ms))
+                     (persist-if-idle! repo)))
 
-(defn- listen-and-persist!
+                 ;; rebuild search indices
+                 (let [data (:tx-data tx-report)
+                       datoms (filter
+                               (fn [datom]
+                                 (contains? #{:block/name :block/content} (:a datom)))
+                               data)]
+                   (when-let [f @*sync-search-indice-f]
+                     (f datoms)))))))
+
+(defn listen-and-persist!
   [repo]
   (when-let [conn (get-conn repo false)]
     (repo-listen-to-tx! repo conn)))
@@ -153,7 +160,7 @@
                        :listen-handler listen-and-persist!))))
 
 ;; TODO: only restore the current graph instead of all the graphs to speedup and
-;; reduce memory usage.
+;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
   (let [logged? (:name me)]

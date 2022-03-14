@@ -45,6 +45,21 @@ const common = {
     return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
   },
 
+  // NOTE: All assets from node_modules are copied to the output directory
+  syncAssetFiles (...params) {
+    return gulp.series(
+      () => gulp.src([
+          "./node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**",
+          "!**/*/i18n-*.js"
+        ])
+        .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
+      () => gulp.src("node_modules/@tabler/icons/iconfont/tabler-icons.min.css")
+        .pipe(gulp.dest(path.join(outputPath, 'css'))),
+      () => gulp.src("node_modules/@tabler/icons/iconfont/fonts/**")
+        .pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+    )(...params)
+  },
+
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   },
@@ -116,6 +131,6 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAllStatic,
-  gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keepSyncStaticInRt))
-exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
+  gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, css.buildCSS)

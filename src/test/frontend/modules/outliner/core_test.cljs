@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.core-test
   (:require [cljs.test :refer [deftest is use-fixtures testing] :as test]
-            [frontend.fixtures :as fixtures]
+            [frontend.test.fixtures :as fixtures]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as outliner-ds]
             [frontend.modules.outliner.tree :as tree]
@@ -8,7 +8,6 @@
 
 (use-fixtures :each
   fixtures/load-test-env
-  fixtures/react-impl
   fixtures/react-components
   fixtures/reset-db)
 
@@ -330,7 +329,7 @@
         (is (= [19 20] children-of-18))))))
 
 (comment
-  (run-test test-insert-nodes))
+  (cljs.test/run-tests test-insert-nodes))
 
 (comment
-  (run-tests))
+  (cljs.test/run-tests))

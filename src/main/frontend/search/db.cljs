@@ -1,33 +1,23 @@
 (ns frontend.search.db
-  (:refer-clojure :exclude [empty?])
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.text :as text]
             [frontend.util :as util]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]
             ["fuse.js" :as fuse]))
+
+;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
 (defonce indices (atom nil))
 
-(defn block->content
-  "Convert a block to the display contents for searching"
-  [{:block/keys [content format]}]
-  (->> (text/remove-level-spaces content format)
-       (drawer/remove-logbook)
-       (property/remove-built-in-properties format)))
-
 (defn block->index
   "Convert a block to the index for searching"
-  [{:block/keys [uuid page] :as block}]
-  (when-let [result (->> (block->content block)
-                         (util/search-normalize))]
+  [{:block/keys [uuid page content] :as block}]
+  (when-let [content (util/search-normalize content)]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page
-     :content result}))
+     :content content}))
 
 (defn build-blocks-indice
   ;; TODO: Remove repo effects fns further up the call stack. db fns need standardization on taking connection

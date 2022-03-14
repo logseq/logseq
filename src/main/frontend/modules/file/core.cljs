@@ -7,15 +7,29 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.util.property :as property]))
 
 (defn- indented-block-content
   [content spaces-tabs]
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
+(defn- content-with-collapsed-state
+  "Only accept nake content (without any indentation)"
+  [format content collapsed? properties]
+  (cond
+    collapsed?
+    (property/insert-property format content :collapsed true)
+
+    (and (:collapsed properties) (false? collapsed?))
+    (property/remove-property format :collapsed content)
+
+    :else
+    content))
+
 (defn transform-content
-  [{:block/keys [format pre-block? unordered content heading-level left page parent]} level {:keys [heading-to-list?]}]
+  [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
@@ -54,6 +68,7 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
+                        content (content-with-collapsed-state format content collapsed? properties)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
@@ -62,25 +77,26 @@
                     (str prefix sep new-content)))]
     content))
 
-(defn tree->file-content
-  [tree {:keys [init-level]
-         :as opts}]
-  (loop [block-contents []
-         [f & r] tree
-         level init-level]
-    (let [f (if (:block/collapsed? f)
-              (assoc-in f [:block/properties :collapsed] true)
-              f)]
+
+(defn- tree->file-content-aux
+  [tree {:keys [init-level] :as opts}]
+  (let [block-contents (transient [])]
+    (loop [[f & r] tree level init-level]
       (if (nil? f)
-        (string/join "\n" block-contents)
+        (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
               content (if page? nil (transform-content f level opts))
               new-content
-              (->> (if-let [children (seq (:block/children f))]
-                     [content (tree->file-content children {:init-level (inc level)})]
-                     [content])
-                   (remove nil?))]
-          (recur (into block-contents new-content) r level))))))
+              (if-let [children (seq (:block/children f))]
+                     (cons content (tree->file-content-aux children {:init-level (inc level)}))
+                     [content])]
+          (conj! block-contents new-content)
+          (recur r level))))))
+
+(defn tree->file-content
+  [tree opts]
+  (->> (tree->file-content-aux tree opts) (string/join "\n")))
+
 
 (def init-level 1)
 

@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
-            [datascript.core :as d]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -13,15 +12,17 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
@@ -31,12 +32,12 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            ["semver" :as semver]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
 
@@ -74,12 +75,9 @@
     close-fn)))
 
 (defmethod handle :graph/added [[_ repo]]
-  ;; TODO: add ast/version to db
-  (let [_conn (conn/get-conn repo false)
-        ; ast-version (d/datoms @conn :aevt :ast/version)
-        ]
-    (db/set-key-value repo :ast/version db-schema/ast-version)
-    (srs/update-cards-due-count!)))
+  (db/set-key-value repo :ast/version db-schema/ast-version)
+  (search-handler/rebuild-indices!)
+  (db/persist! repo))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
@@ -91,7 +89,8 @@
     (route-handler/redirect-to-home!))
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
-  (srs/update-cards-due-count!))
+  (srs/update-cards-due-count!)
+  (state/pub-event! [:graph/ready graph]))
 
 (defmethod handle :graph/switch [[_ graph]]
   (if (outliner-file/writes-finished?)
@@ -102,6 +101,9 @@
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
+
+(defmethod handle :graph/save [_]
+  (db/persist! (state/get-current-repo)))
 
 (defn get-local-repo
   []
@@ -172,7 +174,7 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards))
+  (state/set-modal! srs/global-cards {:id :srs}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
@@ -206,20 +208,10 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-(defmethod handle :after-db-restore [[_ repos]]
-  (mapv (fn [{url :url}]
-          ;; compare :ast/version
-          (let [db (conn/get-conn url)
-                ast-version (:v (first (d/datoms db :aevt :ast/version)))]
-            (when (and (not= config/local-repo url)
-                       (or (nil? ast-version)
-                           (. semver lt ast-version db-schema/ast-version)))
-              (notification/show!
-               [:p.content
-                (util/format "DB-schema updated, Please re-index repo [%s]" url)]
-               :warning
-               false))))
-        repos))
+;; TODO: when "only restore the current graph instead of all the graphs" is done,
+;; remove invoke of :graph/ready in graph/switch and restore-and-setup!
+(defmethod handle :graph/ready [[_ repo]]
+  (search-handler/rebuild-indices-when-stale! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -238,6 +230,14 @@
 
 (defmethod handle :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
+
+(defmethod handle :go/plugins-settings [[_ pid nav? title]]
+  (if pid
+    (do
+     (state/set-state! :plugin/focused-settings pid)
+     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+     (plugin/open-focused-settings-modal! title))
+    (state/close-sub-modal! "ls-focused-settings-modal")))
 
 
 (defmethod handle :redirect-to-home [_]
@@ -262,7 +262,7 @@
 
 (defmethod handle :mobile/keyboard-did-show [[_]]
   (when-let [input (state/get-input)]
-    (util/make-el-into-viewport input)))
+    (util/make-el-cursor-position-into-center-viewport input)))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
@@ -291,6 +291,25 @@
         ;; try to open waiting updates list
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
+
+(defmethod handle :backup/broken-config [[_ repo content]]
+  (when (and repo content)
+    (let [path (config/get-config-path)
+          broken-path (string/replace path "/config.edn" "/broken-config.edn")]
+      (p/let [_ (fs/write-file! repo (config/get-repo-dir repo) broken-path content {})
+              _ (file-handler/alter-file repo path config/config-default-content {:skip-compare? true})]
+        (notification/show!
+         [:p.content
+          "It seems that your config.edn is broken. We've restored it with the default content and saved the previous content to the file logseq/broken-config.edn."]
+         :warning
+         false)))))
+
+(defmethod handle :file-watcher/changed [[_ ^js event]]
+  (fs-watcher/handle-changed!
+   (.-event event)
+   (update (js->clj event :keywordize-keys true)
+           :path
+           js/decodeURI)))
 
 (defn run!
   []

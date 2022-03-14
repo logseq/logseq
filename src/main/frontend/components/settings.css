@@ -68,8 +68,16 @@
     > article {
       flex: 1;
       padding: 0 12px 12px;
-      max-height: 80vh;
-      /* overflow: auto; */
+      max-height: 70vh;
+      overflow: auto;
+      margin-right: -17px;
+      margin-bottom: -17px;
+    }
+
+    &.no-aside {
+      > article {
+        padding-left: 0;
+      }
     }
 
     .panel-wrap {
@@ -245,6 +253,30 @@
         &:hover {
           text-decoration: underline;
         }
+      }
+    }
+  }
+
+  &-network-proxy-panel {
+    margin: -15px;
+
+    label {
+      display: flex;
+      align-items: center;
+
+      > select {
+        min-width: 100px;
+        margin-left: -14px !important;
+        padding: 4px 10px !important;
+      }
+
+      > input[disabled] {
+        opacity: .5;
+      }
+
+      > strong {
+        font-weight: 500;
+        width: 60px;
       }
     }
   }

@@ -2,7 +2,7 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.handler.link :as link]))
+            [frontend.format.mldoc :as mldoc]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -231,26 +231,6 @@
   [img-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
 
-(defn scheduled-deadline-dash->star
-  [content]
-  (-> content
-      (string/replace "- TODO -> DONE [" "* TODO -> DONE [")
-      (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
-      (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
-      (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))
-
-(defn remove-indentation-spaces
-  [s level remove-first-line?]
-  (let [lines (string/split-lines s)
-        [f & r] lines
-        body (map (fn [line]
-                    (if (string/blank? (util/safe-subs line 0 level))
-                      (util/safe-subs line level)
-                      line))
-               (if remove-first-line? lines r))
-        content (if remove-first-line? body (cons f body))]
-    (string/join "\n" content)))
-
 (defn namespace-page?
   [p]
   (and (string? p)
@@ -357,30 +337,32 @@
   (atom #{"background-color" "background_color"}))
 
 (defn parse-property
-  [k v]
-  (let [k (name k)
-        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
-        v (string/trim v)]
-    (cond
-      (contains? #{"title" "filters"} k)
-      v
+  ([k v]
+   (parse-property :markdown k v))
+  ([format k v]
+   (let [k (name k)
+         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
+         v (string/trim v)]
+     (cond
+       (contains? #{"title" "filters"} k)
+       v
 
-      (= v "true")
-      true
-      (= v "false")
-      false
+       (= v "true")
+       true
+       (= v "false")
+       false
 
-      (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
-      (util/safe-parse-int v)
+       (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
+       (util/safe-parse-int v)
 
-      (util/wrapped-by-quotes? v) ; wrapped in ""
-      v
+       (util/wrapped-by-quotes? v) ; wrapped in ""
+       v
 
-      (contains? @non-parsing-properties (string/lower-case k))
-      v
+       (contains? @non-parsing-properties (string/lower-case k))
+       v
 
-      (link/link? v)
-      v
+       (mldoc/link? format v)
+       v
 
-      :else
-      (split-page-refs-without-brackets v))))
+       :else
+       (split-page-refs-without-brackets v)))))

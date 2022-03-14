@@ -18,6 +18,10 @@
               (.. win -webContents
                   (send (name type) (bean/->js payload))))))
 
+(defn dotdir-file?
+  [file]
+  (and file (string/starts-with? (path/normalize file) cfgs/dot-root)))
+
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
 ;; Zipball https://api.github.com/repos/{owner}/{repo}/zipball
@@ -49,7 +53,7 @@
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
-    (p/let [^js res (fetch dl-url #js {:timeout 30000})
+    (p/let [^js res (fetch dl-url {:timeout 30000})
             _ (when-not (.-ok res) (throw (js/Error. :download-network-issue)))
             frm-zip (p/create
                       (fn [resolve1 reject1]
