@@ -208,13 +208,12 @@
       (repo/sync-status current-repo)
 
       (when show-open-folder?
-        [:a.text-sm.font-medium.button
-         {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
-         [:div.flex.flex-row.text-center.open-button__inner.items-center
-          (ui/icon "folder-plus")
-          (when-not config/mobile?
-            [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-             (t :open)])]])
+        [:a.text-sm.font-medium.button.add-graph-btn.flex.items-center
+         {:on-click #(route-handler/redirect! {:to :repo-add})}
+         (ui/icon "folder-plus")
+         (when-not config/mobile?
+           [:strong {:style {:margin-top (if electron-mac? 0 2)}}
+            (t :on-boarding/add-graph)])])
 
       (when config/publishing?
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
