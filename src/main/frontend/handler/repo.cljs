@@ -256,7 +256,7 @@
       (js/setTimeout f 100))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
@@ -279,7 +279,8 @@
     (cond
       (and (not (seq diffs)) nfs-files)
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true
-                                                       :new-graph? new-graph?})
+                                                       :new-graph? new-graph?
+                                                       :empty-graph? empty-graph?})
 
       (and first-clone? (not nfs-files))
       (->

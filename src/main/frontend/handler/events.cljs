@@ -75,12 +75,14 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo opts]]
+(defmethod handle :graph/added [[_ repo {:keys [empty-graph? re-render?] :as opts}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)
   (when (state/setups-picker?)
-    (route-handler/redirect-to-home!)))
+    (if empty-graph?
+      (route-handler/redirect! {:to :import})
+      (route-handler/redirect-to-home!))))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
