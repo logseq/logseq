@@ -140,16 +140,6 @@
   (when-let [repo (state/get-current-repo)]
     (page-blocks-cp repo page {:sidebar? true})))
 
-(rum/defc failed-query-fallback
-  [query]
-  [:section.border.mt-1.p-1.block-content-fallback-ui
-   [:div.flex.justify-between.items-center.px-1
-    [:h5.text-red-600.pb-1 "Failed default query:"]
-    [:a.text-xs.opacity-50.hover:opacity-80
-     {:href "https://github.com/logseq/logseq/issues"
-      :target "_blank"} "report issue"]]
-   [:pre.m-0.text-sm (pr-str query)]])
-
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
@@ -159,7 +149,7 @@
          (for [query queries]
            (ui/catch-error
             (rum/with-key
-              (failed-query-fallback query)
+              (ui/block-error "Failed default query:" {:content (pr-str query)})
               (str repo "-custom-query-" (:query query)))
             (rum/with-key
               (block/custom-query {:attr {:class "mt-10"}
