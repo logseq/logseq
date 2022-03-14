@@ -109,6 +109,17 @@
       opacity: .9;
     }
   }
+
+  .add-graph-btn {
+    border: 1px dashed var(--ls-border-color);
+    padding: 0 8px;
+
+    strong {
+      padding: 0 10px;
+      position: relative;
+      top: 1px;
+    }
+  }
 }
 
 .is-electron.is-mac .cp__header {
