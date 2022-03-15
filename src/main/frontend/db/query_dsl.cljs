@@ -494,35 +494,30 @@ Some bindings in this fn:
   [s]
   (when (and (string? s)
              (not (string/blank? s)))
-    (try
-      (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
-            form (some-> s
-                         (pre-transform)
-                         (reader/read-string))
-            sort-by (atom nil)
-            blocks? (atom nil)
-            sample (atom nil)
-            {result :query rules :rules}
-            (when form (build-query form {:sort-by sort-by
-                                          :blocks? blocks?
-                                          :sample sample}))
-            result' (when (seq result)
-                      (let [key (if (coll? (first result))
-                                  (keyword (ffirst result))
-                                  (keyword (first result)))
-                            result (case key
-                                     :and
-                                     (rest result)
-
-                                     result)]
-                        (add-bindings! form result)))]
-        {:query result'
-         :rules (mapv rules/query-dsl-rules rules)
-         :sort-by @sort-by
-         :blocks? (boolean @blocks?)
-         :sample sample})
-      (catch js/Error e
-        (log/error :query-dsl/parse-error e)))))
+    (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
+          form (some-> s
+                       (pre-transform)
+                       (reader/read-string))
+          sort-by (atom nil)
+          blocks? (atom nil)
+          sample (atom nil)
+          {result :query rules :rules}
+          (when form (build-query form {:sort-by sort-by
+                                        :blocks? blocks?
+                                        :sample sample}))
+          result' (when (seq result)
+                    (let [key (if (coll? (first result))
+                                ;; Only queries for this branch are not's like:
+                                ;; [(not (page-ref ?b "page 2"))]
+                                (keyword (ffirst result))
+                                (keyword (first result)))]
+                      (add-bindings! form
+                                     (if (= key :and) (rest result) result))))]
+      {:query result'
+       :rules (mapv rules/query-dsl-rules rules)
+       :sort-by @sort-by
+       :blocks? (boolean @blocks?)
+       :sample sample})))
 
 ;; Main fns
 ;; ========
