@@ -38,6 +38,7 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
+            [clojure.core.async :as async]
             [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
@@ -75,7 +76,7 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo {:keys [empty-graph? re-render?] :as opts}]]
+(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)
@@ -109,7 +110,7 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo) 
+  (p/let [current-repo (state/get-current-repo)
           _ (repo-handler/persist-db! current-repo persist-db-noti-m)
           _ (repo-handler/persist-otherwindow-db! graph)
           _ (repo-handler/restore-and-setup-repo! graph)]
