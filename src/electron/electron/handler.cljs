@@ -31,15 +31,15 @@
 (defn- readdir
   [dir]
   (->> (tree-seq
-         (fn [^js f]
-           (.isDirectory (fs/statSync f) ()))
-         (fn [d]
-           (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
-             (->> files
-                  (remove #(.isSymbolicLink ^js %))
-                  (remove #(string/starts-with? (.-name ^js %) "."))
-                  (map #(.join path d (.-name %))))))
-         dir)
+        (fn [^js f]
+          (.isDirectory (fs/statSync f) ()))
+        (fn [d]
+          (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
+            (->> files
+                 (remove #(.isSymbolicLink ^js %))
+                 (remove #(string/starts-with? (.-name ^js %) "."))
+                 (map #(.join path d (.-name %))))))
+        dir)
        (doall)
        (vec)))
 
@@ -50,8 +50,8 @@
   (if (plugin/dotdir-file? path)
     (fs/unlinkSync path)
     (let [file-name   (-> (string/replace path (str repo "/") "")
-                        (string/replace "/" "_")
-                        (string/replace "\\" "_"))
+                          (string/replace "/" "_")
+                          (string/replace "\\" "_"))
           recycle-dir (str repo "/logseq/.recycle")
           _           (fs-extra/ensureDirSync recycle-dir)
           new-path    (str recycle-dir "/" file-name)]
@@ -147,7 +147,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-         #{:org :markdown :md :edn :json :js :css :excalidraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw})
 
 (defn get-ext
   [p]
@@ -158,16 +158,16 @@
 (defn- get-files
   [path]
   (let [result (->>
-                 (readdir path)
-                 (remove (partial utils/ignored-path? path))
-                 (filter #(contains? allowed-formats (get-ext %)))
-                 (map (fn [path]
-                        (let [stat (fs/statSync path)]
-                          (when-not (.isDirectory stat)
-                            {:path    (utils/fix-win-path! path)
-                             :content (utils/read-file path)
-                             :stat    stat}))))
-                 (remove nil?))]
+                (readdir path)
+                (remove (partial utils/ignored-path? path))
+                (filter #(contains? allowed-formats (get-ext %)))
+                (map (fn [path]
+                       (let [stat (fs/statSync path)]
+                         (when-not (.isDirectory stat)
+                           {:path    (utils/fix-win-path! path)
+                            :content (utils/read-file path)
+                            :stat    stat}))))
+                (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defn open-dir-dialog []
@@ -192,12 +192,12 @@
         (string/replace "/" "++")
         (string/replace ":" "+3A+"))))
 
- (defn- graph-name->path
-   [graph-name]
-   (when graph-name
-     (-> graph-name
-         (string/replace "+3A+" ":")
-         (string/replace "++" "/"))))
+(defn- graph-name->path
+  [graph-name]
+  (when graph-name
+    (-> graph-name
+        (string/replace "+3A+" ":")
+        (string/replace "++" "/"))))
 
 (defn- get-graphs-dir
   []
@@ -399,6 +399,23 @@
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
+(defmethod handle :persistGraph [^js win [_ graph]]
+  ;; call a window holds the specific graph to persist
+  (let [dir (utils/get-graph-dir graph)
+        windows (win/get-graph-all-windows dir)
+        windows (filter #(.isVisible %) windows)
+        tar-graph-win (first windows)
+        _ (prn "persist graph" graph)]
+    (if tar-graph-win
+      (utils/send-to-renderer tar-graph-win "persistGraph" graph)
+      (utils/send-to-renderer win "persistGraphDone" graph)))) ;; if no such graph, skip directly
+
+(defmethod handle :persistGraphDone [^js _win [_ graph]]
+  ;; when graph is persisted, broadcast it to all windows
+  (let [windows (win/get-all-windows)]
+    (doseq [window windows]
+      (utils/send-to-renderer window "persistGraphDone" graph))))
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
@@ -410,6 +427,6 @@
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (println "IPC error: " {:event event
                                              :args args-js}
-                             e))
+                              e))
                    e))))
     #(.removeHandler ipcMain main-channel)))
