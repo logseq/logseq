@@ -365,7 +365,12 @@ tags: other
   (testing "page-ref queries"
 
     (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content (dsl-query "[[page 2]]"))))
+           (map :block/content (dsl-query "[[page 2]]")))
+        "Page ref arg")
+
+    (is (= ["b2 [[page 2]] #tag1"]
+           (map :block/content (dsl-query "#tag1")))
+        "Tag arg")
 
     (is (= []
            (map :block/content (dsl-query "[[blarg]]")))
