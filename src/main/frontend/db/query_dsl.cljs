@@ -187,6 +187,9 @@
                     (and (zero? level) (contains? #{'and 'or} fe))
                     result
 
+                    (and (= 'not fe) (some? current-filter))
+                    result
+
                     :else
                     [result])]
         (reset! vars vars')
