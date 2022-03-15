@@ -174,31 +174,34 @@ body[data-page=import] {
 
         &.importer {
           background-color: var(--ls-tertiary-background-color);
-          padding-top: 150px;
+          padding-top: 80px;
           position: relative;
 
           > section {
             flex: unset;
+            padding: 0 30px;
 
             h1 {
-              font-size: 28px;
+              font-size: 26px;
               font-weight: 500;
             }
 
             h2 {
-              font-size: 19px;
-              line-height: 3em;
+              font-size: 14px;
+              padding-top: 15px;
+              padding-bottom: 15px;
             }
 
             &.d {
               width: 100%;
-              padding: 40px 150px;
+              padding: 20px 0;
 
               > label {
                 width: unset;
                 height: 80px;
                 flex: 1;
                 margin: 0 15px;
+                margin-bottom: 10px;
 
                 > span {
                   &:first-child {
@@ -221,16 +224,6 @@ body[data-page=import] {
                 small {
                   font-size: 11px;
                 }
-              }
-            }
-
-            &.e {
-              position: absolute;
-              bottom: -50px;
-              right: 15px;
-
-              a.button {
-                padding: 4px 10px;
               }
             }
           }
@@ -281,6 +274,38 @@ body[data-page=import] {
 
             &.b {
               display: flex;
+            }
+          }
+
+          &.importer {
+            padding-top: 150px;
+
+            > section {
+              padding: 0;
+
+              h1 {
+                font-size: 28px;
+              }
+
+              h2 {
+                font-size: 19px;
+                line-height: 3em;
+                padding: unset;
+              }
+
+              &.d {
+                padding: 40px 150px;
+              }
+
+              &.e {
+                position: absolute;
+                bottom: -50px;
+                right: 15px;
+
+                a.button {
+                  padding: 4px 10px;
+                }
+              }
             }
           }
         }
