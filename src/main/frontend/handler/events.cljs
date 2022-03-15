@@ -1,7 +1,6 @@
 (ns frontend.handler.events
   (:refer-clojure :exclude [run!])
-  (:require [clojure.core.async :as async]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -37,6 +36,7 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
+            [clojure.core.async :as async]
             [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
@@ -74,7 +74,7 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo {:keys [empty-graph? re-render?] :as opts}]]
+(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (db/persist! repo)

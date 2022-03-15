@@ -8,7 +8,6 @@
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.external :as external]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.onboarding.setups :as setups]
             [frontend.extensions.zotero :as zotero]))
