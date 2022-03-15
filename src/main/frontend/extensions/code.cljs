@@ -150,7 +150,7 @@
   (get (state/get-config)
        :editor/extra-codemirror-options {}))
 
-(defn- save-file-or-block-when-blur-or-esc!
+(defn- save-file-or-block!
   [editor textarea config state]
   (.save editor)
   (let [value (gobj/get textarea "value")
@@ -187,6 +187,15 @@
         :else
         nil))))
 
+;; Avoid reentrancy
+(def *code-saving (atom false))
+(defn save-file-or-block-when-blur-or-esc!
+  [editor textarea config state]
+  (when-not @*code-saving
+    (reset! *code-saving true)
+    (save-file-or-block! editor textarea config state)
+    (reset! *code-saving false)))
+
 (defn- text->cm-mode
   ([text]
    (text->cm-mode text :name))
@@ -206,8 +215,7 @@
 
 (defn render!
   [state]
-  (let [esc-pressed? (atom nil)
-        [config id attr _code theme] (:rum/args state)
+  (let [[config id attr _code theme] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -228,13 +236,10 @@
                           {:mode mode
                            :extraKeys #js {"Esc"
                                         (fn [cm]
-                                          (reset! esc-pressed? true)
                                           (save-file-or-block-when-blur-or-esc! cm textarea config state)
                                           (when-let [block-id (:block/uuid config)]
                                             (let [block (db/pull [:block/uuid block-id])]
-                                              (editor-handler/edit-block! block :max block-id)))
-                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                          (js/setTimeout #(reset! esc-pressed? false) 10))}})
+                                              (editor-handler/edit-block! block :max block-id))))}})
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
@@ -248,8 +253,7 @@
         (.on editor "blur" (fn [_cm e]
                              (when e (util/stop e))
                              (state/set-block-component-editing-mode! false)
-                             (when-not @esc-pressed?
-                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
+                             (save-file-or-block-when-blur-or-esc! editor textarea config state)))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (state/clear-selection!)

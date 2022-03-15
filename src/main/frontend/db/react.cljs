@@ -348,7 +348,9 @@
                                result))
                        db (or db' db)
                        f #(execute-query! repo-url db k tx cache)]
-                   (if custom?
+                   (if (and custom?
+                            ;; modifying during cards review need to be executed immediately
+                            (not (:cards-query? (meta query))))
                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
                      (f)))
                  (catch js/Error e

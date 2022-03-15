@@ -723,6 +723,18 @@
       error-view)
     view))
 
+(rum/defc block-error
+  "Well styled error for blocks that error unexpectedly during render"
+  [title {:keys [content section-attrs]}]
+  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+   section-attrs
+   [:div.flex.justify-between.items-center.px-1
+    [:h5.text-red-600.pb-1 title]
+    [:a.text-xs.opacity-50.hover:opacity-80
+     {:href "https://github.com/logseq/logseq/issues"
+      :target "_blank"} "report issue"]]
+   [:pre.m-0.text-sm content]])
+
 (rum/defc select
   [options on-change class]
   [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20

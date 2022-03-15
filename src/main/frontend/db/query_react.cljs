@@ -28,7 +28,8 @@
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
     (= :current-page input)
-    (string/lower-case (state/get-current-page))
+    ;; This sometimes runs when there isn't a current page e.g. :home route
+    (some-> (state/get-current-page) string/lower-case)
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
