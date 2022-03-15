@@ -881,7 +881,7 @@
             [:p.warning.text-sm "Block ref nesting is too deep"]
             (block-reference (assoc config
                                     :reference? true
-                                    :link-depth (inc link-depth) 
+                                    :link-depth (inc link-depth)
                                     :block/uuid id)
                              id label*)))
 
@@ -1148,8 +1148,8 @@
                    f (sci/eval-string fn-string)]
                (when (fn? f)
                  (try (f query-result)
-                      (catch js/Error e
-                        (js/console.error e)))))))
+                   (catch js/Error e
+                     (js/console.error e)))))))
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
@@ -1951,18 +1951,6 @@
                       {:block block}))}
         block-refs-count]])))
 
-(rum/defc block-content-fallback
-  [edit-input-id block]
-  (let [content (:block/content block)]
-    [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
-     {:on-click #(state/set-editing! edit-input-id content block "")}
-     [:div.flex.justify-between.items-center.px-1
-      [:h5.text-red-600.pb-1 "Block Render Error:"]
-      [:a.text-xs.opacity-50.hover:opacity-80
-       {:href "https://github.com/logseq/logseq/issues"
-        :target "_blank"} "report issue"]]
-     [:pre.m-0.text-sm content]]))
-
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1985,7 +1973,10 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
-         (block-content-fallback edit-input-id block)
+         (ui/block-error "Block Render Error:"
+                  {:content (:block/content block)
+                   :section-attrs
+                   {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
@@ -2784,16 +2775,11 @@
 
         ["Custom" "query" _options _result content]
         (try
-          (let [query (reader/read-string content)
-                query (if (string? query)
-                        (string/trim query)
-                        query)]
+          (let [query (reader/read-string content)]
             (custom-query config query))
-          (catch js/Error e
-            (println "read-string error:")
-            (js/console.error e)
-            [:div.warning {:title "Invalid query"}
-             content]))
+          (catch :default e
+            (log/error :read-string-error e)
+            (ui/block-error "Invalid query:" {:content content})))
 
         ["Custom" "note" _options result _content]
         (admonition config "note" result)

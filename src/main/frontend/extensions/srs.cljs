@@ -498,7 +498,7 @@
   rum/reactive
   db-mixins/query
   [blocks option card-index]
-  (let [option (update option :random-mode? (fn [v] (if (boolean? v) v @v)))
+  (let [option (update option :random-mode? (fn [v] (if (util/atom? v) @v v)))
         blocks (if (fn? blocks) (blocks) blocks)
         blocks (if (:random-mode? option)
                  (shuffle blocks)

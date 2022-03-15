@@ -238,20 +238,14 @@
                       (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
-(rum/defc mobile-bar-command [command-handler icon]
+(rum/defc mobile-bar-command [command-handler icon & [event?]]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
-                      (command-handler))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(rum/defc mobile-bar-command-with-event [command-handler icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (command-handler e))}
+                      (if event?
+                        (command-handler e)
+                       (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar < rum/reactive
@@ -285,8 +279,8 @@
       (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
       (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
       (mobile-bar-command editor-handler/html-link-format! "link")
-      (mobile-bar-command-with-event history/undo! "rotate")
-      (mobile-bar-command-with-event history/redo! "rotate-clockwise")
+      (mobile-bar-command history/undo! "rotate" true )
+      (mobile-bar-command history/redo! "rotate-clockwise" true)
       (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
       (mobile-bar-command editor-handler/bold-format! "bold")
       (mobile-bar-command editor-handler/italics-format! "italic")
