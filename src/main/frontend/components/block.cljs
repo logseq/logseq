@@ -68,9 +68,8 @@
   ([s warn?]
    (try
      (reader/read-string s)
-     (catch js/Error e
-       (println "read-string error:")
-       (js/console.error e)
+     (catch :default e
+       (log/error :read-string-error e :string s)
        (when warn?
          [:div.warning {:title "read-string failed"}
           s])))))
@@ -2463,21 +2462,21 @@
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [q (:query query)
-                           result (query-dsl/query (state/get-current-repo) q)]
+                           form (safe-read-string q false)]
                        (cond
-                         (and (util/electron?) (string? result)) ; full-text search
-                         (if (string/blank? result)
-                           (atom [])
-                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result)))))
+                          ;; Searches like 'foo' or 'foo bar' come back as symbols
+                         ;; and are meant to go directly to full text search
+                         (and (util/electron?) (symbol? form)) ; full-text search
+                         (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                (when (seq blocks)
+                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                    (reset! result-atom result))))
 
-                         (string? result)
+                         (symbol? form)
                          (atom nil)
 
                          :else
-                         result))
+                         (query-dsl/query (state/get-current-repo) q)))
                      (db/custom-query query))
         query-atom (if (instance? Atom query-atom)
                      query-atom

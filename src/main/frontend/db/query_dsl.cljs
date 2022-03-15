@@ -374,7 +374,7 @@ Some bindings in this fn:
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
   ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
-  ; {:post [(or (nil? %) (map? %))]}
+   ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
@@ -498,31 +498,29 @@ Some bindings in this fn:
       (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
             form (some-> s
                          (pre-transform)
-                         (reader/read-string))]
-        (if (symbol? form)
-          (str form)
-          (let [sort-by (atom nil)
-                blocks? (atom nil)
-                sample (atom nil)
-                {result :query rules :rules}
-                (when form (build-query form {:sort-by sort-by
-                                              :blocks? blocks?
-                                              :sample sample}))
-                result' (when (seq result)
-                          (let [key (if (coll? (first result))
-                                      (keyword (ffirst result))
-                                      (keyword (first result)))
-                                result (case key
-                                         :and
-                                         (rest result)
+                         (reader/read-string))
+            sort-by (atom nil)
+            blocks? (atom nil)
+            sample (atom nil)
+            {result :query rules :rules}
+            (when form (build-query form {:sort-by sort-by
+                                          :blocks? blocks?
+                                          :sample sample}))
+            result' (when (seq result)
+                      (let [key (if (coll? (first result))
+                                  (keyword (ffirst result))
+                                  (keyword (first result)))
+                            result (case key
+                                     :and
+                                     (rest result)
 
-                                         result)]
-                            (add-bindings! form result)))]
-            {:query result'
-             :rules (mapv rules/query-dsl-rules rules)
-             :sort-by @sort-by
-             :blocks? (boolean @blocks?)
-             :sample sample})))
+                                     result)]
+                        (add-bindings! form result)))]
+        {:query result'
+         :rules (mapv rules/query-dsl-rules rules)
+         :sort-by @sort-by
+         :blocks? (boolean @blocks?)
+         :sample sample})
       (catch js/Error e
         (log/error :query-dsl/parse-error e)))))
 
