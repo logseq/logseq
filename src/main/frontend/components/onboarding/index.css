@@ -47,7 +47,6 @@ body[data-page=import] {
         width: 1040px;
         height: 510px;
         border-radius: 20px;
-        overflow: hidden;
 
         > section {
           flex: 1;
@@ -167,6 +166,7 @@ body[data-page=import] {
         &.importer {
           background-color: var(--ls-tertiary-background-color);
           padding-top: 150px;
+          position: relative;
 
           > section {
             flex: unset;
@@ -212,6 +212,16 @@ body[data-page=import] {
                 small {
                   font-size: 11px;
                 }
+              }
+            }
+
+            &.e {
+              position: absolute;
+              bottom: -50px;
+              right: 15px;
+
+              a.button {
+                padding: 4px 10px;
               }
             }
           }

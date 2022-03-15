@@ -89,7 +89,7 @@
 (defonce *opml-imported-pages (atom nil))
 
 (rum/defc importer < rum/reactive
-  []
+  [{:keys [query-params]}]
   (let [roam-importing? (rum/react *roam-importing?)
         opml-importing? (rum/react *opml-importing?)
         finished-cb     (fn []
@@ -159,4 +159,8 @@
                                           (finished-cb))))))
                                 (.readAsText reader file)))
                             (notification/show! "Please choose a OPML file."
-                              :error))))}]]]])))
+                              :error))))}]]]
+
+       (when (= "picker" (:from query-params))
+         [:section.e
+          [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])])))

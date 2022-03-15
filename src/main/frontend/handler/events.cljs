@@ -81,7 +81,7 @@
   (db/persist! repo)
   (when (state/setups-picker?)
     (if empty-graph?
-      (route-handler/redirect! {:to :import})
+      (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!))))
 
 (defn- graph-switch [graph]
