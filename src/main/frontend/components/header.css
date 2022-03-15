@@ -185,13 +185,19 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
+  user-select: none;
 
   &:hover, &.active {
     opacity: 1;
     background: none;
+
     @screen md {
         background: var(--ls-tertiary-background-color);
     }
+  }
+
+  &:active {
+    opacity: .7;
   }
 }
 
