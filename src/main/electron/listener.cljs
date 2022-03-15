@@ -1,5 +1,6 @@
 (ns electron.listener
   (:require [frontend.state :as state]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
@@ -13,11 +14,13 @@
 
 (defn persist-dbs!
   []
-  (repo-handler/persist-all-dbs! {:before     #(notification/show!
-                                                (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
-                                                :warning)
-                                  :on-success #(ipc/ipc "persistent-dbs-saved")
-                                  :on-error   #(ipc/ipc "persistent-dbs-error")}))
+  ;; only persist current db!
+  ;; TODO rename to persist-db
+  (repo-handler/persist-db! {:before     #(notification/show!
+                                           (ui/loading (t :graph/persist))
+                                           :warning)
+                             :on-success #(ipc/ipc "persistent-dbs-saved")
+                             :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
 (defn listen-persistent-dbs!
   []
@@ -69,7 +72,24 @@
                              tx-data (db/string->db (:data tx-data))]
                          (when-let [conn (db/get-conn graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
-                         (ui-handler/re-render-root!)))))
+                         (ui-handler/re-render-root!))))
+
+  (js/window.apis.on "persistGraph"
+                     ;; electron is requesting window for persisting a graph in it's db
+                     (fn [data]
+                       (let [repo (bean/->clj data)
+                             before-f #(notification/show!
+                                        (ui/loading (t :graph/persist))
+                                        :warning)
+                             after-f #(ipc/ipc "persistGraphDone" repo)
+                             error-f (fn []
+                                       (after-f)
+                                       (notification/show! (t :graph/persist-error)
+                                                           :error))
+                             handlers {:before     before-f
+                                       :on-success after-f
+                                       :on-error   error-f}]
+                         (repo-handler/persist-db! repo handlers)))))
 
 (defn listen!
   []

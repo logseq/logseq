@@ -672,13 +672,38 @@
               (on-error)))))
 
 (defn persist-db!
-  [repo {:keys [before on-success on-error]}]
-  (->
-   (p/do!
-    (before)
-    (metadata-handler/set-pages-metadata! repo)
-    (db/persist! repo)
-    (on-success))
-   (p/catch (fn [error]
-              (js/console.error error)
-              (on-error)))))
+  ([]
+   (persist-db! {}))
+  ([handlers]
+   (persist-db! (state/get-current-repo) handlers))
+  ([repo {:keys [before on-success on-error]}]
+   (->
+    (p/do!
+     (when before
+       (before))
+     (metadata-handler/set-pages-metadata! repo)
+     (db/persist! repo)
+     (when on-success
+       (on-success)))
+    (p/catch (fn [error]
+               (js/console.error error)
+               (when on-error
+                 (on-error)))))))
+
+(defn persist-otherwindow-db!
+  "Call backend to handle persisting a specific db on other window
+     step 1. [In HERE]  a window         --persistGraph----->   electron  
+     step 2.            electron         --persistGraph----->   window holds the graph  
+     step 3.            window w/ graph  --persistGraphDone->   electron  
+     step 4. [In HERE]  electron         --persistGraphDone->   all windows"
+  [graph]
+  (p/create (fn [resolve _]
+              (js/window.apis.on "persistGraphDone"
+                                 (fn [data]
+                                   (let [repo (bean/->clj data)]
+                                     (prn "received persistGraphDone" repo)
+                                     (when (= graph repo)
+                                       ;; js/window.apis.once doesn't work
+                                       (js/window.apis.removeAllListeners "persistGraphDone")
+                                       (resolve repo)))))
+              (ipc/ipc "persistGraph" graph))))
