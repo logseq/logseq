@@ -5,11 +5,16 @@
             [frontend.components.svg :as svg]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [goog.object :as gobj]
+            [frontend.util :as util]
+            [frontend.handler.web.nfs :as nfs]
+            [frontend.mobile.util :as mobile-util]
             [frontend.handler.notification :as notification]
             [frontend.handler.external :as external-handler]
             [frontend.modules.shortcut.core :as shortcut]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [goog.object :as gobj]))
+
+(defonce DEVICE (if (util/mobile?) "phone" "computer"))
 
 (rum/defc setups-container
   [flag content]
@@ -39,20 +44,31 @@
       [:article.flex
        [:section.a
         [:strong "Let’s get you set up."]
-        [:small "Where on your computer do you want to save your work?"]
-        [:div.choose.flex.flex-col.items-center
-         [:i]
-         [:div.control
-          [:label.action-input.flex.items-center.justify-center.flex-col
-           {:on-click #(page-handler/ls-dir-files!
-                         (fn []
-                           (shortcut/refresh!)))
-            :disabled parsing?}
+        [:small (str "Where on your " DEVICE " do you want to save your work?")]
+        (let [nfs-supported? (or (nfs/supported?) (mobile-util/is-native-platform?))]
+          (if-not nfs-supported?
+            (when-not nfs-supported?
+              [:div.px-5
+               (ui/admonition :warning
+                 [:p "It seems that your browser doesn't support the "
+                  [:a {:href   "https://web.dev/file-system-access/"
+                       :target "_blank"}
+                   "new native filesystem API"]
+                  [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])])
 
-           (if parsing?
-             (ui/loading "")
-             [[:strong "Choose a folder"]
-              [:small "Open existing directory or Create a new one"]])]]]]
+            [:div.choose.flex.flex-col.items-center
+             [:i]
+             [:div.control
+              [:label.action-input.flex.items-center.justify-center.flex-col
+               {:on-click #(page-handler/ls-dir-files!
+                             (fn []
+                               (shortcut/refresh!)))
+                :disabled parsing?}
+
+               (if parsing?
+                 (ui/loading "")
+                 [[:strong "Choose a folder"]
+                  [:small "Open existing directory or Create a new one"]])]]]))]
        [:section.b.flex.items-center.flex-col
         [:p.flex
          [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
@@ -61,7 +77,7 @@
           [:small.opacity-60 "Inside the directory you choose, logseq will create 4 folders."]]]
 
         [:p.text-sm.pt-5.tracking-wide
-         [:span "Each page is a file stored only on your computer."]
+         [:span (str "Each page is a file stored only on your " DEVICE ".")]
          [:br]
          [:span "You may choose to sync it later."]]
 
