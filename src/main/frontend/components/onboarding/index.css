@@ -23,30 +23,39 @@ body[data-page=import] {
     }
 
     .inner-card {
-      transform: translateY(-60px);
+      height: 100vh;
+      padding-top: 8vh;
+      background-color: var(--ls-secondary-background-color);
 
       > h1 {
-        font-size: 36px;
+        font-size: 30px;
 
         strong {
           color: var(--ls-active-primary-color);
           display: inline-block;
           padding-right: 4px;
           font-weight: normal;
+
+          &:first-child {
+            display: block;
+            text-align: center;
+            padding-bottom: 15px;
+          }
         }
       }
 
       > h2 {
-        font-size: 20px;
+        font-size: 14px;
         margin-top: 20px;
         margin-bottom: 40px;
+        padding: 0 30px;
+        text-align: center;
       }
 
       > article {
         background-color: var(--ls-secondary-background-color);
-        width: 1040px;
-        height: 510px;
         border-radius: 20px;
+        flex: 1;
 
         > section {
           flex: 1;
@@ -57,6 +66,7 @@ body[data-page=import] {
             flex-direction: column;
             align-items: center;
             padding-top: 75px;
+            border-radius: 20px 20px 0 0;
 
             > strong {
               font-size: 28px;
@@ -65,9 +75,9 @@ body[data-page=import] {
             }
 
             > small {
-              font-size: 20px;
+              font-size: 18px;
               line-height: 30px;
-              padding: 0 95px;
+              padding: 0 40px;
               text-align: center;
             }
 
@@ -83,15 +93,14 @@ body[data-page=import] {
               }
 
               .control {
-                padding-top: 30px;
-                padding-left: 70px;
-                padding-right: 70px;
+                padding: 20px 20px 0 20px;
                 width: 100%;
               }
             }
           }
 
           &.b {
+            display: none;
             padding: 50px 40px;
 
             > p {
@@ -223,6 +232,55 @@ body[data-page=import] {
               a.button {
                 padding: 4px 10px;
               }
+            }
+          }
+        }
+      }
+
+
+      @screen md {
+        transform: translateY(-60px);
+        height: unset;
+        padding-top: unset;
+        background-color: unset;
+
+        > h1 {
+          font-size: 36px;
+
+          strong {
+            &:first-child {
+              display: inline-block;
+            }
+          }
+        }
+
+        > h2 {
+          font-size: 20px;
+          padding: 0;
+        }
+
+        > article {
+          width: 1040px;
+          height: 510px;
+          flex: unset;
+
+          > section {
+            &.a {
+              border-radius: 20px 0 0 20px;
+
+              > small {
+                padding: 0 95px;
+              }
+
+              > .choose {
+                .control {
+                  padding: 30px 70px 0 70px;
+                }
+              }
+            }
+
+            &.b {
+              display: flex;
             }
           }
         }
