@@ -118,7 +118,7 @@
        [:section.c.text-center
         [:h1 "Do you already have notes that you want to import?"]
         [:h2 "If they are in a JSON or Markdown format logseq can work with them."]]
-       [:section.d.flex
+       [:section.d.md:flex
         [:label.action-input.flex.items-center
          {:disabled (or roam-importing? opml-importing?)}
          [:span.as-flex-center [:i (svg/roam-research 28)]]
