@@ -30,7 +30,7 @@
 
 (defn header-marker-pattern
   [markdown? marker]
-  (re-pattern (str "^" (when markdown? "(#+\\s+)?") marker)))
+  (re-pattern (str "^" (when markdown? "#+\\s+") marker)))
 
 (defn replace-marker
   [content markdown? old-marker new-marker]
