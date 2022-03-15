@@ -12,15 +12,18 @@
 
 (defonce polling-interval 10000)
 ;; dir -> Watcher
-(defonce *file-watcher (atom {}))
+(defonce *file-watcher (atom {})) ;; val: [watcher watcher-del-f]
 
 (defonce file-watcher-chan "file-watcher")
 (defn- send-file-watcher! [dir type payload]
-  (doseq [^js win (window/get-graph-all-windows dir)]
-    (when-not (.isDestroyed win)
-      (.. win -webContents
-          (send file-watcher-chan
-                (bean/->js {:type type :payload payload}))))))
+  ;; Should only send to one window; then dbsync will do his job
+  (some (fn [^js win]
+          (when-not (.isDestroyed win)
+            (.. win -webContents
+                (send file-watcher-chan
+                      (bean/->js {:type type :payload payload})))
+            true)) ;; break some loop on success
+        (window/get-graph-all-windows dir)))
 
 (defn- publish-file-event!
   [dir path event]
@@ -44,8 +47,9 @@
                             :persistent true
                             :disableGlobbing true
                             :usePolling false
-                            :awaitWriteFinish true}))]
-      (swap! *file-watcher assoc dir watcher)
+                            :awaitWriteFinish true}))
+          watcher-del-f #(.close watcher)]
+      (swap! *file-watcher assoc dir [watcher watcher-del-f])
       ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
@@ -63,19 +67,21 @@
              (println "Watch error happened: "
                       {:path path})))
 
-      (.on app "quit" #(.close watcher))
+      (.on app "quit" watcher-del-f)
 
       true)))
 
 (defn close-watcher!
   ([]
-   (doseq [watcher (vals @*file-watcher)]
-     (.close watcher))
+   (doseq [[watcher watcher-del-f] (vals @*file-watcher)]
+     (.close watcher)
+     (.on app "quit" watcher-del-f))
    (reset! *file-watcher {}))
   ([dir]
    (let [wins (window/get-graph-all-windows dir)
-         watcher (get @*file-watcher dir)]
+         [watcher watcher-del-f] (get @*file-watcher dir)]
      (when (and (<= (count wins) 1)
                 watcher)
        (.close watcher)
+       (.on app "quit" watcher-del-f)
        (swap! *file-watcher dissoc dir)))))
