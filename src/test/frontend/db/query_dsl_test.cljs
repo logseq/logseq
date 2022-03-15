@@ -234,7 +234,7 @@ prop-d:: nada"}])
 (deftest nested-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
-- DONE b1 [[page 1]]
+- DONE b1 [[page 1]] [[page 3]]
 - DONE b2 [[page 1]]"}
                     {:file/path "pages/page2.md"
                      :file/content "foo:: bar
@@ -244,18 +244,25 @@ prop-d:: nada"}])
 
   (is (= []
          (dsl-query "(and (todo done) (not [[page 1]]))")))
+
+  (is (= ["DONE b1 [[page 1]] [[page 3]]"]
+         (map :block/content
+              (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
+      "Nested not")
+
   (is (= ["NOW b3 [[page 1]]" "LATER b4 [[page 2]]"]
          (map :block/content
               (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
 
   (is (= #{"NOW b3 [[page 1]]"
            "LATER b4 [[page 2]]"
-           "DONE b1 [[page 1]]"
+           "DONE b1 [[page 1]] [[page 3]]"
            "DONE b2 [[page 1]]"}
          (set (map :block/content
                    (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
 
-  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]]" "DONE b2 [[page 1]]"}
+  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]] [[page 3]]"
+           "DONE b2 [[page 1]]"}
          (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
               (keep :block/content)
               set)))
