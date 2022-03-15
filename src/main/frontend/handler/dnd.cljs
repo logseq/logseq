@@ -6,42 +6,35 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
+(defn- ancestor?
+  "Whether current-block is an ancestor of the target-block."
+  [current-block-uuid target-block]
+  (loop [loc target-block]
+    (if-let [parent (db/entity (:db/id (:block/parent loc)))]
+      (if (= (:block/uuid parent) current-block-uuid)
+        true
+        (recur parent))
+      false)))
+
 (defn- movable?
   [current-block target-block move-to]
   (let [current-block-uuid (:block/uuid current-block)]
-    (or
-     ;; movable if not on the same page
-     (not= (:block/page current-block) (:block/page target-block))
+    (not
+     (or
+      (= current-block-uuid (:block/uuid target-block)) ; same block
 
-     ;; movable if not the same block
-     (and (= move-to :top)
-          (not= current-block-uuid (:block/uuid target-block)))
+      (ancestor? current-block-uuid target-block)
 
-     (and (= move-to :nested)
-          (not= current-block-uuid (:block/uuid target-block))
-          (or (not= (:db/id (:block/left current-block))
-                    (:db/id target-block))
-              (= (:block/level target-block)
-                 (:block/level current-block)))
-          (loop [loc target-block]
-            (if-let [parent (db/pull (:db/id (:block/parent loc)))]
-              (if (= (:block/uuid parent) current-block-uuid)
-                false
-                (recur parent))
-              true)))
+      (and (= move-to :nested)
+           ;; current block is already the first child of target-block
+           (and (= (:db/id (:block/left current-block))
+                   (:db/id (:block/parent current-block))
+                   (:db/id target-block))))
 
-     (and (= move-to :sibling)
-          (not= current-block-uuid (:block/uuid target-block))
-          (or (not= (:db/id (:block/left current-block))
-                    (:db/id target-block))
-              (not= (:block/level target-block)
-                    (:block/level current-block)))
-          (loop [loc target-block]
-            (if-let [parent (db/pull (:db/id (:block/parent loc)))]
-              (if (= (:block/uuid parent) current-block-uuid)
-                false
-                (recur parent))
-              true))))))
+      (and (= move-to :sibling)
+           ;; current block is already the next sibling of target-block
+           (and (= (:db/id (:block/left current-block))
+                   (:db/id target-block))))))))
 
 (defn move-block
   "There can be two possible situations:
