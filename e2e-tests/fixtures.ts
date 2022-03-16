@@ -63,7 +63,7 @@ base.beforeAll(async () => {
     expect('page must not crash!').toBe('page crashed')
   })
   page.on('pageerror', (err) => {
-    console.log(err)
+    console.error("[pageerror]", err)
     expect('page must not have errors!').toBe('page has some error')
   })
 
