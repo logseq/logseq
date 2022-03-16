@@ -1,5 +1,5 @@
 {:meta/version 1
- 
+
  ;; Currently, we support either "Markdown" or "Org".
  ;; This can overwrite your global preference so that
  ;; maybe your personal preferred format is Org but you'd
@@ -143,6 +143,13 @@
  ;; E.g. [["js" "Javascript"]]
  :commands
  []
+
+ ;; By default, a block can only be collapsed if it has some children.
+ ;; `:outliner/block-title-collapse-enabled? true` enables a block with a title
+ ;; (multiple lines) can be collapsed too. For example:
+ ;; - block title
+ ;;   block content
+ :outliner/block-title-collapse-enabled? false
 
  ;; Macros replace texts and will make you more productive.
  ;; For example:
