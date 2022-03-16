@@ -117,8 +117,7 @@
           ast (map first ast)           ; without position meta
           directive? (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
-          directive-ast (first (partition-by directive? original-ast))
-          directive-ast (when (every? directive? directive-ast) directive-ast)
+          directive-ast (take-while directive? original-ast)
           [properties-ast other-ast] (if (= "Property_Drawer" (ffirst ast))
                                        [(last (first ast))
                                         (rest original-ast)]
