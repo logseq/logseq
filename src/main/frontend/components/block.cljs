@@ -1420,10 +1420,6 @@
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
-        has-children-blocks? (and (coll? children) (seq children))
-        has-child? (and
-                    (not (:pre-block? block))
-                    has-children-blocks?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)]
@@ -1436,12 +1432,11 @@
       {:id (str "control-" uuid)
        :on-click (fn [event]
                    (util/stop event)
-                   (when-not (and (not collapsed?) (not has-child?))
-                     (if ref?
-                       (state/toggle-collapsed-block! uuid)
-                       (if collapsed?
-                         (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid)))))}
+                   (if ref?
+                     (state/toggle-collapsed-block! uuid)
+                     (if collapsed?
+                       (editor-handler/expand-block! uuid)
+                       (editor-handler/collapse-block! uuid))))}
       [:span {:class (if control-show? "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
@@ -2116,7 +2111,7 @@
   (util/stop e)
   (when (or
          (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid))
+         (editor-handler/collapsable? uuid true))
     (reset! *control-show? true))
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]

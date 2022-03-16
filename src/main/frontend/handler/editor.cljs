@@ -3367,13 +3367,28 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
-(defn collapsable? [block-id]
-  (when block-id
-    (if-let [block (db-model/query-block-by-uuid block-id)]
-      (and
-       (not (util/collapsed? block))
-       (db-model/has-children? block-id))
-      false)))
+(defn block-with-title?
+  [format content semantic?]
+  (and (string/includes? content "\n")
+       (if semantic?
+         (let [ast (mldoc/->edn content (mldoc/default-config format))
+               first-elem-type (first (ffirst ast))]
+           (mldoc/block-with-title? first-elem-type))
+         true)))
+
+(defn collapsable?
+  ([block-id]
+   (collapsable? block-id false))
+  ([block-id semantic?]
+   (when block-id
+     (if-let [block (db-model/query-block-by-uuid block-id)]
+       (and
+        (not (util/collapsed? block))
+        (or (db-model/has-children? block-id)
+            (block-with-title? (:block/format block)
+                               (:block/content block)
+                               semantic?)))
+       false))))
 
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
