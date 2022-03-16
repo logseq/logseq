@@ -68,9 +68,8 @@
   ([s warn?]
    (try
      (reader/read-string s)
-     (catch js/Error e
-       (println "read-string error:")
-       (js/console.error e)
+     (catch :default e
+       (log/error :read-string-error e :string s)
        (when warn?
          [:div.warning {:title "read-string failed"}
           s])))))
@@ -881,7 +880,7 @@
             [:p.warning.text-sm "Block ref nesting is too deep"]
             (block-reference (assoc config
                                     :reference? true
-                                    :link-depth (inc link-depth) 
+                                    :link-depth (inc link-depth)
                                     :block/uuid id)
                              id label*)))
 
@@ -1148,8 +1147,8 @@
                    f (sci/eval-string fn-string)]
                (when (fn? f)
                  (try (f query-result)
-                      (catch js/Error e
-                        (js/console.error e)))))))
+                   (catch js/Error e
+                     (js/console.error e)))))))
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
@@ -1951,18 +1950,6 @@
                       {:block block}))}
         block-refs-count]])))
 
-(rum/defc block-content-fallback
-  [edit-input-id block]
-  (let [content (:block/content block)]
-    [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
-     {:on-click #(state/set-editing! edit-input-id content block "")}
-     [:div.flex.justify-between.items-center.px-1
-      [:h5.text-red-600.pb-1 "Block Render Error:"]
-      [:a.text-xs.opacity-50.hover:opacity-80
-       {:href "https://github.com/logseq/logseq/issues"
-        :target "_blank"} "report issue"]]
-     [:pre.m-0.text-sm content]]))
-
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1985,7 +1972,10 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
-         (block-content-fallback edit-input-id block)
+         (ui/block-error "Block Render Error:"
+                  {:content (:block/content block)
+                   :section-attrs
+                   {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
@@ -2472,21 +2462,21 @@
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [q (:query query)
-                           result (query-dsl/query (state/get-current-repo) q)]
+                           form (safe-read-string q false)]
                        (cond
-                         (and (util/electron?) (string? result)) ; full-text search
-                         (if (string/blank? result)
-                           (atom [])
-                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result)))))
+                          ;; Searches like 'foo' or 'foo bar' come back as symbols
+                         ;; and are meant to go directly to full text search
+                         (and (util/electron?) (symbol? form)) ; full-text search
+                         (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                (when (seq blocks)
+                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                    (reset! result-atom result))))
 
-                         (string? result)
+                         (symbol? form)
                          (atom nil)
 
                          :else
-                         result))
+                         (query-dsl/query (state/get-current-repo) q)))
                      (db/custom-query query))
         query-atom (if (instance? Atom query-atom)
                      query-atom
@@ -2731,7 +2721,7 @@
              ["Directive" key value]
              [:div.file-level-property
               (when (contains? #{"caption"} (string/lower-case key))
-                [:span.font-medium.opacity-100
+                [:span.font-medium
                  [:span.font-bold (string/upper-case key)]
                  (str ": " value)])]
 

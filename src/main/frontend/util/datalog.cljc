@@ -8,6 +8,7 @@ and not require valid-rules"
   [where valid-rules]
   (->> where
        flatten
+       distinct
        (filter #(and (symbol? %) (contains? valid-rules (keyword %))))
        (map keyword)))
 
