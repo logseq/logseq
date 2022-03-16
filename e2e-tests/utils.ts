@@ -1,6 +1,6 @@
 import { Page, Locator } from 'playwright'
 import { expect } from '@playwright/test'
-import process from 'process'
+import * as process from 'process'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -154,8 +154,10 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('h1:has-text("Open a local directory")', { state: 'visible' })
-    await page.click('h1:has-text("Open a local directory")')
+    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.click('strong:has-text("Choose a folder")')
+    await page.waitForSelector('a:has-text("Skip")')
+    await page.click('a:has-text("Skip")')
   }
 
   setMockedOpenDirPath(page, ''); // reset it
