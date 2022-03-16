@@ -147,11 +147,15 @@
       (when (seq queries)
         [:div#today-queries.mt-10
          (for [query queries]
-           (rum/with-key
-             (block/custom-query {:attr {:class "mt-10"}
-                                  :editor-box editor/box
-                                  :page page} query)
-             (str repo "-custom-query-" (:query query))))]))))
+           (ui/catch-error
+            (rum/with-key
+              (ui/block-error "Failed default query:" {:content (pr-str query)})
+              (str repo "-custom-query-" (:query query)))
+            (rum/with-key
+              (block/custom-query {:attr {:class "mt-10"}
+                                   :editor-box editor/box
+                                   :page page} query)
+              (str repo "-custom-query-" (:query query)))))]))))
 
 (defn tagged-pages
   [repo tag]
