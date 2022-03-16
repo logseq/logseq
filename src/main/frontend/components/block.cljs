@@ -1418,7 +1418,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id children collapsed? *control-show? edit?]
+  [state config block uuid block-id _children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
