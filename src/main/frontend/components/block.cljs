@@ -2783,16 +2783,11 @@
 
              ["Custom" "query" _options _result content]
              (try
-               (let [query (reader/read-string content)
-                     query (if (string? query)
-                             (string/trim query)
-                             query)]
+               (let [query (reader/read-string content)]
                  (custom-query config query))
-               (catch js/Error e
-                 (println "read-string error:")
-                 (js/console.error e)
-                 [:div.warning {:title "Invalid query"}
-                  content]))
+               (catch :default e
+                 (log/error :read-string-error e)
+                 (ui/block-error "Invalid query:" {:content content})))
 
              ["Custom" "note" _options result _content]
              (admonition config "note" result)
