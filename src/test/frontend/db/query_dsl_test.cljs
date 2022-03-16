@@ -2,47 +2,45 @@
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
             [frontend.db :as db]
-            [frontend.db.config :refer [test-db] :as config]
-            [frontend.db.query-dsl :as dsl]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
 ;; 2. find illegal queries which can't be executed by datascript
 ;; 3. find filters combinations which might break the current query implementation
 
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
+
 ;; Test helpers
 ;; ============
-(defn- load-test-files [files]
-  (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false}))
+
+(def dsl-query*
+  "When $EXAMPLE set, prints query result of build query. Useful for
+   documenting examples and debugging"
+  (if (some? js/process.env.EXAMPLE)
+    (fn dsl-query-star [& args]
+      (let [old-build-query query-dsl/build-query]
+       (with-redefs [query-dsl/build-query
+                     (fn [& args']
+                       (let [res (apply old-build-query args')]
+                         (println "EXAMPLE:" (pr-str (:query res)))
+                         res))]
+         (apply query-dsl/query args))))
+    query-dsl/query))
 
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (when-let [result (dsl/query test-db s)]
+  (when-let [result (dsl-query* test-helper/test-db s)]
     (map first (deref result))))
 
-(def parse (partial dsl/parse test-db))
-
-(defn- q
-  [s]
+(defn- custom-query
+  [query]
   (db/clear-query-state!)
-  (let [parse-result (parse s)
-        query (:query parse-result)]
-    {:query (if (seq query) (vec query) query)
-     :result (dsl/query test-db s)}))
-
-(defn q-count
-  [s]
-  (let [{:keys [query result]} (q s)]
-    {:query query
-     :count (if result
-              (count @result)
-              0)}))
-
-(defn count-only
-  [s]
-  (:count (q-count s)))
+  (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
+    (map first (deref result))))
 
 ;; Tests
 ;; =====
@@ -156,7 +154,13 @@ prop-d:: nada"}])
          (map
           :block/name
           (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
-      "Page property queries NOTed"))
+      "Page property queries nested NOT in second clause")
+
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
+      "Page property queries nested NOT in first clause"))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -230,25 +234,38 @@ prop-d:: nada"}])
 (deftest nested-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
-- DONE b1 [[page 1]]
+- DONE b1 [[page 1]] [[page 3]]
 - DONE b2 [[page 1]]"}
                     {:file/path "pages/page2.md"
-                     :file/content "foo::bar
+                     :file/content "foo:: bar
 - NOW b3 [[page 1]]
 - LATER b4 [[page 2]]
 "}])
 
-  (is (= 0
-         (count (dsl-query "(and (todo done) (not [[page 1]]))"))))
-  (is (= 2
-         (count (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+  (is (= []
+         (dsl-query "(and (todo done) (not [[page 1]]))")))
 
-  (is (= 4
-         (count (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"))))
+  (is (= ["DONE b1 [[page 1]] [[page 3]]"]
+         (map :block/content
+              (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
+      "Nested not")
 
-  ;; TODO
-  #_(is (= 34
-           (count (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))"))))
+  (is (= ["NOW b3 [[page 1]]" "LATER b4 [[page 2]]"]
+         (map :block/content
+              (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+
+  (is (= #{"NOW b3 [[page 1]]"
+           "LATER b4 [[page 2]]"
+           "DONE b1 [[page 1]] [[page 3]]"
+           "DONE b2 [[page 1]]"}
+         (set (map :block/content
+                   (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
+
+  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]] [[page 3]]"
+           "DONE b2 [[page 1]]"}
+         (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
+              (keep :block/content)
+              set)))
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet
@@ -333,17 +350,17 @@ tags: other
       "Correctly returns no results"))
 
 (deftest empty-queries
-  (let [empty-result {:query nil :result nil}]
-    (testing "nil or blank strings should be ignored"
-      (are [x y] (= (q x) y)
-           nil empty-result
-           "" empty-result
-           " " empty-result))
+  (testing "nil or blank strings should be ignored"
+    (are [x] (nil? (dsl-query x))
+         nil
+         ""
+         " "
+         "\"\""))
 
-    (testing "Non exists page should be ignored"
-      (are [x y] (nil? (:result (q x)))
-           "[[page-not-exist]]" empty-result
-           "[[another-page-not-exist]]" empty-result))))
+  (testing "Non exists page should be ignored"
+    (are [x] (nil? (dsl-query x))
+         "[[page-not-exist]]"
+         "[[another-page-not-exist]]")))
 
 (deftest page-ref-and-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -355,7 +372,12 @@ tags: other
   (testing "page-ref queries"
 
     (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content (dsl-query "[[page 2]]"))))
+           (map :block/content (dsl-query "[[page 2]]")))
+        "Page ref arg")
+
+    (is (= ["b2 [[page 2]] #tag1"]
+           (map :block/content (dsl-query "#tag1")))
+        "Tag arg")
 
     (is (= []
            (map :block/content (dsl-query "[[blarg]]")))
@@ -373,9 +395,10 @@ tags: other
         "OR query")
 
     (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
-           (map :block/content
-                ;; ANDed page1 to not clutter results with blocks in default db
-                (dsl-query "(and (page page1) (not [[page 2]]))")))
+           (->> (dsl-query "(not [[page 2]])")
+                ;; Only filter to page1 to get meaningful results
+                (filter #(= "page1" (get-in % [:block/page :block/name])))
+                (map :block/content)))
         "NOT query")))
 
 (defn- load-test-files-with-timestamps
@@ -431,7 +454,7 @@ last-modified-at:: 1609084800002"}]]
 (deftest between-queries
   (load-test-files-with-timestamps)
 
-  (are [x y] (= (count-only x) y)
+  (are [x y] (= (count (dsl-query x)) y)
        "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
        5
 
@@ -449,81 +472,80 @@ last-modified-at:: 1609084800002"}]]
        )
   )
 
+(deftest custom-query-test
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- NOW b1
+- TODO b2
+- LATER b3
+- b3"}])
+
+  (is (= ["LATER b3"]
+         (map :block/content (custom-query {:query '(task later)}))))
+
+  (is (= ["LATER b3"]
+         (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
+      "Query with rule that can't be derived from the form itself"))
+
 #_(deftest sort-by-queries
     (load-test-files-with-timestamps)
     ;; (testing "sort-by (created-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (task now later done)
+    ;;   (let [result (->> (dsl-query "(and (task now later done)
     ;;                              (sort-by created-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at asc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
     ;; (testing "sort-by (last-modified-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
     )
 
-(use-fixtures :each
-              {:before config/start-test-db!
-               :after config/destroy-test-db!})
-
 #_(cljs.test/run-tests)
 
 (comment
  (require '[clojure.pprint :as pprint])
- (config/start-test-db!)
+ (test-helper/start-test-db!)
  (load-test-files-with-timestamps)
 
- (dsl/query test-db "(task done)")
+ (query-dsl/query test-db "(task done)")
 
  ;; Useful for debugging
  (prn

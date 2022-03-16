@@ -68,9 +68,8 @@
   ([s warn?]
    (try
      (reader/read-string s)
-     (catch js/Error e
-       (println "read-string error:")
-       (js/console.error e)
+     (catch :default e
+       (log/error :read-string-error e :string s)
        (when warn?
          [:div.warning {:title "read-string failed"}
           s])))))
@@ -881,7 +880,7 @@
             [:p.warning.text-sm "Block ref nesting is too deep"]
             (block-reference (assoc config
                                     :reference? true
-                                    :link-depth (inc link-depth) 
+                                    :link-depth (inc link-depth)
                                     :block/uuid id)
                              id label*)))
 
@@ -1148,8 +1147,8 @@
                    f (sci/eval-string fn-string)]
                (when (fn? f)
                  (try (f query-result)
-                      (catch js/Error e
-                        (js/console.error e)))))))
+                   (catch js/Error e
+                     (js/console.error e)))))))
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
@@ -1951,18 +1950,6 @@
                       {:block block}))}
         block-refs-count]])))
 
-(rum/defc block-content-fallback
-  [edit-input-id block]
-  (let [content (:block/content block)]
-    [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
-     {:on-click #(state/set-editing! edit-input-id content block "")}
-     [:div.flex.justify-between.items-center.px-1
-      [:h5.text-red-600.pb-1 "Block Render Error:"]
-      [:a.text-xs.opacity-50.hover:opacity-80
-       {:href "https://github.com/logseq/logseq/issues"
-        :target "_blank"} "report issue"]]
-     [:pre.m-0.text-sm content]]))
-
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1985,7 +1972,10 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
-         (block-content-fallback edit-input-id block)
+         (ui/block-error "Block Render Error:"
+                  {:content (:block/content block)
+                   :section-attrs
+                   {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
@@ -2472,21 +2462,21 @@
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [q (:query query)
-                           result (query-dsl/query (state/get-current-repo) q)]
+                           form (safe-read-string q false)]
                        (cond
-                         (and (util/electron?) (string? result)) ; full-text search
-                         (if (string/blank? result)
-                           (atom [])
-                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result)))))
+                          ;; Searches like 'foo' or 'foo bar' come back as symbols
+                         ;; and are meant to go directly to full text search
+                         (and (util/electron?) (symbol? form)) ; full-text search
+                         (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                (when (seq blocks)
+                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                    (reset! result-atom result))))
 
-                         (string? result)
+                         (symbol? form)
                          (atom nil)
 
                          :else
-                         result))
+                         (query-dsl/query (state/get-current-repo) q)))
                      (db/custom-query query))
         query-atom (if (instance? Atom query-atom)
                      query-atom
@@ -2684,181 +2674,185 @@
                    :markdown)]
     (try
       (match item
-        ["Drawer" name lines]
-        (when (or (not= name "logbook")
-                  (and
-                   (= name "logbook")
-                   (state/enable-timetracking?)
-                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                        (when (get-in (state/get-config)
-                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
-                          (or (:block/scheduled (:block config))
-                              (:block/deadline (:block config)))))))
-          [:div
-           [:div.text-sm
-            [:div.drawer {:data-drawer-name name}
-             (ui/foldable
-              [:div.opacity-50.font-medium.logbook
-               (util/format ":%s:" (string/upper-case name))]
-              [:div.opacity-50.font-medium
-               (if (= name "logbook")
-                 (logbook-cp lines)
-                 (apply str lines))
-               [:div ":END:"]]
-              {:default-collapsed? true
-               :title-trigger? true})]]])
+             ["Drawer" name lines]
+             (when (or (not= name "logbook")
+                       (and
+                        (= name "logbook")
+                        (state/enable-timetracking?)
+                        (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                             (when (get-in (state/get-config)
+                                           [:logbook/settings :enabled-in-timestamped-blocks] true)
+                               (or (:block/scheduled (:block config))
+                                   (:block/deadline (:block config)))))))
+               [:div
+                [:div.text-sm
+                 [:div.drawer {:data-drawer-name name}
+                  (ui/foldable
+                   [:div.opacity-50.font-medium.logbook
+                    (util/format ":%s:" (string/upper-case name))]
+                   [:div.opacity-50.font-medium
+                    (if (= name "logbook")
+                      (logbook-cp lines)
+                      (apply str lines))
+                    [:div ":END:"]]
+                   {:default-collapsed? true
+                    :title-trigger? true})]]])
 
-        ["Properties" m]
-        [:div.properties
-         (for [[k v] (dissoc m :roam_alias :roam_tags)]
-           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                      (not (= k :title))
-                      (not (= k :filters)))
-             [:div.property
-              [:span.font-medium.mr-1 (str (name k) ": ")]
-              (if (coll? v)
-                (let [vals (for [item v]
-                             (if (coll? v)
-                               (let [config (when (= k :alias)
-                                              (assoc config :block/alias? true))]
-                                 (page-cp config {:block/name item}))
-                               (inline-text format item)))]
-                  (interpose [:span ", "] vals))
-                (inline-text format v))]))]
+             ["Properties" m]
+             [:div.properties
+              (for [[k v] (dissoc m :roam_alias :roam_tags)]
+                (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                           (not (= k :title))
+                           (not (= k :filters)))
+                  [:div.property
+                   [:span.font-medium.mr-1 (str (name k) ": ")]
+                   (if (coll? v)
+                     (let [vals (for [item v]
+                                  (if (coll? v)
+                                    (let [config (when (= k :alias)
+                                                   (assoc config :block/alias? true))]
+                                      (page-cp config {:block/name item}))
+                                    (inline-text format item)))]
+                       (interpose [:span ", "] vals))
+                     (inline-text format v))]))]
 
-        ["Paragraph" l]
-        ;; TODO: speedup
-        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-          (->elem :div (map-inline config l))
-          (->elem :div.is-paragraph (map-inline config l)))
+             ;; for file-level property in orgmode: #+key: value
+             ;; only display caption. https://orgmode.org/manual/Captions.html.
+             ["Directive" key value]
+             [:div.file-level-property
+              (when (contains? #{"caption"} (string/lower-case key))
+                [:span.font-medium
+                 [:span.font-bold (string/upper-case key)]
+                 (str ": " value)])]
 
-        ["Horizontal_Rule"]
-        (when-not (:slide? config)
-          [:hr])
-        ["Heading" h]
-        (block-container config h)
-        ["List" l]
-        (let [lists (divide-lists l)]
-          (if (= 1 (count lists))
-            (let [l (first lists)]
-              (->elem
-               (list-element l)
-               (map #(list-item config %) l)))
-            [:div.list-group
-             (for [l lists]
-               (->elem
-                (list-element l)
-                (map #(list-item config %) l)))]))
-        ["Table" t]
-        (table config t)
-        ["Math" s]
-        (if html-export?
-          (latex/html-export s true true)
-          (latex/latex (str (d/squuid)) s true true))
-        ["Example" l]
-        [:pre.pre-wrap-white-space
-         (join-lines l)]
-        ["Quote" l]
-        (->elem
-         :blockquote
-         (markup-elements-cp config l))
-        ["Raw_Html" content]
-        (when (not html-export?)
-          [:div.raw_html {:dangerouslySetInnerHTML
-                          {:__html content}}])
-        ["Export" "html" _options content]
-        (when (not html-export?)
-          [:div.export_html {:dangerouslySetInnerHTML
-                             {:__html content}}])
-        ["Hiccup" content]
-        (ui/catch-error
-         [:div.warning {:title "Invalid hiccup"}
-          content]
-         (-> (safe-read-string content)
-             (security/remove-javascript-links-in-href)))
+             ["Paragraph" l]
+             ;; TODO: speedup
+             (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+               (->elem :div (map-inline config l))
+               (->elem :div.is-paragraph (map-inline config l)))
 
-        ["Export" "latex" _options content]
-        (if html-export?
-          (latex/html-export content true false)
-          (latex/latex (str (d/squuid)) content true false))
+             ["Horizontal_Rule"]
+             (when-not (:slide? config)
+               [:hr])
+             ["Heading" h]
+             (block-container config h)
+             ["List" l]
+             (let [lists (divide-lists l)]
+               (if (= 1 (count lists))
+                 (let [l (first lists)]
+                   (->elem
+                    (list-element l)
+                    (map #(list-item config %) l)))
+                 [:div.list-group
+                  (for [l lists]
+                    (->elem
+                     (list-element l)
+                     (map #(list-item config %) l)))]))
+             ["Table" t]
+             (table config t)
+             ["Math" s]
+             (if html-export?
+               (latex/html-export s true true)
+               (latex/latex (str (d/squuid)) s true true))
+             ["Example" l]
+             [:pre.pre-wrap-white-space
+              (join-lines l)]
+             ["Quote" l]
+             (->elem
+              :blockquote
+              (markup-elements-cp config l))
+             ["Raw_Html" content]
+             (when (not html-export?)
+               [:div.raw_html {:dangerouslySetInnerHTML
+                               {:__html content}}])
+             ["Export" "html" _options content]
+             (when (not html-export?)
+               [:div.export_html {:dangerouslySetInnerHTML
+                                  {:__html content}}])
+             ["Hiccup" content]
+             (ui/catch-error
+              [:div.warning {:title "Invalid hiccup"}
+               content]
+              (-> (safe-read-string content)
+                  (security/remove-javascript-links-in-href)))
 
-        ["Custom" "query" _options _result content]
-        (try
-          (let [query (reader/read-string content)
-                query (if (string? query)
-                        (string/trim query)
-                        query)]
-            (custom-query config query))
-          (catch js/Error e
-            (println "read-string error:")
-            (js/console.error e)
-            [:div.warning {:title "Invalid query"}
-             content]))
+             ["Export" "latex" _options content]
+             (if html-export?
+               (latex/html-export content true false)
+               (latex/latex (str (d/squuid)) content true false))
 
-        ["Custom" "note" _options result _content]
-        (admonition config "note" result)
+             ["Custom" "query" _options _result content]
+             (try
+               (let [query (reader/read-string content)]
+                 (custom-query config query))
+               (catch :default e
+                 (log/error :read-string-error e)
+                 (ui/block-error "Invalid query:" {:content content})))
 
-        ["Custom" "tip" _options result _content]
-        (admonition config "tip" result)
+             ["Custom" "note" _options result _content]
+             (admonition config "note" result)
 
-        ["Custom" "important" _options result _content]
-        (admonition config "important" result)
+             ["Custom" "tip" _options result _content]
+             (admonition config "tip" result)
 
-        ["Custom" "caution" _options result _content]
-        (admonition config "caution" result)
+             ["Custom" "important" _options result _content]
+             (admonition config "important" result)
 
-        ["Custom" "warning" _options result _content]
-        (admonition config "warning" result)
+             ["Custom" "caution" _options result _content]
+             (admonition config "caution" result)
 
-        ["Custom" "pinned" _options result _content]
-        (admonition config "pinned" result)
+             ["Custom" "warning" _options result _content]
+             (admonition config "warning" result)
 
-        ["Custom" "center" _options l _content]
-        (->elem
-         :div.text-center
-         (markup-elements-cp config l))
+             ["Custom" "pinned" _options result _content]
+             (admonition config "pinned" result)
 
-        ["Custom" name _options l _content]
-        (->elem
-         :div
-         {:class name}
-         (markup-elements-cp config l))
+             ["Custom" "center" _options l _content]
+             (->elem
+              :div.text-center
+              (markup-elements-cp config l))
 
-        ["Latex_Fragment" l]
-        [:p.latex-fragment
-         (inline config ["Latex_Fragment" l])]
+             ["Custom" name _options l _content]
+             (->elem
+              :div
+              {:class name}
+              (markup-elements-cp config l))
 
-        ["Latex_Environment" name option content]
-        (let [content (latex-environment-content name option content)]
-          (if html-export?
-            (latex/html-export content true true)
-            (latex/latex (str (d/squuid)) content true true)))
+             ["Latex_Fragment" l]
+             [:p.latex-fragment
+              (inline config ["Latex_Fragment" l])]
 
-        ["Displayed_Math" content]
-        (if html-export?
-          (latex/html-export content true true)
-          (latex/latex (str (d/squuid)) content true true))
+             ["Latex_Environment" name option content]
+             (let [content (latex-environment-content name option content)]
+               (if html-export?
+                 (latex/html-export content true true)
+                 (latex/latex (str (d/squuid)) content true true)))
 
-        ["Footnote_Definition" name definition]
-        (let [id (util/url-encode name)]
-          [:div.footdef
-           [:div.footpara
-            (conj
-             (markup-element-cp config ["Paragraph" definition])
-             [:a.ml-1 {:id (str "fn." id)
-                       :style {:font-size 14}
-                       :class "footnum"
-                       :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
-              [:sup.fn (str name "↩︎")]])]])
+             ["Displayed_Math" content]
+             (if html-export?
+               (latex/html-export content true true)
+               (latex/latex (str (d/squuid)) content true true))
 
-        ["Src" options]
-        [:div.cp__fenced-code-block
-         (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-           (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
-           (src-cp config options html-export?))]
+             ["Footnote_Definition" name definition]
+             (let [id (util/url-encode name)]
+               [:div.footdef
+                [:div.footpara
+                 (conj
+                  (markup-element-cp config ["Paragraph" definition])
+                  [:a.ml-1 {:id (str "fn." id)
+                            :style {:font-size 14}
+                            :class "footnum"
+                            :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
+                   [:sup.fn (str name "↩︎")]])]])
 
-        :else
-        "")
+             ["Src" options]
+             [:div.cp__fenced-code-block
+              (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
+                (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+                (src-cp config options html-export?))]
+
+             :else
+             "")
       (catch js/Error e
         (println "Convert to html failed, error: " e)
         ""))))

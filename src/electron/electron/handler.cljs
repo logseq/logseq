@@ -1,5 +1,5 @@
 (ns electron.handler
-  (:require ["electron" :refer [ipcMain dialog app autoUpdater]]
+  (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["buffer" :as buffer]
@@ -64,22 +64,33 @@
     (some (fn [a] (= -1 (first a))) result)))
 
 (defn- truncate-old-versioned-files!
-  [file-path]
-  (let [dir (path/dirname file-path)
-        files (fs/readdirSync dir (clj->js {:withFileTypes true}))
+  [dir]
+  (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
         files (map #(.-name %) files)
-        prefix (str (path/basename file-path) ".")
-        versioned-files (filter #(string/starts-with? % prefix) files)
-        old-versioned-files (drop 10 (reverse (sort versioned-files)))]
+        old-versioned-files (drop 3 (reverse (sort files)))]
     (doseq [file old-versioned-files]
       (fs-extra/removeSync (path/join dir file)))))
 
+(defn- get-backup-dir
+  [repo path]
+  (let [path (string/replace path repo "")
+        bak-dir (str repo "/logseq/bak")
+        path (str bak-dir path)
+        parsed-path (path/parse path)]
+    (path/join (.-dir parsed-path)
+               (.-name parsed-path))))
+
 (defn backup-file
-  [_repo path content]
-  (let [new-path (str path "." (string/replace (.toISOString (js/Date.)) ":" "_"))]
+  [repo path content]
+  (let [path-dir (get-backup-dir repo path)
+        ext (path/extname path)
+        new-path (path/join path-dir
+                            (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                                 ext))]
+    (fs-extra/ensureDirSync path-dir)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
-    (truncate-old-versioned-files! path)
+    (truncate-old-versioned-files! path-dir)
     new-path))
 
 (defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
@@ -87,6 +98,11 @@
              (string? new-content)
              (string-some-deleted? db-content new-content))
     (backup-file repo path db-content)))
+
+(defmethod handle :openFileBackupDir [_window [_ repo path]]
+  (when (string? path)
+    (let [dir (get-backup-dir repo path)]
+      (.openPath shell dir))))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -286,6 +302,7 @@
 
 (defmethod handle :addDirWatcher [window [_ dir]]
   (when dir
+    (watcher/close-watcher! dir)
     (watcher/watch-dir! window dir)))
 
 (defmethod handle :openDialog [^js _window _messages]

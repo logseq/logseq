@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         registerPlugin(FolderPicker.class);
+        registerPlugin(FsWatcher.class);
     }
 
     @Override

@@ -65,4 +65,4 @@ frontend.util.pool/terminate-pool!
 ;; Repl fn
 frontend.util.property/add-page-properties
 ;; Used by shadow
-frontend.node-test-runner/main
+frontend.test.node-test-runner/main

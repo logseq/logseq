@@ -13,6 +13,7 @@
             [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
@@ -123,7 +124,9 @@
                ;; reactive components
                (react/refresh! repo tx-report)
 
-               (when-not (:new-graph? (:tx-meta tx-report)) ; skip initial txs
+               (when (and
+                      (not config/publishing?)
+                      (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs
                  (if (util/electron?)
                    (when-not (:dbsync? (:tx-meta tx-report))
                      ;; sync with other windows if needed
@@ -143,7 +146,7 @@
                    (when-let [f @*sync-search-indice-f]
                      (f datoms)))))))
 
-(defn- listen-and-persist!
+(defn listen-and-persist!
   [repo]
   (when-let [conn (get-conn repo false)]
     (repo-listen-to-tx! repo conn)))

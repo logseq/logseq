@@ -11,6 +11,7 @@
 ;; 1. https://github.com/Axosoft/nsfw
 
 (defonce polling-interval 10000)
+;; dir -> Watcher
 (defonce *file-watcher (atom {}))
 
 (defonce file-watcher-chan "file-watcher")
@@ -67,7 +68,14 @@
       true)))
 
 (defn close-watcher!
-  []
-  (doseq [watcher (vals @*file-watcher)]
-    (.close watcher))
-  (reset! *file-watcher {}))
+  ([]
+   (doseq [watcher (vals @*file-watcher)]
+     (.close watcher))
+   (reset! *file-watcher {}))
+  ([dir]
+   (let [wins (window/get-graph-all-windows dir)
+         watcher (get @*file-watcher dir)]
+     (when (and (<= (count wins) 1)
+                watcher)
+       (.close watcher)
+       (swap! *file-watcher dissoc dir)))))

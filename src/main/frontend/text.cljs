@@ -2,7 +2,9 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [clojure.set :as set]
+            [frontend.state :as state]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -344,7 +346,9 @@
          v (if (or (symbol? v) (keyword? v)) (name v) (str v))
          v (string/trim v)]
      (cond
-       (contains? #{"title" "filters"} k)
+       (contains? (set/union
+                   #{"title" "filters"}
+                   (get (state/get-config) :ignored-page-references-keywords)) k)
        v
 
        (= v "true")

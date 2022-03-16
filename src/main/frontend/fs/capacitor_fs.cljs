@@ -16,11 +16,6 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
-(when (mobile-util/native-ios?)
-  (.addListener mobile-util/fs-watcher "watcher"
-                (fn [event]
-                  (state/pub-event! [:file-watcher/changed event]))))
-
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
           permission (-> permission
@@ -265,7 +260,6 @@
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
   (watch-dir! [_this dir]
-    (when (mobile-util/native-ios?)
-      (p/do!
-       (.unwatch mobile-util/fs-watcher)
-       (.watch mobile-util/fs-watcher #js {:path dir})))))
+    (p/do!
+     (.unwatch mobile-util/fs-watcher)
+     (.watch mobile-util/fs-watcher #js {:path dir}))))

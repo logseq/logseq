@@ -1,4 +1,5 @@
 (ns frontend.db.query-dsl
+  "Handles executing dsl queries a.k.a. simple queries"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
@@ -7,13 +8,12 @@
             [clojure.walk :as walk]
             [frontend.date :as date]
             [frontend.db.model :as model]
-            [frontend.db.query-react :as react]
+            [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.db.rules :as rules]
             [frontend.template :as template]
             [frontend.text :as text]
             [frontend.util :as util]
-            [frontend.state :as state]
             [lambdaisland.glogi :as log]))
 
 
@@ -142,23 +142,21 @@
     (coll? (first clauses))
     (cond
       (= current-filter 'not)
-      (->> (apply concat clauses)
-           (apply list fe))
+      (cons 'and clauses)
 
       (or (= current-filter 'or)
           nested-and?)
-      (if (list? (first clauses))
-          (cons 'and clauses)
-          (apply concat clauses))
+      (cons 'and clauses)
 
       :else
-      (->> (map (fn [result]
+      (->> clauses
+           (map (fn [result]
                   (if (list? result)
                     result
                     (let [result (if (vector? (ffirst result))
                                    (apply concat result)
                                    result)]
-                      (cons 'and (seq result))))) clauses)
+                      (cons 'and (seq result))))))
            (apply list fe)))
 
     :else
@@ -169,9 +167,9 @@
 (defonce remove-nil? (partial remove nil?))
 
 (defn- build-and-or-not
-  [repo e {:keys [current-filter vars] :as env} level fe]
+  [e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
-                           (build-query repo form (assoc env :current-filter fe) (inc level)))
+                           (build-query form (assoc env :current-filter fe) (inc level)))
                          (rest e))
         clauses (->> raw-clauses
                      (map :query)
@@ -183,21 +181,13 @@
                     fe clauses current-filter nested-and?)
             vars' (set/union (set @vars) (collect-vars result))
             query (cond
-                    ;; TODO: more thoughts
-                    (and (= current-filter 'and)
-                         (= 'or fe)
-                         (= #{'?b} vars'))
-                    [(concat result [['?b]])]
-
                     nested-and?
                     result
 
-                    (and (zero? level) (= 'and fe))
-                    (if (list? (first clauses))
-                      result
-                      (distinct (apply concat clauses)))
+                    (and (zero? level) (contains? #{'and 'or} fe))
+                    result
 
-                    (and (zero? level) (= 'or fe))
+                    (and (= 'not fe) (some? current-filter))
                     result
 
                     :else
@@ -384,9 +374,10 @@ Some bindings in this fn:
 
 * e - the list being processed
 * fe - the query operator e.g. `property`"
-  ([repo e env]
-   (build-query repo e (assoc env :vars (atom {})) 0))
-  ([repo e {:keys [sort-by blocks? sample] :as env} level]
+  ([e env]
+   (build-query e (assoc env :vars (atom {})) 0))
+  ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
+   ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
@@ -406,7 +397,7 @@ Some bindings in this fn:
        (build-block-content e)
 
        (contains? #{'and 'or 'not} fe)
-       (build-and-or-not repo e env level fe)
+       (build-and-or-not e env level fe)
 
        (= 'between fe)
        (build-between e)
@@ -503,121 +494,94 @@ Some bindings in this fn:
       q)))
 
 (defn parse
-  [repo s]
+  [s]
   (when (and (string? s)
              (not (string/blank? s)))
-    (try
-      (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
-            form (some-> s
-                         (pre-transform)
-                         (reader/read-string))]
-        (if (symbol? form)
-          (str form)
-          (let [sort-by (atom nil)
-                blocks? (atom nil)
-                sample (atom nil)
-                {result :query rules :rules}
-                (when form (build-query repo form {:sort-by sort-by
-                                                   :blocks? blocks?
-                                                   :sample sample}))]
-            (cond
-              (and (nil? result) (string? form))
-              form
-
-              (string? result)
-              result
-
-              :else
-              (let [result (when (seq result)
-                             (let [key (if (coll? (first result))
-                                         (keyword (ffirst result))
-                                         (keyword (first result)))
-                                   result (case key
-                                            :and
-                                            (rest result)
-
-                                            result)]
-                               (add-bindings! form result)))]
-                {:query result
-                 :rules (mapv rules/query-dsl-rules rules)
-                 :sort-by @sort-by
-                 :blocks? (boolean @blocks?)
-                 :sample sample})))))
-      (catch js/Error e
-        (log/error :query-dsl/parse-error e)))))
+    (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
+          form (some-> s
+                       (pre-transform)
+                       (reader/read-string))
+          sort-by (atom nil)
+          blocks? (atom nil)
+          sample (atom nil)
+          {result :query rules :rules}
+          (when form (build-query form {:sort-by sort-by
+                                        :blocks? blocks?
+                                        :sample sample}))
+          result' (when (seq result)
+                    (let [key (if (coll? (first result))
+                                ;; Only queries for this branch are not's like:
+                                ;; [(not (page-ref ?b "page 2"))]
+                                (keyword (ffirst result))
+                                (keyword (first result)))]
+                      (add-bindings! form
+                                     (if (= key :and) (rest result) result))))]
+      {:query result'
+       :rules (mapv rules/query-dsl-rules rules)
+       :sort-by @sort-by
+       :blocks? (boolean @blocks?)
+       :sample sample})))
 
 ;; Main fns
 ;; ========
 
 (defn query-wrapper
   [where blocks?]
-  (when where
-    (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-              `[:find (~'pull ~'?b ~model/block-attrs)
-                :in ~'$ ~'%
-                :where]
-              '[:find (pull ?p [*])
-                :in $ %
-                :where])
-          result (if (coll? (first where))
-                   (apply conj q where)
-                   (conj q where))]
-      (prn "Datascript query: " result)
-      result)))
+  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+            `[:find (~'pull ~'?b ~model/block-attrs)
+              :in ~'$ ~'%
+              :where]
+            '[:find (pull ?p [*])
+              :in $ %
+              :where])
+        result (if (coll? (first where))
+                 (apply conj q where)
+                 (conj q where))]
+    (prn "Datascript query: " result)
+    result))
 
 (defn query
-  ([query-string]
-   (query (state/get-current-repo) query-string))
-  ([repo query-string]
-   (when (string? query-string)
-     (let [query-string (template/resolve-dynamic-template! query-string)]
-       (when-not (string/blank? query-string)
-         (let [{:keys [query rules sort-by blocks? sample] :as result} (parse repo query-string)
-               query (if (string? query) (string/trim query) query)
-               full-text-query? (and (string? result)
-                                     (not (string/includes? result " ")))]
-           (if full-text-query?
-             (if (= "\"" (first result) (last result))
-               (subs result 1 (dec (count result)))
-               result)
-             (when-let [query (query-wrapper query blocks?)]
-               (let [sort-by (or sort-by identity)
-                     random-samples (if @sample
-                                      (fn [col]
-                                        (take @sample (shuffle col)))
-                                      identity)
-                     transform-fn (comp sort-by random-samples)]
-                 (try
-                   (react/react-query repo
-                                      {:query query
-                                       :query-string query-string
-                                       :rules rules
-                                       :throw-exception true}
-                                      {:use-cache? false
-                                       :transform-fn transform-fn})
-                   (catch ExceptionInfo e
-                     ;; Allow non-existent page queries to be ignored
-                     (if (string/includes? (str (.-message e)) "Nothing found for entity")
-                       (log/error :query-dsl-error e)
-                       (throw e)))))))))))))
+  "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
+  [repo query-string]
+  (when (and (string? query-string) (not= "\"\"" query-string))
+    (let [query-string' (template/resolve-dynamic-template! query-string)
+          {:keys [query rules sort-by blocks? sample]} (parse query-string')]
+      (when-let [query' (some-> query (query-wrapper blocks?))]
+        (let [sort-by (or sort-by identity)
+              random-samples (if @sample
+                               (fn [col]
+                                 (take @sample (shuffle col)))
+                               identity)
+              transform-fn (comp sort-by random-samples)]
+          (try
+            (query-react/react-query repo
+                                     {:query query'
+                                      :query-string query-string
+                                      :rules rules}
+                                     {:use-cache? false
+                                      :transform-fn transform-fn})
+            (catch ExceptionInfo e
+              ;; Allow non-existent page queries to be ignored
+              (if (string/includes? (str (.-message e)) "Nothing found for entity")
+                (log/error :nothing-found-error e)
+                (throw e)))))))))
 
 (defn custom-query
+  "Runs a dsl query with query as a seq. Primary use is from advanced query"
   [repo query-m query-opts]
   (when (seq (:query query-m))
-    (let [query-string (pr-str (:query query-m))
-          query-string (template/resolve-dynamic-template! query-string)
-          {:keys [query sort-by blocks?]} (parse repo query-string)
-          query (if (string? query) (string/trim query) query)]
-      (when query
-        (when-let [query (query-wrapper query blocks?)]
-          (react/react-query repo
-                             (merge
-                              query-m
-                              {:query query})
-                             (merge
-                              query-opts
-                              (when sort-by
-                                {:transform-fn sort-by}))))))))
+    (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
+          {:keys [query sort-by blocks? rules]} (parse query-string)]
+      (when-let [query' (some-> query (query-wrapper blocks?))]
+        (query-react/react-query repo
+                           (merge
+                            query-m
+                            {:query query'
+                             :rules rules})
+                           (merge
+                            query-opts
+                            (when sort-by
+                              {:transform-fn sort-by})))))))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

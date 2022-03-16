@@ -162,7 +162,7 @@
     (try
       (let [empty-db (d/empty-db db-schema/schema)
             db (or old-db
-                   (when (and (coll? cached-result)
+                   (when (and (sequential? cached-result)
                               (or (map? (first cached-result))
                                   (empty? cached-result)))
                      (let [cached-result (util/remove-nils cached-result)]
@@ -348,7 +348,9 @@
                                result))
                        db (or db' db)
                        f #(execute-query! repo-url db k tx cache)]
-                   (if custom?
+                   (if (and custom?
+                            ;; modifying during cards review need to be executed immediately
+                            (not (:cards-query? (meta query))))
                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
                      (f)))
                  (catch js/Error e
