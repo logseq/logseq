@@ -9,7 +9,7 @@ test('render app', async ({ page }) => {
   // NOTE: part of app startup tests is moved to `fixtures.ts`.
   await page.waitForFunction('window.document.title != "Loading"')
 
-  // expect(await page.title()).toMatch(/^Logseq.*?/)
+  expect(await page.title()).toMatch(/^Logseq.*?/)
 })
 
 test('toggle sidebar', async ({ page }) => {
