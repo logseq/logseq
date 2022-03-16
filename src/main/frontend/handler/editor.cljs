@@ -3385,9 +3385,11 @@
        (and
         (not (util/collapsed? block))
         (or (db-model/has-children? block-id)
-            (block-with-title? (:block/format block)
-                               (:block/content block)
-                               semantic?)))
+            (and
+             (:outliner/block-title-collapse-enabled? (state/get-config))
+             (block-with-title? (:block/format block)
+                                (:block/content block)
+                                semantic?))))
        false))))
 
 (defn all-blocks-with-level
