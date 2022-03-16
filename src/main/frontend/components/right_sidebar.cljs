@@ -24,7 +24,7 @@
   []
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
-      [:a.button.fade-link.toggle
+      [:a.button.fade-link.toggle-right-sidebar
        {:on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 

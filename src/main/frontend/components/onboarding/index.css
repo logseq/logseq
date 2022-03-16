@@ -1,7 +1,17 @@
 body[data-page=repo-add],
 body[data-page=import] {
-  #left-sidebar, #right-sidebar, .cp__header .add-graph-btn {
+  .cp__header .add-graph-btn {
     display: none;
+  }
+}
+
+@screen md {
+  body[data-page=repo-add],
+  body[data-page=import] {
+    #left-sidebar, #right-sidebar, #left-menu,
+    .cp__header .toggle-right-sidebar {
+      display: none;
+    }
   }
 }
 
@@ -12,7 +22,7 @@ body[data-page=import] {
     width: 100%;
     top: 0;
     left: 0;
-    z-index: 9;
+    z-index: 1;
     height: 100vh;
     overflow-y: auto;
 
