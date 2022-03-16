@@ -3601,19 +3601,18 @@
 
 (defn replace-block-reference-with-content-at-point
   []
-  (when-let [{:keys [content start end]} (thingatpt/block-ref-at-point)]
-    (let [block-ref-id (subs content 2 (- (count content) 2))]
-      (when-let [block (db/pull [:block/uuid (uuid block-ref-id)])]
-        (let [block-content (:block/content block)
-              format (or (:block/format block) :markdown)
-              block-content-without-prop (-> (property/remove-properties format block-content)
-                                             (drawer/remove-logbook))]
-          (when-let [input (state/get-input)]
-            (when-let [current-block-content (gobj/get input "value")]
-              (let [block-content* (str (subs current-block-content 0 start)
-                                        block-content-without-prop
-                                        (subs current-block-content end))]
-                (state/set-block-content-and-last-pos! input block-content* 1)))))))))
+  (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
+    (when-let [block (db/pull [:block/uuid link])]
+      (let [block-content (:block/content block)
+            format (or (:block/format block) :markdown)
+            block-content-without-prop (-> (property/remove-properties format block-content)
+                                           (drawer/remove-logbook))]
+        (when-let [input (state/get-input)]
+          (when-let [current-block-content (gobj/get input "value")]
+            (let [block-content* (str (subs current-block-content 0 start)
+                                      block-content-without-prop
+                                      (subs current-block-content end))]
+              (state/set-block-content-and-last-pos! input block-content* 1))))))))
 
 (defn copy-current-ref
   [block-id]
