@@ -424,12 +424,8 @@
               next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
               next-siblings (if (and next-sibling child-block)
                               (cons next-sibling next-siblings)
-                              next-siblings)
-              collapsed? (:block/collapsed? node)]
-          (if-let [node (and
-                         (or (not collapsed?)
-                             (= (:db/id node) (:db/id parent)))
-                         (or child-block next-sibling))]
+                              next-siblings)]
+          (if-let [node (or child-block next-sibling)]
             (recur node next-siblings (conj result node))
             (if-let [sibling (first next-siblings)]
               (recur sibling (rest next-siblings) (conj result sibling))
