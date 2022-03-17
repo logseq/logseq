@@ -556,6 +556,21 @@
              (ui-handler/re-render-root!)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
+(defn restore-and-setup-repo!
+  "Restore the db of a graph from the persisted data, and setup.
+   Create a new conn, or replace the conn in state with a new one.
+   me: optional, identity data, can be retrieved from `(state/get-me)` or `nil`"
+  ([repo]
+   (restore-and-setup-repo! repo (state/get-me)))
+  ([repo me]
+   (p/let [_ (state/set-db-restoring! true)
+           _ (db/restore-graph! repo me)]
+     (file-handler/restore-config! repo false)
+    ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+     (db/listen-and-persist! repo)
+     (ui-handler/add-style-if-exists!)
+     (state/set-db-restoring! false))))
+
 (defn periodically-pull-current-repo
   []
   (js/setInterval
@@ -649,28 +664,6 @@
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
 
-(defn persist-all-dbs!
-  [{:keys [before on-success on-error]}]
-  (->
-   (p/let [repos (db-persist/get-all-graphs)
-           repos (-> repos
-                     (conj (state/get-current-repo))
-                     (distinct))]
-     (if (seq repos)
-       (do
-         (before)
-         (doseq [repo repos]
-           (metadata-handler/set-pages-metadata! repo))
-         (js/setTimeout
-          (fn []
-            (-> (p/all (map db/persist! repos))
-                (p/then on-success)))
-          100))
-       (on-success)))
-   (p/catch (fn [error]
-              (js/console.error error)
-              (on-error)))))
-
 (defn persist-db!
   ([]
    (persist-db! {}))
@@ -699,11 +692,10 @@
   [graph]
   (p/create (fn [resolve _]
               (js/window.apis.on "persistGraphDone"
-                                 (fn [data]
-                                   (let [repo (bean/->clj data)]
-                                     (prn "received persistGraphDone" repo)
-                                     (when (= graph repo)
+                                 #(let [repo (bean/->clj %)]
+                                    (prn "received persistGraphDone" repo)
+                                    (when (= graph repo)
                                        ;; js/window.apis.once doesn't work
-                                       (js/window.apis.removeAllListeners "persistGraphDone")
-                                       (resolve repo)))))
+                                      (js/window.apis.removeAllListeners "persistGraphDone")
+                                      (resolve repo))))
               (ipc/ipc "persistGraph" graph))))
