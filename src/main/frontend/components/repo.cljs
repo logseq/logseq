@@ -257,7 +257,7 @@
                            :options {:on-click ui-handler/open-new-window!}})]
     (->>
      (concat repo-links
-             [(when (seq repos) {:hr true})
+             [(when (seq repo-links) {:hr true})
               {:title (t :new-graph) :options {:href (rfe/href :repo-add)}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
