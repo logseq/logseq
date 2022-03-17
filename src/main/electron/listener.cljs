@@ -84,8 +84,9 @@
                              after-f #(ipc/ipc "persistGraphDone" repo)
                              error-f (fn []
                                        (after-f)
-                                       (notification/show! (t :graph/persist-error)
-                                                           :error))
+                                       (notification/show!
+                                        (t :graph/persist-error)
+                                        :error))
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]
