@@ -15,7 +15,7 @@
 (defn persist-dbs!
   []
   ;; only persist current db!
-  ;; TODO rename to persist-db
+  ;; TODO rename the function and event to persist-db
   (repo-handler/persist-db! {:before     #(notification/show!
                                            (ui/loading (t :graph/persist))
                                            :warning)
