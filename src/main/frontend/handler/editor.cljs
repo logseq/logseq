@@ -3378,8 +3378,9 @@
 
 (defn collapsable?
   ([block-id]
-   (collapsable? block-id false))
-  ([block-id semantic?]
+   (collapsable? block-id {}))
+  ([block-id {:keys [semantic?]
+              :or {semantic? false}}]
    (when block-id
      (if-let [block (db-model/query-block-by-uuid block-id)]
        (and
