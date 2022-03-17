@@ -93,7 +93,10 @@
   (srs/update-cards-due-count!)
   (state/pub-event! [:graph/ready graph]))
 
-(defn- graph-switch-on-persisted [graph]
+(defn- graph-switch-on-persisted 
+  "Logic for keeping db sync when switching graphs
+   Only works for electron"
+  [graph]
   (p/let [;; save current db
           _ (repo-handler/persist-db!)
           ;; ask other windows to persist the targeting db

@@ -684,7 +684,9 @@
                  (on-error)))))))
 
 (defn persist-otherwindow-db!
-  "Call backend to handle persisting a specific db on other window
+  "Only works for electron
+   Call backend to handle persisting a specific db on other window
+   Skip persisting if no other windows is open (controlled by electron)
      step 1. [In HERE]  a window         --persistGraph----->   electron  
      step 2.            electron         --persistGraph----->   window holds the graph  
      step 3.            window w/ graph  --persistGraphDone->   electron  
