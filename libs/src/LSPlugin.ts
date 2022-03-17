@@ -442,6 +442,12 @@ export interface IEditorProxy extends Record<string, any> {
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
   /**
+   * get all page/block linked references
+   * @param srcPage
+   */
+  getPageLinkedReferences: (srcPage: PageIdentity) => Promise<Array<[page: PageEntity, blocks: Array<BlockEntity>]> | null>
+
+  /**
    * get flatten pages from top namespace
    * @param namespace
    */

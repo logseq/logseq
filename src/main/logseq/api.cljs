@@ -566,6 +566,16 @@
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
 
+(defn ^:export get_page_linked_references
+  [page-name-or-uuid]
+  (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
+    (let [page-name (:block/name page)
+          ref-blocks (if page-name
+                       (db-model/get-page-referenced-blocks page-name)
+                       (db-model/get-block-referenced-blocks (:block/uuid page)))
+          ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
+      (bean/->js (normalize-keyword-for-json ref-blocks)))))
+
 (defn ^:export get_pages_from_namespace
   [ns]
   (when-let [repo (and ns (state/get-current-repo))]
