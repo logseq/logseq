@@ -2,6 +2,10 @@
 # yarn lockfile v1
 
 
+"-@0.0.1":
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/-/-/--0.0.1.tgz#db6db7cd866142880dd03e5b8781d1b4fac0e5bd"
+  integrity sha512-3HfneK3DGAm05fpyj20sT3apkNcvPpCuccOThOPdzz8sY7GgQGe0l93XH9bt+YzibcTIgUAIMoyVJI740RtgyQ==
 "@ampproject/remapping@^2.1.0":
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/@ampproject/remapping/-/remapping-2.1.2.tgz#4edca94973ded9630d20101cd8559cedb8d8bd34"
@@ -519,6 +523,27 @@
     tslib "^2.1.0"
     xml2js "^0.4.23"
 
+"@capacitor/cli@>= 3 < 4":
+  version "3.4.3"
+  resolved "https://registry.yarnpkg.com/@capacitor/cli/-/cli-3.4.3.tgz#15a14cbd9574980da5f9f04b6ce8623455784c6e"
+  integrity sha512-mu2pGoIh/OapMzWwXGXUlOmapXthW9XcHGERpZxNE45aBEYC9eTJWmbcXVlJuyx/9GFnnV+pXjGl3i0grci/Zw==
+  dependencies:
+    "@ionic/cli-framework-output" "^2.2.1"
+    "@ionic/utils-fs" "^3.1.5"
+    "@ionic/utils-subprocess" "^2.1.6"
+    "@ionic/utils-terminal" "^2.3.0"
+    commander "^6.0.0"
+    debug "^4.2.0"
+    env-paths "^2.2.0"
+    kleur "^4.1.1"
+    native-run "^1.5.0"
+    open "^7.4.2"
+    plist "^3.0.2"
+    prompts "^2.3.2"
+    semver "^7.3.2"
+    tar "^6.1.11"
+    tslib "^2.1.0"
+    xml2js "^0.4.23"
 "@capacitor/core@3.2.2":
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-3.2.2.tgz#5926788920ba9117aa735d2941f5b2bdc4a6889a"
@@ -526,6 +551,12 @@
   dependencies:
     tslib "^2.1.0"
 
+"@capacitor/core@>= 3 < 4":
+  version "3.4.3"
+  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-3.4.3.tgz#3cf343b7035f1f6f9b73854dfb828600cd8a5e07"
+  integrity sha512-drfu0IiDMyeJtL4QALQgNFqdgN19DZJkbKh945eXyK44Sk2YkFXUs7Ewq1ZlVI30QF79mHGuM13oZeki0gv5Tw==
+  dependencies:
+    tslib "^2.1.0"
 "@capacitor/filesystem@1.0.6":
   version "1.0.6"
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-1.0.6.tgz#b837585e6b5d48dc705ee89e49cc7c6aeb8874ec"
@@ -7346,6 +7377,14 @@ semver@^7.3.2, semver@^7.3.4:
   dependencies:
     lru-cache "^6.0.0"
 
+send-intent@3.0.11:
+  version "3.0.11"
+  resolved "https://registry.yarnpkg.com/send-intent/-/send-intent-3.0.11.tgz#85bf84b57e147a79a24429f8e51229339da36a78"
+  integrity sha512-v272/VBygddJdCz/Xk6o6Clh4NJMfCIzB0h8ZVqbnGvNeK1raCZ+LlXPYdkRw1zY5I0LiwEDudumWREd7AgzwA==
+  dependencies:
+    "-" "0.0.1"
+    "@capacitor/cli" ">= 3 < 4"
+    "@capacitor/core" ">= 3 < 4"
 serialize-error@^7.0.1:
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/serialize-error/-/serialize-error-7.0.1.tgz#f1360b0447f61ffb483ec4157c737fab7d778e18"
