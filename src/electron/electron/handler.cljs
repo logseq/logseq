@@ -247,12 +247,6 @@
       (when (fs/existsSync file-path)
         (fs-extra/removeSync file-path)))))
 
-(defmethod handle :openNewWindow [_window [_]]
-  (let [win (win/create-main-window)]
-    (win/on-close-save! win)
-    (win/setup-window-listeners! win)
-    nil))
-
 (defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)
   true)
@@ -329,8 +323,16 @@
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)})
 
+(defn close-watcher-when-orphaned!
+  "When it's the last window for the directory, close the watcher."
+  [window dir]
+  (when (not (win/graph-has-other-windows? window dir))
+    (watcher/close-watcher! dir)))
+
 (defmethod handle :setCurrentGraph [^js win [_ path]]
-  (let [path (when path (utils/get-graph-dir path))]
+  (let [path (when path (utils/get-graph-dir path))
+        old-path (state/get-window-graph-path win)]
+    (when old-path (close-watcher-when-orphaned! win old-path))
     (swap! state/state assoc :graph/current path)
     (swap! state/state assoc-in [:window/graph win] path)
     nil))
@@ -365,19 +367,13 @@
                               (bean/->clj {:graph graph
                                            :tx-data tx-data})))))
 
-(defn- graph-has-other-windows? [win graph]
-  (let [dir (utils/get-graph-dir graph)
-        windows (win/get-graph-all-windows dir)
-        windows (filter #(.isVisible %) windows)]
-    (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
-
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
-  (graph-has-other-windows? win graph))
+  (win/graph-has-other-windows? win graph))
 
 (defmethod handle :graphHasMultipleWindows [^js _win [_ graph]]
   (let [dir (utils/get-graph-dir graph)
-        windows (win/get-graph-all-windows dir)
-        windows (filter #(.isVisible %) windows)]
+        windows (win/get-graph-all-windows dir)]
+        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
     (> (count windows) 1)))
 
 (defmethod handle :addDirWatcher [^js window [_ dir]]
@@ -388,9 +384,14 @@
   (when dir
     ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
     ;; TODO: handle duplicated adding dir watcher when multiple windows
-    (when (not (graph-has-other-windows? window dir))
-      (watcher/close-watcher! dir))
+    (close-watcher-when-orphaned! window dir)
     (watcher/watch-dir! window dir)))
+
+(defmethod handle :openNewWindow [_window [_]]
+  (let [win (win/create-main-window)]
+    (win/on-close-actions! win close-watcher-when-orphaned!)
+    (win/setup-window-listeners! win)
+    nil))
 
 (defmethod handle :searchVersionChanged?
   [^js _win [_ graph]]
@@ -410,7 +411,7 @@
   ;; call a window holds the specific graph to persist
   (let [dir (utils/get-graph-dir graph)
         windows (win/get-graph-all-windows dir)
-        windows (filter #(.isVisible %) windows)
+        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
         tar-graph-win (first windows)]
     (if tar-graph-win
       (utils/send-to-renderer tar-graph-win "persistGraph" graph)

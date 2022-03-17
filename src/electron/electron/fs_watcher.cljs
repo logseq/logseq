@@ -18,13 +18,15 @@
 (defn- send-file-watcher! [dir type payload]
   ;; Should only send to one window; then dbsync will do his job
   ;; If no window is on this graph, just ignore
-  (some (fn [^js win]
-          (when-not (.isDestroyed win)
-            (.. win -webContents
-                (send file-watcher-chan
-                      (bean/->js {:type type :payload payload})))
-            true)) ;; break some loop on success
-        (window/get-graph-all-windows dir)))
+  (let [sent? (some (fn [^js win]
+                      (when-not (.isDestroyed win)
+                        (.. win -webContents
+                            (send file-watcher-chan
+                                  (bean/->js {:type type :payload payload})))
+                        true)) ;; break some loop on success
+                    (window/get-graph-all-windows dir))]
+    (when-not sent? (prn "unhandled file event will cause uncatched file modifications!.
+                          target:" dir))))
 
 (defn- publish-file-event!
   [dir path event]
@@ -76,7 +78,7 @@
 
 (defn close-watcher!
   "If no `dir` provided, close all watchers;
-   Otherwise, close the specific watcher"
+   Otherwise, close the specific watcher if exists"
   ([]
    (doseq [[watcher watcher-del-f] (vals @*file-watcher)]
      (.close watcher)
@@ -84,7 +86,7 @@
    (reset! *file-watcher {}))
   ([dir]
    (let [[watcher watcher-del-f] (get @*file-watcher dir)]
-     (when watcher ;; when there are multiple windows, 
+     (when watcher
        (.close watcher)
        (.removeListener app "quit" watcher-del-f)
        (swap! *file-watcher dissoc dir)))))

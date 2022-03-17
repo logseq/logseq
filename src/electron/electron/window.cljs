@@ -1,6 +1,6 @@
 (ns electron.window
   (:require ["electron-window-state" :as windowStateKeeper]
-            [electron.utils :refer [mac? win32? linux? dev? logger open]]
+            [electron.utils :refer [mac? win32? linux? dev? logger open] :as utils]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             ["electron" :refer [BrowserWindow app session shell] :as electron]
@@ -68,10 +68,13 @@
   [^js win]
   (.destroy win))
 
-(defn on-close-save!
-  [^js win]
+(defn on-close-actions!
+  ;; TODO merge with the on close in core
+  [^js win close-watcher-f] ;; injected watcher related func
   (.on win "close" (fn [e]
                      (.preventDefault e)
+                     (when-let [dir (state/get-window-graph-path win)]
+                       (close-watcher-f win dir))
                      (state/close-window! win)
                      (let [web-contents (. win -webContents)]
                        (.send web-contents "persistent-dbs"))
@@ -90,6 +93,12 @@
   (->> (group-by second (:window/graph @state/state))
        (#(get % graph-path))
        (map first)))
+
+(defn graph-has-other-windows? [win graph]
+  (let [dir (utils/get-graph-dir graph)
+        windows (get-graph-all-windows dir)]
+        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
+    (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
 
 (defn- open-default-app!
   [url default-open]
