@@ -89,14 +89,13 @@
   (.getAllWindows BrowserWindow))
 
 (defn get-graph-all-windows
-  [graph-path]
+  [graph-path] ;; graph-path == dir
   (->> (group-by second (:window/graph @state/state))
        (#(get % graph-path))
        (map first)))
 
-(defn graph-has-other-windows? [win graph]
-  (let [dir (utils/get-graph-dir graph)
-        windows (get-graph-all-windows dir)]
+(defn graph-has-other-windows? [win dir]
+  (let [windows (get-graph-all-windows dir)]
         ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
     (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
 

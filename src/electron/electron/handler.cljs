@@ -368,7 +368,8 @@
                                            :tx-data tx-data})))))
 
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
-  (win/graph-has-other-windows? win graph))
+  (let [dir (utils/get-graph-dir graph)]
+    (win/graph-has-other-windows? win dir)))
 
 (defmethod handle :graphHasMultipleWindows [^js _win [_ graph]]
   (let [dir (utils/get-graph-dir graph)
@@ -377,6 +378,7 @@
     (> (count windows) 1)))
 
 (defmethod handle :addDirWatcher [^js window [_ dir]]
+  ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir (TODO: check this on a window is closed)
