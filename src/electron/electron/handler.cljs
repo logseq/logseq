@@ -300,11 +300,6 @@
   (clear-cache!)
   (search/ensure-search-dir!))
 
-(defmethod handle :addDirWatcher [window [_ dir]]
-  (when dir
-    (watcher/close-watcher! dir)
-    (watcher/watch-dir! window dir)))
-
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
@@ -385,6 +380,18 @@
         windows (filter #(.isVisible %) windows)]
     (> (count windows) 1)))
 
+(defmethod handle :addDirWatcher [^js window [_ dir]]
+  ;; Windows on same dir share the same watcher
+  ;; Only close file watcher when:
+  ;;    1. there is no one window on the same dir (TODO: check this on a window is closed)
+  ;;    2. reset file watcher to resend `add` event on window refreshing
+  (when dir
+    ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
+    ;; TODO: handle duplicated adding dir watcher when multiple windows
+    (when (not (graph-has-other-windows? window dir))
+      (watcher/close-watcher! dir))
+    (watcher/watch-dir! window dir)))
+
 (defmethod handle :searchVersionChanged?
   [^js _win [_ graph]]
   (search/version-changed? graph))
@@ -404,8 +411,7 @@
   (let [dir (utils/get-graph-dir graph)
         windows (win/get-graph-all-windows dir)
         windows (filter #(.isVisible %) windows)
-        tar-graph-win (first windows)
-        _ (prn "persist graph" graph)]
+        tar-graph-win (first windows)]
     (if tar-graph-win
       (utils/send-to-renderer tar-graph-win "persistGraph" graph)
       (utils/send-to-renderer win "persistGraphDone" graph)))) ;; if no such graph, skip directly

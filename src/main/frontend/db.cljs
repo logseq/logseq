@@ -159,35 +159,40 @@
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
+(defn restore-graph!
+  "Restore db from serialized db cache, and swap into the current db status"
+  [repo me]
+  (p/let [db-name (datascript-db repo)
+          db-conn (d/create-conn db-schema/schema)
+          _ (swap! conns assoc db-name db-conn)
+          stored (db-persist/get-serialized-graph db-name)
+          logged? (:name me)
+          _ (if stored
+              (let [stored-db (try (string->db stored)
+                                   (catch js/Error _e
+                                     (js/console.warn "Invalid graph cache")
+                                     (d/empty-db db-schema/schema)))
+                    attached-db (d/db-with stored-db (concat
+                                                      [(me-tx stored-db me)]
+                                                      default-db/built-in-pages)) ;; TODO bug overriding uuids?
+                    db (if (old-schema? attached-db)
+                         (db-migrate/migrate attached-db)
+                         attached-db)]
+                (conn/reset-conn! db-conn db))
+              (when logged?
+                (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+    (d/transact! db-conn [{:schema/version db-schema/version}])))
+
 ;; TODO: only restore the current graph instead of all the graphs to speedup and
 ;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
-  (let [logged? (:name me)]
-    (doall
-     (for [{:keys [url]} repos]
-       (let [repo url]
-         (p/let [db-name (datascript-db repo)
-                 db-conn (d/create-conn db-schema/schema)
-                 _ (swap! conns assoc db-name db-conn)
-                 stored (db-persist/get-serialized-graph db-name)
-                 _ (if stored
-                     (let [stored-db (try (string->db stored)
-                                          (catch js/Error _e
-                                            (js/console.warn "Invalid graph cache")
-                                            (d/empty-db db-schema/schema)))
-                           attached-db (d/db-with stored-db (concat
-                                                             [(me-tx stored-db me)]
-                                                             default-db/built-in-pages))
-                           db (if (old-schema? attached-db)
-                                (db-migrate/migrate attached-db)
-                                attached-db)]
-                       (conn/reset-conn! db-conn db))
-                     (when logged?
-                       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
-           (d/transact! db-conn [{:schema/version db-schema/version}])
-           (restore-config-handler repo)
-           (listen-and-persist! repo)))))))
+  (doall
+   (for [{:keys [url]} repos]
+     (let [repo url]
+       (p/let [_ (restore-graph! repo me)]
+         (restore-config-handler repo)
+         (listen-and-persist! repo))))))
 
 (defn run-batch-txs!
   []

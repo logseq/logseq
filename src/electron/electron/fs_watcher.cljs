@@ -17,6 +17,7 @@
 (defonce file-watcher-chan "file-watcher")
 (defn- send-file-watcher! [dir type payload]
   ;; Should only send to one window; then dbsync will do his job
+  ;; If no window is on this graph, just ignore
   (some (fn [^js win]
           (when-not (.isDestroyed win)
             (.. win -webContents
@@ -67,21 +68,23 @@
              (println "Watch error happened: "
                       {:path path})))
 
+      ;; electron app extends `EventEmitter`
+      ;; TODO check: duplicated with the logic in "window-all-closed" ?
       (.on app "quit" watcher-del-f)
 
       true)))
 
 (defn close-watcher!
+  "If no `dir` provided, close all watchers;
+   Otherwise, close the specific watcher"
   ([]
    (doseq [[watcher watcher-del-f] (vals @*file-watcher)]
      (.close watcher)
-     (.on app "quit" watcher-del-f))
+     (.removeListener app "quit" watcher-del-f))
    (reset! *file-watcher {}))
   ([dir]
-   (let [wins (window/get-graph-all-windows dir)
-         [watcher watcher-del-f] (get @*file-watcher dir)]
-     (when (and (<= (count wins) 1)
-                watcher)
+   (let [[watcher watcher-del-f] (get @*file-watcher dir)]
+     (when watcher ;; when there are multiple windows, 
        (.close watcher)
-       (.on app "quit" watcher-del-f)
+       (.removeListener app "quit" watcher-del-f)
        (swap! *file-watcher dissoc dir)))))

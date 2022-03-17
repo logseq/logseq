@@ -97,7 +97,8 @@
   (p/let [;; save current db
           _ (repo-handler/persist-db!)
           ;; ask other windows to persist the targeting db
-          _ (repo-handler/persist-otherwindow-db! graph)]
+          _ (repo-handler/persist-otherwindow-db! graph)
+          _ (repo-handler/restore-and-setup-repo! graph)]
     (graph-switch graph)))
 
 (defmethod handle :graph/switch [[_ graph]]
