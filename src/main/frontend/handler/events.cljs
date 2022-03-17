@@ -93,13 +93,20 @@
   (srs/update-cards-due-count!)
   (state/pub-event! [:graph/ready graph]))
 
-(defn- graph-switch-on-persisted 
+(def persist-db-noti-m
+  {:before     #(notification/show!
+                 (ui/loading (t :graph/persist))
+                 :warning)
+   :on-error   #(notification/show!
+                 (t :graph/persist-error)
+                 :error)})
+
+(defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [;; save current db
-          _ (repo-handler/persist-db!)
-          ;; ask other windows to persist the targeting db
+  (p/let [current-repo (state/get-current-repo) 
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
           _ (repo-handler/persist-otherwindow-db! graph)
           _ (repo-handler/restore-and-setup-repo! graph)]
     (graph-switch graph)))
@@ -112,6 +119,14 @@
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
+
+(defmethod handle :graph/open-new-window [[_ repo]]
+  (p/let [current-repo (state/get-current-repo)
+          target-repo (or repo current-repo)
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
+          _ (when-not (= current-repo target-repo)
+              (repo-handler/persist-otherwindow-db! repo))]
+    (ui-handler/open-new-window! _ repo)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
@@ -333,18 +348,6 @@
    (update (js->clj event :keywordize-keys true)
            :path
            js/decodeURI)))
-
-(defmethod handle :graph/open-new-window [[_ repo]]
-   ;; persistent current db, then open new window
-  (let [cur-repo (state/get-current-repo)]
-    (repo-handler/persist-db! cur-repo
-                              {:before     #(notification/show!
-                                             (ui/loading (t :graph/persist))
-                                             :warning)
-                               :on-success #(ui-handler/open-new-window! _ repo)
-                               :on-error   #(notification/show!
-                                             (t :graph/persist-error)
-                                             :error)})))
 
 (defn run!
   []
