@@ -7,7 +7,8 @@
             [frontend.util :as util]
             [frontend.modules.outliner.transaction]
             [frontend.spec :as spec]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [clojure.set :as set]))
 
 ;;; Commentary
 ;; properties related to block position:
@@ -62,10 +63,6 @@
         (nil? node) last-node
         (contains? parent-nodes (get-parent node db)) last-node
         :else (recur node (get-next node db))))))
-
-(defn- page-node?
-  [node db]
-  (nil? (get-parent node db)))
 
 ;;; Node apis
 (defprotocol Node
@@ -252,9 +249,9 @@
                    node
                    (assoc node :db/id (dec (- idx))))) nodes))
 
-(defn- map-sequential?
-  [o]
-  (not-any? (complement map?) o))
+(defn- map-with-keys-sequential?
+  [o required-keys]
+  (every? #(and (map? %) (seq (set/intersection (set required-keys) (set (keys %))))) o))
 
 ;;; some validators and specs
 (declare contains-node?)
@@ -291,7 +288,8 @@
   (count (get-parent-nodes node db)))
 
 (defn get-children-nodes
-  "include NODE itself"
+  "include NODE itself
+  see also `with-children-nodes`"
   [node db]
   (let [parent-nodes (set (get-parent-nodes node db))
         children-nodes (transient [node])]
@@ -344,26 +342,56 @@
             (contains? parent-parent-nodes parent-node*) nil
             :else (recur (get-next node db))))))))
 
+(defn with-children-nodes
+  "return nodes includes NODES themselves and their children.
+  e.g.
+  page nodes as following:
+  - 1
+    - 2
+  - 3
+    - 4
+      - 5
+  NODES = [1 3 4],  return [1 2 3 4 5]
+  NODES = [1 3],    return [1 2 3 4 5]"
+  [nodes db]
+  {:post [(spec/valid? (s/coll-of some?) %)]}
+  (let [node-ids-set (set (mapv get-id nodes))
+        r (transient [])]
+    (loop [node (first nodes)]
+      (when node
+        (let [node-and-children (get-children-nodes node db)]
+          (conj! r node-and-children)
+          (when-let [next-sibling (get-next-sibling-node node db)]
+            (when (contains? node-ids-set (get-id next-sibling))
+              (recur next-sibling))))))
+    (flatten (persistent! r))))
+
+
 ;;; write-operations on outliner nodes (no side effects) ;;;;;;;;;;;;;;;;
 ;; all operation functions are pure, return transaction data
 
+(declare page-node?)
 (defn insert-nodes
   "insert NODES as consecutive sorted nodes after target as siblings or children.
   return transaction data.
   NODES should have [:level int?] kv, toplevel is 1"
   [nodes db target-id-or-entity sibling?]
   {:pre [(spec/valid? ::target-id-or-entity target-id-or-entity)
-         (map-sequential? nodes)]}
+         (map-with-keys-sequential? nodes [:level])]}
   (let [nodes (assign-temp-id nodes)
         target (target-entity target-id-or-entity db)
         target-or-its-last-child (skip-children target db)
-        next (get-next target-or-its-last-child db)
+        ;; if sibling?, insert after target's last child, else, insert after target
+        target* (if sibling? target-or-its-last-child target)
+        next (if sibling?
+               (get-next target-or-its-last-child db)
+               (get-next target db))
         first-node (first nodes)
         last-node (last nodes)
         parent-node
         (if (and (not (page-node? target db)) sibling?) (get-parent target db) target)
         update-next-id-txs
-        [(set-next target-or-its-last-child first-node)
+        [(set-next target* first-node)
          (set-next last-node next)]
         update-internal-nodes-next-id-txs
         (for [i (range)
@@ -377,7 +405,7 @@
       (when node
         (let [level (:level node)]
           (conj! update-parent-txs
-                 (save-aux db (merge node (set-parent node (get parent-node-map (dec level))))))
+                 (save-aux db (merge (dissoc node :level) (set-parent node (get parent-node-map (dec level))))))
           (recur (assoc parent-node-map level node) tail))))
     (vec (concat (flatten (persistent! update-parent-txs)) update-next-id-txs update-internal-nodes-next-id-txs))))
 
@@ -386,11 +414,13 @@
   return transaction data."
   [nodes db target-id-or-entity sibling?]
   ;; TODO: check NODES are consecutive
-  ;; TODO: nodes should be NODES+children
   {:pre [(seq nodes)
-         (spec/valid? ::target-id-or-entity target-id-or-entity)]}
+         (spec/valid? ::target-id-or-entity target-id-or-entity)
+         (= nodes (with-children-nodes nodes db))]}
   (validate-nodes-not-contains-target nodes target-id-or-entity db)
   (let [target (target-entity target-id-or-entity db)
+        ;; if target is page-node, sibling? must be false
+        sibling? (if (page-node? target db) false sibling?)
         target-next (get-next target db)
         first-node (first nodes)
         origin-prev-first-node (get-prev first-node db)
@@ -427,7 +457,7 @@
   return transaction data."
   [nodes db]
   {:pre [(seq nodes)]}
-  ;; TODO: nodes=NODES+children
+  ;; TODO: ensure nodes=NODES+children
   (let [first-node (first nodes)
         last-node (last nodes)
         target-node (get-prev first-node db)
@@ -494,6 +524,10 @@
 
 
 ;;; predicates
+(defn page-node?
+  [node db]
+  (nil? (get-parent node db)))
+
 (defn contains-node?
   "return not nil value if the consecutive sorted NODES contains NODE"
   [nodes node]

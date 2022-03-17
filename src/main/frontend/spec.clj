@@ -5,5 +5,6 @@
   [spec x]
   `(let [r# (cljs.spec.alpha/valid? ~spec ~x)]
     (when-not r#
-      (cljs.spec.alpha/explain ~spec ~x))
+      (cljs.spec.alpha/explain ~spec ~x)
+      (println ~x))
     r#))
