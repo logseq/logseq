@@ -94,7 +94,7 @@ export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
 
-export type IEntityID = { id: EntityID }
+export type IEntityID = { id: EntityID, [key: string]: any }
 export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
 export type IGitResult = { stdout: string, stderr: string, exitCode: number }
@@ -165,6 +165,7 @@ export interface PageEntity {
 
   file?: IEntityID
   namespace?: IEntityID
+  children?: Array<PageEntity>
   format?: 'markdown' | 'org'
   journalDay?: number
 }
@@ -439,6 +440,18 @@ export interface IEditorProxy extends Record<string, any> {
    * @param srcPage - the page name or uuid
    */
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
+
+  /**
+   * get flatten pages from top namespace
+   * @param namespace
+   */
+  getPagesFromNamespace: (namespace: BlockPageName) => Promise<Array<PageEntity> | null>
+
+  /**
+   * construct pages tree from namespace pages
+   * @param namespace
+   */
+  getPagesTreeFromNamespace: (namespace: BlockPageName) => Promise<Array<PageEntity> | null>
 
   insertBlock: (
     srcBlock: BlockIdentity,

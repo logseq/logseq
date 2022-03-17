@@ -566,6 +566,18 @@
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
 
+(defn ^:export get_pages_from_namespace
+  [ns]
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-pages repo ns)]
+      (bean/->js (normalize-keyword-for-json pages)))))
+
+(defn ^:export get_pages_tree_from_namespace
+  [ns]
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
+      (bean/->js (normalize-keyword-for-json pages)))))
+
 ;; plugins
 (def ^:export __install_plugin
   (fn [^js manifest]
