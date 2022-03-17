@@ -1418,7 +1418,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id _children collapsed? *control-show? edit?]
+  [state config block uuid block-id collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
@@ -2111,7 +2111,7 @@
   (util/stop e)
   (when (or
          (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid true))
+         (editor-handler/collapsable? uuid {:semantic? true}))
     (reset! *control-show? true))
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
@@ -2279,7 +2279,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
