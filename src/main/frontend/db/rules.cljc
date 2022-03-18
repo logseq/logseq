@@ -140,7 +140,7 @@
    '[(page-refs ?b ?page-name)
      [?b :block/path-refs ?r]
      [?r :block/name ?tag]
-     [(contains? ?page-name ?tag)]]   
+     [(contains? ?page-names ?tag)]]   
    
    :page-ref
    '[(page-ref ?b ?page-name)
