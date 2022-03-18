@@ -78,7 +78,6 @@
     :iPhoneSE4      {:width 320  :height 568  :statusbar 20}
     :iPodtouch5     {:width 320  :height 568  :statusbar 20}}))
 
-
 (defn get-idevice-model
   []
   (when (native-ios?)
@@ -129,10 +128,3 @@
     (if (and model landscape?)
       20
       (:statusbar (model @idevice-info)))))
-
-(defn icloud-sync!
-  []
-  (let [f (fn []
-            (.downloadFilesFromiCloud download-icloud-files))]
-    (f)
-    (js/setInterval f 300000)))

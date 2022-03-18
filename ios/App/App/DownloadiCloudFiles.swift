@@ -50,19 +50,6 @@ public class DownloadiCloudFiles: CAPPlugin,  UIDocumentPickerDelegate  {
         call.resolve(["success": downloaded])
      }
     
-    @objc func iCloudSync(_ call: CAPPluginCall) {
-
-        if let url = self.containerUrl, fileManager.fileExists(atPath: url.path) {
-            do {
-                downloaded = try self.downloadAllFilesFromCloud(at: url, ignorePattern: [".git", ".Trash", "bak", ".recycle"])
-            } catch {
-                print(error.localizedDescription)
-            }
-        }
-        
-        call.resolve(["success": downloaded])
-    }
-    
     func appendUndownloadedFile(at url: URL){
         var lastPathComponent = url.lastPathComponent
         lastPathComponent.removeFirst()
