@@ -19,7 +19,7 @@
 (rum/defc setups-container
   [flag content]
 
-  [:div.cp__onboarding-setups.flex.items-center.justify-center
+  [:div.cp__onboarding-setups.flex
    (let [picker? (= flag :picker)]
      [:div.inner-card.flex.flex-col.items-center
 
