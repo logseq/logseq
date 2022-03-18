@@ -41,7 +41,7 @@
   []
   (let [_ (state/sub :auth/id-token)]
     (when-not config/publishing?
-      (if (user-handler/logged?)
+      (if (user-handler/logged-in?)
         [:span.text-sm.font-medium (user-handler/email)]
 
         [:a.button.text-sm.font-medium.block {:on-click (fn []
@@ -62,7 +62,7 @@
         uploading-files (:current-local->remote-files sync-state)
         downloading-files (:current-remote->local-files sync-state)]
     (when-not config/publishing?
-      (when (user-handler/logged?)
+      (when (user-handler/logged-in?)
         (when-not (file-sync-handler/graph-txid-exists?)
           (a/go
             (let [graphs (a/<! (file-sync-handler/list-graphs))]
@@ -114,8 +114,7 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [;; logged? (user-handler/logged?)
-        page-menu (page-menu/page-menu nil)
+  (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links

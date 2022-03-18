@@ -347,7 +347,7 @@
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        logged? (user-handler/logged?)]
+        logged? (user-handler/logged-in?)]
     [:div
      (cond
        (and default-home

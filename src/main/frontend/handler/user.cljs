@@ -127,7 +127,7 @@
    (parse-jwt)
    (:sub)))
 
-(defn logged? []
+(defn logged-in? []
   (boolean
    (some->
     (state/get-auth-id-token)
