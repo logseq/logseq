@@ -1456,3 +1456,7 @@
 (defn collapsed?
   [block]
   (:block/collapsed? block))
+
+#?(:cljs
+   (defn atom? [v]
+     (instance? Atom v)))

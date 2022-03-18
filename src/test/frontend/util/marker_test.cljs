@@ -12,7 +12,9 @@
     "todo" "TODO" "TODO todo"
     "TODO xxx" "DONE" "DONE xxx"
     "TODO" "DONE" "DONE "
-    "## TODO [#A] xxx" "DONE" "## DONE [#A] xxx"))
+    "## TODO [#A] xxx" "DONE" "## DONE [#A] xxx"
+    "#test content" "TODO" "TODO #test content"
+    "TODO #test content" "DONE" "DONE #test content"))
 
 (deftest add-or-update-marker-org
   (are [content marker expect] (= expect (marker/add-or-update-marker content :org marker))
