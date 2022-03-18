@@ -171,14 +171,29 @@ public class PollingWatcher {
         
         if let enumerator = FileManager.default.enumerator(
             at: url,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .nameKey, .isDirectoryKey],
             // NOTE: icloud downloading requires non-skipsHiddenFiles
             options: [.skipsPackageDescendants]) {
             
             var newMetaDb: [URL: SimpleFileMetadata] = [:]
             
             for case let fileURL as URL in enumerator {
-                if !fileURL.isSkipped() {
+                guard let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .nameKey, .isDirectoryKey]),
+                      let isDirectory = resourceValues.isDirectory,
+                      let isRegularFile = resourceValues.isRegularFile,
+                      let name = resourceValues.name
+                else {
+                    continue
+                }
+                
+                if isDirectory {
+                    // NOTE: URL.path won't end with a `/`
+                    if fileURL.path.hasSuffix("/logseq/bak") || name == ".recycle" || name.hasPrefix(".") || name == "node_modules" {
+                        enumerator.skipDescendants()
+                    }
+                }
+            
+                if isRegularFile && !fileURL.isSkipped() {
                     if let meta = SimpleFileMetadata(of: fileURL) {
                         newMetaDb[fileURL] = meta
                     }
