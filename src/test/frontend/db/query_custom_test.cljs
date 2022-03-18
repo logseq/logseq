@@ -39,6 +39,18 @@
                                         (task ?b #{"LATER"})]})))
         "advanced query with an :in works")
 
+    (is (= ["foo:: bar\n" "b3"]
+           (map :block/content
+                (custom-query {:query '[:find (pull ?b [*])
+                                        :in $ ?query %
+                                        :where
+                                        (block-content ?b ?query)
+                                        (not-task ?b)]
+                               :inputs ["b"
+                                        '[[(not-task ?b)
+                                           (not [?b :block/marker _])]]]})))
+        "advanced query that uses rule from logseq and rule from :inputs")
+
     (is (= #{"page1"}
            (set
             (map #(get-in % [:block/page :block/name])
