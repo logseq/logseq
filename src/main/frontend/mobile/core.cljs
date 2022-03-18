@@ -14,6 +14,17 @@
             [frontend.util :as util]
             [frontend.config :as config]))
 
+(defn- ios-init
+  []
+  (let [path (fs/iOS-ensure-documents!)]
+    (println "iOS container path: " path))
+
+  ;; Keyboard watcher
+  ;; (.addListener Keyboard "keyboardWillShow"
+  ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
+  (.addListener Keyboard "keyboardDidShow"
+                #(state/pub-event! [:mobile/keyboard-did-show])))
+
 (defn init!
   []
   ;; patch back navigation
@@ -37,17 +48,15 @@
                                (not (string/includes? href "#/")))
                          (.exitApp App)
                          (js/window.history.back))))))
-  (when (mobile-util/native-ios?)
-    (let [path (fs/iOS-ensure-documents!)]
-      (println "iOS container path: " path))
 
-    ;; Keyboard watcher
-    ;; (.addListener Keyboard "keyboardWillShow"
-    ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
-    (.addListener Keyboard "keyboardDidShow"
-                  #(state/pub-event! [:mobile/keyboard-did-show])))
+  (when (mobile-util/native-ios?)
+    (ios-init))
 
   (when (mobile-util/is-native-platform?)
+    (.addListener mobile-util/fs-watcher "watcher"
+                  (fn [event]
+                    (state/pub-event! [:file-watcher/changed event])))
+
     (.addEventListener js/window "statusTap"
                        #(util/scroll-to-top true))
 
@@ -59,6 +68,7 @@
                         (if is-active?
                           (p/do!
                            (when (mobile-util/native-ios?)
-                               (mobile-util/sync-icloud-repo repo-dir))
-                           (nfs-handler/refresh! repo repo/refresh-cb))
+                             (mobile-util/sync-icloud-repo repo-dir))
+                           (nfs-handler/refresh! repo repo/refresh-cb)
+                           (notification/show! "Notes updated!" :success true))
                           (editor-handler/save-current-block!))))))))

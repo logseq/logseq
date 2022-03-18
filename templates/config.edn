@@ -1,5 +1,5 @@
 {:meta/version 1
- 
+
  ;; Currently, we support either "Markdown" or "Org".
  ;; This can overwrite your global preference so that
  ;; maybe your personal preferred format is Org but you'd
@@ -144,6 +144,13 @@
  :commands
  []
 
+ ;; By default, a block can only be collapsed if it has some children.
+ ;; `:outliner/block-title-collapse-enabled? true` enables a block with a title
+ ;; (multiple lines) can be collapsed too. For example:
+ ;; - block title
+ ;;   block content
+ :outliner/block-title-collapse-enabled? false
+
  ;; Macros replace texts and will make you more productive.
  ;; For example:
  ;; Add this to the macros below:
@@ -189,4 +196,7 @@
 
  ;; Extra CodeMirror options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
+
+ ;; ignore #+keyword: for parsing page references in orgmode
+ ;; :ignored-page-references-keywords #{"author" "startup"}
  }

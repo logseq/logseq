@@ -16,20 +16,6 @@
     []
     (.ensureDocuments mobile-util/ios-file-container)))
 
-(when (mobile-util/native-ios?)
-  ;; NOTE: avoid circular dependency
-  #_:clj-kondo/ignore
-  (def handle-changed! (delay frontend.fs.watcher-handler/handle-changed!))
-
-  (p/do!
-   (.addListener mobile-util/fs-watcher "watcher"
-                 (fn [^js event]
-                   (@handle-changed!
-                    (.-event event)
-                    (update (js->clj event :keywordize-keys true)
-                            :path
-                            js/decodeURI))))))
-
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
           permission (-> permission
@@ -274,7 +260,6 @@
   (get-files [_this path-or-handle _ok-handler]
     (readdir path-or-handle))
   (watch-dir! [_this dir]
-    (when (mobile-util/native-ios?)
-      (p/do!
-       (.unwatch mobile-util/fs-watcher)
-       (.watch mobile-util/fs-watcher #js {:path dir})))))
+    (p/do!
+     (.unwatch mobile-util/fs-watcher)
+     (.watch mobile-util/fs-watcher #js {:path dir}))))

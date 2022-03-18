@@ -205,7 +205,7 @@
   [format label link]
   (case format
     :org
-    [(util/format "[[%s][label]]" link label)
+    [(util/format "[[%s][%s]]" link label)
      (+ 4 (count link) (count label))]
     :markdown
     [(util/format "[%s](%s)" label link)
@@ -312,7 +312,7 @@
       (if (string/starts-with? dir "file:")
         dir
         (str "file:///" (string/replace dir #"^/+" ""))))
-    
+
     :else
     (str "/"
          (->> (take-last 2 (string/split repo-url #"/"))

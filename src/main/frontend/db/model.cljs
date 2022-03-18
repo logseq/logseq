@@ -16,7 +16,9 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [frontend.db.rules :refer [rules]]
-            [frontend.db.default :as default-db]))
+            [frontend.db.default :as default-db]
+            [frontend.util.property :as property]
+            [frontend.util.drawer :as drawer]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -422,12 +424,8 @@
               next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
               next-siblings (if (and next-sibling child-block)
                               (cons next-sibling next-siblings)
-                              next-siblings)
-              collapsed? (:block/collapsed? node)]
-          (if-let [node (and
-                         (or (not collapsed?)
-                             (= (:db/id node) (:db/id parent)))
-                         (or child-block next-sibling))]
+                              next-siblings)]
+          (if-let [node (or child-block next-sibling)]
             (recur node next-siblings (conj result node))
             (if-let [sibling (first next-siblings)]
               (recur sibling (rest next-siblings) (conj result sibling))
@@ -611,7 +609,7 @@
             '[:find ?id
               :in $ ?p %
               :where
-              (parent ?p ?c)
+              (child ?p ?c)
               [?c :block/uuid ?id]]
             conn
             eid
@@ -1041,7 +1039,11 @@
             patterns    (->> (conj alias-names page)
                              (map pattern))
             filter-fn   (fn [datom]
-                          (some (fn [p] (re-find p (:v datom))) patterns))]
+                          (some (fn [p]
+                                  (re-find p (->> (:v datom)
+                                                  (property/remove-built-in-properties (:block/format page))
+                                                  (drawer/remove-logbook))))
+                                patterns))]
         (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
                       {:query-fn (fn [db _tx-report _result]
                                    (let [ids
@@ -1382,8 +1384,8 @@
                          {:block/file [:db/id :file/path]}]) ...]
         :in $ % ?namespace
         :where
-        (namespace ?p ?c)
-        [?p :block/name ?namespace]]
+        [?p :block/name ?namespace]
+        (namespace ?p ?c)]
       (conn/get-conn repo)
       rules
       namespace)))
@@ -1417,10 +1419,13 @@
   (when-let [db (conn/get-conn repo)]
     (when-not (string/blank? page)
       (let [page (util/page-name-sanity-lc (string/trim page))
-            ids (->> (d/datoms db :aevt :block/name)
-                     (filter (fn [datom]
-                               (string/ends-with? (:v datom) (str "/" page))))
-                     (map :e))]
+            page-exist? (db-utils/entity repo [:block/name page])
+            ids (if page-exist?
+                  '()
+                  (->> (d/datoms db :aevt :block/name)
+                       (filter (fn [datom]
+                                 (string/ends-with? (:v datom) (str "/" page))))
+                       (map :e)))]
         (when (seq ids)
           (db-utils/pull-many repo
                               '[:db/id :block/name :block/original-name

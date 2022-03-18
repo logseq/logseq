@@ -214,7 +214,7 @@
            [:div.flex-shrink-0
             svg]
            [:div.ml-3.w-0.flex-1
-            [:div.text-sm.leading-5.font-medium {:style {:margin 0}
+            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
                                                  :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
@@ -714,14 +714,24 @@
 (rum/defcs catch-error
   < {:did-catch
      (fn [state error _info]
-       (js/console.dir error)
+       (log/error :exception error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)
-    (do
-      (log/error :exception error)
-      error-view)
+    error-view
     view))
+
+(rum/defc block-error
+  "Well styled error for blocks that error unexpectedly during render"
+  [title {:keys [content section-attrs]}]
+  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+   section-attrs
+   [:div.flex.justify-between.items-center.px-1
+    [:h5.text-red-600.pb-1 title]
+    [:a.text-xs.opacity-50.hover:opacity-80
+     {:href "https://github.com/logseq/logseq/issues"
+      :target "_blank"} "report issue"]]
+   [:pre.m-0.text-sm content]])
 
 (rum/defc select
   [options on-change class]

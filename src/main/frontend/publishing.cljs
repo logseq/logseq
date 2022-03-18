@@ -72,6 +72,8 @@
   (restore-state!)
   (shortcut/refresh!)
   (events/run!)
+  ;; actually, there's no persist for publishing
+  (db/listen-and-persist! (state/get-current-repo))
   (start))
 
 (defn stop []
