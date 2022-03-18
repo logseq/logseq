@@ -27,30 +27,6 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-;; (rum/defcs set-email < (rum/local "" ::email)
-;;   [state]
-;;   (let [email (get state ::email)]
-;;     [:div.p-8.flex.items-center.justify-center
-;;      [:div.w-full.mx-auto
-;;       [:div
-;;        [:div
-;;         [:h1.title.mb-1
-;;          "Your email address:"]
-;;         [:div.mt-2.mb-4.relative.rounded-md.max-w-xs
-;;          [:input#.form-input.is-small
-;;           {:autoFocus true
-;;            :on-change (fn [e]
-;;                         (reset! email (util/evalue e)))}]]]]
-;;       (ui/button
-;;         "Submit"
-;;         :on-click
-;;         (fn []
-;;           (user-handler/deprecated-set-email! @email)))
-
-;;       [:hr]
-
-;;       [:span.pl-1.opacity-70 "Git commit requires the email address."]]]))
-
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -105,24 +81,6 @@
                (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
                (util/stop e))}
             svg/external-link " release channel"]])])]))
-
-;; (rum/defc delete-account-confirm
-;;   [close-fn]
-;;   [:div
-;;    (ui/admonition
-;;      :important
-;;      [:p.text-gray-700 (t :user/delete-account-notice)])
-;;    [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-;;     [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
-;;      [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-;;       {:type     "button"
-;;        :on-click user-handler/deprecated-delete-account!}
-;;       (t :user/delete-account)]]
-;;     [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
-;;      [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-;;       {:type     "button"
-;;        :on-click close-fn}
-;;       "Cancel"]]]])
 
 (rum/defc outdenting-hint
   []
@@ -677,19 +635,6 @@
                 :target "_blank"}
             "https://github.com/isomorphic-git/cors-proxy"]])])
 
-     ;; (when logged?
-     ;;   [:div
-     ;;    [:hr]
-     ;;    [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-     ;;     [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
-     ;;      {:for "delete account"}
-     ;;      (t :user/delete-account)]
-     ;;     [:div.mt-1.sm:mt-0.sm:col-span-2
-     ;;      [:div.max-w-lg.rounded-md.sm:max-w-xs
-     ;;       (ui/button (t :user/delete-your-account)
-     ;;                  :on-click (fn []
-     ;;                              (ui-handler/toggle-settings-modal!)
-     ;;                              (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])
      ]))
 
 (rum/defcs settings

@@ -4,6 +4,7 @@
             [cljs-time.format :as tf]
             [cljs.core.async :as async]
             [clojure.string :as string]
+            [cljs.spec.alpha :as s]
             [dommy.core :as dom]
             [medley.core :as medley]
             [electron.ipc :as ipc]
@@ -1670,6 +1671,7 @@
 (defn set-file-sync-manager [v]
   (set-state! :file-sync/sync-manager v))
 (defn set-file-sync-state [v]
+  (when v (s/assert :frontend.fs.sync/sync-state v))
   (set-state! :file-sync/sync-state v))
 
 (defn get-file-sync-manager []
