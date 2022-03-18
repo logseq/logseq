@@ -3367,13 +3367,31 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
-(defn collapsable? [block-id]
-  (when block-id
-    (if-let [block (db-model/query-block-by-uuid block-id)]
-      (and
-       (not (util/collapsed? block))
-       (db-model/has-children? block-id))
-      false)))
+(defn block-with-title?
+  [format content semantic?]
+  (and (string/includes? content "\n")
+       (if semantic?
+         (let [ast (mldoc/->edn content (mldoc/default-config format))
+               first-elem-type (first (ffirst ast))]
+           (mldoc/block-with-title? first-elem-type))
+         true)))
+
+(defn collapsable?
+  ([block-id]
+   (collapsable? block-id {}))
+  ([block-id {:keys [semantic?]
+              :or {semantic? false}}]
+   (when block-id
+     (if-let [block (db-model/query-block-by-uuid block-id)]
+       (and
+        (not (util/collapsed? block))
+        (or (db-model/has-children? block-id)
+            (and
+             (:outliner/block-title-collapse-enabled? (state/get-config))
+             (block-with-title? (:block/format block)
+                                (:block/content block)
+                                semantic?))))
+       false))))
 
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
@@ -3601,19 +3619,18 @@
 
 (defn replace-block-reference-with-content-at-point
   []
-  (when-let [{:keys [content start end]} (thingatpt/block-ref-at-point)]
-    (let [block-ref-id (subs content 2 (- (count content) 2))]
-      (when-let [block (db/pull [:block/uuid (uuid block-ref-id)])]
-        (let [block-content (:block/content block)
-              format (or (:block/format block) :markdown)
-              block-content-without-prop (-> (property/remove-properties format block-content)
-                                             (drawer/remove-logbook))]
-          (when-let [input (state/get-input)]
-            (when-let [current-block-content (gobj/get input "value")]
-              (let [block-content* (str (subs current-block-content 0 start)
-                                        block-content-without-prop
-                                        (subs current-block-content end))]
-                (state/set-block-content-and-last-pos! input block-content* 1)))))))))
+  (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
+    (when-let [block (db/pull [:block/uuid link])]
+      (let [block-content (:block/content block)
+            format (or (:block/format block) :markdown)
+            block-content-without-prop (-> (property/remove-properties format block-content)
+                                           (drawer/remove-logbook))]
+        (when-let [input (state/get-input)]
+          (when-let [current-block-content (gobj/get input "value")]
+            (let [block-content* (str (subs current-block-content 0 start)
+                                      block-content-without-prop
+                                      (subs current-block-content end))]
+              (state/set-block-content-and-last-pos! input block-content* 1))))))))
 
 (defn copy-current-ref
   [block-id]

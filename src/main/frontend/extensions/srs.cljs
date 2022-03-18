@@ -254,7 +254,7 @@
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
            {:keys [query sort-by rules]} (query-dsl/parse query-string)
-           query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
+           query* (concat [['?b :block/refs '?bp] ['?bp :block/name card-hash-tag]]
                           (if (coll? (first query))
                             query
                             [query]))]
@@ -498,7 +498,7 @@
   rum/reactive
   db-mixins/query
   [blocks option card-index]
-  (let [option (update option :random-mode? (fn [v] (if (boolean? v) v @v)))
+  (let [option (update option :random-mode? (fn [v] (if (util/atom? v) @v v)))
         blocks (if (fn? blocks) (blocks) blocks)
         blocks (if (:random-mode? option)
                  (shuffle blocks)
