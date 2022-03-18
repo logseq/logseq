@@ -71,7 +71,7 @@
                                         :event event}))
 
          (let [parsed-url (js/URL. url)]
-           (when (and (= "logseq:" (.-protocol parsed-url))
+           (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
                       (= "auth-callback" (.-host parsed-url)))
              (send-to-renderer "loginCallback" (.get (.-searchParams parsed-url) "code"))))))
 
