@@ -11,6 +11,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -42,7 +43,7 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
-  (when dir
+  (when (and dir (not (util-fs/ignored-path? dir path)))
     (let [path (util/path-normalize path)
           repo (config/get-local-repo dir)
           pages-metadata-path (config/get-pages-metadata-path)
@@ -92,7 +93,7 @@
           (and (contains? #{"add"} type)
                (= path pages-metadata-path))
           (p/do! (repo-handler/update-pages-metadata! repo content true))
-          
+
           ;; Change is triggered by external changes, so update to the db
           ;; Don't forced update when db is online, but resolving conflicts
           (and (contains? #{"change"} type)
