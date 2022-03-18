@@ -722,7 +722,7 @@
     view))
 
 (rum/defc block-error
-  "Well styled error for blocks that error unexpectedly during render"
+  "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
   [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
    section-attrs
@@ -731,7 +731,12 @@
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues"
       :target "_blank"} "report issue"]]
-   [:pre.m-0.text-sm content]])
+   (when content [:pre.m-0.text-sm content])])
+
+(def component-error
+  "Well styled error message for higher level components. Currently same as
+  block-error but this could change"
+  block-error)
 
 (rum/defc select
   [options on-change class]

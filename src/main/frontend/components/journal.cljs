@@ -83,7 +83,7 @@
        (page/today-queries repo today? false)
 
        (rum/with-key
-         (reference/references title false)
+         (reference/references title)
          (str title "-refs"))
 
        (when intro? (onboarding/intro))])))
