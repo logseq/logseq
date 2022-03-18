@@ -5,7 +5,7 @@ body[data-page=import] {
   }
 }
 
-@screen md {
+@screen lg {
   body[data-page=repo-add],
   body[data-page=import] {
     #left-sidebar, #right-sidebar, #left-menu,
@@ -33,8 +33,9 @@ body[data-page=import] {
     }
 
     .inner-card {
-      height: 100vh;
-      padding-top: 8vh;
+      min-height: 100vh;
+      width: 100%;
+      padding-top: 55px;
       background-color: var(--ls-secondary-background-color);
 
       > h1 {
@@ -65,6 +66,7 @@ body[data-page=import] {
       > article {
         background-color: var(--ls-secondary-background-color);
         border-radius: 20px;
+        width: 100%;
         flex: 1;
 
         > section {
@@ -76,6 +78,7 @@ body[data-page=import] {
             flex-direction: column;
             align-items: center;
             padding-top: 75px;
+            padding-bottom: 100px;
             border-radius: 20px 20px 0 0;
 
             > strong {
@@ -241,9 +244,10 @@ body[data-page=import] {
       }
 
 
-      @screen md {
+      @screen lg {
         transform: translateY(-60px);
         height: unset;
+        min-height: unset;
         padding-top: unset;
         background-color: unset;
 
@@ -265,6 +269,7 @@ body[data-page=import] {
         > article {
           width: 1040px;
           height: 510px;
+          max-width: 100vw;
           flex: unset;
 
           > section {
@@ -335,6 +340,7 @@ body[data-page=import] {
 
       small {
         font-size: 11px;
+        text-align: center;
       }
 
       &:hover {
@@ -348,6 +354,11 @@ body[data-page=import] {
       &[disabled] {
         pointer-events: none;
       }
+    }
+
+    @screen lg {
+      justify-content: center;
+      align-items: center;
     }
   }
 }
