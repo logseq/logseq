@@ -66,14 +66,14 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
-(rum/defcs references < rum/reactive db-mixins/query
+(rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name _marker?]
+  [state page-name]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
@@ -166,6 +166,12 @@
 
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
+
+(rum/defc references
+  [page-name]
+  (ui/catch-error
+   (ui/component-error "Linked References: Unexpected error")
+   (references* page-name)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

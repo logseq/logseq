@@ -149,7 +149,7 @@
          (for [query queries]
            (ui/catch-error
             (rum/with-key
-              (ui/block-error "Failed default query:" {:content (pr-str query)})
+              (ui/component-error "Failed default query:" {:content (pr-str query)})
               (str repo "-custom-query-" (:query query)))
             (rum/with-key
               (block/custom-query {:attr {:class "mt-10"}
@@ -382,7 +382,7 @@
        ;; referenced blocks
        [:div {:key "page-references"}
         (rum/with-key
-          (reference/references route-page-name false)
+          (reference/references route-page-name)
           (str route-page-name "-refs"))]
 
        (when-not block?
