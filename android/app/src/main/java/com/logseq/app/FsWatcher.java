@@ -104,7 +104,7 @@ public class FsWatcher extends Plugin {
         File[] files = pathObj.listFiles();
         if (files != null) {
             for (int i = 0; i < files.length; ++i) {
-                if (files[i].isDirectory() && !files[i].getName().startsWith(".")) {
+                if (files[i].isDirectory() && !files[i].getName().startsWith(".") && !files[i].getName().equals("bak")) {
                     this.initialNotify(files[i], maxDepth - 1);
                 } else if (files[i].isFile()
                         && Pattern.matches("[^.].*?\\.(md|org|css|edn|text|markdown|yml|yaml|json|js)$",
