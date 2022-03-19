@@ -12,7 +12,6 @@ import UIKit
 import UniformTypeIdentifiers
 
 class ShareItem {
-    
     public var title: String?
     public var type: String?
     public var url: String?
@@ -21,6 +20,10 @@ class ShareItem {
 class ShareViewController: UIViewController {
     
     private var shareItems: [ShareItem] = []
+    
+    var groupContainerUrl: URL? {
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.logseq.logseq")
+    }
     
     override public func viewDidAppear(_ animated: Bool) {
        super.viewDidAppear(animated)
@@ -48,27 +51,19 @@ class ShareViewController: UIViewController {
     }
     
     fileprivate func createSharedFileUrl(_ url: URL?) -> String {
-        let fileManager = FileManager.default
         
-        let copyFileUrl =
-        fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.logseq.logseq")!
-            .absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)! + "/" + url!
+        let copyFileUrl = groupContainerUrl!.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)! + "/" + url!
             .lastPathComponent.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
         try? Data(contentsOf: url!).write(to: URL(string: copyFileUrl)!)
         
-        print("copyFileUrl in createSharedFileUrl: ", copyFileUrl)
         return copyFileUrl
     }
     
     func saveScreenshot(_ image: UIImage) -> String {
-        let fileManager = FileManager.default
-        
-        let copyFileUrl =
-        fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.logseq.logseq")!
-            .absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+ 
+        let copyFileUrl = groupContainerUrl!.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
         + "/screenshot.png"
         
-        print("copyFileUrl in saveScreenshot: ", copyFileUrl)
         do {
             try image.pngData()?.write(to: URL(string: copyFileUrl)!)
             return copyFileUrl
@@ -106,7 +101,7 @@ class ShareViewController: UIViewController {
         let text = results as! String
         shareItem.title = text
         shareItem.type = "text/plain"
-        print("shareItem in handleTypeText: ", shareItem)
+        
         return shareItem
     }
     
@@ -120,7 +115,7 @@ class ShareViewController: UIViewController {
         shareItem.title = url!.lastPathComponent
         shareItem.type = "video/" + url!.pathExtension.lowercased()
         shareItem.url = createSharedFileUrl(url)
-        print("shareItem in handleTypeMovie: ", shareItem)
+        
         return shareItem
     }
     
@@ -142,8 +137,6 @@ class ShareViewController: UIViewController {
         default:
             print("Unexpected image data:", type(of: data))
         }
-        
-        print("shareItem in handleTypeImage: ", shareItem)
         
         return shareItem
     }
@@ -190,6 +183,7 @@ class ShareViewController: UIViewController {
         }
     }
     
+    @discardableResult
     @objc func openURL(_ url: URL) -> Bool {
         var responder: UIResponder? = self
         while responder != nil {
