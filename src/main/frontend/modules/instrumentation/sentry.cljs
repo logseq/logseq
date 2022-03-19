@@ -15,7 +15,12 @@
                                          :else "")
                          version)
    :environment (if cfg/dev? "development" "production")
-   :platform (if (util/electron?) "electron" "web")
+   :initialScope {:tags
+                  {:platform (cond
+                               (util/electron?) "electron"
+                               (mobile-util/is-native-platform?) "mobile"
+                               :else "web")
+                   :publishing cfg/publishing?}}
    :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
                   (new BrowserTracing)]
    :debug cfg/dev?
