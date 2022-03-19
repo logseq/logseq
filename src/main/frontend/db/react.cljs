@@ -162,7 +162,7 @@
     (try
       (let [empty-db (d/empty-db db-schema/schema)
             db (or old-db
-                   (when (and (coll? cached-result)
+                   (when (and (sequential? cached-result)
                               (or (map? (first cached-result))
                                   (empty? cached-result)))
                      (let [cached-result (util/remove-nils cached-result)]

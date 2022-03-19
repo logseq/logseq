@@ -115,10 +115,9 @@
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
-          directive?
-          (fn [[item _]] (= "directive" (string/lower-case (first item))))
+          directive? (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
-          directive-ast (get grouped-ast true)
+          directive-ast (take-while directive? original-ast)
           [properties-ast other-ast] (if (= "Property_Drawer" (ffirst ast))
                                        [(last (first ast))
                                         (rest original-ast)]
