@@ -177,6 +177,10 @@ jobs:
           yarn gulp:build && yarn cljs:release
           (cd static && yarn install && yarn rebuild:better-sqlite3)
 
+      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
+      - name: Ensure static yarn.lock is up to date
+        run: git diff --exit-code static/yarn.lock
+
       - name: Run Playwright test
         run: xvfb-run -- yarn e2e-test
         env:
