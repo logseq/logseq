@@ -115,7 +115,6 @@ jobs:
           sentry-cli releases new "${release_name}"
           sentry-cli releases files "${release_name}" upload-sourcemaps --ext map ./static/js --url-prefix '~/static/js'
           sentry-cli releases finalize "${release_name}"
-          find ./static/js/ -name "*.map" -type f -delete
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: logseq
