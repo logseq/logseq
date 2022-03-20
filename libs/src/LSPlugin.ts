@@ -337,6 +337,7 @@ export interface IAppProxy {
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
    *
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-pomodoro-timer
    * @example
    * ```ts
    * // e.g. {{renderer :h1, hello world, green}}
@@ -366,9 +367,11 @@ export interface IAppProxy {
 export interface IEditorProxy extends Record<string, any> {
   /**
    * register a custom command which will be added to the Logseq slash command list
-   *
    * @param tag - displayed name of command
    * @param action - can be a single callback function to run when the command is called, or an array of fixed commands with arguments
+   *
+   *
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-slash-commands
    *
    * @example
    * ```ts
@@ -404,9 +407,6 @@ export interface IEditorProxy extends Record<string, any> {
 
   checkEditing: () => Promise<BlockUUID | boolean>
 
-  /**
-   * insert a string at the current cursor
-   */
   insertAtEditingCursor: (content: string) => Promise<void>
 
   restoreEditingCursor: () => Promise<void>
@@ -459,6 +459,13 @@ export interface IEditorProxy extends Record<string, any> {
    */
   getPagesTreeFromNamespace: (namespace: BlockPageName) => Promise<Array<PageEntity> | null>
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
+   *
+   * @param srcBlock
+   * @param content
+   * @param opts
+   */
   insertBlock: (
     srcBlock: BlockIdentity,
     content: string,
@@ -543,7 +550,9 @@ export interface IEditorProxy extends Record<string, any> {
 
   openInRightSidebar: (uuid: BlockUUID) => void
 
-  // events
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
+   */
   onInputSelectionEnd: IUserHook<{ caret: any, point: { x: number, y: number }, start: number, end: number, text: string }>
 }
 
@@ -671,16 +680,12 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * Inject custom css for the main Logseq app
    *
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
    * @example
    * ```ts
    *   logseq.provideStyle(`
    *    @import url("https://at.alicdn.com/t/font_2409735_r7em724douf.css");
    *  )
-   * ```
-   *
-   * @example
-   * ```ts
-   *
    * ```
    */
   provideStyle (style: StyleString | StyleOptions): this
@@ -689,6 +694,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * Inject custom UI at specific DOM node.
    * Event handlers can not be passed by string, so you need to create them in `provideModel`
    *
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
    * @example
    * ```ts
    * logseq.provideUI({
@@ -704,8 +710,18 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    */
   provideUI (ui: UIOptions): this
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
+   *
+   * @param schemas
+   */
   useSettingsSchema (schemas: Array<SettingSchemaDesc>): this
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
+   *
+   * @param attrs
+   */
   updateSettings (attrs: Record<string, any>): void
 
   onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook
@@ -719,6 +735,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * Set the style for the plugin's UI
    *
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
    * @example
    * ```ts
    * logseq.setMainUIInlineStyle({
