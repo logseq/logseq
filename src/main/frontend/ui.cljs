@@ -199,7 +199,7 @@
        {:style
         (when (or (= state "exiting")
                   (= state "exited"))
-                  {:z-index -1})}
+          {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -215,7 +215,7 @@
             svg]
            [:div.ml-3.w-0.flex-1
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}
-                                                 :class color-class}
+                                                                     :class color-class}
              content]]
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
@@ -398,7 +398,7 @@
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
   [state _list-element-id body {:keys [on-load has-more more more-class]
-                               :or {more-class "text-sm"}}]
+                                :or {more-class "text-sm"}}]
   [:div
    body
    (when has-more
@@ -632,13 +632,13 @@
          {:style {:z-index (if show? (+ 999 idx) -1)}
           :label label}
          (css-transition
-           {:in show? :timeout 0}
-           (fn [state]
-             (modal-overlay state close-fn)))
+          {:in show? :timeout 0}
+          (fn [state]
+            (modal-overlay state close-fn)))
          (css-transition
-           {:in show? :timeout 0}
-           (fn [state]
-             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
+          {:in show? :timeout 0}
+          (fn [state]
+            (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
   [content]
@@ -678,9 +678,9 @@
         (when-not (mobile-util/is-native-platform?)
           [:a.block-control.opacity-50.hover:opacity-100.mr-2
            (cond->
-               {:style    {:width       14
-                           :height      16
-                           :margin-left -30}}
+            {:style    {:width       14
+                        :height      16
+                        :margin-left -30}}
              (not title-trigger?)
              (assoc :on-mouse-down on-mouse-down))
            [:span {:class (if @control? "control-show cursor-pointer" "control-hide")}
@@ -722,7 +722,7 @@
     view))
 
 (rum/defc block-error
-  "Well styled error for blocks that error unexpectedly during render"
+  "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
   [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
    section-attrs
@@ -731,7 +731,12 @@
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues"
       :target "_blank"} "report issue"]]
-   [:pre.m-0.text-sm content]])
+   (when content [:pre.m-0.text-sm content])])
+
+(def component-error
+  "Well styled error message for higher level components. Currently same as
+  block-error but this could change"
+  block-error)
 
 (rum/defc select
   [options on-change class]
@@ -777,10 +782,10 @@
                 value (.-value target)]
 
             (on-change
-              (into []
-                (if checked?
-                  (conj checked-vals value)
-                  (disj checked-vals value))))))]
+             (into []
+                   (if checked?
+                     (conj checked-vals value)
+                     (disj checked-vals value))))))]
 
     [:div.ui__checkbox-list
      {:class class}

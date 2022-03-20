@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
@@ -53,8 +54,8 @@
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
       repo-url)
      (ui/button
-       "Install Logseq on GitHub"
-       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+      "Install Logseq on GitHub"
+      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
    :error
    false))
 
@@ -92,18 +93,55 @@
   (srs/update-cards-due-count!)
   (state/pub-event! [:graph/ready graph]))
 
+(def persist-db-noti-m
+  {:before     #(notification/show!
+                 (ui/loading (t :graph/persist))
+                 :warning)
+   :on-error   #(notification/show!
+                 (t :graph/persist-error)
+                 :error)})
+
+(defn- graph-switch-on-persisted
+  "Logic for keeping db sync when switching graphs
+   Only works for electron"
+  [graph]
+  (p/let [current-repo (state/get-current-repo) 
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
+          _ (repo-handler/persist-otherwindow-db! graph)
+          _ (repo-handler/restore-and-setup-repo! graph)]
+    (graph-switch graph)))
+
 (defmethod handle :graph/switch [[_ graph]]
   (if (outliner-file/writes-finished?)
-    (graph-switch graph)
+    (if (util/electron?)
+      (graph-switch-on-persisted graph)
+      (graph-switch graph))
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
+
+(defmethod handle :graph/open-new-window [[_ repo]]
+  (p/let [current-repo (state/get-current-repo)
+          target-repo (or repo current-repo)
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
+          _ (when-not (= current-repo target-repo)
+              (repo-handler/persist-otherwindow-db! repo))]
+    (ui-handler/open-new-window! _ repo)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
 
 (defmethod handle :graph/save [_]
-  (db/persist! (state/get-current-repo)))
+  (repo-handler/persist-db! (state/get-current-repo)
+                            {:before     #(notification/show!
+                                           (ui/loading (t :graph/save))
+                                           :warning)
+                             :on-success #(notification/show!
+                                           (ui/loading (t :graph/save-success))
+                                           :warning)
+                             :on-error   #(notification/show!
+                                           (t :graph/save-error)
+                                           :error)}))
 
 (defn get-local-repo
   []
@@ -114,19 +152,19 @@
 (defn ask-permission
   [repo]
   (when
-      (and (not (util/electron?))
-           (not (mobile-util/is-native-platform?)))
+   (and (not (util/electron?))
+        (not (mobile-util/is-native-platform?)))
     (fn [close-fn]
       [:div
        [:p
         "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button
-         "Grant"
-         :class "ui__modal-enter"
-         :on-click (fn []
-                     (nfs/check-directory-permission! repo)
-                     (close-fn)))])))
+        "Grant"
+        :class "ui__modal-enter"
+        :on-click (fn []
+                    (nfs/check-directory-permission! repo)
+                    (close-fn)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
@@ -234,9 +272,9 @@
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (if pid
     (do
-     (state/set-state! :plugin/focused-settings pid)
-     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
-     (plugin/open-focused-settings-modal! title))
+      (state/set-state! :plugin/focused-settings pid)
+      (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+      (plugin/open-focused-settings-modal! title))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
 
@@ -270,24 +308,24 @@
     (when-let [coming (and (not downloading?)
                            (get-in @state/state [:plugin/updates-coming id]))]
       (notification/show!
-        (str "Checked: " (:title coming))
-        :success))
+       (str "Checked: " (:title coming))
+       :success))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
       (if-let [n (state/get-next-selected-coming-update)]
         (plugin-handler/check-or-update-marketplace-plugin
-          (assoc n :only-check false :error-code nil)
-          (fn [^js e] (js/console.error "[Download Err]" n e)))
+         (assoc n :only-check false :error-code nil)
+         (fn [^js e] (js/console.error "[Download Err]" n e)))
         (plugin-handler/close-updates-downloading))
 
       ;; try to start consume pending item
       (if-let [n (second (first (:plugin/updates-pending @state/state)))]
         (plugin-handler/check-or-update-marketplace-plugin
-          (assoc n :only-check true :error-code nil)
-          (fn [^js e]
-            (notification/show! (.toString e) :error)
-            (js/console.error "[Check Err]" n e)))
+         (assoc n :only-check true :error-code nil)
+         (fn [^js e]
+           (notification/show! (.toString e) :error)
+           (js/console.error "[Check Err]" n e)))
         ;; try to open waiting updates list
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))

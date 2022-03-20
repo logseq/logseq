@@ -89,6 +89,7 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
+                     ;; `(state/set-db-restoring! true)` already executed before restoring
                      (-> (p/all (db/restore!
                                  (assoc me :repos repos)
                                  old-db-schema
@@ -109,6 +110,7 @@
                                    ;; Not native local directory
                                    (not (some config/local-db? (map :url repos)))
                                    (not (mobile-util/is-native-platform?)))
+                              ;; will execute `(state/set-db-restoring! false)` inside
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else
@@ -129,9 +131,6 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (when (and (state/get-current-repo)
-                                       (mobile-util/native-ios?))
-                              (mobile-util/icloud-sync!))
                             (file-handler/watch-for-current-graph-dir!)))
                          (p/then (state/pub-event! [:graph/ready (state/get-current-repo)]))
                          (p/catch (fn [error]
@@ -192,10 +191,10 @@
               (ipc/ipc "clearCache"))
           _ (idb/clear-local-storage-and-idb!)]
     (js/setTimeout
-      (fn [] (if (util/electron?)
-               (ipc/ipc :reloadWindowPage)
-               (js/window.location.reload)))
-      2000)))
+     (fn [] (if (util/electron?)
+              (ipc/ipc :reloadWindowPage)
+              (js/window.location.reload)))
+     2000)))
 
 (defn- register-components-fns!
   []

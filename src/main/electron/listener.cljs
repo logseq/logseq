@@ -1,43 +1,26 @@
 (ns electron.listener
   (:require [frontend.state :as state]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
             [datascript.core :as d]
-            [promesa.core :as p]
             [electron.ipc :as ipc]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.metadata :as metadata-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.ui :as ui]
-            [frontend.db.persist :as db-persist]))
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]))
 
 (defn persist-dbs!
   []
-  (->
-   (p/let [repos (db-persist/get-all-graphs)
-           repos (-> repos
-                     (conj (state/get-current-repo))
-                     (distinct))]
-     (if (seq repos)
-       (do
-         (notification/show!
-          (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
-          :warning)
-         (doseq [repo repos]
-           (metadata-handler/set-pages-metadata! repo))
-         (js/setTimeout
-          (fn []
-            (-> (p/all (map db/persist! repos))
-                (p/then (fn []
-                          (ipc/ipc "persistent-dbs-saved")))))
-          100))
-       (ipc/ipc "persistent-dbs-saved")))
-   (p/catch (fn [error]
-              (js/console.error error)
-              (ipc/ipc "persistent-dbs-error")))))
+  ;; only persist current db!
+  ;; TODO rename the function and event to persist-db
+  (repo-handler/persist-db! {:before     #(notification/show!
+                                           (ui/loading (t :graph/persist))
+                                           :warning)
+                             :on-success #(ipc/ipc "persistent-dbs-saved")
+                             :on-error   #(ipc/ipc "persistent-dbs-error")}))
 
 (defn listen-persistent-dbs!
   []
@@ -89,7 +72,25 @@
                              tx-data (db/string->db (:data tx-data))]
                          (when-let [conn (db/get-conn graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
-                         (ui-handler/re-render-root!)))))
+                         (ui-handler/re-render-root!))))
+
+  (js/window.apis.on "persistGraph"
+                     ;; electron is requesting window for persisting a graph in it's db
+                     (fn [data]
+                       (let [repo (bean/->clj data)
+                             before-f #(notification/show!
+                                        (ui/loading (t :graph/persist))
+                                        :warning)
+                             after-f #(ipc/ipc "persistGraphDone" repo)
+                             error-f (fn []
+                                       (after-f)
+                                       (notification/show!
+                                        (t :graph/persist-error)
+                                        :error))
+                             handlers {:before     before-f
+                                       :on-success after-f
+                                       :on-error   error-f}]
+                         (repo-handler/persist-db! repo handlers)))))
 
 (defn listen!
   []

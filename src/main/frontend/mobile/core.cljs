@@ -8,13 +8,8 @@
             [frontend.mobile.intent :as intent]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
-            [frontend.components.repo :as repo]
-            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
-            [promesa.core :as p]
-            [frontend.util :as util]
-            [frontend.config :as config]))
+            [frontend.util :as util]))
 
 (defn- ios-init
   []
@@ -64,15 +59,9 @@
 
     (.addListener App "appStateChange"
                   (fn [^js state]
-                    (when-let [repo (state/get-current-repo)]
-                      (let [is-active? (.-isActive state)
-                            repo-dir (config/get-repo-dir repo)]
-                        (if is-active?
-                          (p/do!
-                           (when (mobile-util/native-ios?)
-                             (mobile-util/sync-icloud-repo repo-dir))
-                           (nfs-handler/refresh! repo repo/refresh-cb)
-                           (notification/show! "Notes updated!" :success true))
+                    (when (state/get-current-repo)
+                      (let [is-active? (.-isActive state)]
+                        (when is-active?
                           (editor-handler/save-current-block!))))))))
     (.addEventListener js/window "sendIntentReceived"
                        #(intent/handle-received))

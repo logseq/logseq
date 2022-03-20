@@ -15,4 +15,8 @@
   (stat [this dir path])
   (open-dir [this ok-handler])
   (get-files [this path-or-handle ok-handler])
-  (watch-dir! [this dir]))
+  (watch-dir! [this dir]) 
+  ;; Ensure the dir is watched, window agnostic.
+  ;; Implementation should handle the actual watcher's construction / destruction.
+  ;; So shouldn't consider `unwatch-dir!`.
+  )
