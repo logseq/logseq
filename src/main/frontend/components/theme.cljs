@@ -19,11 +19,11 @@
     (rum/use-effect!
      #(let [doc js/document.documentElement
             cls (.-classList doc)]
-        (.setAttribute doc "data-theme" (if (= theme "white") "light" theme))
+        (.setAttribute doc "data-theme" theme)
         (if (= theme "dark") ;; for tailwind dark mode
           (.add cls "dark")
           (.remove cls "dark"))
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode (if (= theme "white") "light" theme)} nil))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
      [theme])
 
     (rum/use-effect!
@@ -61,7 +61,8 @@
 
     (rum/use-effect!
      #(when system-theme?
-        (ui/setup-system-theme-effect!))
+        (ui/setup-system-theme-effect!)
+        )
      [system-theme?])
 
     (rum/use-effect!
