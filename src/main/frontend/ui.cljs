@@ -714,13 +714,11 @@
 (rum/defcs catch-error
   < {:did-catch
      (fn [state error _info]
-       (js/console.dir error)
+       (log/error :exception error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)
-    (do
-      (log/error :exception error)
-      error-view)
+    error-view
     view))
 
 (rum/defc block-error

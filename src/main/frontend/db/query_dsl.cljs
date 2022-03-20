@@ -13,8 +13,7 @@
             [frontend.db.rules :as rules]
             [frontend.template :as template]
             [frontend.text :as text]
-            [frontend.util :as util]
-            [lambdaisland.glogi :as log]))
+            [frontend.util :as util]))
 
 
 ;; Query fields:
@@ -553,18 +552,12 @@ Some bindings in this fn:
                                  (take @sample (shuffle col)))
                                identity)
               transform-fn (comp sort-by random-samples)]
-          (try
-            (query-react/react-query repo
-                                     {:query query'
-                                      :query-string query-string
-                                      :rules rules}
-                                     {:use-cache? false
-                                      :transform-fn transform-fn})
-            (catch ExceptionInfo e
-              ;; Allow non-existent page queries to be ignored
-              (if (string/includes? (str (.-message e)) "Nothing found for entity")
-                (log/error :nothing-found-error e)
-                (throw e)))))))))
+          (query-react/react-query repo
+                                   {:query query'
+                                    :query-string query-string
+                                    :rules rules}
+                                   {:use-cache? false
+                                    :transform-fn transform-fn}))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"

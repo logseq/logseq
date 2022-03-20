@@ -116,7 +116,8 @@
 
    :page
    '[(page ?b ?page-name)
-     [?b :block/page [:block/name ?page-name]]]
+     [?b :block/page ?bp]
+     [?bp :block/name ?page-name]]
 
    :namespace
    '[(namespace ?p ?namespace)
@@ -138,4 +139,5 @@
 
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/path-refs [:block/name ?page-name]]]})
+     [?b :block/path-refs ?bp]
+     [?bp :block/name ?page-name]]})

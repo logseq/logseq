@@ -355,12 +355,7 @@ tags: other
          nil
          ""
          " "
-         "\"\""))
-
-  (testing "Non exists page should be ignored"
-    (are [x] (nil? (dsl-query x))
-         "[[page-not-exist]]"
-         "[[another-page-not-exist]]")))
+         "\"\"")))
 
 (deftest page-ref-and-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -380,8 +375,8 @@ tags: other
         "Tag arg")
 
     (is (= []
-           (map :block/content (dsl-query "[[blarg]]")))
-        "Correctly returns no results"))
+           (dsl-query "[[blarg]]"))
+        "Nonexistent page returns no results"))
 
   (testing "basic boolean queries"
     (is (= ["b2 [[page 2]] #tag1"]
@@ -393,6 +388,11 @@ tags: other
            (map :block/content
                 (dsl-query "(or [[tag2]] [[page 2]])")))
         "OR query")
+
+    (is (= ["b1 [[page 1]] #tag2"]
+           (map :block/content
+                (dsl-query "(or [[tag2]] [[page 3]])")))
+        "OR query with nonexistent page should return meaningful results")
 
     (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
            (->> (dsl-query "(not [[page 2]])")

@@ -4,7 +4,7 @@
 
 (defn marker-pattern [format]
   (re-pattern
-   (str "^" (when-not (= format :org) "(#*\\s*)?")
+   (str "^" (when-not (= format :org) "(#+\\s+)?")
         "(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\\s?")))
 
 (def bare-marker-pattern
@@ -30,13 +30,13 @@
 
 (defn header-marker-pattern
   [markdown? marker]
-  (re-pattern (str "^" (when markdown? "#*\\s*") marker)))
+  (re-pattern (str "^" (when markdown? "#+\\s+") marker)))
 
 (defn replace-marker
   [content markdown? old-marker new-marker]
   (string/replace-first content (header-marker-pattern markdown? old-marker)
                         (fn [match]
-                          (if (and markdown? (= new-marker "")  (string/starts-with? match "#"))
+                          (if (and markdown? (= new-marker "") (string/starts-with? match "#"))
                             (string/replace match (str " " old-marker) "")
                             (string/replace match old-marker new-marker)))))
 
