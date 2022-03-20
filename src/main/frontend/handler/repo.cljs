@@ -26,7 +26,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
-            [frontend.mobile.util :as mobile-util]
             [frontend.db.persist :as db-persist]
             [electron.ipc :as ipc]
             [clojure.set :as set]))
@@ -645,12 +644,9 @@
   [nfs-rebuild-index! ok-handler]
   (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)
-          repo-dir (config/get-repo-dir repo)]
+    (let [local? (config/local-db? repo)]
       (if local?
-        (p/let [_ (when (mobile-util/native-ios?)
-                    (mobile-util/sync-icloud-repo repo-dir))
-                _ (metadata-handler/set-pages-metadata! repo)]
+        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
