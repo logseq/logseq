@@ -38,7 +38,6 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
-            [clojure.core.async :as async]
             [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
