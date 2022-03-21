@@ -49,8 +49,8 @@
     (if (= :now preferred-workflow) "LATER" "TODO")))
 
 (defn cycle-marker
-  [content marker? format preferred-workflow]
+  [content marker new-marker format preferred-workflow]
   (let [content (string/triml content)
-        marker (or marker? (last (util/safe-re-find (marker-pattern format) content))) ;; return the last matching group (last vec)
-        new-marker (cycle-marker-state marker preferred-workflow)]
+        marker (or marker (last (util/safe-re-find (marker-pattern format) content))) ;; return the last matching group (last vec)
+        new-marker (or new-marker (cycle-marker-state marker preferred-workflow))]
     [(add-or-update-marker content format new-marker) new-marker]))

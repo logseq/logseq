@@ -1515,9 +1515,10 @@
 (defn marker-switch
   [{:block/keys [marker] :as block}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-    (let [set-marker-fn (fn [e]
+    (let [set-marker-fn (fn [new-marker]
+                          (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker block))
+                            (editor-handler/set-marker block new-marker)))
           next-marker (case marker
                         "NOW" "LATER"
                         "LATER" "NOW"
@@ -1526,7 +1527,7 @@
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
-        :on-mouse-down set-marker-fn}
+        :on-mouse-down (set-marker-fn next-marker)}
        marker])))
 
 (defn marker-cp

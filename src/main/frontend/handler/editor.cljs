@@ -813,8 +813,8 @@
          distinct)))
 
 (defn set-marker
-  [{:block/keys [marker content format] :as block}]
-  (let [[new-content _] (marker/cycle-marker content marker format (state/get-preferred-workflow))]
+  [{:block/keys [marker content format] :as block} new-marker]
+  (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
     (save-block-if-changed! block new-content)))
 
 (defn cycle-todos!
@@ -825,7 +825,7 @@
                    (remove nil?))]
       (doseq [id ids]
         (let [block (db/pull [:block/uuid id])]
-          (set-marker block)))
+          (set-marker block nil)))
       (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
 
 (defn cycle-todo!
@@ -839,7 +839,7 @@
             content (state/get-edit-content)
             format (or (db/get-page-format (state/get-current-page))
                        (state/get-preferred-format))
-            [new-content marker] (marker/cycle-marker content nil format (state/get-preferred-workflow))
+            [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
             new-pos (commands/compute-pos-delta-when-change-marker
                      content marker (cursor/pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
