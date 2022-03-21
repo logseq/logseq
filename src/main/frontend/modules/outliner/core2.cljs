@@ -233,13 +233,13 @@
 (defn get-top-level-nodes
   "Get toplevel nodes of consecutive NODES"
   [nodes db]
-  (let [nodes-set (set nodes)
+  (let [node-ids-set (into #{} (map get-id) nodes)
         toplevel-nodes (transient [])]
     (loop [node (first nodes)]
       (let [node* (skip-children node db)
             next-node (get-next node* db)]
         (conj! toplevel-nodes node)
-        (when (and next-node (contains? nodes-set next-node))
+        (when (and next-node (contains? node-ids-set (get-id next-node)))
           (recur next-node))))
     (persistent! toplevel-nodes)))
 
@@ -466,6 +466,94 @@
        (map #(set-parent % parent-node) toplevel-nodes)))))
 
 
+;; move nodes up/down examples:
+;; 1)
+;; - 1
+;;   - 2
+;;   - 3
+;; == move 3 up ==
+;; - 1
+;;   - 3
+;;   - 2
+;; -----------------
+;; 2)
+;; - 1
+;; - 2
+;;   - 3
+;; - 4
+;; == move 3,4 up ==
+;; - 1
+;;   - 3
+;;   - 4
+;; - 2
+;; -----------------
+;; 3)
+;; - 1
+;; - 2
+;;   - 3
+;;   - 4
+;; - 5
+;; == move 4,5 up ==
+;; - 1
+;; - 2
+;;   - 4
+;;   - 5
+;;   - 3
+
+(defn move-nodes-up
+  [nodes db]
+  {:pre [(seq nodes)]}
+  (let [first-node (first nodes)
+        prev-sibling-node (get-prev-sibling-node first-node db)
+        last-node (last nodes)
+        origin-prev-first-node (get-prev first-node db)
+        origin-next-last-node (get-next last-node db)
+        target-next-node (or (get-prev-sibling-node first-node db)
+                             (get-parent first-node db))
+        target-node (get-prev target-next-node db)
+        toplevel-nodes (get-top-level-nodes nodes db)
+        target-parent-node (cond-> (get-parent first-node db)
+                             (not prev-sibling-node) (get-prev-sibling-node db))]
+    (when (and target-parent-node target-node)
+      (vec
+       (concat
+        [(unset-next last-node)
+         (if origin-next-last-node
+           (set-next origin-prev-first-node origin-next-last-node)
+           (unset-next origin-prev-first-node))
+         (set-next target-node first-node)
+         (set-next last-node target-next-node)]
+        (mapv #(set-parent % target-parent-node) toplevel-nodes))))))
+
+(defn move-nodes-down
+  [nodes db]
+  {:pre [(seq nodes)]}
+  (let [first-node (first nodes)
+        last-node (last nodes)
+        next-sibling-node (get-next-sibling-node first-node db)
+        origin-prev-first-node (get-prev first-node db)
+        origin-next-last-node (get-next last-node db)
+        toplevel-nodes (get-top-level-nodes nodes db)
+        last-toplevel-node (last toplevel-nodes)
+        target-node (or (some-> (get-next-sibling-node last-toplevel-node db)
+                                (skip-children db))
+                        (some-> (get-parent last-toplevel-node db)
+                                (get-next-sibling-node db)))
+        target-next-node (and target-node (get-next target-node db))
+        target-parent-node (cond-> (get-parent last-toplevel-node db)
+                             (not next-sibling-node) (get-next-sibling-node db))]
+    (when (and target-parent-node target-next-node)
+      (vec
+       (concat
+        [(unset-next last-node)
+         (if origin-next-last-node
+           (set-next origin-prev-first-node origin-next-last-node)
+           (unset-next origin-prev-first-node))
+         (set-next target-node first-node)
+         (set-next last-node target-next-node)]
+        (mapv #(set-parent % target-parent-node) toplevel-nodes))))))
+
+
 (defn delete-nodes
   "Delete consecutive sorted NODES.
   Returns transaction data."
@@ -564,6 +652,24 @@
   (when (nil? *transaction-data*)
     (throw (js/Error. "move-nodes! is not used in (save-transactions ...)")))
   (let [origin-tx-data (move-nodes nodes @conn target-id-or-entity sibling?)
+        tx-report (d/transact! conn origin-tx-data)]
+    (apply conj! *transaction-data* (:tx-data tx-report))))
+
+(defn move-nodes-up!
+  [nodes conn]
+  {:pre [(d/conn? conn)]}
+  (when (nil? *transaction-data*)
+    (throw (js/Error. "move-nodes-up! is not used in (save-transactions ...)")))
+  (let [origin-tx-data (move-nodes-up nodes @conn)
+        tx-report (d/transact! conn origin-tx-data)]
+    (apply conj! *transaction-data* (:tx-data tx-report))))
+
+(defn move-nodes-down!
+  [nodes conn]
+  {:pre [(d/conn? conn)]}
+  (when (nil? *transaction-data*)
+    (throw (js/Error. "move-nodes-down! is not used in (save-transactions ...)")))
+  (let [origin-tx-data (move-nodes-down nodes @conn)
         tx-report (d/transact! conn origin-tx-data)]
     (apply conj! *transaction-data* (:tx-data tx-report))))
 

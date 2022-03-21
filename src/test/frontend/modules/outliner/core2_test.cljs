@@ -66,7 +66,11 @@
          [node & tail] (get-page-nodes2 db)]
     (when node
       (->> node
-           ((juxt #(apply str (repeat (inc (get parents (:db/id (:block/parent %)) -1)) "__")) (constantly "- ") :data))
+           ((juxt #(apply str (repeat (inc (get parents (:db/id (:block/parent %)) -1)) "__"))
+                  (constantly "- ")
+                  :data
+                  (constantly " #")
+                  :db/id))
            (apply str)
            println)
       (recur (assoc parents (:db/id node) (inc (get parents (:db/id (:block/parent node)) -1))) tail))))
@@ -217,14 +221,19 @@
                 {:data 13, :block/parent 2, :db/id 14}
                 {:data 14, :block/parent 14, :db/id 15}]))))))
 
-(defn- validate-nodes-parent
-  "check that NODE's :block/parent node is positioned before NODE"
+(defn- validate-nodes-parent2
+  "Validate that every node's parent is correct."
   [nodes db]
-  (let [seen (volatile! #{1})]
-    (doseq [node nodes]
-      (assert (contains? @seen (outliner-core/get-id (outliner-core/get-parent node db)))
-              (outliner-core/get-id (outliner-core/get-parent node db)))
-      (vswap! seen conj (outliner-core/get-id node)))))
+  (when (seq nodes)
+    (let [parents+self (volatile! [])]
+      (loop [[node & tail] nodes]
+        (let [parents (mapv outliner-core/get-id (vec (reverse (outliner-core/get-parent-nodes node db))))]
+          (when (seq @parents+self)
+            (assert (= parents (subvec @parents+self 0 (count parents)))
+                    (do (print-page-nodes db) [parents @parents+self node])))
+          (vreset! parents+self (conj parents (outliner-core/get-id node)))
+          (when tail
+            (recur tail)))))))
 
 
 (defn- gen-random-tree
@@ -302,10 +311,28 @@
           {:txs-data (outliner-core/move-nodes nodes db target (g/generate g/boolean))
            :nodes-count-change 0})))))
 
+(defn- op-move-nodes-up
+  [db _]
+  (let [datoms (d/datoms db :avet :data)]
+    (if (empty? datoms)
+      {:txs-data [] :nodes-count-change 0}
+      (let [node (d/entity db (:e (g/generate (g/elements datoms))))
+            nodes (outliner-core/get-children-nodes node db)]
+        {:txs-data (outliner-core/move-nodes-up nodes db)
+         :nodes-count-change 0}))))
+
+(defn- op-move-nodes-down
+  [db _]
+  (let [datoms (d/datoms db :avet :data)]
+    (if (empty? datoms)
+      {:txs-data [] :nodes-count-change 0}
+      (let [node (d/entity db (:e (g/generate (g/elements datoms))))
+            nodes (outliner-core/get-children-nodes node db)]
+        {:txs-data (outliner-core/move-nodes-down nodes db)
+         :nodes-count-change 0}))))
 
 ;;; generative testcases
 ;; build random legal tree, then apply random operations on it.
-
 (deftest test-random-op
   (testing "random insert/delete/indent/outdent nodes"
     (dotimes [_ 20]
@@ -321,11 +348,14 @@
                                           op-delete-nodes
                                           op-indent-nodes
                                           op-outdent-nodes
-                                          op-move-nodes])) @conn seq-state)]
+                                          op-move-nodes
+                                          op-move-nodes-up
+                                          op-move-nodes-down
+                                          ])) @conn seq-state)]
             (d/transact! conn txs-data)
             (vswap! nodes-count #(+ % nodes-count-change))
             (let [page-nodes (get-page-nodes2 @conn)]
-              (validate-nodes-parent page-nodes @conn)
+              (validate-nodes-parent2 page-nodes @conn)
               (is (= @nodes-count (count page-nodes))) ; check node count
               )))))))
 

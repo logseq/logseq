@@ -5,15 +5,21 @@
             [clojure.test.check.generators :as g]
             [frontend.modules.rtc.core :as rtc]))
 
-(defn- validate-nodes-parent
-  "check that NODE's :block/parent node is positioned before NODE"
-  [nodes db]
-  (let [seen (volatile! #{1})]
-    (doseq [node nodes]
-      (assert (contains? @seen (outliner-core/get-id (outliner-core/get-parent node db)))
-              (outliner-core/get-id (outliner-core/get-parent node db)))
-      (vswap! seen conj (outliner-core/get-id node)))))
 
+(declare print-page-nodes)
+(defn- validate-nodes-parent2
+  "Validate that every node's parent is correct."
+  [nodes db]
+  (when (seq nodes)
+    (let [parents+self (volatile! [])]
+      (loop [[node & tail] nodes]
+        (let [parents (mapv outliner-core/get-id (vec (reverse (outliner-core/get-parent-nodes node db))))]
+          (when (seq @parents+self)
+            (assert (= parents (subvec @parents+self 0 (count parents)))
+                    (do (print-page-nodes db) [parents @parents+self node])))
+          (vreset! parents+self (conj parents (outliner-core/get-id node)))
+          (when tail
+            (recur tail)))))))
 (def tree
   [{:block/uuid 1 :level 1 :data "1"}
    {:block/uuid 2 :level 2 :data "2"}
@@ -159,6 +165,6 @@
             (println "op" op)
             (d/transact! server-conn (rtc/apply-op op @server-conn)))
           (d/transact! client-replay-conn tx-data)
-          (validate-nodes-parent
+          (validate-nodes-parent2
            (outliner-core/get-page-nodes (d/entity @server-conn 1) @server-conn) @server-conn)))
       (def xxx [client-replay-conn server-conn]))))
