@@ -60,6 +60,17 @@
   [db]
   (outliner-core/get-page-nodes (d/entity db 1) db))
 
+(defn- print-page-nodes
+  [db]
+  (loop [parents {}
+         [node & tail] (get-page-nodes2 db)]
+    (when node
+      (->> node
+           ((juxt #(apply str (repeat (inc (get parents (:db/id (:block/parent %)) -1)) "__")) (constantly "- ") :data))
+           (apply str)
+           println)
+      (recur (assoc parents (:db/id node) (inc (get parents (:db/id (:block/parent node)) -1))) tail))))
+
 ;;; testcases for operations (pure functions)
 
 (deftest test-insert-nodes
@@ -311,7 +322,6 @@
                                           op-indent-nodes
                                           op-outdent-nodes
                                           op-move-nodes])) @conn seq-state)]
-
             (d/transact! conn txs-data)
             (vswap! nodes-count #(+ % nodes-count-change))
             (let [page-nodes (get-page-nodes2 @conn)]

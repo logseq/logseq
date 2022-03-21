@@ -417,12 +417,30 @@
   ;; TODO: check NODES are consecutive
   {:pre [(seq nodes)
          (spec/valid? ::target-id-or-entity target-id-or-entity)
-         (= nodes (with-children-nodes nodes db))]}
+         ;; (= nodes (with-children-nodes nodes db))
+         ]}
   (validate-nodes-not-contains-target nodes target-id-or-entity db)
-  (let [target (target-entity target-id-or-entity db)
+  (let [node-ids-set (into #{} (map get-id) nodes)
+        target (target-entity target-id-or-entity db)
         ;; if target is page-node, sibling? must be false
         sibling? (if (page-node? target db) false sibling?)
-        target-next (get-next target db)
+        ;; target* = last-child(node-ids-set doesn't contain it)
+        ;; or target itself
+        ;; loop to find previous node not included in NODES,
+        ;; e.g. NODES maybe moved to same place but sibling?(or not)
+        ;; - 1
+        ;;   - 2    move 3,4 to target(1) as sibling=true
+        ;;     - 3
+        ;;   - 4
+        target* (loop [target* (skip-children target db)]
+                  (if (contains? node-ids-set (get-id target*))
+                    (recur (get-prev target* db))
+                    target*))
+        target-next (loop [target-next (get-next target* db)]
+                      (when target-next
+                        (if (contains? node-ids-set (get-id target-next))
+                          (recur (get-next target-next db))
+                          target-next)))
         first-node (first nodes)
         origin-prev-first-node (get-prev first-node db)
         last-node (last nodes)
@@ -435,22 +453,17 @@
        ;; no need to set-next if first-node is next node of target
        []
        [(unset-next origin-prev-first-node)
-        (set-next target first-node)
+        (set-next target* first-node)
         (if target-next   ; need to unset-next when target-next is nil
           (set-next last-node target-next)
           (unset-next last-node))
-        (set-next origin-prev-first-node origin-next-last-node)])
+        (when-not (and target-next origin-next-last-node
+                       (= (get-id target-next)
+                          (get-id origin-next-last-node)))
+          (set-next origin-prev-first-node origin-next-last-node))])
      (let [toplevel-nodes (get-top-level-nodes nodes db)]
-       (concat
-        ;; alter :block/parent
-        (map #(set-parent % parent-node) toplevel-nodes)
-        ;; if sibling? , then we need to update prev-sibling's children's parent
-        (when sibling?
-          (sequence
-           (comp
-            (filter (fn [d] (not (contains? (set (mapv :db/id toplevel-nodes)) (:e d)))))
-            (map (fn [d] {:db/id (:e d) :block/parent (get-id (last toplevel-nodes))})))
-           (d/datoms db :avet :block/parent (get-id target)))))))))
+       ;; alter :block/parent
+       (map #(set-parent % parent-node) toplevel-nodes)))))
 
 
 (defn delete-nodes
