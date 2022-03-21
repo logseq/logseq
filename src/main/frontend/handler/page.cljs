@@ -266,13 +266,14 @@
       (config-handler/set-config! :favorites favorites))))
 
 (defn toggle-favorite! []
-  (let [page-name  (state/get-current-page)
-        favorites  (:favorites (state/sub-graph-config))
-        favorited? (contains? (set (map string/lower-case favorites))
-                              (string/lower-case page-name))]
+  ;; NOTE: in journals or settings, current-page is nil
+  (when-let [page-name (state/get-current-page)]
+   (let [favorites  (:favorites (state/sub-graph-config))
+         favorited? (contains? (set (map string/lower-case favorites))
+                               (string/lower-case page-name))]
     (if favorited?
       (unfavorite-page! page-name)
-      (favorite-page! page-name))))
+      (favorite-page! page-name)))))
 
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
