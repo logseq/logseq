@@ -245,7 +245,7 @@
                       (util/stop e)
                       (if event?
                         (command-handler e)
-                       (command-handler)))}
+                        (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar < rum/reactive
@@ -279,7 +279,7 @@
       (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
       (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
       (mobile-bar-command editor-handler/html-link-format! "link")
-      (mobile-bar-command history/undo! "rotate" true )
+      (mobile-bar-command history/undo! "rotate" true)
       (mobile-bar-command history/redo! "rotate-clockwise" true)
       (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
       (mobile-bar-command editor-handler/bold-format! "bold")
@@ -295,7 +295,7 @@
    (fn [state]
      (mixins/on-key-down
       state
-      { ;; enter
+      {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
@@ -319,23 +319,23 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                  {:key           (str "modal-input-" (name id))
-                   :id            (str "modal-input-" (name id))
-                   :type          (or type "text")
-                   :on-change     (fn [e]
-                                    (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                 {:key           (str "modal-input-" (name id))
+                  :id            (str "modal-input-" (name id))
+                  :type          (or type "text")
+                  :on-change     (fn [e]
+                                   (swap! input-value assoc id (util/evalue e)))
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder)
                   autoFocus
                   (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
-             "Submit"
-             :on-click
-             (fn [e]
-               (util/stop e)
-               (on-submit command @input-value pos)))])))))
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]

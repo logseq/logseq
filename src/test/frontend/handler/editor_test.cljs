@@ -5,7 +5,7 @@
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
     (is (= "page1"
-          (editor/extract-nearest-link-from-text "[[page1]] [[page2]]" 0))
+           (editor/extract-nearest-link-from-text "[[page1]] [[page2]]" 0))
         "Finds first page link correctly based on cursor position")
 
     (is (= "page2"
@@ -23,13 +23,13 @@
 
   (testing "Url links"
     (is (= "https://github.com/logseq/logseq"
-          (editor/extract-nearest-link-from-text
-           "https://github.com/logseq/logseq is #awesome :)" 0 editor/url-regex))
+           (editor/extract-nearest-link-from-text
+            "https://github.com/logseq/logseq is #awesome :)" 0 editor/url-regex))
         "Finds url correctly")
 
     (is (not= "https://github.com/logseq/logseq"
-           (editor/extract-nearest-link-from-text
-            "https://github.com/logseq/logseq is #awesome :)" 0))
+              (editor/extract-nearest-link-from-text
+               "https://github.com/logseq/logseq is #awesome :)" 0))
         "Doesn't find url if regex not passed")
 
     (is (= "https://github.com/logseq/logseq"

@@ -53,7 +53,7 @@
 
   It also accepts the specified `marker` and `new-marker`.
   If you don't specify it, it will automatically find it based on `content`.
-  
+
   Returns [new-content new-marker]."
   [content marker new-marker format preferred-workflow]
   (let [content    (string/triml content)
