@@ -51,7 +51,7 @@
 (defn cycle-marker
   "The cycle-marker will cycle markers sequentially. You can find all its order in `cycle-marker-state`.
 
-  It also accept the specified `marker` and `new-marker`.
+  It also accepts the specified `marker` and `new-marker`.
   If you don't specify it, it will automatically find it based on `content`.
   
   Returns [new-content new-marker]."

@@ -54,6 +54,7 @@
   (are [marker content expect] (= expect (set-marker marker content :org))
     "TODO" "TODO content" "DOING content"
     "TODO" "** TODO content" "** DOING content"
+    "TODO" "## TODO content" "DOING ## TODO content"
     "DONE" "DONE content" "content"))
 
 (deftest set-marker-markdown
