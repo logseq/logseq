@@ -50,8 +50,7 @@
 
 (defn cycle-marker
   [content marker? format preferred-workflow]
-  (let [markdown? (= :markdown format)
-        content (string/triml content)
+  (let [content (string/triml content)
         marker (or marker? (last (util/safe-re-find (marker-pattern format) content))) ;; return the last matching group (last vec)
         new-marker (cycle-marker-state marker preferred-workflow)]
     [(add-or-update-marker content format new-marker) new-marker]))
