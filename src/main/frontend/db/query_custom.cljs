@@ -24,15 +24,30 @@
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"
   [{:keys [query] :as query-m}]
-  (let [{:keys [where]} (datalog-util/query-vec->map query)
+  (let [{:keys [where in]} (datalog-util/query-vec->map query)
         rules-found (datalog-util/find-rules-in-where where (-> rules/query-dsl-rules keys set))]
     (if (seq rules-found)
-      (-> query-m
-          (update :query (fn [q]
-                           (if (contains? (set q) :in)
-                             (datalog-util/add-to-end-of-query-section q :in ['%])
-                             (into q [:in '$ '%]))))
-          (assoc :rules (mapv rules/query-dsl-rules rules-found)))
+      (if (= '% (last in))
+        ;; Add to existing :inputs rules
+        (update query-m
+                :inputs
+                (fn [inputs]
+                  (assoc (vec inputs)
+                         ;; last position is rules
+                         (dec (count inputs))
+                         (->> (mapv rules/query-dsl-rules rules-found)
+                              (into (last inputs))
+                              ;; user could give rules that we already have
+                              distinct
+                              vec))))
+        ;; Add new rules
+        (-> query-m
+            (update :query
+                    (fn [q]
+                      (if (contains? (set q) :in)
+                        (datalog-util/add-to-end-of-query-section q :in ['%])
+                        (into q [:in '$ '%]))))
+            (assoc :rules (mapv rules/query-dsl-rules rules-found))))
       query-m)))
 
 (defn custom-query

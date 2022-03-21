@@ -68,9 +68,8 @@
   ([s warn?]
    (try
      (reader/read-string s)
-     (catch js/Error e
-       (println "read-string error:")
-       (js/console.error e)
+     (catch :default e
+       (log/error :read-string-error e :string s)
        (when warn?
          [:div.warning {:title "read-string failed"}
           s])))))
@@ -1419,12 +1418,8 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id children collapsed? *control-show? edit?]
+  [state config block uuid block-id collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
-        has-children-blocks? (and (coll? children) (seq children))
-        has-child? (and
-                    (not (:pre-block? block))
-                    has-children-blocks?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)]
@@ -1437,12 +1432,11 @@
       {:id (str "control-" uuid)
        :on-click (fn [event]
                    (util/stop event)
-                   (when-not (and (not collapsed?) (not has-child?))
-                     (if ref?
-                       (state/toggle-collapsed-block! uuid)
-                       (if collapsed?
-                         (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid)))))}
+                   (if ref?
+                     (state/toggle-collapsed-block! uuid)
+                     (if collapsed?
+                       (editor-handler/expand-block! uuid)
+                       (editor-handler/collapse-block! uuid))))}
       [:span {:class (if control-show? "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
@@ -1521,10 +1515,10 @@
 (defn marker-switch
   [{:block/keys [marker] :as block}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-    (let [set-marker-fn (fn [marker]
+    (let [set-marker-fn (fn [new-marker]
                           (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker block marker)))
+                            (editor-handler/set-marker block new-marker)))
           next-marker (case marker
                         "NOW" "LATER"
                         "LATER" "NOW"
@@ -1959,7 +1953,7 @@
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
-        [:p.warning "Something wrong in the editor"]
+        (ui/block-error "Something wrong in the editor" {})
         (editor-box {:block block
                      :block-id uuid
                      :block-parent-id block-id
@@ -2117,7 +2111,7 @@
   (util/stop e)
   (when (or
          (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid))
+         (editor-handler/collapsable? uuid {:semantic? true}))
     (reset! *control-show? true))
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
@@ -2285,7 +2279,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
@@ -2463,28 +2457,28 @@
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [q (:query query)
-                           result (query-dsl/query (state/get-current-repo) q)]
+                           form (safe-read-string q false)]
                        (cond
-                         (and (util/electron?) (string? result)) ; full-text search
-                         (if (string/blank? result)
-                           (atom [])
-                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result)))))
+                          ;; Searches like 'foo' or 'foo bar' come back as symbols
+                         ;; and are meant to go directly to full text search
+                         (and (util/electron?) (symbol? form)) ; full-text search
+                         (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                (when (seq blocks)
+                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                    (reset! result-atom result))))
 
-                         (string? result)
+                         (symbol? form)
                          (atom nil)
 
                          :else
-                         result))
+                         (query-dsl/query (state/get-current-repo) q)))
                      (db/custom-query query))
         query-atom (if (instance? Atom query-atom)
                      query-atom
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defcs ^:large-vars/cleanup-todo custom-query < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -2498,119 +2492,121 @@
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show?] :as q}]
+  (let [dsl-query? (:dsl-query? config)
+        query-atom (:query-atom state)
+        current-block-uuid (or (:block/uuid (:block config))
+                               (:block/uuid config))
+        current-block (db/entity [:block/uuid current-block-uuid])
+        ;; exclude the current one, otherwise it'll loop forever
+        remove-blocks (if current-block-uuid [current-block-uuid] nil)
+        query-result (and query-atom (rum/react query-atom))
+        table? (or (get-in current-block [:block/properties :query-table])
+                   (and (string? query) (string/ends-with? (string/trim query) "table")))
+        transformed-query-result (when query-result
+                                   (db/custom-query-result-transform query-result remove-blocks q))
+        not-grouped-by-page? (or table?
+                                 (boolean (:result-transform q))
+                                 (and (string? query) (string/includes? query "(by-page false)")))
+        result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                 (db-utils/group-by-page transformed-query-result)
+                 transformed-query-result)
+        _ (when-let [query-result (:query-result config)]
+            (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+              (reset! query-result result)))
+        view-f (and view (sci/eval-string (pr-str view)))
+        only-blocks? (:block/uuid (first result))
+        blocks-grouped-by-page? (and (seq result)
+                                     (not not-grouped-by-page?)
+                                     (coll? (first result))
+                                     (:block/name (ffirst result))
+                                     (:block/uuid (first (second (first result))))
+                                     true)
+        built-in? (built-in-custom-query? title)
+        page-list? (and (seq result)
+                        (:block/name (first result)))
+        nested-query? (:custom-query? config)]
+    (if nested-query?
+      [:code (if dsl-query?
+               (util/format "{{query %s}}" query)
+               "{{query hidden}}")]
+      [:div.custom-query.mt-4 (get config :attr {})
+       (when-not (and built-in? (empty? result))
+         (ui/foldable
+          [:div.custom-query-title
+           [:span.title-text title]
+           [:span.opacity-60.text-sm.ml-2.results-count
+            (str (count transformed-query-result) " results")]]
+          (fn []
+            [:div
+             (when current-block
+               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
+                (when-not page-list?
+                  [:div.flex.flex-row
+                   [:div.mx-2 [:span.text-sm "Table view"]]
+                   [:div {:style {:margin-top 5}}
+                    (ui/toggle table?
+                               (fn []
+                                 (editor-handler/set-block-property! current-block-uuid
+                                                                     "query-table"
+                                                                     (not table?)))
+                               true)]])
+
+                [:a.mx-2.block.fade-link
+                 {:on-click (fn []
+                              (let [all-keys (query-table/get-keys result page-list?)]
+                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                 [:span.table-query-properties
+                  [:span.text-sm.mr-1 "Set properties"]
+                  svg/settings-sm]]])
+             (cond
+               (and (seq result) view-f)
+               (let [result (try
+                              (sci/call-fn view-f result)
+                              (catch js/Error error
+                                (log/error :custom-view-failed {:error error
+                                                                :result result})
+                                [:div "Custom view failed: "
+                                 (str error)]))]
+                 (util/hiccup-keywordize result))
+
+               page-list?
+               (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+
+               table?
+               (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+
+               (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+               (->hiccup result (cond-> (assoc config
+                                               :custom-query? true
+                                               :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                                   breadcrumb-show?
+                                                                   true)
+                                               :group-by-page? blocks-grouped-by-page?
+                                               :ref? true)
+                                        children?
+                                        (assoc :ref? true))
+                         {:style {:margin-top "0.25rem"
+                                  :margin-left "0.25rem"}})
+
+               (seq result)
+               (let [result (->>
+                             (for [record result]
+                               (if (map? record)
+                                 (str (util/pp-str record) "\n")
+                                 record))
+                             (remove nil?))]
+                 [:pre result])
+
+               :else
+               [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
+          {:default-collapsed? collapsed?
+           :title-trigger? true}))])))
+
+(rum/defc custom-query
+  [config q]
   (ui/catch-error
-   [:div.warning
-    [:p "Query failed: "]
-    [:pre (str q)]]
-   (let [dsl-query? (:dsl-query? config)
-         query-atom (:query-atom state)
-         current-block-uuid (or (:block/uuid (:block config))
-                                (:block/uuid config))
-         current-block (db/entity [:block/uuid current-block-uuid])
-         ;; exclude the current one, otherwise it'll loop forever
-         remove-blocks (if current-block-uuid [current-block-uuid] nil)
-         query-result (and query-atom (rum/react query-atom))
-         table? (or (get-in current-block [:block/properties :query-table])
-                    (and (string? query) (string/ends-with? (string/trim query) "table")))
-         transformed-query-result (when query-result
-                                    (db/custom-query-result-transform query-result remove-blocks q))
-         not-grouped-by-page? (or table?
-                                  (boolean (:result-transform q))
-                                  (and (string? query) (string/includes? query "(by-page false)")))
-         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                  (db-utils/group-by-page transformed-query-result)
-                  transformed-query-result)
-         _ (when-let [query-result (:query-result config)]
-             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-               (reset! query-result result)))
-         view-f (and view (sci/eval-string (pr-str view)))
-         only-blocks? (:block/uuid (first result))
-         blocks-grouped-by-page? (and (seq result)
-                                      (not not-grouped-by-page?)
-                                      (coll? (first result))
-                                      (:block/name (ffirst result))
-                                      (:block/uuid (first (second (first result))))
-                                      true)
-         built-in? (built-in-custom-query? title)
-         page-list? (and (seq result)
-                         (:block/name (first result)))
-         nested-query? (:custom-query? config)]
-     (if nested-query?
-       [:code (if dsl-query?
-                (util/format "{{query %s}}" query)
-                "{{query hidden}}")]
-       [:div.custom-query.mt-4 (get config :attr {})
-        (when-not (and built-in? (empty? result))
-          (ui/foldable
-           [:div.custom-query-title
-            [:span.title-text title]
-            [:span.opacity-60.text-sm.ml-2.results-count
-             (str (count transformed-query-result) " results")]]
-           (fn []
-             [:div
-              (when current-block
-                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-                 (when-not page-list?
-                   [:div.flex.flex-row
-                    [:div.mx-2 [:span.text-sm "Table view"]]
-                    [:div {:style {:margin-top 5}}
-                     (ui/toggle table?
-                                (fn []
-                                  (editor-handler/set-block-property! current-block-uuid
-                                                                      "query-table"
-                                                                      (not table?)))
-                                true)]])
-
-                 [:a.mx-2.block.fade-link
-                  {:on-click (fn []
-                               (let [all-keys (query-table/get-keys result page-list?)]
-                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-                  [:span.table-query-properties
-                   [:span.text-sm.mr-1 "Set properties"]
-                   svg/settings-sm]]])
-              (cond
-                (and (seq result) view-f)
-                (let [result (try
-                               (sci/call-fn view-f result)
-                               (catch js/Error error
-                                 (log/error :custom-view-failed {:error error
-                                                                 :result result})
-                                 [:div "Custom view failed: "
-                                  (str error)]))]
-                  (util/hiccup-keywordize result))
-
-                page-list?
-                (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
-
-                table?
-                (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
-
-                (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-                (->hiccup result (cond-> (assoc config
-                                                :custom-query? true
-                                                :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                                    breadcrumb-show?
-                                                                    true)
-                                                :group-by-page? blocks-grouped-by-page?
-                                                :ref? true)
-                                   children?
-                                   (assoc :ref? true))
-                          {:style {:margin-top "0.25rem"
-                                   :margin-left "0.25rem"}})
-
-                (seq result)
-                (let [result (->>
-                              (for [record result]
-                                (if (map? record)
-                                  (str (util/pp-str record) "\n")
-                                  record))
-                              (remove nil?))]
-                  [:pre result])
-
-                :else
-                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
-           {:default-collapsed? collapsed?
-            :title-trigger? true}))]))))
+   (ui/block-error "Query Error:" {:content (:query q)})
+   (custom-query* config q)))
 
 (defn admonition
   [config type result]
@@ -2675,173 +2671,182 @@
                    :markdown)]
     (try
       (match item
-        ["Drawer" name lines]
-        (when (or (not= name "logbook")
-                  (and
-                   (= name "logbook")
-                   (state/enable-timetracking?)
-                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                        (when (get-in (state/get-config)
-                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
-                          (or (:block/scheduled (:block config))
-                              (:block/deadline (:block config)))))))
-          [:div
-           [:div.text-sm
-            [:div.drawer {:data-drawer-name name}
-             (ui/foldable
-              [:div.opacity-50.font-medium.logbook
-               (util/format ":%s:" (string/upper-case name))]
-              [:div.opacity-50.font-medium
-               (if (= name "logbook")
-                 (logbook-cp lines)
-                 (apply str lines))
-               [:div ":END:"]]
-              {:default-collapsed? true
-               :title-trigger? true})]]])
+             ["Drawer" name lines]
+             (when (or (not= name "logbook")
+                       (and
+                        (= name "logbook")
+                        (state/enable-timetracking?)
+                        (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                             (when (get-in (state/get-config)
+                                           [:logbook/settings :enabled-in-timestamped-blocks] true)
+                               (or (:block/scheduled (:block config))
+                                   (:block/deadline (:block config)))))))
+               [:div
+                [:div.text-sm
+                 [:div.drawer {:data-drawer-name name}
+                  (ui/foldable
+                   [:div.opacity-50.font-medium.logbook
+                    (util/format ":%s:" (string/upper-case name))]
+                   [:div.opacity-50.font-medium
+                    (if (= name "logbook")
+                      (logbook-cp lines)
+                      (apply str lines))
+                    [:div ":END:"]]
+                   {:default-collapsed? true
+                    :title-trigger? true})]]])
 
-        ["Properties" m]
-        [:div.properties
-         (for [[k v] (dissoc m :roam_alias :roam_tags)]
-           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                      (not (= k :title))
-                      (not (= k :filters)))
-             [:div.property
-              [:span.font-medium.mr-1 (str (name k) ": ")]
-              (if (coll? v)
-                (let [vals (for [item v]
-                             (if (coll? v)
-                               (let [config (when (= k :alias)
-                                              (assoc config :block/alias? true))]
-                                 (page-cp config {:block/name item}))
-                               (inline-text format item)))]
-                  (interpose [:span ", "] vals))
-                (inline-text format v))]))]
+             ["Properties" m]
+             [:div.properties
+              (for [[k v] (dissoc m :roam_alias :roam_tags)]
+                (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                           (not (= k :title))
+                           (not (= k :filters)))
+                  [:div.property
+                   [:span.font-medium.mr-1 (str (name k) ": ")]
+                   (if (coll? v)
+                     (let [vals (for [item v]
+                                  (if (coll? v)
+                                    (let [config (when (= k :alias)
+                                                   (assoc config :block/alias? true))]
+                                      (page-cp config {:block/name item}))
+                                    (inline-text format item)))]
+                       (interpose [:span ", "] vals))
+                     (inline-text format v))]))]
 
-        ["Paragraph" l]
-        ;; TODO: speedup
-        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-          (->elem :div (map-inline config l))
-          (->elem :div.is-paragraph (map-inline config l)))
+             ;; for file-level property in orgmode: #+key: value
+             ;; only display caption. https://orgmode.org/manual/Captions.html.
+             ["Directive" key value]
+             [:div.file-level-property
+              (when (contains? #{"caption"} (string/lower-case key))
+                [:span.font-medium
+                 [:span.font-bold (string/upper-case key)]
+                 (str ": " value)])]
 
-        ["Horizontal_Rule"]
-        (when-not (:slide? config)
-          [:hr])
-        ["Heading" h]
-        (block-container config h)
-        ["List" l]
-        (let [lists (divide-lists l)]
-          (if (= 1 (count lists))
-            (let [l (first lists)]
-              (->elem
-               (list-element l)
-               (map #(list-item config %) l)))
-            [:div.list-group
-             (for [l lists]
-               (->elem
-                (list-element l)
-                (map #(list-item config %) l)))]))
-        ["Table" t]
-        (table config t)
-        ["Math" s]
-        (if html-export?
-          (latex/html-export s true true)
-          (latex/latex (str (d/squuid)) s true true))
-        ["Example" l]
-        [:pre.pre-wrap-white-space
-         (join-lines l)]
-        ["Quote" l]
-        (->elem
-         :blockquote
-         (markup-elements-cp config l))
-        ["Raw_Html" content]
-        (when (not html-export?)
-          [:div.raw_html {:dangerouslySetInnerHTML
-                          {:__html content}}])
-        ["Export" "html" _options content]
-        (when (not html-export?)
-          [:div.export_html {:dangerouslySetInnerHTML
-                             {:__html content}}])
-        ["Hiccup" content]
-        (ui/catch-error
-         [:div.warning {:title "Invalid hiccup"}
-          content]
-         (-> (safe-read-string content)
-             (security/remove-javascript-links-in-href)))
+             ["Paragraph" l]
+             ;; TODO: speedup
+             (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+               (->elem :div (map-inline config l))
+               (->elem :div.is-paragraph (map-inline config l)))
 
-        ["Export" "latex" _options content]
-        (if html-export?
-          (latex/html-export content true false)
-          (latex/latex (str (d/squuid)) content true false))
+             ["Horizontal_Rule"]
+             (when-not (:slide? config)
+               [:hr])
+             ["Heading" h]
+             (block-container config h)
+             ["List" l]
+             (let [lists (divide-lists l)]
+               (if (= 1 (count lists))
+                 (let [l (first lists)]
+                   (->elem
+                    (list-element l)
+                    (map #(list-item config %) l)))
+                 [:div.list-group
+                  (for [l lists]
+                    (->elem
+                     (list-element l)
+                     (map #(list-item config %) l)))]))
+             ["Table" t]
+             (table config t)
+             ["Math" s]
+             (if html-export?
+               (latex/html-export s true true)
+               (latex/latex (str (d/squuid)) s true true))
+             ["Example" l]
+             [:pre.pre-wrap-white-space
+              (join-lines l)]
+             ["Quote" l]
+             (->elem
+              :blockquote
+              (markup-elements-cp config l))
+             ["Raw_Html" content]
+             (when (not html-export?)
+               [:div.raw_html {:dangerouslySetInnerHTML
+                               {:__html content}}])
+             ["Export" "html" _options content]
+             (when (not html-export?)
+               [:div.export_html {:dangerouslySetInnerHTML
+                                  {:__html content}}])
+             ["Hiccup" content]
+             (ui/catch-error
+              [:div.warning {:title "Invalid hiccup"}
+               content]
+              (-> (safe-read-string content)
+                  (security/remove-javascript-links-in-href)))
 
-        ["Custom" "query" _options _result content]
-        (try
-          (let [query (reader/read-string content)]
-            (custom-query config query))
-          (catch :default e
-            (log/error :read-string-error e)
-            (ui/block-error "Invalid query:" {:content content})))
+             ["Export" "latex" _options content]
+             (if html-export?
+               (latex/html-export content true false)
+               (latex/latex (str (d/squuid)) content true false))
 
-        ["Custom" "note" _options result _content]
-        (admonition config "note" result)
+             ["Custom" "query" _options _result content]
+             (try
+               (let [query (reader/read-string content)]
+                 (custom-query config query))
+               (catch :default e
+                 (log/error :read-string-error e)
+                 (ui/block-error "Invalid query:" {:content content})))
 
-        ["Custom" "tip" _options result _content]
-        (admonition config "tip" result)
+             ["Custom" "note" _options result _content]
+             (admonition config "note" result)
 
-        ["Custom" "important" _options result _content]
-        (admonition config "important" result)
+             ["Custom" "tip" _options result _content]
+             (admonition config "tip" result)
 
-        ["Custom" "caution" _options result _content]
-        (admonition config "caution" result)
+             ["Custom" "important" _options result _content]
+             (admonition config "important" result)
 
-        ["Custom" "warning" _options result _content]
-        (admonition config "warning" result)
+             ["Custom" "caution" _options result _content]
+             (admonition config "caution" result)
 
-        ["Custom" "pinned" _options result _content]
-        (admonition config "pinned" result)
+             ["Custom" "warning" _options result _content]
+             (admonition config "warning" result)
 
-        ["Custom" "center" _options l _content]
-        (->elem
-         :div.text-center
-         (markup-elements-cp config l))
+             ["Custom" "pinned" _options result _content]
+             (admonition config "pinned" result)
 
-        ["Custom" name _options l _content]
-        (->elem
-         :div
-         {:class name}
-         (markup-elements-cp config l))
+             ["Custom" "center" _options l _content]
+             (->elem
+              :div.text-center
+              (markup-elements-cp config l))
 
-        ["Latex_Fragment" l]
-        [:p.latex-fragment
-         (inline config ["Latex_Fragment" l])]
+             ["Custom" name _options l _content]
+             (->elem
+              :div
+              {:class name}
+              (markup-elements-cp config l))
 
-        ["Latex_Environment" name option content]
-        (let [content (latex-environment-content name option content)]
-          (if html-export?
-            (latex/html-export content true true)
-            (latex/latex (str (d/squuid)) content true true)))
+             ["Latex_Fragment" l]
+             [:p.latex-fragment
+              (inline config ["Latex_Fragment" l])]
 
-        ["Displayed_Math" content]
-        (if html-export?
-          (latex/html-export content true true)
-          (latex/latex (str (d/squuid)) content true true))
+             ["Latex_Environment" name option content]
+             (let [content (latex-environment-content name option content)]
+               (if html-export?
+                 (latex/html-export content true true)
+                 (latex/latex (str (d/squuid)) content true true)))
 
-        ["Footnote_Definition" name definition]
-        (let [id (util/url-encode name)]
-          [:div.footdef
-           [:div.footpara
-            (conj
-             (markup-element-cp config ["Paragraph" definition])
-             [:a.ml-1 {:id (str "fn." id)
-                       :style {:font-size 14}
-                       :class "footnum"
-                       :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
-              [:sup.fn (str name "↩︎")]])]])
+             ["Displayed_Math" content]
+             (if html-export?
+               (latex/html-export content true true)
+               (latex/latex (str (d/squuid)) content true true))
 
-        ["Src" options]
-        (src-cp config options html-export?)
+             ["Footnote_Definition" name definition]
+             (let [id (util/url-encode name)]
+               [:div.footdef
+                [:div.footpara
+                 (conj
+                  (markup-element-cp config ["Paragraph" definition])
+                  [:a.ml-1 {:id (str "fn." id)
+                            :style {:font-size 14}
+                            :class "footnum"
+                            :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
+                   [:sup.fn (str name "↩︎")]])]])
 
-        :else
-        "")
+             ["Src" options]
+             (src-cp config options html-export?)
+
+             :else
+             "")
       (catch js/Error e
         (println "Convert to html failed, error: " e)
         ""))))

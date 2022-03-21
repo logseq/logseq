@@ -224,18 +224,26 @@
                (@*setup-fn)
 
                ;; main window events
+               ;; TODO merge with window/on-close-actions!
+               ;; TODO elimilate the difference between main and non-main windows
                (.on win "close" (fn [e]
-                                  (when @*quit-dirty?
+                                  (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
-                                    (state/close-window! win)
                                     (let [web-contents (. win -webContents)]
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
                                         (if (or @win/*quitting? (not mac?))
+                                          ;; only cmd+q quitting will trigger actual closing on mac
+                                          ;; otherwise, it's just hiding - don't do any actuall closing in that case
+                                          ;; except saving transit
                                           (when-let [win @*win]
+                                            (when-let [dir (state/get-window-graph-path win)]
+                                              (handler/close-watcher-when-orphaned! win dir))
+                                            (state/close-window! win)
                                             (win/destroy-window! win)
                                             (reset! *win nil))
+                                          ;; Just hiding - don't do any actuall closing operation
                                           (do (.preventDefault ^js/Event e)
                                               (if (and mac? (.isFullScreen win))
                                                 (do (.once win "leave-full-screen" #(.hide win))

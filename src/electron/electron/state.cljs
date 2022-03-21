@@ -43,6 +43,11 @@
   []
   (:graph/current @state))
 
+(defn get-window-graph-path
+  "Get the path of the graph of a window (might be `nil`)"
+  [window]
+  (get (:window/graph @state) window))
+
 (defn close-window!
   [window]
   (swap! state medley/dissoc-in [:window/graph window]))

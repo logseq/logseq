@@ -789,21 +789,6 @@
       (state/set-edit-content! input-id new-content)
       (save-block-if-changed! block new-content))))
 
-(defn set-marker
-  [{:block/keys [marker content format] :as block} new-marker]
-  (let [old-header-marker (when (not= format :org)
-                            (re-find (marker/header-marker-pattern true marker) content))
-        new-header-marker (when (not-empty old-header-marker)
-                            (string/replace old-header-marker marker new-marker))
-        marker (or old-header-marker marker)
-        new-marker (or new-header-marker new-marker)
-        new-content (->
-                     (if (not-empty marker)
-                       (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                       (str new-marker " " content))
-                     (string/triml))]
-    (save-block-if-changed! block new-content)))
-
 (defn- rehighlight-selected-nodes
   ([]
    (rehighlight-selected-nodes (state/get-selection-blocks)))
@@ -827,18 +812,24 @@
                  blocks)
          distinct)))
 
+(defn set-marker
+  "The set-marker will set a new marker on the selected block.
+  if the `new-marker` is nil, it will generate it automatically."
+  ([block]
+    (set-marker block nil))
+  ([{:block/keys [marker content format] :as block} new-marker]
+    (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
+      (save-block-if-changed! block new-content))))
+
 (defn cycle-todos!
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [workflow (state/get-preferred-workflow)
-          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
       (doseq [id ids]
-        (let [block (db/pull [:block/uuid id])
-              new-marker (marker/cycle-marker-state workflow (:block/marker block))
-              new-marker (if new-marker new-marker "")]
-          (set-marker block new-marker)))
+        (let [block (db/pull [:block/uuid id])]
+          (set-marker block)))
       (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
 
 (defn cycle-todo!
@@ -852,8 +843,7 @@
             content (state/get-edit-content)
             format (or (db/get-page-format (state/get-current-page))
                        (state/get-preferred-format))
-            [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
-            new-content (string/triml new-content)
+            [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
             new-pos (commands/compute-pos-delta-when-change-marker
                      content marker (cursor/pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
@@ -3367,13 +3357,31 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
-(defn collapsable? [block-id]
-  (when block-id
-    (if-let [block (db-model/query-block-by-uuid block-id)]
-      (and
-       (not (util/collapsed? block))
-       (db-model/has-children? block-id))
-      false)))
+(defn block-with-title?
+  [format content semantic?]
+  (and (string/includes? content "\n")
+       (if semantic?
+         (let [ast (mldoc/->edn content (mldoc/default-config format))
+               first-elem-type (first (ffirst ast))]
+           (mldoc/block-with-title? first-elem-type))
+         true)))
+
+(defn collapsable?
+  ([block-id]
+   (collapsable? block-id {}))
+  ([block-id {:keys [semantic?]
+              :or {semantic? false}}]
+   (when block-id
+     (if-let [block (db-model/query-block-by-uuid block-id)]
+       (and
+        (not (util/collapsed? block))
+        (or (db-model/has-children? block-id)
+            (and
+             (:outliner/block-title-collapse-enabled? (state/get-config))
+             (block-with-title? (:block/format block)
+                                (:block/content block)
+                                semantic?))))
+       false))))
 
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
@@ -3601,19 +3609,18 @@
 
 (defn replace-block-reference-with-content-at-point
   []
-  (when-let [{:keys [content start end]} (thingatpt/block-ref-at-point)]
-    (let [block-ref-id (subs content 2 (- (count content) 2))]
-      (when-let [block (db/pull [:block/uuid (uuid block-ref-id)])]
-        (let [block-content (:block/content block)
-              format (or (:block/format block) :markdown)
-              block-content-without-prop (-> (property/remove-properties format block-content)
-                                             (drawer/remove-logbook))]
-          (when-let [input (state/get-input)]
-            (when-let [current-block-content (gobj/get input "value")]
-              (let [block-content* (str (subs current-block-content 0 start)
-                                        block-content-without-prop
-                                        (subs current-block-content end))]
-                (state/set-block-content-and-last-pos! input block-content* 1)))))))))
+  (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
+    (when-let [block (db/pull [:block/uuid link])]
+      (let [block-content (:block/content block)
+            format (or (:block/format block) :markdown)
+            block-content-without-prop (-> (property/remove-properties format block-content)
+                                           (drawer/remove-logbook))]
+        (when-let [input (state/get-input)]
+          (when-let [current-block-content (gobj/get input "value")]
+            (let [block-content* (str (subs current-block-content 0 start)
+                                      block-content-without-prop
+                                      (subs current-block-content end))]
+              (state/set-block-content-and-last-pos! input block-content* 1))))))))
 
 (defn copy-current-ref
   [block-id]

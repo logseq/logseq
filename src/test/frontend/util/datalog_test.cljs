@@ -1,6 +1,7 @@
 (ns frontend.util.datalog-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.util.datalog :as datalog-util]))
+            [frontend.util.datalog :as datalog-util]
+            [frontend.db.rules :as rules]))
 
 (deftest add-to-end-of-query-in
   (is (= '[:find ?b
@@ -28,3 +29,10 @@
           :in
           ['%]))
       "Add to :in at end of query"))
+
+(deftest find-rules-in-where
+  (is (= [:page-property]
+         (datalog-util/find-rules-in-where
+          ['(page-property ?b :foo "bar")
+           '(page-property ?b :bar "baz")]
+          (-> rules/query-dsl-rules keys set)))))

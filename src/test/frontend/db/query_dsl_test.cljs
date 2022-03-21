@@ -42,14 +42,6 @@
   (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
     (map first (deref result))))
 
-(defn- q
-  [s]
-  (db/clear-query-state!)
-  (let [parse-result (query-dsl/parse s)
-        query (:query parse-result)]
-    {:query (if (seq query) (vec query) query)
-     :result (query-dsl/query test-helper/test-db s)}))
-
 ;; Tests
 ;; =====
 
@@ -162,7 +154,13 @@ prop-d:: nada"}])
          (map
           :block/name
           (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
-      "Page property queries NOTed"))
+      "Page property queries nested NOT in second clause")
+
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
+      "Page property queries nested NOT in first clause"))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -236,25 +234,38 @@ prop-d:: nada"}])
 (deftest nested-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
-- DONE b1 [[page 1]]
+- DONE b1 [[page 1]] [[page 3]]
 - DONE b2 [[page 1]]"}
                     {:file/path "pages/page2.md"
-                     :file/content "foo::bar
+                     :file/content "foo:: bar
 - NOW b3 [[page 1]]
 - LATER b4 [[page 2]]
 "}])
 
-  (is (= 0
-         (count (dsl-query "(and (todo done) (not [[page 1]]))"))))
-  (is (= 2
-         (count (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+  (is (= []
+         (dsl-query "(and (todo done) (not [[page 1]]))")))
 
-  (is (= 4
-         (count (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"))))
+  (is (= ["DONE b1 [[page 1]] [[page 3]]"]
+         (map :block/content
+              (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
+      "Nested not")
 
-  ;; TODO
-  #_(is (= 34
-           (count (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))"))))
+  (is (= ["NOW b3 [[page 1]]" "LATER b4 [[page 2]]"]
+         (map :block/content
+              (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+
+  (is (= #{"NOW b3 [[page 1]]"
+           "LATER b4 [[page 2]]"
+           "DONE b1 [[page 1]] [[page 3]]"
+           "DONE b2 [[page 1]]"}
+         (set (map :block/content
+                   (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
+
+  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]] [[page 3]]"
+           "DONE b2 [[page 1]]"}
+         (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
+              (keep :block/content)
+              set)))
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet
@@ -339,17 +350,12 @@ tags: other
       "Correctly returns no results"))
 
 (deftest empty-queries
-  (let [empty-result {:query nil :result nil}]
-    (testing "nil or blank strings should be ignored"
-      (are [x y] (= (q x) y)
-           nil empty-result
-           "" empty-result
-           " " empty-result))
-
-    (testing "Non exists page should be ignored"
-      (are [x y] (nil? (:result (q x)))
-           "[[page-not-exist]]" empty-result
-           "[[another-page-not-exist]]" empty-result))))
+  (testing "nil or blank strings should be ignored"
+    (are [x] (nil? (dsl-query x))
+         nil
+         ""
+         " "
+         "\"\"")))
 
 (deftest page-ref-and-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -361,11 +367,16 @@ tags: other
   (testing "page-ref queries"
 
     (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content (dsl-query "[[page 2]]"))))
+           (map :block/content (dsl-query "[[page 2]]")))
+        "Page ref arg")
+
+    (is (= ["b2 [[page 2]] #tag1"]
+           (map :block/content (dsl-query "#tag1")))
+        "Tag arg")
 
     (is (= []
-           (map :block/content (dsl-query "[[blarg]]")))
-        "Correctly returns no results"))
+           (dsl-query "[[blarg]]"))
+        "Nonexistent page returns no results"))
 
   (testing "basic boolean queries"
     (is (= ["b2 [[page 2]] #tag1"]
@@ -378,10 +389,16 @@ tags: other
                 (dsl-query "(or [[tag2]] [[page 2]])")))
         "OR query")
 
-    (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
+    (is (= ["b1 [[page 1]] #tag2"]
            (map :block/content
-                ;; ANDed page1 to not clutter results with blocks in default db
-                (dsl-query "(and (page page1) (not [[page 2]]))")))
+                (dsl-query "(or [[tag2]] [[page 3]])")))
+        "OR query with nonexistent page should return meaningful results")
+
+    (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
+           (->> (dsl-query "(not [[page 2]])")
+                ;; Only filter to page1 to get meaningful results
+                (filter #(= "page1" (get-in % [:block/page :block/name])))
+                (map :block/content)))
         "NOT query")))
 
 (defn- load-test-files-with-timestamps
@@ -474,60 +491,48 @@ last-modified-at:: 1609084800002"}]]
     (load-test-files-with-timestamps)
     ;; (testing "sort-by (created-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (task now later done)
+    ;;   (let [result (->> (dsl-query "(and (task now later done)
     ;;                              (sort-by created-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
     ;; (testing "sort-by (created-at asc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by created-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "created-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
     ;; (testing "sort-by (last-modified-at defaults to desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at desc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
     ;; (testing "sort-by (last-modified-at desc)"
     ;;   (db/clear-query-state!)
-    ;;   (let [result (->> (q "(and (todo now later done)
+    ;;   (let [result (->> (dsl-query "(and (todo now later done)
     ;;                              (sort-by last-modified-at asc))")
-    ;;                     :result
-    ;;                     deref
     ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
     ;;     (is (= result
     ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))

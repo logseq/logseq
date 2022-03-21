@@ -254,7 +254,7 @@
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
            {:keys [query sort-by rules]} (query-dsl/parse query-string)
-           query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
+           query* (concat [['?b :block/refs '?bp] ['?bp :block/name card-hash-tag]]
                           (if (coll? (first query))
                             query
                             [query]))]

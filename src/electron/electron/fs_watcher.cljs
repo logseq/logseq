@@ -12,15 +12,21 @@
 
 (defonce polling-interval 10000)
 ;; dir -> Watcher
-(defonce *file-watcher (atom {}))
+(defonce *file-watcher (atom {})) ;; val: [watcher watcher-del-f]
 
 (defonce file-watcher-chan "file-watcher")
 (defn- send-file-watcher! [dir type payload]
-  (doseq [^js win (window/get-graph-all-windows dir)]
-    (when-not (.isDestroyed win)
-      (.. win -webContents
-          (send file-watcher-chan
-                (bean/->js {:type type :payload payload}))))))
+  ;; Should only send to one window; then dbsync will do his job
+  ;; If no window is on this graph, just ignore
+  (let [sent? (some (fn [^js win]
+                      (when-not (.isDestroyed win)
+                        (.. win -webContents
+                            (send file-watcher-chan
+                                  (bean/->js {:type type :payload payload})))
+                        true)) ;; break some loop on success
+                    (window/get-graph-all-windows dir))]
+    (when-not sent? (prn "unhandled file event will cause uncatched file modifications!.
+                          target:" dir))))
 
 (defn- publish-file-event!
   [dir path event]
@@ -44,8 +50,9 @@
                             :persistent true
                             :disableGlobbing true
                             :usePolling false
-                            :awaitWriteFinish true}))]
-      (swap! *file-watcher assoc dir watcher)
+                            :awaitWriteFinish true}))
+          watcher-del-f #(.close watcher)]
+      (swap! *file-watcher assoc dir [watcher watcher-del-f])
       ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
@@ -63,19 +70,23 @@
              (println "Watch error happened: "
                       {:path path})))
 
-      (.on app "quit" #(.close watcher))
+      ;; electron app extends `EventEmitter`
+      ;; TODO check: duplicated with the logic in "window-all-closed" ?
+      (.on app "quit" watcher-del-f)
 
       true)))
 
 (defn close-watcher!
+  "If no `dir` provided, close all watchers;
+   Otherwise, close the specific watcher if exists"
   ([]
-   (doseq [watcher (vals @*file-watcher)]
-     (.close watcher))
+   (doseq [[watcher watcher-del-f] (vals @*file-watcher)]
+     (.close watcher)
+     (.removeListener app "quit" watcher-del-f))
    (reset! *file-watcher {}))
   ([dir]
-   (let [wins (window/get-graph-all-windows dir)
-         watcher (get @*file-watcher dir)]
-     (when (and (<= (count wins) 1)
-                watcher)
+   (let [[watcher watcher-del-f] (get @*file-watcher dir)]
+     (when watcher
        (.close watcher)
+       (.removeListener app "quit" watcher-del-f)
        (swap! *file-watcher dissoc dir)))))
