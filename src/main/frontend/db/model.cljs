@@ -17,7 +17,6 @@
             [frontend.util :as util :refer [react]]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]))
 
 ;; TODO: extract to specific models and move data transform logic to the
