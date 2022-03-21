@@ -3,6 +3,7 @@
             [frontend.modules.outliner.file :as file]
             [frontend.db :as db]
             [frontend.util :as util]
+            [frontend.state :as state]
             [frontend.debug :as debug]))
 
 (defn updated-page-hook
@@ -18,7 +19,12 @@
 
 (defn invoke-hooks
   [tx-report]
-  (let [{:keys [pages]} (ds-report/get-blocks-and-pages tx-report)]
+  (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)]
     (doseq [p (seq pages)] (updated-page-hook p))
+    (when (and state/lsp-enabled? (seq blocks))
+      (state/pub-event! [:plugin/hook-db-tx
+                         {:blocks  blocks
+                          :tx-data (:tx-data tx-report)
+                          :tx-meta (:tx-meta tx-report)}]))
     ;; TODO: Add blocks to hooks
-    #_(doseq [b (seq blocks)] )))
+    #_(doseq [b (seq blocks)])))

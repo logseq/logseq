@@ -2,6 +2,7 @@
   (:require [promesa.core :as p]
             [rum.core :as rum]
             [frontend.util :as util]
+            [clojure.walk :as walk]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notifications]
             [camel-snake-kebab.core :as csk]
@@ -18,6 +19,16 @@
 (defonce lsp-enabled?
          (and (util/electron?)
               (state/lsp-enabled?-or-theme)))
+
+(defn- normalize-keyword-for-json
+  [input]
+  (when input
+    (walk/postwalk
+      (fn [a]
+        (cond
+          (keyword? a) (csk/->camelCase (name a))
+          (uuid? a) (str a)
+          :else a)) input)))
 
 (defn invoke-exported-api
   [type & args]
@@ -410,7 +421,7 @@
                (str "hook" (string/capitalize (name tag)))
                (name type)
                (if (coll? payload)
-                 (bean/->js (into {} (for [[k v] payload] [(csk/->camelCase k) (if (uuid? v) (str v) v)])))
+                 (bean/->js (normalize-keyword-for-json payload))
                  payload)
                (if (keyword? plugin-id) (name plugin-id) plugin-id))))
 
@@ -421,6 +432,10 @@
 (defn hook-plugin-editor
   ([type payload] (hook-plugin-editor type payload nil))
   ([type payload plugin-id] (hook-plugin :editor type payload plugin-id)))
+
+(defn hook-plugin-db
+  ([type payload] (hook-plugin-db type payload nil))
+  ([type payload plugin-id] (hook-plugin :db type payload plugin-id)))
 
 (defn get-ls-dotdir-root
   []
@@ -512,6 +527,7 @@
                               ;; commands
                               (unregister-plugin-slash-command pid)
                               (invoke-exported-api "unregister_plugin_simple_command" pid)
+                              (invoke-exported-api "uninstall_plugin_hook" pid)
                               (unregister-plugin-ui-items pid)
                               (unregister-plugin-resources pid))
 

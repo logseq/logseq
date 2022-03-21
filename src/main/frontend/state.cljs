@@ -161,6 +161,7 @@
      :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
      :plugin/installed-resources            {}
+     :plugin/installed-hooks                {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -1284,6 +1285,25 @@
         [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
       resource)))
 
+(defn install-plugin-hook
+  [pid hook]
+  (when-let [pid (keyword pid)]
+    (set-state!
+      [:plugin/installed-hooks hook]
+      (conj
+        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
+        pid)) true))
+
+(defn uninstall-plugin-hook
+  [pid hook-or-all]
+  (when-let [pid (keyword pid)]
+    (if (nil? hook-or-all)
+      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
+        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+    true))
+
+
 (defn get-scheduled-future-days
   []
   (let [days (:scheduled/future-days (get-config))]
@@ -1570,6 +1590,9 @@
 (defn lsp-enabled?-or-theme
   []
   (:plugin/enabled @state))
+
+(def lsp-enabled?
+  (lsp-enabled?-or-theme))
 
 (defn consume-updates-coming-plugin
   [payload updated?]

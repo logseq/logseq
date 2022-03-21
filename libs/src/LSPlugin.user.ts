@@ -473,11 +473,24 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
               const f = hookMatcher[0].toLowerCase()
               const s = hookMatcher.input!
               const e = s.slice(f.length)
+              const isOff = f === 'off'
+              const pid = that.baseInfo.id
 
               const type = `hook:${tag}:${snakeCase(e)}`
               const handler = args[0]
               caller[f](type, handler)
-              return f !== 'off' ? () => (caller.off(type, handler)) : void 0
+
+              if (isOff) {
+                return () => {
+                  caller.off(type, handler)
+
+                  // @ts-ignore
+                  that.App.uninstallPluginHook(pid, type)
+                }
+              } else {
+                // @ts-ignore
+                return that.App.installPluginHook(pid, type)
+              }
             }
           }
 

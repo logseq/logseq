@@ -96,6 +96,7 @@ export type BlockUUIDTuple = ['uuid', BlockUUID]
 
 export type IEntityID = { id: EntityID, [key: string]: any }
 export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
+export type IDatom = [e: number, a: string, v: any, t: number, added: boolean]
 
 export type IGitResult = { stdout: string, stderr: string, exitCode: number }
 
@@ -571,6 +572,15 @@ export interface IDBProxy {
    * Run a datascript query
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
+
+  /**
+   * Hook all transaction data of DB
+   */
+  onChanged: IUserHook<{
+    blocks: Array<BlockEntity>,
+    txData: Array<IDatom>,
+    txMeta?: { outlinerOp: string, [key: string]: any }
+  }>
 }
 
 /**

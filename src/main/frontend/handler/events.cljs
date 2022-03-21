@@ -292,6 +292,10 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
+  (when (seq blocks)
+    (plugin-handler/hook-plugin-db :changed (merge payload {:tx-data (map #(into [] %) tx-data)}))))
+
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)

@@ -1252,11 +1252,26 @@ class LSPluginCore
   }
 
   async _hook (ns: string, type: string, payload?: any, pid?: string) {
+    const hook = `${ns}:${snakeCase(type)}`
+    const act = (p: PluginLocal) => {
+      debug('[DID HOOK]', p.id, hook)
+      p.caller?.callUserModel(LSPMSG, {
+        ns, type: snakeCase(type), payload
+      })
+    }
+
     for (const [_, p] of this._registeredPlugins) {
-      if (!pid || pid === p.id) {
-        p.caller?.callUserModel(LSPMSG, {
-          ns, type: snakeCase(type), payload
-        })
+      if (p.options.theme || p.disabled) {
+        continue
+      }
+
+      if (!pid) {
+        if (invokeHostExportedApi('should_exec_plugin_hook', p.id, hook)) {
+          act(p)
+        }
+      } else if (pid === p.id) {
+        act(p)
+        break
       }
     }
   }
@@ -1267,6 +1282,10 @@ class LSPluginCore
 
   hookEditor (type: string, payload?: any, pid?: string) {
     return this._hook(`hook:editor`, type, payload, pid)
+  }
+
+  hookDb (type: string, payload?: any, pid?: string) {
+    return this._hook(`hook:db`, type, payload, pid)
   }
 
   _execDirective (tag: string, ...params: any[]) {
