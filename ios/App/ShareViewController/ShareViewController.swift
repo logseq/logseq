@@ -60,9 +60,12 @@ class ShareViewController: UIViewController {
     }
     
     func saveScreenshot(_ image: UIImage) -> String {
- 
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        
         let copyFileUrl = groupContainerUrl!.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
-        + "/screenshot.png"
+        + dateFormatter.string(from: Date()) + ".png"
         
         do {
             try image.pngData()?.write(to: URL(string: copyFileUrl)!)
