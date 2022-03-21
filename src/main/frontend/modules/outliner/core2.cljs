@@ -191,7 +191,7 @@
 
 (defn- save-aux
   "Generate datascript transaction data,
-   call this function when node's fields(except :block/next & :block/level) changes."
+  call this function when node's fields(except :block/next & :block/level) changes."
   [db node]
   {:pre [(map? node)]}
   (let [txs (transient [])
@@ -274,7 +274,7 @@
 
 (defn get-parent-nodes
   "Return NODE's parent-nodes,
-   [parent, parent's parent, ...]"
+  [parent, parent's parent, ...]"
   [node db]
   (let [parent-nodes (transient [])]
     (loop [node node]
@@ -290,7 +290,7 @@
 
 (defn get-children-nodes
   "Get NODE's children including itself,
-   see also `with-children-nodes`"
+  see also `with-children-nodes`"
   [node db]
   (let [parent-nodes (set (get-parent-nodes node db))
         children-nodes (transient [node])]
@@ -314,7 +314,7 @@
 
 (defn get-prev-sibling-node
   "Return previous node whose :block/parent is same as NODE
-   or nil(when NODE is first node in the page or it's the first child of its parent)"
+  or nil(when NODE is first node in the page or it's the first child of its parent)"
   [node db]
   (let [parent-node (get-parent node db)]
     (loop [node (get-prev node db)]
@@ -329,7 +329,7 @@
 
 (defn get-next-sibling-node
   "Return next node whose :block/parent is same as NODE
-   or nil(when NODE is final one in the page or it's the last child of its parent)"
+  or nil(when NODE is final one in the page or it's the last child of its parent)"
   [node db]
   (let [parent-node (get-parent node db)
         parent-parent-nodes (set (get-parent-nodes node db))]
@@ -374,8 +374,8 @@
 (declare page-node?)
 (defn insert-nodes
   "Insert NODES as consecutive sorted nodes after target as siblings or children.
-   Returns transaction data.
-   NODES should have [:level int?] kv, toplevel is 1"
+  Returns transaction data.
+  NODES should have [:level int?] kv, toplevel is 1"
   [nodes db target-id-or-entity sibling?]
   {:pre [(spec/valid? ::target-id-or-entity target-id-or-entity)
          (map-with-keys-sequential? nodes [:level])]}
@@ -412,7 +412,7 @@
 
 (defn move-nodes
   "Move consecutive sorted NODES after target as siblings or children.
-   Returns transaction data."
+  Returns transaction data."
   [nodes db target-id-or-entity sibling?]
   ;; TODO: check NODES are consecutive
   {:pre [(seq nodes)
@@ -468,7 +468,7 @@
 
 (defn delete-nodes
   "Delete consecutive sorted NODES.
-   Returns transaction data."
+  Returns transaction data."
   [nodes db]
   {:pre [(seq nodes)]}
   ;; TODO: ensure nodes=NODES+children
@@ -509,7 +509,7 @@
 
 (defn indent-nodes
   "Indent consecutive sorted nodes.
-   Returns transaction data."
+  Returns transaction data."
   [nodes db]
   (let [filtered-nodes (get-min-level-nodes nodes db)]
     (when-let [target-node (some-> (first filtered-nodes) (get-prev-sibling-node db))]
@@ -517,7 +517,7 @@
 
 (defn outdent-nodes
   "Outdent consecutive sorted nodes.
-   Returns transaction data."
+  Returns transaction data."
   [nodes db]
   (let [filtered-nodes (get-min-level-nodes nodes db)]
     (when-let [target-node (some-> (first filtered-nodes) (get-parent db) (get-parent db))]
@@ -540,20 +540,6 @@
   "Returns true if the consecutive sorted NODES contains NODE"
   [nodes node]
   (some #(= (get-id %) (get-id node)) nodes))
-
-(defn split-unconsecutive-nodes
-  [nodes db]
-  (let [nodes-groups (transient [])]
-    (loop [prev-node (first nodes)
-           group (transient [(first nodes)])
-           [node & tail-nodes] (rest nodes)]
-      (if (nil? node)
-        (persistent! (conj! nodes-groups (persistent! group)))
-        (if (= (get-id node) (some-> (get-next prev-node db) get-id))
-          (do (conj! group node)
-              (recur node group tail-nodes))
-          (do (conj! nodes-groups (persistent! group))
-              (recur node (transient [node]) tail-nodes)))))))
 
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
