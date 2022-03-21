@@ -952,7 +952,6 @@
                                 #js {:container            el
                                      :eventBus             event-bus
                                      :linkService          link-service
-                                     :enhanceTextSelection true
                                      :textLayerMode        2
                                      :removePageBorders    true})]
                (. link-service setDocument pdf-document)
