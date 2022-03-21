@@ -1041,7 +1041,6 @@
             filter-fn   (fn [datom]
                           (some (fn [p]
                                   (re-find p (->> (:v datom)
-                                                  (property/remove-built-in-properties (:block/format page))
                                                   (drawer/remove-logbook))))
                                 patterns))]
         (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]
