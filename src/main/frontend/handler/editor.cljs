@@ -813,9 +813,13 @@
          distinct)))
 
 (defn set-marker
-  [{:block/keys [marker content format] :as block} new-marker]
-  (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
-    (save-block-if-changed! block new-content)))
+  "The set-marker will set a new marker on the selected block.
+  if the `new-marker` is nil, it will generate it automatically."
+  ([block]
+    (set-marker block nil))
+  ([{:block/keys [marker content format] :as block} new-marker]
+    (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
+      (save-block-if-changed! block new-content))))
 
 (defn cycle-todos!
   []
@@ -825,7 +829,7 @@
                    (remove nil?))]
       (doseq [id ids]
         (let [block (db/pull [:block/uuid id])]
-          (set-marker block nil)))
+          (set-marker block)))
       (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
 
 (defn cycle-todo!

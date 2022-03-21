@@ -49,8 +49,16 @@
     (if (= :now preferred-workflow) "LATER" "TODO")))
 
 (defn cycle-marker
+  "The cycle-marker will cycle markers sequentially. You can find all its order in `cycle-marker-state`.
+
+  It also accept the specified `marker` and `new-marker`.
+  If you don't specify it, it will automatically find it based on `content`.
+  
+  Returns [new-content new-marker]."
   [content marker new-marker format preferred-workflow]
-  (let [content (string/triml content)
-        marker (or marker (last (util/safe-re-find (marker-pattern format) content))) ;; return the last matching group (last vec)
-        new-marker (or new-marker (cycle-marker-state marker preferred-workflow))]
+  (let [content    (string/triml content)
+        new-marker (or new-marker
+                       (cycle-marker-state (or marker
+                                               (last (util/safe-re-find (marker-pattern format) content))) ; Returns the last matching group (last vec)
+                                           preferred-workflow))]
     [(add-or-update-marker content format new-marker) new-marker]))

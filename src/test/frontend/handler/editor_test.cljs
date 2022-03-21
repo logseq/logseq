@@ -47,7 +47,7 @@
   (let [actual-content (atom nil)]
     (with-redefs [editor/save-block-if-changed! (fn [_ content]
                                                   (reset! actual-content content))]
-      (editor/set-marker {:block/marker marker :block/content content :block/format format} nil)
+      (editor/set-marker {:block/marker marker :block/content content :block/format format})
       @actual-content)))
 
 (deftest set-marker-org
