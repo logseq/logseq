@@ -342,6 +342,7 @@
             (contains? parent-parent-nodes parent-node*) nil
             :else (recur (get-next db node))))))))
 
+
 (defn with-children-nodes
   "Return nodes includes NODES themselves and their children.
   e.g.
