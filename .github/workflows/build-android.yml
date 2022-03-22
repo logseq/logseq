@@ -7,10 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta")'
+        description: 'Build Target ("nightly"/"beta"/"non-release")'
         type: string
         required: true
         default: "beta"
+      git-ref:
+        description: "Build from Git Ref(master)"
+        required: true
+        default: "master"
   workflow_call:
     inputs:
       build-target:
@@ -34,6 +38,8 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -87,7 +93,7 @@ jobs:
         run: yarn install && yarn release
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
+        if: "${{ github.event_name == 'workflow_call' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}"
         run: |
           curl -sL https://sentry.io/get-cli/ | bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"

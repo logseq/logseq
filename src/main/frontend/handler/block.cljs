@@ -27,14 +27,15 @@
 
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]
-  (let [ref-pages (->> (if group-by-page?
-                         (mapcat last ref-blocks)
-                         ref-blocks)
-                       (mapcat (fn [b] (get-block-refs-with-children b)))
-                       (concat (when group-by-page? (map first ref-blocks)))
-                       (distinct)
-                       (map :db/id)
-                       (db/pull-many repo '[:db/id :block/name]))
+  (let [ref-pages-ids (->> (if group-by-page?
+                             (mapcat last ref-blocks)
+                             ref-blocks)
+                           (mapcat (fn [b] (get-block-refs-with-children b)))
+                           (concat (when group-by-page? (map first ref-blocks)))
+                           (distinct)
+                           (map :db/id)
+                           (remove nil?))
+        ref-pages (db/pull-many repo '[:db/id :block/name] ref-pages-ids)
         ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
         exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
                          (remove nil?)

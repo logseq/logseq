@@ -234,18 +234,17 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :extraKeys #js {"Esc"
-                                        (fn [cm]
-                                          (save-file-or-block-when-blur-or-esc! cm textarea config state)
-                                          (when-let [block-id (:block/uuid config)]
-                                            (let [block (db/pull [:block/uuid block-id])]
-                                              (editor-handler/edit-block! block :max block-id))))}})
+                           :extraKeys #js {"Esc" (fn [cm]
+                                                   (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                                   (when-let [block-id (:block/uuid config)]
+                                                     (let [block (db/pull [:block/uuid block-id])]
+                                                       (editor-handler/edit-block! block :max block-id))))}})
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
-      (let [textarea-ref (rum/ref-node state textarea-ref-name)]
-        (gobj/set textarea-ref codemirror-ref-name editor))
-      (let [element (.getWrapperElement editor)]
+      (let [textarea-ref (rum/ref-node state textarea-ref-name)
+            element (.getWrapperElement editor)]
+        (gobj/set textarea-ref codemirror-ref-name editor)
         (when (= mode "calc")
           (.on editor "change" (fn [_cm _e]
                                  (let [new-code (.getValue editor)]
@@ -262,9 +261,9 @@
                              (util/stop e)
                              (state/set-block-component-editing-mode! true)))
         (.save editor)
-        (.refresh editor)))
-    (when default-open?
-      (.focus editor))
+        (.refresh editor)
+        (when default-open?
+          (.focus editor))))
     editor))
 
 (defn- load-and-render!

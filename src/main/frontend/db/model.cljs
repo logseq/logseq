@@ -17,7 +17,6 @@
             [frontend.util :as util :refer [react]]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]))
 
 ;; TODO: extract to specific models and move data transform logic to the
@@ -1041,7 +1040,6 @@
             filter-fn   (fn [datom]
                           (some (fn [p]
                                   (re-find p (->> (:v datom)
-                                                  (property/remove-built-in-properties (:block/format page))
                                                   (drawer/remove-logbook))))
                                 patterns))]
         (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]

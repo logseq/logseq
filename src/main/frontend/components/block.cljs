@@ -1515,10 +1515,10 @@
 (defn marker-switch
   [{:block/keys [marker] :as block}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-    (let [set-marker-fn (fn [marker]
+    (let [set-marker-fn (fn [new-marker]
                           (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker block marker)))
+                            (editor-handler/set-marker block new-marker)))
           next-marker (case marker
                         "NOW" "LATER"
                         "LATER" "NOW"
@@ -1953,7 +1953,7 @@
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
-        [:p.warning "Something wrong in the editor"]
+        (ui/block-error "Something wrong in the editor" {})
         (editor-box {:block block
                      :block-id uuid
                      :block-parent-id block-id
@@ -2478,7 +2478,7 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defcs ^:large-vars/cleanup-todo custom-query < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -2492,119 +2492,121 @@
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show?] :as q}]
+  (let [dsl-query? (:dsl-query? config)
+        query-atom (:query-atom state)
+        current-block-uuid (or (:block/uuid (:block config))
+                               (:block/uuid config))
+        current-block (db/entity [:block/uuid current-block-uuid])
+        ;; exclude the current one, otherwise it'll loop forever
+        remove-blocks (if current-block-uuid [current-block-uuid] nil)
+        query-result (and query-atom (rum/react query-atom))
+        table? (or (get-in current-block [:block/properties :query-table])
+                   (and (string? query) (string/ends-with? (string/trim query) "table")))
+        transformed-query-result (when query-result
+                                   (db/custom-query-result-transform query-result remove-blocks q))
+        not-grouped-by-page? (or table?
+                                 (boolean (:result-transform q))
+                                 (and (string? query) (string/includes? query "(by-page false)")))
+        result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                 (db-utils/group-by-page transformed-query-result)
+                 transformed-query-result)
+        _ (when-let [query-result (:query-result config)]
+            (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+              (reset! query-result result)))
+        view-f (and view (sci/eval-string (pr-str view)))
+        only-blocks? (:block/uuid (first result))
+        blocks-grouped-by-page? (and (seq result)
+                                     (not not-grouped-by-page?)
+                                     (coll? (first result))
+                                     (:block/name (ffirst result))
+                                     (:block/uuid (first (second (first result))))
+                                     true)
+        built-in? (built-in-custom-query? title)
+        page-list? (and (seq result)
+                        (:block/name (first result)))
+        nested-query? (:custom-query? config)]
+    (if nested-query?
+      [:code (if dsl-query?
+               (util/format "{{query %s}}" query)
+               "{{query hidden}}")]
+      [:div.custom-query.mt-4 (get config :attr {})
+       (when-not (and built-in? (empty? result))
+         (ui/foldable
+          [:div.custom-query-title
+           [:span.title-text title]
+           [:span.opacity-60.text-sm.ml-2.results-count
+            (str (count transformed-query-result) " results")]]
+          (fn []
+            [:div
+             (when current-block
+               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
+                (when-not page-list?
+                  [:div.flex.flex-row
+                   [:div.mx-2 [:span.text-sm "Table view"]]
+                   [:div {:style {:margin-top 5}}
+                    (ui/toggle table?
+                               (fn []
+                                 (editor-handler/set-block-property! current-block-uuid
+                                                                     "query-table"
+                                                                     (not table?)))
+                               true)]])
+
+                [:a.mx-2.block.fade-link
+                 {:on-click (fn []
+                              (let [all-keys (query-table/get-keys result page-list?)]
+                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                 [:span.table-query-properties
+                  [:span.text-sm.mr-1 "Set properties"]
+                  svg/settings-sm]]])
+             (cond
+               (and (seq result) view-f)
+               (let [result (try
+                              (sci/call-fn view-f result)
+                              (catch js/Error error
+                                (log/error :custom-view-failed {:error error
+                                                                :result result})
+                                [:div "Custom view failed: "
+                                 (str error)]))]
+                 (util/hiccup-keywordize result))
+
+               page-list?
+               (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+
+               table?
+               (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+
+               (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+               (->hiccup result (cond-> (assoc config
+                                               :custom-query? true
+                                               :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                                   breadcrumb-show?
+                                                                   true)
+                                               :group-by-page? blocks-grouped-by-page?
+                                               :ref? true)
+                                        children?
+                                        (assoc :ref? true))
+                         {:style {:margin-top "0.25rem"
+                                  :margin-left "0.25rem"}})
+
+               (seq result)
+               (let [result (->>
+                             (for [record result]
+                               (if (map? record)
+                                 (str (util/pp-str record) "\n")
+                                 record))
+                             (remove nil?))]
+                 [:pre result])
+
+               :else
+               [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
+          {:default-collapsed? collapsed?
+           :title-trigger? true}))])))
+
+(rum/defc custom-query
+  [config q]
   (ui/catch-error
-   [:div.warning
-    [:p "Query failed: "]
-    [:pre (str q)]]
-   (let [dsl-query? (:dsl-query? config)
-         query-atom (:query-atom state)
-         current-block-uuid (or (:block/uuid (:block config))
-                                (:block/uuid config))
-         current-block (db/entity [:block/uuid current-block-uuid])
-         ;; exclude the current one, otherwise it'll loop forever
-         remove-blocks (if current-block-uuid [current-block-uuid] nil)
-         query-result (and query-atom (rum/react query-atom))
-         table? (or (get-in current-block [:block/properties :query-table])
-                    (and (string? query) (string/ends-with? (string/trim query) "table")))
-         transformed-query-result (when query-result
-                                    (db/custom-query-result-transform query-result remove-blocks q))
-         not-grouped-by-page? (or table?
-                                  (boolean (:result-transform q))
-                                  (and (string? query) (string/includes? query "(by-page false)")))
-         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                  (db-utils/group-by-page transformed-query-result)
-                  transformed-query-result)
-         _ (when-let [query-result (:query-result config)]
-             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-               (reset! query-result result)))
-         view-f (and view (sci/eval-string (pr-str view)))
-         only-blocks? (:block/uuid (first result))
-         blocks-grouped-by-page? (and (seq result)
-                                      (not not-grouped-by-page?)
-                                      (coll? (first result))
-                                      (:block/name (ffirst result))
-                                      (:block/uuid (first (second (first result))))
-                                      true)
-         built-in? (built-in-custom-query? title)
-         page-list? (and (seq result)
-                         (:block/name (first result)))
-         nested-query? (:custom-query? config)]
-     (if nested-query?
-       [:code (if dsl-query?
-                (util/format "{{query %s}}" query)
-                "{{query hidden}}")]
-       [:div.custom-query.mt-4 (get config :attr {})
-        (when-not (and built-in? (empty? result))
-          (ui/foldable
-           [:div.custom-query-title
-            [:span.title-text title]
-            [:span.opacity-60.text-sm.ml-2.results-count
-             (str (count transformed-query-result) " results")]]
-           (fn []
-             [:div
-              (when current-block
-                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-                 (when-not page-list?
-                   [:div.flex.flex-row
-                    [:div.mx-2 [:span.text-sm "Table view"]]
-                    [:div {:style {:margin-top 5}}
-                     (ui/toggle table?
-                                (fn []
-                                  (editor-handler/set-block-property! current-block-uuid
-                                                                      "query-table"
-                                                                      (not table?)))
-                                true)]])
-
-                 [:a.mx-2.block.fade-link
-                  {:on-click (fn []
-                               (let [all-keys (query-table/get-keys result page-list?)]
-                                 (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
-                  [:span.table-query-properties
-                   [:span.text-sm.mr-1 "Set properties"]
-                   svg/settings-sm]]])
-              (cond
-                (and (seq result) view-f)
-                (let [result (try
-                               (sci/call-fn view-f result)
-                               (catch js/Error error
-                                 (log/error :custom-view-failed {:error error
-                                                                 :result result})
-                                 [:div "Custom view failed: "
-                                  (str error)]))]
-                  (util/hiccup-keywordize result))
-
-                page-list?
-                (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
-
-                table?
-                (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
-
-                (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-                (->hiccup result (cond-> (assoc config
-                                                :custom-query? true
-                                                :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                                    breadcrumb-show?
-                                                                    true)
-                                                :group-by-page? blocks-grouped-by-page?
-                                                :ref? true)
-                                   children?
-                                   (assoc :ref? true))
-                          {:style {:margin-top "0.25rem"
-                                   :margin-left "0.25rem"}})
-
-                (seq result)
-                (let [result (->>
-                              (for [record result]
-                                (if (map? record)
-                                  (str (util/pp-str record) "\n")
-                                  record))
-                              (remove nil?))]
-                  [:pre result])
-
-                :else
-                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
-           {:default-collapsed? collapsed?
-            :title-trigger? true}))]))))
+   (ui/block-error "Query Error:" {:content (:query q)})
+   (custom-query* config q)))
 
 (defn admonition
   [config type result]
