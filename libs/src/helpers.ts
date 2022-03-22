@@ -2,11 +2,8 @@ import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
-import { merge, snakeCase } from 'lodash-es'
-
-interface IObject {
-  [key: string]: any;
-}
+import { merge } from 'lodash-es'
+import { snakeCase } from 'snake-case'
 
 declare global {
   interface Window {
@@ -22,6 +19,9 @@ export const PROTOCOL_LSP = 'lsp://'
 export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
 let _appPathRoot
+
+// TODO: snakeCase of lodash is incompatible with `snake-case`
+export const safeSnakeCase = snakeCase
 
 export async function getAppPathRoot (): Promise<string> {
   if (_appPathRoot) {
@@ -131,7 +131,7 @@ export function invokeHostExportedApi (
 ) {
   method = method?.startsWith('_call') ? method :
     method?.replace(/^[_$]+/, '')
-  const method1 = snakeCase(method)
+  const method1 = safeSnakeCase(method)
 
   // @ts-ignore
   const logseqHostExportedApi = window.logseq?.api || {}
@@ -338,7 +338,7 @@ export function cleanInjectedScripts (
   const scripts = document.head.querySelectorAll(
     `script[data-ref=${this.id}]`
   )
-  
+
   scripts?.forEach(it => it.remove())
 }
 

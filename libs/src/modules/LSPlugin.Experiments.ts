@@ -1,6 +1,6 @@
 import { LSPluginUser } from '../LSPlugin.user'
-import { snakeCase } from 'lodash-es'
 import { PluginLocal } from '../LSPlugin.core'
+import { safeSnakeCase } from '../helpers'
 
 /**
  * Some experiment features
@@ -24,7 +24,7 @@ export class LSPluginExperiments {
 
   private invokeExperMethod (type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
-    type = snakeCase(type)?.toLowerCase()
+    type = safeSnakeCase(type)?.toLowerCase()
     return host.logseq.api['exper_' + type]?.apply(host, args)
   }
 

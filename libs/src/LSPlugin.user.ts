@@ -1,4 +1,4 @@
-import { deepMerge, mergeSettingsWithSchema, safetyPathJoin } from './helpers'
+import { deepMerge, mergeSettingsWithSchema, safeSnakeCase, safetyPathJoin } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
   IAppProxy,
@@ -28,7 +28,6 @@ import Debug from 'debug'
 import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
-import { snakeCase } from 'lodash-es'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 
 declare global {
@@ -476,7 +475,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
               const isOff = f === 'off'
               const pid = that.baseInfo.id
 
-              const type = `hook:${tag}:${snakeCase(e)}`
+              const type = `hook:${tag}:${safeSnakeCase(e)}`
               const handler = args[0]
               caller[f](type, handler)
 

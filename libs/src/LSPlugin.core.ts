@@ -12,7 +12,8 @@ import {
   PROTOCOL_FILE, URL_LSP,
   safetyPathJoin,
   path, safetyPathNormalize,
-  mergeSettingsWithSchema, IS_DEV, cleanInjectedScripts
+  mergeSettingsWithSchema, IS_DEV,
+  cleanInjectedScripts, safeSnakeCase
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -31,7 +32,6 @@ import {
   ThemeOptions, UIContainerAttrs,
   UIOptions
 } from './LSPlugin'
-import { snakeCase } from 'lodash-es'
 
 const debug = Debug('LSPlugin:core')
 const DIR_PLUGINS = 'plugins'
@@ -1252,11 +1252,11 @@ class LSPluginCore
   }
 
   async _hook (ns: string, type: string, payload?: any, pid?: string) {
-    const hook = `${ns}:${snakeCase(type)}`
+    const hook = `${ns}:${safeSnakeCase(type)}`
     const act = (p: PluginLocal) => {
-      debug('[DID HOOK]', p.id, hook)
+      debug('[call hook]', p.id, ns, type)
       p.caller?.callUserModel(LSPMSG, {
-        ns, type: snakeCase(type), payload
+        ns, type: safeSnakeCase(type), payload
       })
     }
 
