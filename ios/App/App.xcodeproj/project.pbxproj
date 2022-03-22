@@ -22,6 +22,8 @@
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
+		FE21DE1127E9F03E006B8E3F /* FileSync.m in Sources */ = {isa = PBXBuildFile; fileRef = FE21DE0F27E9F03E006B8E3F /* FileSync.m */; };
+		FE21DE1227E9F03E006B8E3F /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE21DE1027E9F03E006B8E3F /* FileSync.swift */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
 		FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF527BDFEF500F3206B /* FsWatcher.m */; };
 /* End PBXBuildFile section */
@@ -49,6 +51,8 @@
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
+		FE21DE0F27E9F03E006B8E3F /* FileSync.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileSync.m; sourceTree = "<group>"; };
+		FE21DE1027E9F03E006B8E3F /* FileSync.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileSync.swift; sourceTree = "<group>"; };
 		FE647FF327BDFEDE00F3206B /* FsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsWatcher.swift; sourceTree = "<group>"; };
 		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -87,6 +91,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				FE21DE0F27E9F03E006B8E3F /* FileSync.m */,
+				FE21DE1027E9F03E006B8E3F /* FileSync.swift */,
 				5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */,
 				5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */,
 				D32752BF2754C5AB0039291C /* AppDebug.entitlements */,
@@ -245,7 +251,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FE21DE1127E9F03E006B8E3F /* FileSync.m in Sources */,
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				FE21DE1227E9F03E006B8E3F /* FileSync.swift in Sources */,
 				5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */,
 				FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */,
 				5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */,

@@ -20,4 +20,6 @@ end
 target 'Logseq' do
   capacitor_pods
   # Add your Pods here
+  pod 'AWSMobileClient'
+  pod 'AWSS3'
 end
