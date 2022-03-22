@@ -10,8 +10,7 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.modules.outliner.core2]))
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 

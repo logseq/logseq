@@ -13,7 +13,7 @@
   (when (seq nodes)
     (let [parents+self (volatile! [])]
       (loop [[node & tail] nodes]
-        (let [parents (mapv outliner-core/get-id (vec (reverse (outliner-core/get-parent-nodes node db))))]
+        (let [parents (mapv outliner-core/get-id (vec (reverse (outliner-core/get-parent-nodes db node))))]
           (when (seq @parents+self)
             (assert (= parents (subvec @parents+self 0 (count parents)))
                     (do (print-page-nodes db) [parents @parents+self node])))
@@ -47,13 +47,13 @@
                              :block/name {:db/unique :db.unique/identity}})]
     (d/transact! conn [[:db/add 1 :page-block true]
                        [:db/add 1 :block/name "fake-page-name"]])
-    (d/transact! conn (outliner-core/insert-nodes tree @conn 1 false))
+    (d/transact! conn (outliner-core/insert-nodes @conn tree 1 false))
     conn))
 
 (defn- get-page-nodes
   [db]
   (map #(select-keys % [:data :block/parent :db/id :block/uuid])
-       (outliner-core/get-page-nodes (d/entity db 1) db)))
+    (outliner-core/get-page-nodes db (d/entity db 1))))
 
 (defn- print-page-nodes
   [db]
@@ -87,9 +87,9 @@
   (when-some [datoms (d/datoms db :avet :block/uuid)]
     (let [block-entity (d/entity db (:e (g/generate (g/elements datoms))))
           prev-sibling-entity (outliner-core/get-prev-sibling-node
-                               block-entity db)
+                               db block-entity)
           siblings? (boolean prev-sibling-entity)
-          parent-node (outliner-core/get-parent block-entity db)
+          parent-node (outliner-core/get-parent db block-entity)
           block-uuid (:block/uuid block-entity)]
       [:update-block-op
        [["fake-page-name"
@@ -102,14 +102,14 @@
   [db]
   (when-some [datoms (d/datoms db :avet :block/uuid)]
     (let [node (d/entity db (:e (g/generate (g/elements datoms))))
-          nodes (outliner-core/get-children-nodes node db)]
+          nodes (outliner-core/get-children-nodes db node)]
       [:delete-blocks-op (mapv :block/uuid nodes)])))
 
 (defn- gen:move-blocks-op
   [db]
   (when-some [datoms (d/datoms db :avet :block/uuid)]
     (let [node (d/entity db (:e (g/generate (g/elements datoms))))
-          nodes (outliner-core/get-children-nodes node db)
+          nodes (outliner-core/get-children-nodes db node)
           target-node
           (loop [n 10
                  maybe-result-node
@@ -166,5 +166,5 @@
             (d/transact! server-conn (rtc/apply-op op @server-conn)))
           (d/transact! client-replay-conn tx-data)
           (validate-nodes-parent2
-           (outliner-core/get-page-nodes (d/entity @server-conn 1) @server-conn) @server-conn)))
+           (outliner-core/get-page-nodes @server-conn (d/entity @server-conn 1)) @server-conn)))
       (def xxx [client-replay-conn server-conn]))))

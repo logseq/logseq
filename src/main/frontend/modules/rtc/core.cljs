@@ -53,8 +53,8 @@
     (if (block-exists? block-uuid server-db)
       block-uuid
       (let [block (d/entity client-db [:block/uuid block-uuid])
-            prev-block-entity (outliner-core/get-prev block client-db)]
-        (when-not (outliner-core/page-node? prev-block-entity client-db)
+            prev-block-entity (outliner-core/get-prev client-db block)]
+        (when-not (outliner-core/page-node? client-db prev-block-entity)
           (recur (:block/uuid prev-block-entity)))))))
 
 (defn- get-target-node-by-block-pos
@@ -88,8 +88,8 @@
         target-entity (get-target-node-by-block-pos block-pos db)
         siblings? (:sibling? block-pos)
         block-uuid (first (:operated-block-uuids op))]
-    (outliner-core/insert-nodes [{:data (:data op) :block/uuid block-uuid :level 1}]
-                                db
+    (outliner-core/insert-nodes db
+                                [{:data (:data op) :block/uuid block-uuid :level 1}]
                                 target-entity
                                 siblings?)))
 
@@ -104,9 +104,9 @@
   (let [op (s/conform ::delete-blocks-op op)
         block-uuids (:operated-block-uuids op)]
     (outliner-core/delete-nodes
+     db
      (map #(d/entity db [:block/uuid %])
-          block-uuids)
-     db)))
+          block-uuids))))
 
 (defmethod apply-op :move-blocks-op [op db]
   {:pre [(valid? ::move-blocks-op op)]}
@@ -116,7 +116,7 @@
         target-entity (get-target-node-by-block-pos block-pos db)
         siblings? (:sibling? block-pos)]
     (outliner-core/move-nodes
-     (map #(d/entity db [:block/uuid %]) block-uuids) db target-entity siblings?)))
+     db (map #(d/entity db [:block/uuid %]) block-uuids) target-entity siblings?)))
 
 (defmulti apply-op-on-altered-db (fn [op _ _] (first op)))
 
@@ -181,7 +181,7 @@
         (->> block-uuids
              (filterv #(block-exists? % server-db))
              (mapv #(d/entity server-db [:block/uuid %]))
-             (#(outliner-core/with-children-nodes % server-db))
+             (outliner-core/with-children-nodes server-db)
              (mapv :block/uuid))]
     (if (empty? block-uuids*)
       []
@@ -220,7 +220,7 @@
           (recur block-pos tail)
 
           :else
-          (let [nodes (outliner-core/get-children-nodes node server-db)
+          (let [nodes (outliner-core/get-children-nodes server-db node)
                 block-uuids (mapv :block/uuid nodes)]
             (if (seq (set/intersection (set block-uuids) @seen))
               (recur block-pos tail)
