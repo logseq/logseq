@@ -9,7 +9,6 @@
 import MobileCoreServices
 import Social
 import UIKit
-import UniformTypeIdentifiers
 
 class ShareItem {
     public var title: String?
@@ -79,7 +78,7 @@ class ShareViewController: UIViewController {
     fileprivate func handleTypeUrl(_ attachment: NSItemProvider)
     async throws -> ShareItem
     {
-        let results = try await attachment.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil)
+        let results = try await attachment.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil)
         let url = results as! URL?
         let shareItem: ShareItem = ShareItem()
         
@@ -99,7 +98,7 @@ class ShareViewController: UIViewController {
     fileprivate func handleTypeText(_ attachment: NSItemProvider)
     async throws -> ShareItem
     {
-        let results = try await attachment.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil)
+        let results = try await attachment.loadItem(forTypeIdentifier: kUTTypeText as String, options: nil)
         let shareItem: ShareItem = ShareItem()
         let text = results as! String
         shareItem.title = text
@@ -111,7 +110,7 @@ class ShareViewController: UIViewController {
     fileprivate func handleTypeMovie(_ attachment: NSItemProvider)
     async throws -> ShareItem
     {
-        let results = try await attachment.loadItem(forTypeIdentifier: UTType.movie.identifier, options: nil)
+        let results = try await attachment.loadItem(forTypeIdentifier: kUTTypeMovie as String, options: nil)
         let shareItem: ShareItem = ShareItem()
         
         let url = results as! URL?
@@ -125,7 +124,7 @@ class ShareViewController: UIViewController {
     fileprivate func handleTypeImage(_ attachment: NSItemProvider)
     async throws -> ShareItem
     {
-        let data = try await attachment.loadItem(forTypeIdentifier: UTType.image.identifier, options: nil)
+        let data = try await attachment.loadItem(forTypeIdentifier: kUTTypeImage as String, options: nil)
         
         let shareItem: ShareItem = ShareItem()
         switch data {
@@ -157,19 +156,19 @@ class ShareViewController: UIViewController {
                 body: { taskGroup in
                     
                     for attachment in extensionItem.attachments! {
-                        if attachment.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+                        if attachment.hasItemConformingToTypeIdentifier(kUTTypeURL as String) {
                             taskGroup.addTask {
                                 return try await self.handleTypeUrl(attachment)
                             }
-                        } else if attachment.hasItemConformingToTypeIdentifier(UTType.text.identifier) {
+                        } else if attachment.hasItemConformingToTypeIdentifier(kUTTypeText as String) {
                             taskGroup.addTask {
                                 return try await self.handleTypeText(attachment)
                             }
-                        } else if attachment.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                        } else if attachment.hasItemConformingToTypeIdentifier(kUTTypeMovie as String) {
                             taskGroup.addTask {
                                 return try await self.handleTypeMovie(attachment)
                             }
-                        } else if attachment.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                        } else if attachment.hasItemConformingToTypeIdentifier(kUTTypeImage as String) {
                             taskGroup.addTask {
                                 return try await self.handleTypeImage(attachment)
                             }
