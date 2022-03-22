@@ -187,6 +187,8 @@
     :else
     (throw (js/Error. (str "cannot set-parent on " o)))))
 
+(defn node= [o1 o2] (= (get-id o1) (get-id o2)))
+
 ;;; node apis ends here
 
 (defn save-node
@@ -453,8 +455,7 @@
         parent-node (if sibling? (get-parent db target) target)]
     (into
      ;; alter :block/next
-     (if (and target-next
-              (= (get-id first-node) (get-id target-next)))
+     (if (and target-next (node= first-node target-next))
        ;; no need to set-next if first-node is next node of target
        []
        [(unset-next origin-prev-first-node)
@@ -463,8 +464,7 @@
           (set-next last-node target-next)
           (unset-next last-node))
         (when-not (and target-next origin-next-last-node
-                       (= (get-id target-next)
-                          (get-id origin-next-last-node)))
+                       (node= target-next origin-next-last-node))
           (set-next origin-prev-first-node origin-next-last-node))])
      (let [toplevel-nodes (get-top-level-nodes db nodes)]
        ;; alter :block/parent
@@ -632,8 +632,7 @@
 (defn contains-node?
   "Returns true if the consecutive sorted NODES contains NODE"
   [nodes node]
-  (some #(= (get-id %) (get-id node)) nodes))
-
+  (some #(node= node %) nodes))
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
