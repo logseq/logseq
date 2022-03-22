@@ -3809,7 +3809,7 @@
         :page/updated-at "更新日時 "
         :page/backlinks "バックリンク"
         :editor/block-search "ブロックを検索"
-        :editor/image-uploading "アップロード"
+        :editor/image-uploading "アップロード中"
         :draw/invalid-file "この excalidraw ファイルは正しくないためロードできません。"
         :draw/specify-title "はじめにタイトルを指定してください。"
         :draw/rename-success "ファイル名を変更しました。"
