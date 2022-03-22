@@ -185,6 +185,12 @@ type PluginLocalOptions = {
   [key: string]: any
 }
 
+type PluginLocalSDKMetadata = {
+  version: string
+
+  [key: string]: any
+}
+
 type PluginLocalUrl = Pick<PluginLocalOptions, 'url'> & { [key: string]: any }
 type RegisterPluginOpts = PluginLocalOptions | PluginLocalUrl
 
@@ -403,6 +409,7 @@ class ExistedImportedPluginPackageError extends Error {
 class PluginLocal
   extends EventEmitter<'loaded' | 'unloaded' | 'beforeunload' | 'error'> {
 
+  private _sdk: Partial<PluginLocalSDKMetadata> = {}
   private _disposes: Array<() => Promise<any>> = []
   private _id: PluginLocalIdentity
   private _status: PluginLocalLoadStatus = PluginLocalLoadStatus.UNLOADED
@@ -424,6 +431,13 @@ class PluginLocal
     super()
 
     this._id = _options.key || genID()
+
+    // @ts-ignore
+    this.once('sdk:metadata', (data) => {
+      if (isObject(data)) {
+        Object.assign(this._sdk, data)
+      }
+    })
 
     initUserSettingsHandlers(this)
     initMainUIHandlers(this)
@@ -1014,6 +1028,10 @@ class PluginLocal
 
   get dotPluginsRoot () {
     return path.join(this.dotConfigRoot, DIR_PLUGINS)
+  }
+
+  get sdk (): Partial<PluginLocalSDKMetadata> {
+    return this._sdk
   }
 
   toJSON () {

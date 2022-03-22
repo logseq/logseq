@@ -232,6 +232,8 @@ const KEY_MAIN_UI = 0
  * @public
  */
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
+  // @ts-ignore
+  private _version: string = LIB_VERSION
   private _settingsSchema?: Array<SettingSchemaDesc>
   private _connected: boolean = false
 
@@ -316,6 +318,10 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
       if (baseInfo?.id) {
         this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
+
+      await this.caller.callAsync('sdk:metadata', {
+        version: this._version
+      })
 
       callback && callback.call(this, baseInfo)
     } catch (e) {
@@ -414,6 +420,10 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     } else {
       this.showMainUI()
     }
+  }
+
+  get version (): string {
+    return this._version
   }
 
   get isMainUIVisible (): boolean {
