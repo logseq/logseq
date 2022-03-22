@@ -319,7 +319,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
         this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
-      await this.caller.callAsync('sdk:metadata', {
+      await this._execCallableAPIAsync('setSDKMetadata', {
         version: this._version
       })
 
@@ -518,14 +518,20 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     })
   }
 
-  /**
-   * @param args
-   */
-  _callWin (...args) {
+  _execCallableAPIAsync (method, ...args) {
     return this._caller.callAsync(`api:call`, {
-      method: '_callMainWin',
-      args: args
+      method, args
     })
+  }
+
+  _execCallableAPI (method, ...args) {
+    this._caller.call(`api:call`, {
+      method, args
+    })
+  }
+
+  _callWin (...args) {
+    return this._execCallableAPIAsync(`_callMainWin`, ...args)
   }
 
   /**

@@ -186,6 +186,7 @@ class LSPluginCaller extends EventEmitter {
     return this._call?.call(this, type, payload)
   }
 
+  // only for callable apis for sdk user
   async callAsync (type: any, payload: any = {}) {
     const actor = deferred(1000 * 10)
     return this._call?.call(this, type, payload, actor)

@@ -4,6 +4,7 @@ import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
 import { merge } from 'lodash-es'
 import { snakeCase } from 'snake-case'
+import * as callables from './callable.apis'
 
 declare global {
   interface Window {
@@ -134,7 +135,7 @@ export function invokeHostExportedApi (
   const method1 = safeSnakeCase(method)
 
   // @ts-ignore
-  const logseqHostExportedApi = window.logseq?.api || {}
+  const logseqHostExportedApi = Object.assign(window.logseq?.api || {}, callables)
 
   const fn = logseqHostExportedApi[method1] || window.apis[method1] ||
     logseqHostExportedApi[method] || window.apis[method]
@@ -142,7 +143,7 @@ export function invokeHostExportedApi (
   if (!fn) {
     throw new Error(`Not existed method #${method}`)
   }
-  return typeof fn !== 'function' ? fn : fn.apply(null, args)
+  return typeof fn !== 'function' ? fn : fn.apply(this, args)
 }
 
 export function setupIframeSandbox (

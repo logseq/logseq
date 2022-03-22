@@ -350,7 +350,7 @@ function initApiProxyHandlers (pluginLocal: PluginLocal) {
     let ret: any
 
     try {
-      ret = await invokeHostExportedApi(payload.method, ...payload.args)
+      ret = await invokeHostExportedApi.apply(pluginLocal, [payload.method, ...payload.args])
     } catch (e) {
       ret = {
         [LSPMSG_ERROR_TAG]: e,
@@ -407,7 +407,7 @@ class ExistedImportedPluginPackageError extends Error {
  * Host plugin for local
  */
 class PluginLocal
-  extends EventEmitter<'loaded' | 'unloaded' | 'beforeunload' | 'error'> {
+  extends EventEmitter<'loaded' | 'unloaded' | 'beforeunload' | 'error' | string> {
 
   private _sdk: Partial<PluginLocalSDKMetadata> = {}
   private _disposes: Array<() => Promise<any>> = []
@@ -431,13 +431,6 @@ class PluginLocal
     super()
 
     this._id = _options.key || genID()
-
-    // @ts-ignore
-    this.once('sdk:metadata', (data) => {
-      if (isObject(data)) {
-        Object.assign(this._sdk, data)
-      }
-    })
 
     initUserSettingsHandlers(this)
     initMainUIHandlers(this)
@@ -970,7 +963,7 @@ class PluginLocal
   }
 
   set settingsSchema (schema: Array<SettingSchemaDesc>) {
-    this.options.settingsSchema = schema
+    this._options.settingsSchema = schema
   }
 
   get settingsSchema () {
@@ -1032,6 +1025,10 @@ class PluginLocal
 
   get sdk (): Partial<PluginLocalSDKMetadata> {
     return this._sdk
+  }
+
+  set sdk (value: Partial<PluginLocalSDKMetadata>) {
+    this._sdk = value
   }
 
   toJSON () {
