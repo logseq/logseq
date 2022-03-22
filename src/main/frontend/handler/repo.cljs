@@ -534,6 +534,25 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! nil repo option))
 
+; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict 
+; to avoid circular dependency
+(defn fetch-local-language []
+  (.. js/window -navigator -language))
+
+(defonce translate-dicts (atom {}))
+
+(defn t
+  [& args]
+  (let [preferred-language (keyword (state/sub :preferred-language))
+        _ (when (nil? preferred-language)
+            (state/set-preferred-language! (fetch-local-language)))
+        dicts (or (get @translate-dicts preferred-language)
+                  (let [result (some-> dicts/dicts
+                                       dicts/translate)]
+                    (swap! translate-dicts assoc preferred-language result)
+                    result))]
+    (apply (partial dicts preferred-language) args)))
+
 (defn setup-local-repo-if-not-exists!
   []
   (if js/window.pfs
@@ -542,10 +561,10 @@
              (state/set-current-repo! repo)
              (db/start-db-conn! nil repo)
              (when-not config/publishing?
-               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
              (when-not config/publishing?
-               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
