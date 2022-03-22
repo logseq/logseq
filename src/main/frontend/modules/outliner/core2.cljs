@@ -245,6 +245,24 @@
           (recur next-node))))
     (persistent! toplevel-nodes)))
 
+(defn get-top-level-children
+  "Get toplevel consecutive children of NODES"
+  [db node]
+  (let [parent-nodes (set (get-parent-nodes db node))
+        children (transient [])]
+    (loop [node* (get-next db node)]
+      (when-let [parent-node (and node* (get-parent db node*))]
+        (cond
+          ;; found
+          (= parent-node node)
+          (do (conj! children node*)
+              (recur (get-next db node*)))
+          ;; finish
+          (contains? parent-nodes parent-node) nil
+          ;; not toplevel child
+          :else (recur (get-next db node*)))))
+    (persistent! children)))
+
 (defn- assign-temp-id
   [nodes]
   (map-indexed (fn [idx node]
@@ -504,60 +522,35 @@
 ;;   - 4
 ;;   - 5
 ;;   - 3
+(def reverse-list (comp reverse list))
 
 (defn move-nodes-up
   [db nodes]
   {:pre [(seq nodes)]}
   (let [first-node (first nodes)
         prev-sibling-node (get-prev-sibling-node db first-node)
-        last-node (last nodes)
-        origin-prev-first-node (get-prev db first-node)
-        origin-next-last-node (get-next db last-node)
-        target-next-node (or (get-prev-sibling-node db first-node)
-                             (get-parent db first-node))
-        target-node (get-prev db target-next-node)
-        toplevel-nodes (get-top-level-nodes db nodes)
-        target-parent-node (cond->> (get-parent db first-node)
-                             (not prev-sibling-node) (get-prev-sibling-node db))]
-    (when (and target-parent-node target-node)
-      (vec
-       (concat
-        [(unset-next last-node)
-         (if origin-next-last-node
-           (set-next origin-prev-first-node origin-next-last-node)
-           (unset-next origin-prev-first-node))
-         (set-next target-node first-node)
-         (set-next last-node target-next-node)]
-        (mapv #(set-parent % target-parent-node) toplevel-nodes))))))
+        [target-node sibling?]
+        (or (some->> prev-sibling-node (get-prev-sibling-node db) (reverse-list true))
+            (some->> prev-sibling-node (get-parent db) (reverse-list false))
+            (when-let [prev-parent (some->> (get-parent db first-node) (get-prev-sibling-node db))]
+              (if-let [last-toplevel-children (last (get-top-level-children db prev-parent))]
+                [last-toplevel-children true]
+                [prev-parent false])))]
+    (when target-node
+      (move-nodes db nodes target-node sibling?))))
 
 (defn move-nodes-down
   [db nodes]
   {:pre [(seq nodes)]}
-  (let [first-node (first nodes)
-        last-node (last nodes)
-        next-sibling-node (get-next-sibling-node db first-node)
-        origin-prev-first-node (get-prev db first-node)
-        origin-next-last-node (get-next db last-node)
-        toplevel-nodes (get-top-level-nodes db nodes)
-        last-toplevel-node (last toplevel-nodes)
-        target-node (or (some->> (get-next-sibling-node db last-toplevel-node)
-                                 (get-last-child-or-itself db))
-                        (some->> (get-parent db last-toplevel-node)
-                                 (get-next-sibling-node db)))
-        target-next-node (and target-node (get-next db target-node))
-        target-parent-node (cond->> (get-parent db last-toplevel-node)
-                             (not next-sibling-node) (get-next-sibling-node db))]
-    (when (and target-parent-node target-next-node)
-      (vec
-       (concat
-        [(unset-next last-node)
-         (if origin-next-last-node
-           (set-next origin-prev-first-node origin-next-last-node)
-           (unset-next origin-prev-first-node))
-         (set-next target-node first-node)
-         (set-next last-node target-next-node)]
-        (mapv #(set-parent % target-parent-node) toplevel-nodes))))))
-
+  (let [last-toplevel-node (last (get-top-level-nodes db nodes))
+        next-sibling-node (get-next-sibling-node db last-toplevel-node)
+        [target-node sibling?]
+        (or (some->> next-sibling-node (reverse-list true))
+            (some->> (get-parent db last-toplevel-node)
+                     (get-next-sibling-node db)
+                     (reverse-list false)))]
+    (when target-node
+      (move-nodes db nodes target-node sibling?))))
 
 (defn delete-nodes
   "Delete consecutive sorted NODES.
