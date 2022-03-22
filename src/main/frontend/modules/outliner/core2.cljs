@@ -432,15 +432,20 @@
         ;;   - 2    move 3,4 to target(1) as sibling=true
         ;;     - 3
         ;;   - 4
-        target* (loop [target* (skip-children target db)]
-                  (if (contains? node-ids-set (get-id target*))
-                    (recur (get-prev target* db))
-                    target*))
-        target-next (loop [target-next (get-next target* db)]
-                      (when target-next
-                        (if (contains? node-ids-set (get-id target-next))
-                          (recur (get-next target-next db))
-                          target-next)))
+        target*
+        (if sibling?
+          (loop [target* (skip-children target db)]
+            (if (contains? node-ids-set (get-id target*))
+              (recur (get-prev target* db))
+              target*))
+          target)
+        target-next
+        (loop [target-next (get-next target* db)]
+          (when target-next
+            (if (contains? node-ids-set (get-id target-next))
+              (recur (get-next target-next db))
+              target-next)))
+
         first-node (first nodes)
         origin-prev-first-node (get-prev first-node db)
         last-node (last nodes)
