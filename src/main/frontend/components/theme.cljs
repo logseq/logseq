@@ -61,15 +61,14 @@
 
     (rum/use-effect!
      #(when system-theme?
-        (ui/setup-system-theme-effect!)
-        )
+        (ui/setup-system-theme-effect!))
      [system-theme?])
 
     (rum/use-effect!
-      #(state/set-modal!
-         (when settings-open?
-           (fn [] [:div.settings-modal (settings/settings)])))
-      [settings-open?])
+     #(state/set-modal!
+       (when settings-open?
+         (fn [] [:div.settings-modal (settings/settings)])))
+     [settings-open?])
 
     [:div
      {:class    (str theme "-theme")
