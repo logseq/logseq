@@ -47,7 +47,7 @@
 
      (mobile-util/native-android?)
      [:div
-      "You can save them in your local storage, and use any third-party sync service to keep your notes sync with other devices."
+      "You can save them in your local storage, and use any third-party sync service to keep your notes sync with other devices. "
       "If you prefer to use Dropbox to sync your notes, you can use "
       [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
            :target "_blank"}
