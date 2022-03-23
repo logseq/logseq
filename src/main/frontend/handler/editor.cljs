@@ -795,12 +795,12 @@
   ([blocks]
    (let [blocks (doall
                  (map
-                   (fn [block]
-                     (when-let [id (gobj/get block "id")]
-                       (when-let [block (gdom/getElement id)]
-                         (dom/add-class! block "selected noselect")
-                         block)))
-                   blocks))]
+                  (fn [block]
+                    (when-let [id (gobj/get block "id")]
+                      (when-let [block (gdom/getElement id)]
+                        (dom/add-class! block "selected noselect")
+                        block)))
+                  blocks))]
      (state/set-selection-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
@@ -816,10 +816,10 @@
   "The set-marker will set a new marker on the selected block.
   if the `new-marker` is nil, it will generate it automatically."
   ([block]
-    (set-marker block nil))
+   (set-marker block nil))
   ([{:block/keys [marker content format] :as block} new-marker]
-    (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
-      (save-block-if-changed! block new-content))))
+   (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
+     (save-block-if-changed! block new-content))))
 
 (defn cycle-todos!
   []
@@ -1062,7 +1062,7 @@
                    (let [block (db/entity [:block/uuid block-id])]
                      (when-not (:block/pre-block? block)
                        [block-id :id (str block-id)])))
-              block-ids)]
+                 block-ids)]
     (batch-set-block-property! col)))
 
 (defn copy-block-ref!
@@ -1159,7 +1159,7 @@
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
                                            :level (int level)}))
-                                  selected-blocks))
+                                     selected-blocks))
                       (remove nil?))
           first-block (first blocks)
           first-root-level-index (ffirst
@@ -1974,10 +1974,10 @@
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
     (when-not
-        (and
-         (= (:db/id (:block/parent block))
-            (:db/id (:block/page block)))            ; don't auto-save for page's properties block
-         (get-in block [:block/properties :title]))
+     (and
+      (= (:db/id (:block/parent block))
+         (:db/id (:block/page block)))            ; don't auto-save for page's properties block
+      (get-in block [:block/properties :title]))
       (reset! *auto-save-timeout
               (js/setTimeout
                (fn []
@@ -2109,8 +2109,8 @@
                      :block/page (select-keys page [:db/id])
                      :block/format format
                      :block/properties (apply dissoc (:block/properties block)
-                                         (concat [:id :custom_id :custom-id]
-                                                 exclude-properties))
+                                              (concat [:id :custom_id :custom-id]
+                                                      exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
                      :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
@@ -2734,17 +2734,14 @@
           (js/document.execCommand "copy"))
         (delete-and-update input selected-start selected-end))
 
-      ;; not the top block in a page
-      (and page
-           (let [left-id (:db/id (:block/left block))
-                 page-id (:db/id (:block/page block))]
-             (= left-id page-id)))
-      (util/stop e)
-
       (zero? current-pos)
       (do
         (util/stop e)
-        (delete-block! repo false))
+        (when-not (and page
+                       (let [left-id (:db/id (:block/left block))
+                             page-id (:db/id (:block/page block))]
+                         (= left-id page-id)))
+          (delete-block! repo false)))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
