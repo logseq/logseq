@@ -33,6 +33,7 @@ import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 declare global {
   interface Window {
     __LSP__HOST__: boolean
+    logseq: LSPluginUser
   }
 }
 
@@ -234,6 +235,7 @@ const KEY_MAIN_UI = 0
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
   // @ts-ignore
   private _version: string = LIB_VERSION
+  private _debugTag: string = ''
   private _settingsSchema?: Array<SettingSchemaDesc>
   private _connected: boolean = false
 
@@ -316,7 +318,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
       }
 
       if (baseInfo?.id) {
-        this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
+        this._debugTag = this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
       await this._execCallableAPIAsync('setSDKMetadata', {
@@ -325,7 +327,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
       callback && callback.call(this, baseInfo)
     } catch (e) {
-      console.error('[LSPlugin Ready Error]', e)
+      console.error(`${this._debugTag} [Ready Error]`, e)
     }
   }
 
@@ -582,8 +584,8 @@ export function setupPluginUserInstance (
   return new LSPluginUser(pluginBaseInfo, pluginCaller)
 }
 
-if (window.__LSP__HOST__ == null) { // Entry of iframe mode
+// entry of iframe mode
+if (window.__LSP__HOST__ == null) {
   const caller = new LSPluginCaller(null)
-  // @ts-ignore
   window.logseq = setupPluginUserInstance({} as any, caller)
 }

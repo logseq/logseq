@@ -1281,7 +1281,9 @@ class LSPluginCore
       }
 
       if (!pid) {
-        if (invokeHostExportedApi('should_exec_plugin_hook', p.id, hook)) {
+        // compatible for old SDK < 0.0.2
+        const sdkVersion = p.sdk?.version
+        if (!sdkVersion || invokeHostExportedApi('should_exec_plugin_hook', p.id, hook)) {
           act(p)
         }
       } else if (pid === p.id) {

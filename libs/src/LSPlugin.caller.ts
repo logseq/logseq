@@ -76,7 +76,7 @@ class LSPluginCaller extends EventEmitter {
       [LSPMSG_READY]: async (baseInfo) => {
         // dynamically setup common msg handler
         model[LSPMSGFn(baseInfo?.pid)] = ({ type, payload }: { type: string, payload: any }) => {
-          debug(`[call from host (_call)] ${this._debugTag}`, type, payload)
+          debug(`[host (_call) -> *user] ${this._debugTag}`, type, payload)
           // host._call without async
           caller.emit(type, payload)
         }
@@ -95,7 +95,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`[call from host (async)] ${this._debugTag}`, ns, type, payload)
+        debug(`[host (async) -> *user] ${this._debugTag}`, ns, type, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)
@@ -106,7 +106,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG_SYNC]: ({ _sync, result }: any) => {
-        debug(`[sync reply] #${_sync}`, result)
+        debug(`[sync host -> *user] #${_sync}`, result)
 
         if (syncActors.has(_sync)) {
           const actor = syncActors.get(_sync)
@@ -253,7 +253,7 @@ class LSPluginCaller extends EventEmitter {
         this.emit('connected')
 
         refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
-          debug(`[call from plugin] `, type, payload)
+          debug(`[user -> *host] `, type, payload)
 
           this._pluginLocal?.emit(type, payload || {})
         })
