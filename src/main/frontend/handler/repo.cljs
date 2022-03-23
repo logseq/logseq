@@ -536,6 +536,7 @@
 
 ; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict 
 ; to avoid circular dependency
+; TODO: Remove copied functions once circular dependency is resolved
 (defn fetch-local-language []
   (.. js/window -navigator -language))
 
