@@ -1268,6 +1268,8 @@ class LSPluginCore
 
   async _hook (ns: string, type: string, payload?: any, pid?: string) {
     const hook = `${ns}:${safeSnakeCase(type)}`
+    const isDbChangedHook = hook === 'hook:db:changed'
+
     const act = (p: PluginLocal) => {
       debug('[call hook]', p.id, ns, type)
       p.caller?.callUserModel(LSPMSG, {
@@ -1283,6 +1285,12 @@ class LSPluginCore
       if (!pid) {
         // compatible for old SDK < 0.0.2
         const sdkVersion = p.sdk?.version
+
+        // TODO: remove optimization after few releases
+        if (!sdkVersion && isDbChangedHook) {
+          continue
+        }
+
         if (!sdkVersion || invokeHostExportedApi('should_exec_plugin_hook', p.id, hook)) {
           act(p)
         }
