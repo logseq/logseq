@@ -3713,7 +3713,7 @@
         :right-side-bar/theme "{1} テーマ"
         :right-side-bar/page "ページグラフ"
         :right-side-bar/recent "最新"
-        :right-side-bar/contents "コンテンツ"
+        :right-side-bar/contents "目次"
         :right-side-bar/favorites "Favorites"
         :right-side-bar/page-graph "ページグラフ"
         :right-side-bar/block-ref "ブロック参照"
