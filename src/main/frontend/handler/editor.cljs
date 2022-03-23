@@ -2722,7 +2722,7 @@
                      (util/nth-safe value (dec current-pos)))
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
-        block-id (:block/uuid (state/get-edit-block))
+        block (state/get-edit-block)
         page (state/get-current-page)
         repo (state/get-current-repo)]
     (mark-last-input-time! repo)
@@ -2734,11 +2734,14 @@
           (js/document.execCommand "copy"))
         (delete-and-update input selected-start selected-end))
 
-      (and (zero? current-pos)
-           ;; not the top block in a block page
-           (not (and page
-                     (util/uuid-string? page)
-                     (= (medley/uuid page) block-id))))
+      ;; not the top block in a page
+      (and page
+           (let [left-id (:db/id (:block/left block))
+                 page-id (:db/id (:block/page block))]
+             (= left-id page-id)))
+      (util/stop e)
+
+      (zero? current-pos)
       (do
         (util/stop e)
         (delete-block! repo false))
