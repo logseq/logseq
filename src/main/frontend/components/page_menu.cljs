@@ -126,7 +126,7 @@
              :options {:on-click
                        (fn []
                          (shell/get-file-latest-git-log page 100))}})
-          (when (and (user-handler/logged?) (not file-sync-handler/hiding-login&file-sync))
+          (when (and (user-handler/logged-in?) (not file-sync-handler/hiding-login&file-sync))
             (when-let [graph-uuid (file-sync-handler/get-current-graph-uuid)]
               {:title (t :page/file-sync-versions)
                :options {:on-click #(file-sync-handler/list-file-versions graph-uuid page)}}))
