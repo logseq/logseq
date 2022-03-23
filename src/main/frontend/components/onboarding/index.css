@@ -362,3 +362,43 @@ body[data-page=import] {
     }
   }
 }
+
+html.is-native-android,
+html.is-native-ipad,
+html.is-native-iphone,
+html.is-native-iphone-without-notch {
+    .cp__onboarding {
+        &-setups {
+            .inner-card {
+                padding-top: 25px;
+
+                > h2 {
+                    margin-bottom: 25px;
+                }
+                
+                > article {
+                    > section {
+                        &.a {
+                            padding-top: 25px;
+
+                            small {
+                                text-align: left;
+                                padding: 0 40px;
+                            }
+                            .mobile-intro {
+                                margin-top: 10px;
+                                line-height: 1.5rem;
+                                font-size: 1rem;
+                            }
+      
+                            > .choose {
+                                padding-top: 25px;
+                        }
+                        }
+                    }
+                }
+                
+            }
+        }
+    }
+}

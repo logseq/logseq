@@ -35,70 +35,96 @@
 
       content])])
 
+(rum/defc mobile-intro
+  []
+  [:div.mobile-intro
+   (cond
+     (mobile-util/native-ios?)
+     [:div
+      [:ul
+       [:li "Save them in " [:span.font-bold "iCloud Drive's Logseq directory"] ", and sync them across devices using iCloud."]
+       [:li "Save them in Logseq's directory of your device's local storage."]]]
+
+     (mobile-util/native-android?)
+     [:div
+      "You can save them in your local storage, and use any third-party sync service to keep your notes sync with other devices."
+      "If you prefer to use Dropbox to sync your notes, you can use "
+      [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
+           :target "_blank"}
+       "Dropsync"]
+      ". Or you can use "
+      [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
+           :target "_blank"}
+       "FolderSync"]
+      "."]
+
+     :else
+     nil)])
+
 (rum/defcs picker < rum/reactive
   [_state]
   (let [parsing? (state/sub :repo/parsing-files?)]
 
     (setups-container
-      :picker
-      [:article.flex
-       [:section.a
-        [:strong "Let’s get you set up."]
-        [:small (str "Where on your " DEVICE " do you want to save your work?")]
-        (let [nfs-supported? (or (nfs/supported?) (mobile-util/is-native-platform?))]
-          (if-not nfs-supported?
-            (when-not nfs-supported?
-              [:div.px-5
-               (ui/admonition :warning
-                 [:p "It seems that your browser doesn't support the "
-                  [:a {:href   "https://web.dev/file-system-access/"
-                       :target "_blank"}
-                   "new native filesystem API"]
-                  [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])])
+     :picker
+     [:article.flex
+      [:section.a
+       [:strong "Let’s get you set up."]
+       [:small (str "Where on your " DEVICE " do you want to save your work?")
+        (when (mobile-util/is-native-platform?)
+          (mobile-intro))]
+       
+       (if (or (nfs/supported?) (mobile-util/is-native-platform?))
+         [:div.choose.flex.flex-col.items-center
+          [:i]
+          [:div.control
+           [:label.action-input.flex.items-center.justify-center.flex-col
+            {:on-click #(page-handler/ls-dir-files!
+                         (fn []
+                           (shortcut/refresh!)))
+             :disabled parsing?}
 
-            [:div.choose.flex.flex-col.items-center
-             [:i]
-             [:div.control
-              [:label.action-input.flex.items-center.justify-center.flex-col
-               {:on-click #(page-handler/ls-dir-files!
-                             (fn []
-                               (shortcut/refresh!)))
-                :disabled parsing?}
+            (if parsing?
+              (ui/loading "")
+              [[:strong "Choose a folder"]
+               [:small "Open existing directory or Create a new one"]])]]]
+         [:div.px-5
+          (ui/admonition :warning
+                         [:p "It seems that your browser doesn't support the "
+                          [:a {:href   "https://web.dev/file-system-access/"
+                               :target "_blank"}
+                           "new native filesystem API"]
+                          [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]])])]
+      [:section.b.flex.items-center.flex-col
+       [:p.flex
+        [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
+        [:span.flex-1.flex.flex-col
+         [:strong "How logseq saves your work"]
+         [:small.opacity-60 "Inside the directory you choose, logseq will create 4 folders."]]]
 
-               (if parsing?
-                 (ui/loading "")
-                 [[:strong "Choose a folder"]
-                  [:small "Open existing directory or Create a new one"]])]]]))]
-       [:section.b.flex.items-center.flex-col
-        [:p.flex
-         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
-         [:span.flex-1.flex.flex-col
-          [:strong "How logseq saves your work"]
-          [:small.opacity-60 "Inside the directory you choose, logseq will create 4 folders."]]]
+       [:p.text-sm.pt-5.tracking-wide
+        [:span (str "Each page is a file stored only on your " DEVICE ".")]
+        [:br]
+        [:span "You may choose to sync it later."]]
 
-        [:p.text-sm.pt-5.tracking-wide
-         [:span (str "Each page is a file stored only on your " DEVICE ".")]
-         [:br]
-         [:span "You may choose to sync it later."]]
-
-        [:ul
-         (for [[title label icon]
-               [["Graphics & Documents" "/assets" "artboard"]
-                ["Daily notes" "/journals" "calendar-plus"]
-                ["PAGES" "/pages" "file-text"]
-                []
-                ["APP Internal" "/logseq" "tool"]
-                ["Configs File" "/logseq/config.edn"]]]
-           (if-not title
-             [:li.hr]
-             [:li
-              {:key title}
-              [:i.as-flex-center
-               {:class (when (string/ends-with? label ".edn") "is-file")}
-               (when icon (ui/icon icon))]
-              [:span
-               [:strong.uppercase title]
-               [:small.opacity-50 label]]]))]]])))
+       [:ul
+        (for [[title label icon]
+              [["Graphics & Documents" "/assets" "artboard"]
+               ["Daily notes" "/journals" "calendar-plus"]
+               ["PAGES" "/pages" "file-text"]
+               []
+               ["APP Internal" "/logseq" "tool"]
+               ["Configs File" "/logseq/config.edn"]]]
+          (if-not title
+            [:li.hr]
+            [:li
+             {:key title}
+             [:i.as-flex-center
+              {:class (when (string/ends-with? label ".edn") "is-file")}
+              (when icon (ui/icon icon))]
+             [:span
+              [:strong.uppercase title]
+              [:small.opacity-50 label]]]))]]])))
 
 (defonce *roam-importing? (atom nil))
 (defonce *opml-importing? (atom nil))
