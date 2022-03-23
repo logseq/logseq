@@ -44,8 +44,7 @@
       (if (user-handler/logged-in?)
         [:span.text-sm.font-medium (user-handler/email)]
 
-        [:a.button.text-sm.font-medium.block {:on-click (fn []
-                                                          (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback"))}
+        [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
          [:span (t :login)]]))))
 
 (rum/defcs file-sync-remote-graphs <
