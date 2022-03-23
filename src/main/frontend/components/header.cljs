@@ -76,7 +76,6 @@
   [state]
   (let [_ (state/sub :auth/id-token)
         sync-state (state/sub :file-sync/sync-state)
-        _ (when sync-state (assert (s/valid? :frontend.fs.sync/sync-state sync-state)))
         not-syncing? (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
         *existed-graphs (::existed-graphs state)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
