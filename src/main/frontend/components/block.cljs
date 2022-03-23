@@ -179,23 +179,23 @@
     (ui/resize-provider
      (ui/resize-consumer
       (cond->
-        {:className "resize image-resize"
-         :onSizeChanged (fn [value]
-                          (when (and (not @*resizing-image?)
-                                     (some? @size)
-                                     (not= value @size))
-                            (reset! *resizing-image? true))
-                          (reset! size value))
-         :onMouseUp (fn []
-                      (when (and @size @*resizing-image?)
-                        (when-let [block-id (:block/uuid config)]
-                          (let [size (bean/->clj @size)]
-                            (editor-handler/resize-image! block-id metadata full_text size))))
-                      (when @*resizing-image?
+       {:className "resize image-resize"
+        :onSizeChanged (fn [value]
+                         (when (and (not @*resizing-image?)
+                                    (some? @size)
+                                    (not= value @size))
+                           (reset! *resizing-image? true))
+                         (reset! size value))
+        :onMouseUp (fn []
+                     (when (and @size @*resizing-image?)
+                       (when-let [block-id (:block/uuid config)]
+                         (let [size (bean/->clj @size)]
+                           (editor-handler/resize-image! block-id metadata full_text size))))
+                     (when @*resizing-image?
                         ;; TODO: need a better way to prevent the clicking to edit current block
-                        (js/setTimeout #(reset! *resizing-image? false) 200)))
-         :onClick (fn [e]
-                    (when @*resizing-image? (util/stop e)))}
+                       (js/setTimeout #(reset! *resizing-image? false) 200)))
+        :onClick (fn [e]
+                   (when @*resizing-image? (util/stop e)))}
         (and (:width metadata) (not (util/mobile?)))
         (assoc :style {:width (:width metadata)}))
       [:div.asset-container
@@ -422,7 +422,7 @@
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
                    original-name)
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
-                                                         " page-name-in-block: " page-name-in-block))]
+                                                        " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
@@ -795,6 +795,351 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(rum/defc audio-link-cp
+  [src]
+  [:audio {:src src
+           :controls true}])
+
+(defn- media-link-cp
+  [config url s label metadata full_text]
+  (let [ext (util/get-file-ext s)]
+    (cond
+      (contains? (set (map name config/audio-formats)) ext)
+      (audio-link-cp s)
+
+      (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
+      (image-link config url s label metadata full_text)
+
+      (util/electron?)
+      (if (= (util/get-file-ext s) "pdf")
+        [:a.asset-ref.is-pdf
+         {:href "javascript:void(0);"
+          :on-mouse-down (fn [_event]
+                           (when-let [current (pdf-assets/inflate-asset s)]
+                             (state/set-state! :pdf/current current)))}
+         (get-label-text label)]
+        (asset-reference config label s)))))
+
+(defn- search-link-cp
+  [config url s label title metadata full_text]
+  (cond
+    (string/blank? s)
+    [:span.warning {:title "Invalid link"} full_text]
+
+    (= \# (first s))
+    (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
+
+    ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
+    (and (= \* (first s))
+         (not= \* (last s)))
+    (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
+
+    (text/block-ref? s)
+    (let [id (text/get-block-ref s)]
+      (block-reference config id label))
+
+    (not (string/includes? s "."))
+    (page-reference (:html-export? config) s config label)
+
+    (util/url? s)
+    (->elem :a {:href s
+                :data-href s
+                :target "_blank"}
+            (map-inline config label))
+
+    (show-link? config metadata s full_text)
+    (media-link-cp config url s label metadata full_text)
+
+    (util/electron?)
+    (let [path (cond
+                 (string/starts-with? s "file://")
+                 (string/replace s "file://" "")
+
+                 (string/starts-with? s "/")
+                 s
+
+                 :else
+                 (relative-assets-path->absolute-path s))]
+      (->elem
+       :a
+       (cond->
+        {:href      (str "file://" path)
+         :data-href path
+         :target    "_blank"}
+         title
+         (assoc :title title))
+       (map-inline config label)))
+
+    :else
+    (page-reference (:html-export? config) s config label)))
+
+(defn- link-cp [config html-export? link]
+  (let [{:keys [url label title metadata full_text]} link]
+    (match url
+      ["Block_ref" id]
+      (let [label* (if (seq (mldoc/plain->text label)) label nil)
+            {:keys [link-depth]} config
+            link-depth (or link-depth 0)]
+        (if (> link-depth max-depth-of-links)
+          [:p.warning.text-sm "Block ref nesting is too deep"]
+          (block-reference (assoc config
+                                  :reference? true
+                                  :link-depth (inc link-depth)
+                                  :block/uuid id)
+                           id label*)))
+
+      ["Page_ref" page]
+      (let [format (get-in config [:block :block/format])]
+        (if (and (= format :org)
+                 (show-link? config nil page page)
+                 (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
+          (image-link config url page nil metadata full_text)
+          (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+            (if (and (string? page) (string/blank? page))
+              [:span (util/format "[[%s]]" page)]
+              (page-reference (:html-export? config) page config label*)))))
+
+      ["Embed_data" src]
+      (image-link config url src nil metadata full_text)
+
+      ["Search" s]
+      (search-link-cp config url s label title metadata full_text)
+
+      :else
+      (let [href (string-of-url url)
+            [protocol path] (or (and (= "Complex" (first url)) url)
+                                (and (= "File" (first url)) ["file" (second url)]))]
+        (cond
+          (and (= (get-in config [:block :block/format]) :org)
+               (= "Complex" protocol)
+               (= (string/lower-case (:protocol path)) "id")
+               (string? (:link path))
+               (util/uuid-string? (:link path))) ; org mode id
+          (let [id (uuid (:link path))
+                block (db/entity [:block/uuid id])]
+            (if (:block/pre-block? block)
+              (let [page (:block/page block)]
+                (page-reference html-export? (:block/name page) config label))
+              (block-reference config (:link path) label)))
+
+          (= protocol "file")
+          (if (show-link? config metadata href full_text)
+            (media-link-cp config url href label metadata full_text)
+            (let [redirect-page-name (when (string? path) (text/get-page-name path))
+                  config (assoc config :redirect-page-name redirect-page-name)
+                  label-text (get-label-text label)
+                  page (if (string/blank? label-text)
+                         {:block/name (db/get-file-page (string/replace href "file:" "") false)}
+                         (get-page label))]
+              (if (and page
+                       (when-let [ext (util/get-file-ext href)]
+                         (config/mldoc-support? ext)))
+                [:span.page-reference
+                 [:span.text-gray-500 "[["]
+                 (page-cp config page)
+                 [:span.text-gray-500 "]]"]]
+
+                (let [href* (if (util/electron?)
+                              (relative-assets-path->absolute-path href)
+                              href)]
+                  (->elem
+                   :a
+                   (cond-> {:href      (str "file://" href*)
+                            :data-href href*
+                            :target    "_blank"}
+                     title (assoc :title title))
+                   (map-inline config label))))))
+
+          (show-link? config metadata href full_text)
+          (media-link-cp config url href label metadata full_text)
+
+          (= protocol "ar")
+          (->elem
+           :a.external-link
+           (cond->
+            {:href (ar-url->http-url href)
+             :target "_blank"}
+             title
+             (assoc :title title))
+           (map-inline config label))
+
+          :else
+          (->elem
+           :a.external-link
+           (cond->
+            {:href href
+             :target "_blank"}
+             title
+             (assoc :title title))
+           (map-inline config label)))))))
+
+;;;; Macro component render functions
+(defn- macro-query-cp
+  [config arguments]
+  [:div.dsl-query
+   (let [query (->> (string/join ", " arguments)
+                    (string/trim))]
+     (when-not (string/blank? query)
+       (custom-query (assoc config :dsl-query? true)
+                     {:title (ui/tippy {:html commands/query-doc
+                                        :interactive true}
+                                       [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                        (str "Query: " query)])
+                      :query query})))])
+
+(defn- macro-function-cp
+  [config arguments]
+  (or
+   (when (:query-result config)
+     (when-let [query-result (rum/react (:query-result config))]
+       (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
+                           (common-handler/safe-read-string "failed to parse function")
+                           (query-handler/normalize-query-function query-result)
+                           (str))
+             f (sci/eval-string fn-string)]
+         (when (fn? f)
+           (try (f query-result)
+                (catch js/Error e
+                  (js/console.error e)))))))
+   [:span.warning
+    (util/format "{{function %s}}" (first arguments))]))
+
+(defn- macro-embed-cp
+  [config arguments]
+  (let [a (first arguments)
+        {:keys [link-depth]} config
+        link-depth (or link-depth 0)]
+    (cond
+      (nil? a)                      ; empty embed
+      nil
+
+      (> link-depth max-depth-of-links)
+      [:p.warning.text-sm "Embed depth is too deep"]
+
+      (and (string/starts-with? a "[[")
+           (string/ends-with? a "]]"))
+      (let [page-name (text/get-page-name a)]
+        (when-not (string/blank? page-name)
+          (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
+
+      (and (string/starts-with? a "((")
+           (string/ends-with? a "))"))
+      (when-let [s (-> (string/replace a "((" "")
+                       (string/replace "))" "")
+                       string/trim)]
+        (when-let [id (and s
+                           (let [s (string/trim s)]
+                             (and (util/uuid-string? s)
+                                  (uuid s))))]
+          (block-embed (assoc config :link-depth (inc link-depth)) id)))
+
+      :else                         ;TODO: maybe collections?
+      nil)))
+
+(defn- macro-vimeo-cp
+  [_config arguments]
+  (when-let [url (first arguments)]
+    (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
+      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
+        (when-not (string/blank? vimeo-id)
+          (let [width (min (- (util/get-width) 96)
+                           560)
+                height (int (* width (/ 315 560)))]
+            [:iframe
+             {:allow-full-screen "allowfullscreen"
+              :allow
+              "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+              :frame-border "0"
+              :src (str "https://player.vimeo.com/video/" vimeo-id)
+              :height height
+              :width width}]))))))
+
+(defn- macro-bilibili-cp
+  [_config arguments]
+  (when-let [url (first arguments)]
+    (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
+      (when-let [id (cond
+                      (<= (count url) 15) url
+                      :else
+                      (last (util/safe-re-find id-regex url)))]
+        (when-not (string/blank? id)
+          (let [width (min (- (util/get-width) 96)
+                           560)
+                height (int (* width (/ 315 560)))]
+            [:iframe
+             {:allowfullscreen true
+              :framespacing "0"
+              :frameborder "no"
+              :border "0"
+              :scrolling "no"
+              :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+              :width width
+              :height (max 500 height)}]))))))
+
+(defn- macro-else-cp
+  [config arguments]
+  (if-let [block-uuid (:block/uuid config)]
+    (let [format (get-in config [:block :block/format] :markdown)
+          macro-content (or
+                         (-> (db/entity [:block/uuid block-uuid])
+                             (:block/page)
+                             (:db/id)
+                             (db/entity)
+                             :block/properties
+                             :macros
+                             (get name))
+                         (get (state/get-macros) name)
+                         (get (state/get-macros) (keyword name)))
+          macro-content (cond
+                          (= (str name) "img")
+                          (case (count arguments)
+                            1
+                            (util/format "[:img {:src \"%s\"}]" (first arguments))
+                            4
+                            (when (and (util/safe-parse-int (nth arguments 1))
+                                       (util/safe-parse-int (nth arguments 2)))
+                              (util/format "[:img.%s {:src \"%s\" :style {:width %s :height %s}}]"
+                                           (nth arguments 3)
+                                           (first arguments)
+                                           (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2))))
+                            3
+                            (when (and (util/safe-parse-int (nth arguments 1))
+                                       (util/safe-parse-int (nth arguments 2)))
+                              (util/format "[:img {:src \"%s\" :style {:width %s :height %s}}]"
+                                           (first arguments)
+                                           (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2))))
+
+                            2
+                            (cond
+                              (util/safe-parse-int (nth arguments 1))
+                              (util/format "[:img {:src \"%s\" :style {:width %s}}]"
+                                           (first arguments)
+                                           (util/safe-parse-int (nth arguments 1)))
+                              (contains? #{"left" "right" "center"} (string/lower-case (nth arguments 1)))
+                              (util/format "[:img.%s {:src \"%s\"}]"
+                                           (string/lower-case (nth arguments 1))
+                                           (first arguments))
+                              :else
+                              macro-content)
+
+                            macro-content)
+
+                          (and (seq arguments) macro-content)
+                          (block/macro-subs macro-content arguments)
+
+                          :else
+                          macro-content)
+          macro-content (when macro-content
+                          (template/resolve-dynamic-template! macro-content))]
+      (render-macro config name arguments macro-content format))
+    (let [macro-content (or
+                         (get (state/get-macros) name)
+                         (get (state/get-macros) (keyword name)))
+          format (get-in config [:block :block/format] :markdown)]
+      (render-macro config name arguments macro-content format))))
+
 (rum/defc namespace-hierarchy-aux
   [config namespace children]
   [:ul
@@ -816,525 +1161,196 @@
     (page-cp config {:block/name namespace})]
    (namespace-hierarchy-aux config namespace children)])
 
-(rum/defc audio-cp
-  [src]
-  [:audio {:src src
-           :controls true}])
-
-(defn link-cp
-  [config url s label metadata full_text]
-  (let [ext (util/get-file-ext s)]
+(defn- macro-cp
+  [config options]
+  (let [{:keys [name arguments]} options
+        arguments (if (and
+                       (>= (count arguments) 2)
+                       (and (string/starts-with? (first arguments) "[[")
+                            (string/ends-with? (last arguments) "]]"))) ; page reference
+                    (let [title (string/join ", " arguments)]
+                      [title])
+                    arguments)]
     (cond
-      (contains? (set (map name config/audio-formats)) ext)
-      (audio-cp s)
+      (= name "query")
+      (macro-query-cp config arguments)
 
-      (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
-      (image-link config url s label metadata full_text)
+      (= name "function")
+      (macro-function-cp config arguments)
 
-      (util/electron?)
-      (if (= (util/get-file-ext s) "pdf")
-        [:a.asset-ref.is-pdf
-         {:href "javascript:void(0);"
-          :on-mouse-down (fn [_event]
-                           (when-let [current (pdf-assets/inflate-asset s)]
-                             (state/set-state! :pdf/current current)))}
-         (get-label-text label)]
-        (asset-reference config label s)))))
+      (= name "namespace")
+      (let [namespace (first arguments)]
+        (when-not (string/blank? namespace)
+          (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
+                children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+            (namespace-hierarchy config namespace children))))
 
-(defn ^:large-vars/cleanup-todo inline
+      (= name "youtube")
+      (when-let [url (first arguments)]
+        (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
+          (when-let [youtube-id (cond
+                                  (== 11 (count url)) url
+                                  :else
+                                  (nth (util/safe-re-find YouTube-regex url) 5))]
+            (when-not (string/blank? youtube-id)
+              (youtube/youtube-video youtube-id)))))
+
+      (= name "youtube-timestamp")
+      (when-let [timestamp (first arguments)]
+        (when-let [seconds (youtube/parse-timestamp timestamp)]
+          (youtube/timestamp seconds)))
+
+      (= name "tutorial-video")
+      (tutorial-video)
+
+      (= name "zotero-imported-file")
+      (let [[item-key filename] arguments]
+        (when (and item-key filename)
+          [:span.ml-1 (zotero/zotero-imported-file item-key filename)]))
+
+      (= name "zotero-linked-file")
+      (when-let [path (first arguments)]
+        [:span.ml-1 (zotero/zotero-linked-file path)])
+
+      (= name "vimeo")
+      (macro-vimeo-cp config arguments)
+
+      ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
+      (= name "bilibili")
+      (macro-bilibili-cp config arguments)
+
+      (contains? #{"tweet" "twitter"} name)
+      (when-let [url (first arguments)]
+        (let [id-regex #"/status/(\d+)"]
+          (when-let [id (cond
+                          (<= (count url) 15) url
+                          :else
+                          (last (util/safe-re-find id-regex url)))]
+            (ui/tweet-embed id))))
+
+      (= name "embed")
+      (macro-embed-cp config arguments)
+
+      (and plugin-handler/lsp-enabled? (= name "renderer"))
+      (when-let [block-uuid (str (:block/uuid config))]
+        (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
+
+      (get @macro/macros name)
+      ((get @macro/macros name) config options)
+
+      :else
+      (macro-else-cp config arguments))))
+
+(defn- emphasis-cp
+  [config kind data]
+  (let [elem (case kind
+               "Bold" :b
+               "Italic" :i
+               "Underline" :ins
+               "Strike_through" :del
+               "Highlight" :mark)]
+    (->elem elem (map-inline config data))))
+
+(defn inline
   [{:keys [html-export?] :as config} item]
   (match item
-    ["Plain" s]
-    s
-    ["Spaces" s]
-    s
-    ["Superscript" l]
-    (->elem :sup (map-inline config l))
-    ["Subscript" l]
-    (->elem :sub (map-inline config l))
-    ["Tag" _s]
-    (when-let [s (block/get-tag item)]
-      (let [s (text/page-ref-un-brackets! s)]
-        (page-cp (assoc config :tag? true) {:block/name s})))
+         [(:or "Plain" "Spaces") s]
+         s
 
-    ["Emphasis" [[kind] data]]
-    (let [elem (case kind
-                 "Bold" :b
-                 "Italic" :i
-                 "Underline" :ins
-                 "Strike_through" :del
-                 "Highlight" :mark)]
-      (->elem elem (map-inline config data)))
-    ["Entity" e]
-    [:span {:dangerouslySetInnerHTML
-            {:__html (:html e)}}]
+         ["Superscript" l]
+         (->elem :sup (map-inline config l))
+         ["Subscript" l]
+         (->elem :sub (map-inline config l))
 
-    ["Latex_Fragment" ["Displayed" s]]
-    (if html-export?
-      (latex/html-export s false true)
-      (latex/latex (str (d/squuid)) s false true))
+         ["Tag" _]
+         (when-let [s (block/get-tag item)]
+           (let [s (text/page-ref-un-brackets! s)]
+             (page-cp (assoc config :tag? true) {:block/name s})))
 
-    ["Latex_Fragment" ["Inline" s]]
-    (if html-export?
-      (latex/html-export s false true)
-      (latex/latex (str (d/squuid)) s false false))
+         ["Emphasis" [[kind] data]]
+         (emphasis-cp config kind data)
 
-    ["Target" s]
-    [:a {:id s} s]
+         ["Entity" e]
+         [:span {:dangerouslySetInnerHTML
+                 {:__html (:html e)}}]
 
-    ["Radio_Target" s]
-    [:a {:id s} s]
+         ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
+         (if html-export?
+           (latex/html-export s false true)
+           (latex/latex (str (d/squuid)) s false (not= display "Inline")))
 
-    ["Email" address]
-    (let [{:keys [local_part domain]} address
-          address (str local_part "@" domain)]
-      [:a {:href (str "mainto:" address)}
-       address])
+         [(:or "Target" "Radio_Target") s]
+         [:a {:id s} s]
 
-    ["Nested_link" link]
-    (nested-link config html-export? link)
+         ["Email" address]
+         (let [{:keys [local_part domain]} address
+               address (str local_part "@" domain)]
+           [:a {:href (str "mainto:" address)} address])
 
-    ["Link" link]
-    (let [{:keys [url label title metadata full_text]} link]
-      (match url
-        ["Block_ref" id]
-        (let [label* (if (seq (mldoc/plain->text label)) label nil)
-              {:keys [link-depth]} config
-              link-depth (or link-depth 0)]
-          (if (> link-depth max-depth-of-links)
-            [:p.warning.text-sm "Block ref nesting is too deep"]
-            (block-reference (assoc config
-                                    :reference? true
-                                    :link-depth (inc link-depth)
-                                    :block/uuid id)
-                             id label*)))
+         ["Nested_link" link]
+         (nested-link config html-export? link)
 
-        ["Page_ref" page]
-        (let [format (get-in config [:block :block/format])]
-          (if (and (= format :org)
-                   (show-link? config nil page page)
-                   (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-            (image-link config url page nil metadata full_text)
-            (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-              (if (and (string? page) (string/blank? page))
-                [:span (util/format "[[%s]]" page)]
-                (page-reference (:html-export? config) page config label*)))))
+         ["Link" link]
+         (link-cp config html-export? link)
 
-        ["Embed_data" src]
-        (image-link config url src nil metadata full_text)
+         [(:or "Verbatim" "Code") s]
+         [:code s]
 
-        ["Search" s]
-        (cond
-          (string/blank? s)
-          [:span.warning {:title "Invalid link"} full_text]
+         ["Inline_Source_Block" x]
+         [:code (:code x)]
 
-          (= \# (first s))
-          (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
+         ["Export_Snippet" "html" s]
+         (when (not html-export?)
+           [:span {:dangerouslySetInnerHTML
+                   {:__html s}}])
+         
+         ["Inline_Hiccup" s] ;; String to hiccup
+         (ui/catch-error
+          [:div.warning {:title "Invalid hiccup"} s]
+          (-> (safe-read-string s)
+              (security/remove-javascript-links-in-href)))
 
-          ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
-          (and (= \* (first s))
-               (not= \* (last s)))
-          (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
+         ["Inline_Html" s]
+         (when (not html-export?)
+           ;; TODO: how to remove span and only export the content of `s`?
+           [:span {:dangerouslySetInnerHTML {:__html s}}])
 
-          (text/block-ref? s)
-          (let [id (text/get-block-ref s)]
-            (block-reference config id label))
+         [(:or "Break_Line" "Hard_Break_Line")]
+         [:br]
 
-          (not (string/includes? s "."))
-          (page-reference (:html-export? config) s config label)
+         ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
+         nil
+         ["Timestamp" ["Date" t]]
+         (timestamp t "Date")
+         ["Timestamp" ["Closed" t]]
+         (timestamp t "Closed")
+         ["Timestamp" ["Range" t]]
+         (range t false)
+         ["Timestamp" ["Clock" ["Stopped" t]]]
+         (range t true)
+         ["Timestamp" ["Clock" ["Started" t]]]
+         (timestamp t "Started")
 
-          (util/url? s)
-          (->elem :a {:href s
-                      :data-href s
-                      :target "_blank"}
-                  (map-inline config label))
+         ["Cookie" ["Percent" n]]
+         [:span {:class "cookie-percent"}
+          (util/format "[d%%]" n)]
+         ["Cookie" ["Absolute" current total]]
+         [:span {:class "cookie-absolute"}
+          (util/format "[%d/%d]" current total)]
 
-          (show-link? config metadata s full_text)
-          (link-cp config url s label metadata full_text)
+         ["Footnote_Reference" options]
+         (let [{:keys [name]} options
+               encode-name (util/url-encode name)]
+           [:sup.fn
+            [:a {:id (str "fnr." encode-name)
+                 :class "footref"
+                 :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
+             name]])
 
-          (util/electron?)
-          (let [path (cond
-                       (string/starts-with? s "file://")
-                       (string/replace s "file://" "")
+         ["Macro" options]
+         (macro-cp config options)
 
-                       (string/starts-with? s "/")
-                       s
-
-                       :else
-                       (relative-assets-path->absolute-path s))]
-            (->elem
-             :a
-             (cond->
-               {:href      (str "file://" path)
-                :data-href path
-                :target    "_blank"}
-               title
-               (assoc :title title))
-             (map-inline config label)))
-
-          :else
-          (page-reference (:html-export? config) s config label))
-
-        :else
-        (let [href (string-of-url url)
-              [protocol path] (or (and (= "Complex" (first url)) url)
-                                  (and (= "File" (first url)) ["file" (second url)]))]
-          (cond
-            (and (= (get-in config [:block :block/format]) :org)
-                 (= "Complex" protocol)
-                 (= (string/lower-case (:protocol path)) "id")
-                 (string? (:link path))
-                 (util/uuid-string? (:link path))) ; org mode id
-            (let [id (uuid (:link path))
-                  block (db/entity [:block/uuid id])]
-              (if (:block/pre-block? block)
-                (let [page (:block/page block)]
-                  (page-reference html-export? (:block/name page) config label))
-                (block-reference config (:link path) label)))
-
-            (= protocol "file")
-            (if (show-link? config metadata href full_text)
-              (link-cp config url href label metadata full_text)
-              (let [redirect-page-name (when (string? path) (text/get-page-name path))
-                    config (assoc config :redirect-page-name redirect-page-name)
-                    label-text (get-label-text label)
-                    page (if (string/blank? label-text)
-                           {:block/name (db/get-file-page (string/replace href "file:" "") false)}
-                           (get-page label))]
-                (if (and page
-                         (when-let [ext (util/get-file-ext href)]
-                           (config/mldoc-support? ext)))
-                  [:span.page-reference
-                   [:span.text-gray-500 "[["]
-                   (page-cp config page)
-                   [:span.text-gray-500 "]]"]]
-
-                  (let [href*
-                        (if (util/electron?)
-                          (relative-assets-path->absolute-path href)
-                          href)]
-                    (->elem
-                     :a
-                     (cond->
-                       {:href      (str "file://" href*)
-                        :data-href href*
-                        :target    "_blank"}
-                       title
-                       (assoc :title title))
-                     (map-inline config label))))))
-
-            
-            (show-link? config metadata href full_text)
-            (link-cp config url href label metadata full_text)
-
-            (= protocol "ar")
-            (->elem
-             :a.external-link
-             (cond->
-               {:href (ar-url->http-url href)
-                :target "_blank"}
-               title
-               (assoc :title title))
-             (map-inline config label))
-
-            :else
-            (->elem
-             :a.external-link
-             (cond->
-               {:href href
-                :target "_blank"}
-               title
-               (assoc :title title))
-             (map-inline config label))))))
-
-    ["Verbatim" s]
-    [:code s]
-
-    ["Code" s]
-    [:code s]
-
-    ["Inline_Source_Block" x]
-    [:code (:code x)]
-
-    ["Export_Snippet" "html" s]
-    (when (not html-export?)
-      [:span {:dangerouslySetInnerHTML
-              {:__html s}}])
-
-    ;; String to hiccup
-    ["Inline_Hiccup" s]
-    (ui/catch-error
-     [:div.warning {:title "Invalid hiccup"} s]
-     (-> (safe-read-string s)
-         (security/remove-javascript-links-in-href)))
-
-    ["Inline_Html" s]
-    (when (not html-export?)
-      ;; TODO: how to remove span and only export the content of `s`?
-      [:span {:dangerouslySetInnerHTML
-              {:__html s}}])
-
-    ["Break_Line"]
-    [:br]
-    ["Hard_Break_Line"]
-    [:br]
-
-    ["Timestamp" ["Scheduled" _timestamp]]
-    nil
-    ["Timestamp" ["Deadline" _timestamp]]
-    nil
-
-    ["Timestamp" ["Date" t]]
-    (timestamp t "Date")
-    ["Timestamp" ["Closed" t]]
-    (timestamp t "Closed")
-    ["Timestamp" ["Range" t]]
-    (range t false)
-    ["Timestamp" ["Clock" ["Stopped" t]]]
-    (range t true)
-    ["Timestamp" ["Clock" ["Started" t]]]
-    (timestamp t "Started")
-
-    ["Cookie" ["Percent" n]]
-    [:span {:class "cookie-percent"}
-     (util/format "[d%%]" n)]
-
-    ["Cookie" ["Absolute" current total]]
-    [:span {:class "cookie-absolute"}
-     (util/format "[%d/%d]" current total)]
-
-    ["Footnote_Reference" options]
-    (let [{:keys [name]} options
-          encode-name (util/url-encode name)]
-      [:sup.fn
-       [:a {:id (str "fnr." encode-name)
-            :class "footref"
-            :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
-        name]])
-
-    ["Macro" options]
-    (let [{:keys [name arguments]} options
-          arguments (if (and
-                         (>= (count arguments) 2)
-                         (and (string/starts-with? (first arguments) "[[")
-                              (string/ends-with? (last arguments) "]]"))) ; page reference
-                      (let [title (string/join ", " arguments)]
-                        [title])
-                      arguments)]
-      (cond
-        (= name "query")
-        [:div.dsl-query
-         (let [query (->> (string/join ", " arguments)
-                          (string/trim))]
-           (when-not (string/blank? query)
-             (custom-query (assoc config :dsl-query? true)
-                           {:title (ui/tippy {:html commands/query-doc
-                                              :interactive true}
-                                             [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                              (str "Query: " query)])
-                            :query query})))]
-
-        (= name "function")
-        (or
-         (when (:query-result config)
-           (when-let [query-result (rum/react (:query-result config))]
-             (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
-                                 (common-handler/safe-read-string "failed to parse function")
-                                 (query-handler/normalize-query-function query-result)
-                                 (str))
-                   f (sci/eval-string fn-string)]
-               (when (fn? f)
-                 (try (f query-result)
-                   (catch js/Error e
-                     (js/console.error e)))))))
-         [:span.warning
-          (util/format "{{function %s}}" (first arguments))])
-
-        (= name "namespace")
-        (let [namespace (first arguments)]
-          (when-not (string/blank? namespace)
-            (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
-                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
-              (namespace-hierarchy config namespace children))))
-
-        (= name "youtube")
-        (when-let [url (first arguments)]
-          (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
-            (when-let [youtube-id (cond
-                                    (== 11 (count url)) url
-                                    :else
-                                    (nth (util/safe-re-find YouTube-regex url) 5))]
-              (when-not (string/blank? youtube-id)
-                (youtube/youtube-video youtube-id)))))
-
-        (= name "youtube-timestamp")
-        (when-let [timestamp (first arguments)]
-          (when-let [seconds (youtube/parse-timestamp timestamp)]
-            (youtube/timestamp seconds)))
-
-        (= name "tutorial-video")
-        (tutorial-video)
-
-        (= name "zotero-imported-file")
-        (let [[item-key filename] arguments]
-          (when (and item-key filename)
-            [:span.ml-1 (zotero/zotero-imported-file item-key filename)]))
-
-        (= name "zotero-linked-file")
-        (when-let [path (first arguments)]
-          [:span.ml-1 (zotero/zotero-linked-file path)])
-
-        (= name "vimeo")
-        (when-let [url (first arguments)]
-          (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-            (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
-              (when-not (string/blank? vimeo-id)
-                (let [width (min (- (util/get-width) 96)
-                                 560)
-                      height (int (* width (/ 315 560)))]
-                  [:iframe
-                   {:allow-full-screen "allowfullscreen"
-                    :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                    :frame-border "0"
-                    :src (str "https://player.vimeo.com/video/" vimeo-id)
-                    :height height
-                    :width width}])))))
-
-        ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
-        (= name "bilibili")
-        (when-let [url (first arguments)]
-          (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
-            (when-let [id (cond
-                            (<= (count url) 15) url
-                            :else
-                            (last (util/safe-re-find id-regex url)))]
-              (when-not (string/blank? id)
-                (let [width (min (- (util/get-width) 96)
-                                 560)
-                      height (int (* width (/ 315 560)))]
-                  [:iframe
-                   {:allowfullscreen true
-                    :framespacing "0"
-                    :frameborder "no"
-                    :border "0"
-                    :scrolling "no"
-                    :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-                    :width width
-                    :height (max 500 height)}])))))
-
-        (contains? #{"tweet" "twitter"} name)
-        (when-let [url (first arguments)]
-          (let [id-regex #"/status/(\d+)"]
-            (when-let [id (cond
-                            (<= (count url) 15) url
-                            :else
-                            (last (util/safe-re-find id-regex url)))]
-              (ui/tweet-embed id))))
-
-        (= name "embed")
-        (let [a (first arguments)
-              {:keys [link-depth]} config
-              link-depth (or link-depth 0)]
-          (cond
-            (nil? a) ; empty embed
-            nil
-
-            (> link-depth max-depth-of-links)
-            [:p.warning.text-sm "Embed depth is too deep"]
-
-            (and (string/starts-with? a "[[")
-                 (string/ends-with? a "]]"))
-            (let [page-name (text/get-page-name a)]
-              (when-not (string/blank? page-name)
-                (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
-
-            (and (string/starts-with? a "((")
-                 (string/ends-with? a "))"))
-            (when-let [s (-> (string/replace a "((" "")
-                             (string/replace "))" "")
-                             string/trim)]
-              (when-let [id (and s
-                                 (let [s (string/trim s)]
-                                   (and (util/uuid-string? s)
-                                        (uuid s))))]
-                (block-embed (assoc config :link-depth (inc link-depth)) id)))
-
-            :else                       ;TODO: maybe collections?
-            nil))
-
-        (and plugin-handler/lsp-enabled? (= name "renderer"))
-        (when-let [block-uuid (str (:block/uuid config))]
-          (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
-
-        (get @macro/macros name)
-        ((get @macro/macros name) config options)
-
-        :else
-        (if-let [block-uuid (:block/uuid config)]
-          (let [format (get-in config [:block :block/format] :markdown)
-                macro-content (or
-                               (-> (db/entity [:block/uuid block-uuid])
-                                   (:block/page)
-                                   (:db/id)
-                                   (db/entity)
-                                   :block/properties
-                                   :macros
-                                   (get name))
-                               (get (state/get-macros) name)
-                               (get (state/get-macros) (keyword name)))
-                macro-content (cond
-                                (= (str name) "img")
-                                (case (count arguments)
-                                  1
-                                  (util/format "[:img {:src \"%s\"}]" (first arguments))
-                                  4
-                                  (when (and (util/safe-parse-int (nth arguments 1))
-                                             (util/safe-parse-int (nth arguments 2)))
-                                    (util/format "[:img.%s {:src \"%s\" :style {:width %s :height %s}}]"
-                                                 (nth arguments 3)
-                                                 (first arguments)
-                                                 (util/safe-parse-int (nth arguments 1))
-                                                 (util/safe-parse-int (nth arguments 2))))
-                                  3
-                                  (when (and (util/safe-parse-int (nth arguments 1))
-                                             (util/safe-parse-int (nth arguments 2)))
-                                    (util/format "[:img {:src \"%s\" :style {:width %s :height %s}}]"
-                                                 (first arguments)
-                                                 (util/safe-parse-int (nth arguments 1))
-                                                 (util/safe-parse-int (nth arguments 2))))
-
-                                  2
-                                  (cond
-                                    (util/safe-parse-int (nth arguments 1))
-                                    (util/format "[:img {:src \"%s\" :style {:width %s}}]"
-                                                 (first arguments)
-                                                 (util/safe-parse-int (nth arguments 1)))
-                                    (contains? #{"left" "right" "center"} (string/lower-case (nth arguments 1)))
-                                    (util/format "[:img.%s {:src \"%s\"}]"
-                                                 (string/lower-case (nth arguments 1))
-                                                 (first arguments))
-                                    :else
-                                    macro-content)
-
-                                  macro-content)
-
-                                (and (seq arguments) macro-content)
-                                (block/macro-subs macro-content arguments)
-
-                                :else
-                                macro-content)
-                macro-content (when macro-content
-                                (template/resolve-dynamic-template! macro-content))]
-            (render-macro config name arguments macro-content format))
-          (let [macro-content (or
-                               (get (state/get-macros) name)
-                               (get (state/get-macros) (keyword name)))
-                format (get-in config [:block :block/format] :markdown)]
-            (render-macro config name arguments macro-content format)))))
-
-    :else
-    ""))
+         :else ""))
 
 (rum/defc block-child
   [block]
@@ -1396,9 +1412,9 @@
             (when (map? child)
               (let [child (dissoc child :block/meta)
                     config (cond->
-                             (-> config
-                                 (assoc :block/uuid (:block/uuid child))
-                                 (dissoc :breadcrumb-show? :embed-parent))
+                            (-> config
+                                (assoc :block/uuid (:block/uuid child))
+                                (dissoc :breadcrumb-show? :embed-parent))
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
@@ -1817,12 +1833,12 @@
            (not (:block/pre-block? block)))
       (let [move-to (rum/react *move-to)]
         (when-not
-            (or (and top? (not= move-to :top))
-                (and (not top?) (= move-to :top))
-                (and block-content? (not= move-to :nested))
-                (and (not block-content?)
-                     (seq (:block/children block))
-                     (= move-to :nested)))
+         (or (and top? (not= move-to :top))
+             (and (not top?) (= move-to :top))
+             (and block-content? (not= move-to :nested))
+             (and (not block-content?)
+                  (seq (:block/children block))
+                  (= move-to :nested)))
           (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
@@ -1865,9 +1881,9 @@
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
         attrs (cond->
-                {:blockid       (str uuid)
-                 :data-type (name block-type)
-                 :style {:width "100%"}}
+               {:blockid       (str uuid)
+                :data-type (name block-type)
+                :style {:width "100%"}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
@@ -1966,9 +1982,9 @@
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
          (ui/block-error "Block Render Error:"
-                  {:content (:block/content block)
-                   :section-attrs
-                   {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+                         {:content (:block/content block)
+                          :section-attrs
+                          {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
@@ -2237,15 +2253,15 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl"))
-        :blockid (str uuid)
-        :haschild (str has-child?)}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-xl"))
+       :blockid (str uuid)
+       :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2348,7 +2364,7 @@
         (->elem
          :li
          (cond->
-           {:checked checked?}
+          {:checked checked?}
            number
            (assoc :value number))
          (vec-cat
@@ -2461,9 +2477,9 @@
                          ;; and are meant to go directly to full text search
                          (and (util/electron?) (symbol? form)) ; full-text search
                          (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                                (when (seq blocks)
-                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                    (reset! result-atom result))))
+                           (when (seq blocks)
+                             (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                               (reset! result-atom result))))
 
                          (symbol? form)
                          (atom nil)
@@ -2581,8 +2597,8 @@
                                                                    true)
                                                :group-by-page? blocks-grouped-by-page?
                                                :ref? true)
-                                        children?
-                                        (assoc :ref? true))
+                                  children?
+                                  (assoc :ref? true))
                          {:style {:margin-top "0.25rem"
                                   :margin-left "0.25rem"}})
 
@@ -2669,182 +2685,182 @@
                    :markdown)]
     (try
       (match item
-             ["Drawer" name lines]
-             (when (or (not= name "logbook")
-                       (and
-                        (= name "logbook")
-                        (state/enable-timetracking?)
-                        (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                             (when (get-in (state/get-config)
-                                           [:logbook/settings :enabled-in-timestamped-blocks] true)
-                               (or (:block/scheduled (:block config))
-                                   (:block/deadline (:block config)))))))
-               [:div
-                [:div.text-sm
-                 [:div.drawer {:data-drawer-name name}
-                  (ui/foldable
-                   [:div.opacity-50.font-medium.logbook
-                    (util/format ":%s:" (string/upper-case name))]
-                   [:div.opacity-50.font-medium
-                    (if (= name "logbook")
-                      (logbook-cp lines)
-                      (apply str lines))
-                    [:div ":END:"]]
-                   {:default-collapsed? true
-                    :title-trigger? true})]]])
+        ["Drawer" name lines]
+        (when (or (not= name "logbook")
+                  (and
+                   (= name "logbook")
+                   (state/enable-timetracking?)
+                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get-in (state/get-config)
+                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
+                          (or (:block/scheduled (:block config))
+                              (:block/deadline (:block config)))))))
+          [:div
+           [:div.text-sm
+            [:div.drawer {:data-drawer-name name}
+             (ui/foldable
+              [:div.opacity-50.font-medium.logbook
+               (util/format ":%s:" (string/upper-case name))]
+              [:div.opacity-50.font-medium
+               (if (= name "logbook")
+                 (logbook-cp lines)
+                 (apply str lines))
+               [:div ":END:"]]
+              {:default-collapsed? true
+               :title-trigger? true})]]])
 
-             ["Properties" m]
-             [:div.properties
-              (for [[k v] (dissoc m :roam_alias :roam_tags)]
-                (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                           (not (= k :title))
-                           (not (= k :filters)))
-                  [:div.property
-                   [:span.font-medium.mr-1 (str (name k) ": ")]
-                   (if (coll? v)
-                     (let [vals (for [item v]
-                                  (if (coll? v)
-                                    (let [config (when (= k :alias)
-                                                   (assoc config :block/alias? true))]
-                                      (page-cp config {:block/name item}))
-                                    (inline-text format item)))]
-                       (interpose [:span ", "] vals))
-                     (inline-text format v))]))]
+        ["Properties" m]
+        [:div.properties
+         (for [[k v] (dissoc m :roam_alias :roam_tags)]
+           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                      (not (= k :title))
+                      (not (= k :filters)))
+             [:div.property
+              [:span.font-medium.mr-1 (str (name k) ": ")]
+              (if (coll? v)
+                (let [vals (for [item v]
+                             (if (coll? v)
+                               (let [config (when (= k :alias)
+                                              (assoc config :block/alias? true))]
+                                 (page-cp config {:block/name item}))
+                               (inline-text format item)))]
+                  (interpose [:span ", "] vals))
+                (inline-text format v))]))]
 
              ;; for file-level property in orgmode: #+key: value
              ;; only display caption. https://orgmode.org/manual/Captions.html.
-             ["Directive" key value]
-             [:div.file-level-property
-              (when (contains? #{"caption"} (string/lower-case key))
-                [:span.font-medium
-                 [:span.font-bold (string/upper-case key)]
-                 (str ": " value)])]
+        ["Directive" key value]
+        [:div.file-level-property
+         (when (contains? #{"caption"} (string/lower-case key))
+           [:span.font-medium
+            [:span.font-bold (string/upper-case key)]
+            (str ": " value)])]
 
-             ["Paragraph" l]
+        ["Paragraph" l]
              ;; TODO: speedup
-             (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-               (->elem :div (map-inline config l))
-               (->elem :div.is-paragraph (map-inline config l)))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+          (->elem :div (map-inline config l))
+          (->elem :div.is-paragraph (map-inline config l)))
 
-             ["Horizontal_Rule"]
-             (when-not (:slide? config)
-               [:hr])
-             ["Heading" h]
-             (block-container config h)
-             ["List" l]
-             (let [lists (divide-lists l)]
-               (if (= 1 (count lists))
-                 (let [l (first lists)]
-                   (->elem
-                    (list-element l)
-                    (map #(list-item config %) l)))
-                 [:div.list-group
-                  (for [l lists]
-                    (->elem
-                     (list-element l)
-                     (map #(list-item config %) l)))]))
-             ["Table" t]
-             (table config t)
-             ["Math" s]
-             (if html-export?
-               (latex/html-export s true true)
-               (latex/latex (str (d/squuid)) s true true))
-             ["Example" l]
-             [:pre.pre-wrap-white-space
-              (join-lines l)]
-             ["Quote" l]
-             (->elem
-              :blockquote
-              (markup-elements-cp config l))
-             ["Raw_Html" content]
-             (when (not html-export?)
-               [:div.raw_html {:dangerouslySetInnerHTML
-                               {:__html content}}])
-             ["Export" "html" _options content]
-             (when (not html-export?)
-               [:div.export_html {:dangerouslySetInnerHTML
-                                  {:__html content}}])
-             ["Hiccup" content]
-             (ui/catch-error
-              [:div.warning {:title "Invalid hiccup"}
-               content]
-              (-> (safe-read-string content)
-                  (security/remove-javascript-links-in-href)))
+        ["Horizontal_Rule"]
+        (when-not (:slide? config)
+          [:hr])
+        ["Heading" h]
+        (block-container config h)
+        ["List" l]
+        (let [lists (divide-lists l)]
+          (if (= 1 (count lists))
+            (let [l (first lists)]
+              (->elem
+               (list-element l)
+               (map #(list-item config %) l)))
+            [:div.list-group
+             (for [l lists]
+               (->elem
+                (list-element l)
+                (map #(list-item config %) l)))]))
+        ["Table" t]
+        (table config t)
+        ["Math" s]
+        (if html-export?
+          (latex/html-export s true true)
+          (latex/latex (str (d/squuid)) s true true))
+        ["Example" l]
+        [:pre.pre-wrap-white-space
+         (join-lines l)]
+        ["Quote" l]
+        (->elem
+         :blockquote
+         (markup-elements-cp config l))
+        ["Raw_Html" content]
+        (when (not html-export?)
+          [:div.raw_html {:dangerouslySetInnerHTML
+                          {:__html content}}])
+        ["Export" "html" _options content]
+        (when (not html-export?)
+          [:div.export_html {:dangerouslySetInnerHTML
+                             {:__html content}}])
+        ["Hiccup" content]
+        (ui/catch-error
+         [:div.warning {:title "Invalid hiccup"}
+          content]
+         (-> (safe-read-string content)
+             (security/remove-javascript-links-in-href)))
 
-             ["Export" "latex" _options content]
-             (if html-export?
-               (latex/html-export content true false)
-               (latex/latex (str (d/squuid)) content true false))
+        ["Export" "latex" _options content]
+        (if html-export?
+          (latex/html-export content true false)
+          (latex/latex (str (d/squuid)) content true false))
 
-             ["Custom" "query" _options _result content]
-             (try
-               (let [query (reader/read-string content)]
-                 (custom-query config query))
-               (catch :default e
-                 (log/error :read-string-error e)
-                 (ui/block-error "Invalid query:" {:content content})))
+        ["Custom" "query" _options _result content]
+        (try
+          (let [query (reader/read-string content)]
+            (custom-query config query))
+          (catch :default e
+            (log/error :read-string-error e)
+            (ui/block-error "Invalid query:" {:content content})))
 
-             ["Custom" "note" _options result _content]
-             (admonition config "note" result)
+        ["Custom" "note" _options result _content]
+        (admonition config "note" result)
 
-             ["Custom" "tip" _options result _content]
-             (admonition config "tip" result)
+        ["Custom" "tip" _options result _content]
+        (admonition config "tip" result)
 
-             ["Custom" "important" _options result _content]
-             (admonition config "important" result)
+        ["Custom" "important" _options result _content]
+        (admonition config "important" result)
 
-             ["Custom" "caution" _options result _content]
-             (admonition config "caution" result)
+        ["Custom" "caution" _options result _content]
+        (admonition config "caution" result)
 
-             ["Custom" "warning" _options result _content]
-             (admonition config "warning" result)
+        ["Custom" "warning" _options result _content]
+        (admonition config "warning" result)
 
-             ["Custom" "pinned" _options result _content]
-             (admonition config "pinned" result)
+        ["Custom" "pinned" _options result _content]
+        (admonition config "pinned" result)
 
-             ["Custom" "center" _options l _content]
-             (->elem
-              :div.text-center
-              (markup-elements-cp config l))
+        ["Custom" "center" _options l _content]
+        (->elem
+         :div.text-center
+         (markup-elements-cp config l))
 
-             ["Custom" name _options l _content]
-             (->elem
-              :div
-              {:class name}
-              (markup-elements-cp config l))
+        ["Custom" name _options l _content]
+        (->elem
+         :div
+         {:class name}
+         (markup-elements-cp config l))
 
-             ["Latex_Fragment" l]
-             [:p.latex-fragment
-              (inline config ["Latex_Fragment" l])]
+        ["Latex_Fragment" l]
+        [:p.latex-fragment
+         (inline config ["Latex_Fragment" l])]
 
-             ["Latex_Environment" name option content]
-             (let [content (latex-environment-content name option content)]
-               (if html-export?
-                 (latex/html-export content true true)
-                 (latex/latex (str (d/squuid)) content true true)))
+        ["Latex_Environment" name option content]
+        (let [content (latex-environment-content name option content)]
+          (if html-export?
+            (latex/html-export content true true)
+            (latex/latex (str (d/squuid)) content true true)))
 
-             ["Displayed_Math" content]
-             (if html-export?
-               (latex/html-export content true true)
-               (latex/latex (str (d/squuid)) content true true))
+        ["Displayed_Math" content]
+        (if html-export?
+          (latex/html-export content true true)
+          (latex/latex (str (d/squuid)) content true true))
 
-             ["Footnote_Definition" name definition]
-             (let [id (util/url-encode name)]
-               [:div.footdef
-                [:div.footpara
-                 (conj
-                  (markup-element-cp config ["Paragraph" definition])
-                  [:a.ml-1 {:id (str "fn." id)
-                            :style {:font-size 14}
-                            :class "footnum"
-                            :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
-                   [:sup.fn (str name "↩︎")]])]])
+        ["Footnote_Definition" name definition]
+        (let [id (util/url-encode name)]
+          [:div.footdef
+           [:div.footpara
+            (conj
+             (markup-element-cp config ["Paragraph" definition])
+             [:a.ml-1 {:id (str "fn." id)
+                       :style {:font-size 14}
+                       :class "footnum"
+                       :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
+              [:sup.fn (str name "↩︎")]])]])
 
-             ["Src" options]
-             (src-cp config options html-export?)
+        ["Src" options]
+        (src-cp config options html-export?)
 
-             :else
-             "")
+        :else
+        "")
       (catch js/Error e
         (println "Convert to html failed, error: " e)
         ""))))
