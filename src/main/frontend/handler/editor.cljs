@@ -58,7 +58,6 @@
 
 ;; FIXME: should support multiple images concurrently uploading
 
-
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
@@ -182,7 +181,6 @@
               pos (or pos (diff/find-position markup range))]
           (cursor/move-cursor-to node pos)
           (state/set-state! :editor/pos nil))))))
-
 
 (defn highlight-block!
   [block-uuid]
@@ -1678,7 +1676,6 @@
    "+" "+"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
-
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
@@ -2737,10 +2734,7 @@
       (do
         (util/stop e)
         ;; not the top block in a page or journal
-        (when-not
-         (let [left-id (:db/id (:block/left block))
-               page-id (:db/id (:block/page block))]
-           (= left-id page-id))
+        (when-not (= (:block/left block) (:block/page block))
           (delete-block! repo false)))
 
       (and (> current-pos 1)
@@ -3029,7 +3023,6 @@
                                      :code code
                                      :key k
                                      :shift? (.-shiftKey e)}))))))
-
 
 (defn editor-on-click!
   [id]
