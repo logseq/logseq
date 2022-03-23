@@ -71,7 +71,7 @@
      [settings-open?])
 
     [:div
-     {:class    (str theme "-theme")
+     {:class    (util/classnames [(str theme "-theme") {:white-theme (= "light" theme)}])
       :on-click on-click}
      child
 
