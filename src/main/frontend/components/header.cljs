@@ -24,8 +24,7 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [cljs.core.async :as a]
-            [cljs.spec.alpha :as s]))
+            [cljs.core.async :as a]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"

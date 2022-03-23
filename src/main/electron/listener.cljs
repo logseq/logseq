@@ -12,8 +12,7 @@
             [frontend.ui :as ui]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user]
-            [frontend.db.persist :as db-persist]))
+            [frontend.handler.user :as user]))
 
 (defn persist-dbs!
   []
