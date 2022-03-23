@@ -450,22 +450,76 @@
          nil)
        react))))
 
-;; Use datoms index and provide limit support
+(defn- collapsed-and-has-children?
+  [block]
+  (and (:block/collapsed? block) (has-children? (:block/uuid block))))
+
+(defn get-by-parent-&-left
+  [conn parent-id left-id]
+  (when (and parent-id left-id)
+    (let [lefts (:block/_left (d/entity @conn left-id))
+          children (:block/_parent (d/entity @conn parent-id))
+          ids (set/intersection lefts children)
+          id (:db/id (first ids))]
+      (when id (d/pull @conn '[*] id)))))
+
+(defn- get-paginated-blocks
+  "Result should be sorted."
+  [parent-id {:keys [limit]}]
+  (when-let [parent (db-utils/entity parent-id)]
+    (let [conn (conn/get-conn false)
+          parent-id (:db/id parent)]
+      (loop [block parent
+             next-siblings '()
+             result []]
+        (let [block-id (:db/id block)
+              block-parent-id (:db/id (:block/parent block))
+              next-sibling (get-by-parent-&-left conn block-parent-id block-id)
+              next-block (if (collapsed-and-has-children? block) ; skips children
+                           next-sibling
+                           (let [child-block (get-by-parent-&-left conn block-id block-id)]
+                             (or child-block next-sibling)))
+              next-siblings (if next-sibling
+                              (cons next-sibling next-siblings)
+                              next-siblings)]
+          (cond
+            (and limit (>= (count result) limit))
+            result
+
+            (and (nil? next-block) (empty? next-siblings))
+            result
+
+            next-block
+            (let [next-siblings (if (= next-block (first next-siblings))
+                                  (rest next-siblings)
+                                  next-siblings)]
+              (recur next-block
+                    next-siblings
+                    (conj result next-block)))
+
+            (and (nil? next-block) (seq next-siblings))
+            (recur (first next-siblings)
+                   (rest next-siblings)
+                   (conj result (first next-siblings)))
+
+            :else
+            result))))))
+
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
    (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys]
+  ([repo-url page {:keys [use-cache? pull-keys limit start-block]
                    :or {use-cache? true
-                        pull-keys '[*]}}]
+                        pull-keys '[*]
+                        limit 50}}]
    (when page
      (let [page-entity (if (integer? page)
                          (db-utils/entity repo-url page)
                          (let [page (util/page-name-sanity-lc (string/trim page))]
                            (db-utils/entity repo-url [:block/name page])))
            page-id (:db/id page-entity)
-           db (conn/get-conn repo-url)
            bare-page-map {:db/id page-id
                           :block/name (:block/name page-entity)
                           :block/original-name (:block/original-name page-entity)
@@ -475,28 +529,10 @@
           (react/q repo-url [:frontend.db.react/page-blocks page-id]
             {:use-cache? use-cache?
              :query-fn (fn [db tx-report result]
-                         (let [[tx-id->block cached-id->block] (when (and tx-report result)
-                                                                 (let [tx-block-ids (distinct (mapv :e (:tx-data tx-report)))
-                                                                       blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
-                                                                                   (remove nil?))]
-                                                                   [(zipmap (mapv :db/id blocks) blocks)
-                                                                    (zipmap (mapv :db/id @result) @result)]))
-                               datoms (d/datoms db :avet :block/page page-id)
-                               tx-merged-blocks (when (and tx-id->block result)
-                                                  (let [result (reduce (fn [acc datom]
-                                                                         (let [id (:e datom)
-                                                                               block (or (get tx-id->block id)
-                                                                                         (get cached-id->block id))]
-                                                                           (if block
-                                                                             (conj! acc block)
-                                                                             (reduced nil))))
-                                                                       (transient [])
-                                                                       datoms)]
-                                                    (when result (persistent! result))))
-                               blocks (or
-                                       tx-merged-blocks
-                                       (let [block-eids (mapv :e datoms)]
-                                         (db-utils/pull-many repo-url pull-keys block-eids)))]
+                         (let [blocks (get-paginated-blocks page-id {:limit limit
+                                                                     :start-block start-block})
+                               block-eids (map :db/id blocks)
+                               blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))

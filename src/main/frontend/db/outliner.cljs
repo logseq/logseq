@@ -8,14 +8,7 @@
     (d/pull @conn '[*] id)
     (catch js/Error _e nil)))
 
-(defn get-by-parent-&-left
-  [conn parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity @conn left-id))
-          children (:block/_parent (d/entity @conn parent-id))
-          ids (set/intersection lefts children)
-          id (:db/id (first ids))]
-      (when id (d/pull @conn '[*] id)))))
+
 
 ;; key [:block/children parent-id]
 
@@ -34,11 +27,3 @@
   (mapv (fn [id-or-look-ref]
          [:db.fn/retractEntity id-or-look-ref])
     ids-or-look-refs))
-
-(defn get-journals
-  [conn]
-  (let [r (d/q '[:find (pull ?a [*])
-                 :where
-                 [?a :block/journal? true]]
-               @conn)]
-    (flatten r)))

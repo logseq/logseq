@@ -32,11 +32,11 @@
 (defn- get-by-parent-&-left
   [parent-id left-id]
   (some->
-    (db-outliner/get-by-parent-&-left
-      (conn/get-conn false)
-      [:block/uuid parent-id]
-      [:block/uuid left-id])
-    (block)))
+   (db-model/get-by-parent-&-left
+    (conn/get-conn false)
+    [:block/uuid parent-id]
+    [:block/uuid left-id])
+   (block)))
 
 (defn- block-with-timestamps
   [block]

@@ -50,8 +50,7 @@
                          (model/sort-blocks root-block {}))]
           (cons root-block blocks)))
       (when-let [page (db/pull [:block/name (util/safe-page-name-sanity-lc page-name)])]
-        (-> (db/get-page-blocks repo page-name)
-            (model/sort-blocks page {}))))))
+        (db/get-page-blocks repo page-name)))))
 
 (defn- open-first-block!
   [state]
