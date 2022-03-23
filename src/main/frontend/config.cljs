@@ -82,6 +82,10 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
+(def audio-formats #{:mp3 :ogg :mpeg :wav})
+
+(def media-formats (set/union (img-formats) audio-formats))
+
 (def html-render-formats
   #{:adoc :asciidoc})
 

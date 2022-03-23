@@ -765,7 +765,7 @@
 
 (defn- show-link?
   [config metadata s full-text]
-  (let [img-formats (set (map name (config/img-formats)))
+  (let [media-formats (set (map name config/media-formats))
         metadata-show (:show (safe-read-string metadata))
         format (get-in config [:block :block/format])]
     (or
@@ -776,7 +776,7 @@
         (nil? metadata-show)
         (or
          (config/local-asset? s)
-         (text/image-link? img-formats s)))
+         (text/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
      ;; markdown
@@ -785,7 +785,7 @@
      ;; image http link
      (and (or (string/starts-with? full-text "http://")
               (string/starts-with? full-text "https://"))
-          (text/image-link? img-formats s)))))
+          (text/media-link? media-formats s)))))
 
 (defn- relative-assets-path->absolute-path
   [path]
@@ -815,6 +815,31 @@
     [:span.text-sm.mr-1 "Namespace "]
     (page-cp config {:block/name namespace})]
    (namespace-hierarchy-aux config namespace children)])
+
+(rum/defc audio-cp
+  [src]
+  [:audio {:src src
+           :controls true}])
+
+(defn link-cp
+  [config url s label metadata full_text]
+  (let [ext (util/get-file-ext s)]
+    (cond
+      (contains? (set (map name config/audio-formats)) ext)
+      (audio-cp s)
+
+      (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
+      (image-link config url s label metadata full_text)
+
+      (util/electron?)
+      (if (= (util/get-file-ext s) "pdf")
+        [:a.asset-ref.is-pdf
+         {:href "javascript:void(0);"
+          :on-mouse-down (fn [_event]
+                           (when-let [current (pdf-assets/inflate-asset s)]
+                             (state/set-state! :pdf/current current)))}
+         (get-label-text label)]
+        (asset-reference config label s)))))
 
 (defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
@@ -924,14 +949,8 @@
                       :target "_blank"}
                   (map-inline config label))
 
-          ;; image
-          (and (show-link? config metadata s full_text)
-               (not (contains? #{"pdf" "mp4" "ogg" "webm" "mov"} (util/get-file-ext s))))
-          (image-link config url s label metadata full_text)
-
-          (and (util/electron?)
-               (show-link? config metadata s full_text))
-          (asset-reference config label s)
+          (show-link? config metadata s full_text)
+          (link-cp config url s label metadata full_text)
 
           (util/electron?)
           (let [path (cond
@@ -974,16 +993,8 @@
                 (block-reference config (:link path) label)))
 
             (= protocol "file")
-            (cond
-              (and (show-link? config metadata href full_text)
-                   (not (contains? #{"pdf" "mp4" "ogg" "webm" "mov"} (util/get-file-ext href))))
-              (image-link config url href label metadata full_text)
-
-              (and (util/electron?)
-                   (show-link? config metadata href full_text))
-              (asset-reference config label href)
-
-              :else
+            (if (show-link? config metadata href full_text)
+              (link-cp config url href label metadata full_text)
               (let [redirect-page-name (when (string? path) (text/get-page-name path))
                     config (assoc config :redirect-page-name redirect-page-name)
                     label-text (get-label-text label)
@@ -1012,22 +1023,9 @@
                        (assoc :title title))
                      (map-inline config label))))))
 
-            ;; image
-            (and (show-link? config metadata href full_text)
-                 (not (contains? #{"pdf"} (util/get-file-ext href))))
-            (image-link config url href label metadata full_text)
-
-            ;; pdf link
-            (and
-             (util/electron?)
-             (= (util/get-file-ext href) "pdf")
-             (show-link? config metadata href full_text))
-            [:a.asset-ref.is-pdf
-             {:href "javascript:void(0);"
-              :on-mouse-down (fn [_event]
-                               (when-let [current (pdf-assets/inflate-asset href)]
-                                 (state/set-state! :pdf/current current)))}
-             (get-label-text label)]
+            
+            (show-link? config metadata href full_text)
+            (link-cp config url href label metadata full_text)
 
             (= protocol "ar")
             (->elem

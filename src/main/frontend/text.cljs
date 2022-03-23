@@ -229,9 +229,9 @@
     (util/format "[%s]"
                  (string/join ", " items))))
 
-(defn image-link?
-  [img-formats s]
-  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+(defn media-link?
+  [media-formats s]
+  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
 (defn namespace-page?
   [p]
