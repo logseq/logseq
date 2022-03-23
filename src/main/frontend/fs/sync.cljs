@@ -181,12 +181,10 @@
 (defprotocol IStopped?
   (-stopped? [this]))
                                         ;from-path, to-path is relative path
-(deftype FileTxn [from-path to-path updated deleted txid]
+(deftype FileTxn [from-path to-path updated? deleted? txid]
   Object
   (renamed? [_]
     (not= from-path to-path))
-  (updated? [_] updated)
-  (deleted? [_] deleted)
 
   IRelativePath
   (-relative-path [_] (remove-user-graph-uuid-prefix to-path))
@@ -195,10 +193,10 @@
   (-equiv [_ ^FileTxn other]
     (and (= from-path (.-from-path other))
          (= to-path (.-to-path other))
-         (= updated (.-updated other))
-         (= deleted (.-deleted other))))
+         (= updated? (.-updated? other))
+         (= deleted? (.-deleted? other))))
   IHash
-  (-hash [_] (hash [from-path to-path updated deleted]))
+  (-hash [_] (hash [from-path to-path updated? deleted?]))
 
   IComparable
   (-compare [_ ^FileTxn other]
@@ -207,7 +205,7 @@
   IPrintWithWriter
   (-pr-writer [coll w _opts]
     (write-all w "#FileTxn[\"" from-path "\" -> \"" to-path
-               "\" (updated? " updated ", renamed? " (.renamed? coll) ", deleted? " (.deleted? coll)
+               "\" (updated? " updated? ", renamed? " (.renamed? coll) ", deleted? " deleted?
                ", txid " txid ")]")))
 (defn- diff->filetxns
   "convert diff(`get-diff`) to `FileTxn`"
@@ -236,7 +234,7 @@
       ([result] (rf result))
       ([result ^FileTxn filetxn]
        (if (and
-            (or (.updated? filetxn) (.deleted? filetxn))
+            (or (.-updated? filetxn) (.deleted? filetxn))
             (contains? @seen-update&delete-filetxns filetxn))
          result
          (do (vswap! seen-update&delete-filetxns conj filetxn)
@@ -267,9 +265,9 @@
   for delete and rename type, only one filetxn in each partition."
   [n]
   (comp
-   (partition-by #(.updated? ^FileTxn %))
+   (partition-by #(.-updated? ^FileTxn %))
    (map (fn [ts]
-          (if (some-> (first ts) (.updated?))
+          (if (some-> (first ts) (.-updated?))
             (partition-all n ts)
             (map list ts))))
    cat))
@@ -579,7 +577,7 @@
                          (relative-path (.-from-path filetxn))
                          (relative-path (.-to-path filetxn))))
 
-    (.updated? (first filetxns))
+    (.-updated? (first filetxns))
     (update-local-files rsapi graph-uuid base-path (map relative-path filetxns))
 
     (.deleted? (first filetxns))
