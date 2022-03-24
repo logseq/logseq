@@ -20,6 +20,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -640,3 +641,7 @@
         (get @state/state (keyword path))
         @state/state)
       (bean/->js)))
+
+(defn ^:export __re_render_root
+  []
+  (ui-handler/re-render-root!))
