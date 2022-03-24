@@ -58,7 +58,6 @@
 
 ;; FIXME: should support multiple images concurrently uploading
 
-
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
@@ -182,7 +181,6 @@
               pos (or pos (diff/find-position markup range))]
           (cursor/move-cursor-to node pos)
           (state/set-state! :editor/pos nil))))))
-
 
 (defn highlight-block!
   [block-uuid]
@@ -789,33 +787,18 @@
       (state/set-edit-content! input-id new-content)
       (save-block-if-changed! block new-content))))
 
-(defn set-marker
-  [{:block/keys [marker content format] :as block} new-marker]
-  (let [old-header-marker (when (not= format :org)
-                            (re-find (marker/header-marker-pattern true marker) content))
-        new-header-marker (when (not-empty old-header-marker)
-                            (string/replace old-header-marker marker new-marker))
-        marker (or old-header-marker marker)
-        new-marker (or new-header-marker new-marker)
-        new-content (->
-                     (if (not-empty marker)
-                       (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                       (str new-marker " " content))
-                     (string/triml))]
-    (save-block-if-changed! block new-content)))
-
 (defn- rehighlight-selected-nodes
   ([]
    (rehighlight-selected-nodes (state/get-selection-blocks)))
   ([blocks]
    (let [blocks (doall
                  (map
-                   (fn [block]
-                     (when-let [id (gobj/get block "id")]
-                       (when-let [block (gdom/getElement id)]
-                         (dom/add-class! block "selected noselect")
-                         block)))
-                   blocks))]
+                  (fn [block]
+                    (when-let [id (gobj/get block "id")]
+                      (when-let [block (gdom/getElement id)]
+                        (dom/add-class! block "selected noselect")
+                        block)))
+                  blocks))]
      (state/set-selection-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
@@ -827,18 +810,24 @@
                  blocks)
          distinct)))
 
+(defn set-marker
+  "The set-marker will set a new marker on the selected block.
+  if the `new-marker` is nil, it will generate it automatically."
+  ([block]
+   (set-marker block nil))
+  ([{:block/keys [marker content format] :as block} new-marker]
+   (let [[new-content _] (marker/cycle-marker content marker new-marker format (state/get-preferred-workflow))]
+     (save-block-if-changed! block new-content))))
+
 (defn cycle-todos!
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [workflow (state/get-preferred-workflow)
-          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
       (doseq [id ids]
-        (let [block (db/pull [:block/uuid id])
-              new-marker (marker/cycle-marker-state workflow (:block/marker block))
-              new-marker (if new-marker new-marker "")]
-          (set-marker block new-marker)))
+        (let [block (db/pull [:block/uuid id])]
+          (set-marker block)))
       (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
 
 (defn cycle-todo!
@@ -852,8 +841,7 @@
             content (state/get-edit-content)
             format (or (db/get-page-format (state/get-current-page))
                        (state/get-preferred-format))
-            [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
-            new-content (string/triml new-content)
+            [new-content marker] (marker/cycle-marker content nil nil format (state/get-preferred-workflow))
             new-pos (commands/compute-pos-delta-when-change-marker
                      content marker (cursor/pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
@@ -1072,7 +1060,7 @@
                    (let [block (db/entity [:block/uuid block-id])]
                      (when-not (:block/pre-block? block)
                        [block-id :id (str block-id)])))
-              block-ids)]
+                 block-ids)]
     (batch-set-block-property! col)))
 
 (defn copy-block-ref!
@@ -1169,7 +1157,7 @@
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
                                            :level (int level)}))
-                                  selected-blocks))
+                                     selected-blocks))
                       (remove nil?))
           first-block (first blocks)
           first-root-level-index (ffirst
@@ -1688,7 +1676,6 @@
    "+" "+"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
-
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
@@ -1984,10 +1971,10 @@
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
     (when-not
-        (and
-         (= (:db/id (:block/parent block))
-            (:db/id (:block/page block)))            ; don't auto-save for page's properties block
-         (get-in block [:block/properties :title]))
+     (and
+      (= (:db/id (:block/parent block))
+         (:db/id (:block/page block)))            ; don't auto-save for page's properties block
+      (get-in block [:block/properties :title]))
       (reset! *auto-save-timeout
               (js/setTimeout
                (fn []
@@ -2119,8 +2106,8 @@
                      :block/page (select-keys page [:db/id])
                      :block/format format
                      :block/properties (apply dissoc (:block/properties block)
-                                         (concat [:id :custom_id :custom-id]
-                                                 exclude-properties))
+                                              (concat [:id :custom_id :custom-id]
+                                                      exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
                      :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
@@ -2732,8 +2719,7 @@
                      (util/nth-safe value (dec current-pos)))
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
-        block-id (:block/uuid (state/get-edit-block))
-        page (state/get-current-page)
+        block (state/get-edit-block)
         repo (state/get-current-repo)]
     (mark-last-input-time! repo)
     (cond
@@ -2744,14 +2730,12 @@
           (js/document.execCommand "copy"))
         (delete-and-update input selected-start selected-end))
 
-      (and (zero? current-pos)
-           ;; not the top block in a block page
-           (not (and page
-                     (util/uuid-string? page)
-                     (= (medley/uuid page) block-id))))
+      (zero? current-pos)
       (do
         (util/stop e)
-        (delete-block! repo false))
+        ;; not the top block in a page or journal
+        (when-not (= (:block/left block) (:block/page block))
+          (delete-block! repo false)))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
@@ -3039,7 +3023,6 @@
                                      :code code
                                      :key k
                                      :shift? (.-shiftKey e)}))))))
-
 
 (defn editor-on-click!
   [id]

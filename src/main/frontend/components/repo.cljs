@@ -12,7 +12,6 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -206,7 +205,7 @@
                          :options {:class "ml-1"
                                    :on-click (fn [e]
                                                (if (gobj/get e "shiftKey")
-                                                 (ui-handler/open-new-window! e url)
+                                                 (state/pub-event! [:graph/open-new-window url])
                                                  (state/pub-event! [:graph/switch url])))}}))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
@@ -254,7 +253,7 @@
                                                       page-handler/create-today-journal!)))]])))})}
         new-window-link (when (util/electron?)
                           {:title        (t :open-new-window)
-                           :options {:on-click ui-handler/open-new-window!}})]
+                           :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})

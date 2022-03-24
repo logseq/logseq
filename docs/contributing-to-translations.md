@@ -14,11 +14,11 @@ In order to run the commands in this doc, you will need to install
 ## Where to Contribute
 
 Language translations are in two files,
-[frontend/dicts.cljs](https://github.com/logseq/logseq/blob/feature/lang-tasks-and-ci/src/main/frontend/dicts.cljs)
+[frontend/dicts.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljs)
 and
-[shortcut/dict.cljs](https://github.com/logseq/logseq/blob/feature/lang-tasks-and-ci/src/main/frontend/modules/shortcut/dict.cljs).
+[shortcut/dict.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dict.cljs).
 When translating `shortcut/dict.cljs` you will want to refer to
-https://github.com/logseq/logseq/blob/feature/lang-tasks-and-ci/src/main/frontend/modules/shortcut/config.cljs
+https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/config.cljs
 for the English equivalent.
 
 ## Language Overview

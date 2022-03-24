@@ -17,7 +17,6 @@
             [frontend.util :as util :refer [react]]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]))
 
 ;; TODO: extract to specific models and move data transform logic to the
@@ -403,6 +402,11 @@
                      f))
                  form))
 
+(defn has-children?
+  ([block-id]
+   (has-children? (state/get-current-repo) block-id))
+  ([repo block-id]
+   (some? (:block/_parent (db-utils/entity repo [:block/uuid block-id])))))
 
 ;; TODO: both zipmap and map lookup are slow in cljs
 ;; zipmap 20k blocks takes 30ms on my M1 Air.
@@ -424,8 +428,12 @@
               next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
               next-siblings (if (and next-sibling child-block)
                               (cons next-sibling next-siblings)
-                              next-siblings)]
-          (if-let [node (or child-block next-sibling)]
+                              next-siblings)
+              collapsed? (:block/collapsed? node)]
+          (if-let [node (and
+                         (or (not (and collapsed? (has-children? (:block/uuid node))))
+                             (= (:db/id node) (:db/id parent)))
+                         (or child-block next-sibling))]
             (recur node next-siblings (conj result node))
             (if-let [sibling (first next-siblings)]
               (recur sibling (rest next-siblings) (conj result sibling))
@@ -488,7 +496,7 @@
                                blocks (or
                                        tx-merged-blocks
                                        (let [block-eids (mapv :e datoms)]
-                                          (db-utils/pull-many repo-url pull-keys block-eids)))]
+                                         (db-utils/pull-many repo-url pull-keys block-eids)))]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
             nil)
           react))))))
@@ -887,16 +895,6 @@
                                db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-(defn has-children?
-  ([block-id]
-   (has-children? (state/get-current-repo) block-id))
-  ([repo block-id]
-   (let [db (conn/get-conn repo)]
-     (when-let [block (get-block-by-uuid block-id)]
-       ;; perf: early stop
-       (let [result (d/datoms db :avet :block/parent (:db/id block))]
-         (boolean (seq result)))))))
-
 (defn get-page-referenced-blocks-no-cache
   [page-id]
   (when-let [repo (state/get-current-repo)]
@@ -1041,7 +1039,6 @@
             filter-fn   (fn [datom]
                           (some (fn [p]
                                   (re-find p (->> (:v datom)
-                                                  (property/remove-built-in-properties (:block/format page))
                                                   (drawer/remove-logbook))))
                                 patterns))]
         (->> (react/q repo [:frontend.db.react/page-unlinked-refs page-id]

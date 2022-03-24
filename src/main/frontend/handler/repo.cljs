@@ -26,7 +26,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
-            [frontend.mobile.util :as mobile-util]
             [frontend.db.persist :as db-persist]
             [electron.ipc :as ipc]
             [clojure.set :as set]))
@@ -556,6 +555,21 @@
              (ui-handler/re-render-root!)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
+(defn restore-and-setup-repo!
+  "Restore the db of a graph from the persisted data, and setup.
+   Create a new conn, or replace the conn in state with a new one.
+   me: optional, identity data, can be retrieved from `(state/get-me)` or `nil`"
+  ([repo]
+   (restore-and-setup-repo! repo (state/get-me)))
+  ([repo me]
+   (p/let [_ (state/set-db-restoring! true)
+           _ (db/restore-graph! repo me)]
+     (file-handler/restore-config! repo false)
+    ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+     (db/listen-and-persist! repo)
+     (ui-handler/add-style-if-exists!)
+     (state/set-db-restoring! false))))
+
 (defn periodically-pull-current-repo
   []
   (js/setInterval
@@ -630,12 +644,9 @@
   [nfs-rebuild-index! ok-handler]
   (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)
-          repo-dir (config/get-repo-dir repo)]
+    (let [local? (config/local-db? repo)]
       (if local?
-        (p/let [_ (when (mobile-util/native-ios?)
-                    (mobile-util/sync-icloud-repo repo-dir))
-                _ (metadata-handler/set-pages-metadata! repo)]
+        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
@@ -648,3 +659,41 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
+
+(defn persist-db!
+  ([]
+   (persist-db! {}))
+  ([handlers]
+   (persist-db! (state/get-current-repo) handlers))
+  ([repo {:keys [before on-success on-error]}]
+   (->
+    (p/do!
+     (when before
+       (before))
+     (metadata-handler/set-pages-metadata! repo)
+     (db/persist! repo)
+     (when on-success
+       (on-success)))
+    (p/catch (fn [error]
+               (js/console.error error)
+               (when on-error
+                 (on-error)))))))
+
+(defn persist-otherwindow-db!
+  "Only works for electron
+   Call backend to handle persisting a specific db on other window
+   Skip persisting if no other windows is open (controlled by electron)
+     step 1. [In HERE]  a window         --persistGraph----->   electron  
+     step 2.            electron         --persistGraph----->   window holds the graph  
+     step 3.            window w/ graph  --persistGraphDone->   electron  
+     step 4. [In HERE]  electron         --persistGraphDone->   all windows"
+  [graph]
+  (p/create (fn [resolve _]
+              (js/window.apis.on "persistGraphDone"
+                                 #(let [repo (bean/->clj %)]
+                                    (prn "received persistGraphDone" repo)
+                                    (when (= graph repo)
+                                       ;; js/window.apis.once doesn't work
+                                      (js/window.apis.removeAllListeners "persistGraphDone")
+                                      (resolve repo))))
+              (ipc/ipc "persistGraph" graph))))
