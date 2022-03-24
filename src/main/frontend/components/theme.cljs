@@ -71,7 +71,9 @@
      [settings-open?])
 
     [:div
-     {:class    (util/classnames [(str theme "-theme") {:white-theme (= "light" theme)}])
+     {:class    (util/classnames
+                 [(str theme "-theme")
+                  {:white-theme (= "light" theme)}]) ; The white-theme is for backward compatibility.
       :on-click on-click}
      child
 
