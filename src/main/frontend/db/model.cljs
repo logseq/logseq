@@ -463,13 +463,30 @@
           id (:db/id (first ids))]
       (when id (d/pull @conn '[*] id)))))
 
+(defn- get-next-outdented-block
+  "Get the next outdented block of the block that has the `id`.
+  e.g.
+  - a
+    - b
+      - c
+  - d
+
+  The next outdented block of `c` is `d`."
+  [id]
+  (when-let [block (db-utils/entity id)]
+    (let [parent (:block/parent block)]
+      (if-let [parent-sibling (get-by-parent-&-left (conn/get-conn false)
+                                                    (:db/id (:block/parent parent))
+                                                    (:db/id parent))]
+       parent-sibling
+       (get-next-outdented-block (:db/id parent))))))
+
 (defn- get-paginated-blocks
   "Result should be sorted."
-  [parent-id {:keys [limit]}]
-  (when-let [parent (db-utils/entity parent-id)]
-    (let [conn (conn/get-conn false)
-          parent-id (:db/id parent)]
-      (loop [block parent
+  [start-id {:keys [limit]}]
+  (when-let [start (db-utils/entity start-id)]
+    (let [conn (conn/get-conn false)]
+      (loop [block start
              next-siblings '()
              result []]
         (let [block-id (:db/id block)
@@ -478,7 +495,9 @@
               next-block (if (collapsed-and-has-children? block) ; skips children
                            next-sibling
                            (let [child-block (get-by-parent-&-left conn block-id block-id)]
-                             (or child-block next-sibling)))
+                             (or child-block
+                                 next-sibling
+                                 (get-next-outdented-block block-id))))
               next-siblings (if next-sibling
                               (cons next-sibling next-siblings)
                               next-siblings)]
@@ -510,7 +529,7 @@
    (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
    (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys limit start-block]
+  ([repo-url page {:keys [use-cache? pull-keys start-block limit]
                    :or {use-cache? true
                         pull-keys '[*]
                         limit 50}}]
@@ -529,8 +548,7 @@
           (react/q repo-url [:frontend.db.react/page-blocks page-id]
             {:use-cache? use-cache?
              :query-fn (fn [db tx-report result]
-                         (let [blocks (get-paginated-blocks page-id {:limit limit
-                                                                     :start-block start-block})
+                         (let [blocks (get-paginated-blocks page-id {:limit limit})
                                block-eids (map :db/id blocks)
                                blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                            (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
@@ -1501,7 +1519,17 @@
 (defn get-block-last-direct-child
   [db-id]
   (when-let [block (db-utils/entity db-id)]
-    (let [children (:block/_parent block)
-          all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-          all-ids (set (map :db/id children))]
-      (first (set/difference all-ids all-left)))))
+    (when-not (collapsed-and-has-children? block)
+      (let [children (:block/_parent block)
+            all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
+            all-ids (set (map :db/id children))]
+        (first (set/difference all-ids all-left))))))
+
+(defn get-block-last-child
+  [db-id]
+  (let [last-child (get-block-last-direct-child db-id)]
+    (loop [prev last-child
+           last-child last-child]
+      (if last-child
+        (recur last-child (get-block-last-direct-child last-child))
+        prev))))

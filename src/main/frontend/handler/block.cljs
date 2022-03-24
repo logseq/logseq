@@ -2,13 +2,16 @@
   (:require [clojure.set :as set]
             [clojure.walk :as walk]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.db.react :as db-react]
+            [frontend.state :as state]
             [frontend.format.block :as block]))
 
 ;; lazy loading
 
-(def initial-blocks-length 200)
+(def initial-blocks-length 100)
 
-(def step-loading-blocks 50)
+(def step-loading-blocks 30)
 
 ;;  Fns
 
@@ -95,3 +98,14 @@
 (defn get-deadline-ast
   [block]
   (get-timestamp block "Deadline"))
+
+(defn load-more!
+  [block? db-id start-id]
+  (let [repo (state/get-current-repo)
+        query-k (if block?
+                  [repo :frontend.db.react/block-and-children (:block/uuid (db/pull db-id))]
+                  [repo :frontend.db.react/page-blocks db-id])
+        more-data (db-model/get-paginated-blocks start-id {:limit step-loading-blocks})]
+    (db-react/swap-new-result! query-k
+                               (fn [result]
+                                 (concat result more-data)))))

@@ -77,6 +77,11 @@
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
 
+(defn swap-new-result!
+  [k f]
+  (when-let [result-atom (get-in @query-state [k :result])]
+    (swap! result-atom f)))
+
 (defn kv
   [key value]
   {:db/id -1

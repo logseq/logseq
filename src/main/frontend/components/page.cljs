@@ -117,8 +117,12 @@
       (if (empty? page-blocks)
         (dummy-block page-name)
         (let [document-mode? (state/sub :document/mode?)
+              block-entity (db/entity (if block-id
+                                       [:block/uuid block-id]
+                                       [:block/name page-name]))
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
+                              :db/id (:db/id block-entity)
                               :block? block?
                               :editor-box editor/box
                               :page page

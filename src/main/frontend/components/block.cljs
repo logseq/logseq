@@ -2883,16 +2883,25 @@
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
-        [segment idx] (get-segment config
-                                   flat-blocks
-                                   @*last-idx
-                                   blocks->vec-tree)
-        bottom-reached (fn [] (reset! *last-idx idx))
-        has-more? (>= (count flat-blocks) (inc idx))]
+        db-id (:db/id config)
+        [blocks idx] (get-segment config
+                                  flat-blocks
+                                  @*last-idx
+                                  blocks->vec-tree)
+        last-block-id (:db/id (last flat-blocks))
+        bottom-reached (fn []
+                         (if db-id
+                           (block-handler/load-more! (:block? config)
+                                                     db-id
+                                                     last-block-id)
+                           (reset! *last-idx idx)))
+        has-more? (if db-id
+                    (not= last-block-id (model/get-block-last-child db-id))
+                    (>= (count flat-blocks) (inc idx)))]
     [:div#lazy-blocks
      (ui/infinite-list
       "main-content-container"
-      (block-list config segment)
+      (block-list config blocks)
       {:on-load bottom-reached
        :bottom-reached (fn []
                          (when-let [node (gdom/getElement "lazy-blocks")]
