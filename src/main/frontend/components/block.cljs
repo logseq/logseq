@@ -247,6 +247,10 @@
 
          (svg/maximize)]]]))))
 
+(rum/defc audio-cp [src]
+  [:audio {:src src
+           :controls true}])
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
   [state config title href metadata full_text]
@@ -255,9 +259,12 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-
+    
     (when @src
-      (resizable-image config title @src metadata full_text true))))
+      (let [ext (util/get-file-ext @src)]
+        (if (contains? (set (map name config/audio-formats)) ext)
+          (audio-cp @src)
+          (resizable-image config title @src metadata full_text true))))))
 
 (defn ar-url->http-url
   [href]
@@ -795,17 +802,34 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
-(rum/defc audio-link-cp
-  [src]
-  [:audio {:src src
-           :controls true}])
+(rum/defc audio-link
+  [config url href _label metadata full_text]
+  (if (and (config/local-asset? href)
+           (config/local-db? (state/get-current-repo)))
+    (asset-link config nil href metadata full_text)
+    (let [href (cond
+                 (util/starts-with? href "http")
+                 href
 
-(defn- media-link-cp
+                 (util/starts-with? href "ar")
+                 (ar-url->http-url href)
+
+                 config/publishing?
+                 (subs href 1)
+
+                 (= "Embed_data" (first url))
+                 href
+
+                 :else
+                 (get-file-absolute-path config href))]
+      (audio-cp href))))
+
+(defn- media-link
   [config url s label metadata full_text]
   (let [ext (util/get-file-ext s)]
     (cond
       (contains? (set (map name config/audio-formats)) ext)
-      (audio-link-cp s)
+      (audio-link config url s label metadata full_text)
 
       (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
       (image-link config url s label metadata full_text)
@@ -848,7 +872,7 @@
             (map-inline config label))
 
     (show-link? config metadata s full_text)
-    (media-link-cp config url s label metadata full_text)
+    (media-link config url s label metadata full_text)
 
     (util/electron?)
     (let [path (cond
@@ -924,7 +948,7 @@
 
           (= protocol "file")
           (if (show-link? config metadata href full_text)
-            (media-link-cp config url href label metadata full_text)
+            (media-link config url href label metadata full_text)
             (let [redirect-page-name (when (string? path) (text/get-page-name path))
                   config (assoc config :redirect-page-name redirect-page-name)
                   label-text (get-label-text label)
@@ -951,7 +975,7 @@
                    (map-inline config label))))))
 
           (show-link? config metadata href full_text)
-          (media-link-cp config url href label metadata full_text)
+          (media-link config url href label metadata full_text)
 
           (= protocol "ar")
           (->elem
