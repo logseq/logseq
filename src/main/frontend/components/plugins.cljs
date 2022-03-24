@@ -316,10 +316,12 @@
    [:input.form-input.is-small
     {:placeholder "Search plugins"
      :ref         *search-ref
+     :auto-focus  true
      :on-key-down (fn [^js e]
                     (when (= 27 (.-keyCode e))
-                      (when-not (string/blank? search-key)
-                        (util/stop e)
+                      (util/stop e)
+                      (if (string/blank? search-key)
+                        (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
                         (reset! *search-key nil))))
      :on-change   #(let [^js target (.-target %)]
                      (reset! *search-key (util/trim-safe (.-value target))))
@@ -737,11 +739,6 @@
   (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
-
-    (rum/use-effect!
-      #(let [^js el (rum/deref *el-ref)]
-         (js/setTimeout (fn [] (.focus el)) 100))
-      [])
 
     [:div.cp__plugins-page
      {:ref       *el-ref
