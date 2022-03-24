@@ -73,7 +73,7 @@
     [:div
      {:class    (util/classnames
                  [(str theme "-theme")
-                  {:white-theme (= "light" theme)}]) ; The white-theme is for backward compatibility.
+                  {:white-theme (= "light" theme)}]) ; The white-theme is for backward compatibility. See: https://github.com/logseq/logseq/pull/4652.
       :on-click on-click}
      child
 
