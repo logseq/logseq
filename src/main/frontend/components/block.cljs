@@ -1806,6 +1806,7 @@
    (util/link? target)
    (util/time? target)
    (util/input? target)
+   (util/audio? target)
    (util/details-or-summary? target)
    (and (util/sup? target)
         (dom/has-class? target "fn"))
