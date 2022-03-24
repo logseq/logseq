@@ -552,6 +552,7 @@
          :pos pos}))))
 
 (defn insert-new-block!
+  "Won't save previous block content - remember to save!"
   ([state]
    (insert-new-block! state nil))
   ([_state block-value]
@@ -1268,6 +1269,7 @@
      (save-block-aux! block value {}))))
 
 (defn save-current-block!
+  "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
    (save-current-block! {}))
   ([{:keys [force? skip-properties?] :as opts}]
@@ -2053,6 +2055,7 @@
                 "END"
                 (do
                   (cursor/move-cursor-to-end input)
+                  (save-current-block!)
                   (insert-new-block! state))
                 ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
                 (if (property/property-key-exist? format content property-key)
@@ -2289,7 +2292,8 @@
             :else
             (profile
              "Insert block"
-             (insert-new-block! state))))))))
+             (do (save-current-block!)
+                 (insert-new-block! state)))))))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/doc-mode-enter-for-new-line?)
