@@ -44,13 +44,13 @@
 (defn- get-blocks
   [repo page-name block-id]
   (when page-name
-    (if block-id
-      (when-let [root-block (db/pull [:block/uuid block-id])]
-        (let [blocks (-> (db/sub-block-and-children repo block-id)
-                         (model/sort-blocks root-block {}))]
-          (cons root-block blocks)))
-      (when-let [page (db/pull [:block/name (util/safe-page-name-sanity-lc page-name)])]
-        (db/get-page-blocks repo page-name)))))
+    (let [root (if block-id
+                 (db/pull [:block/uuid block-id])
+                 (model/get-page page-name))
+          blocks (db/get-paginated-blocks repo (:db/id root))]
+      (if block-id
+        (cons root blocks)
+        blocks))))
 
 (defn- open-first-block!
   [state]

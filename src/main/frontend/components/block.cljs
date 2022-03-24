@@ -576,7 +576,7 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (db/sub-block-and-children (state/get-current-repo) id)]
+  (let [blocks (db/get-paginated-blocks (state/get-current-repo) id)]
     [:div.color-level.embed-block.bg-base-2
      {:style {:z-index 2}
       :on-double-click #(edit-parent-block % config)
@@ -605,7 +605,8 @@
                   page-name)
             (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
-       (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
+       (let [page (model/get-page page-name)
+             blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
          (blocks-container blocks (assoc config
                                          :id page-name
                                          :embed? true

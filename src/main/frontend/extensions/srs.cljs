@@ -509,7 +509,7 @@
 
 (rum/defc preview-cp
   [block-id]
-  (let [blocks-f (fn [] (db/sub-block-and-children (state/get-current-repo) block-id))]
+  (let [blocks-f (fn [] (db/get-paginated-blocks (state/get-current-repo) block-id))]
     (view-modal blocks-f {:preview? true} (atom 0))))
 
 (defn preview
