@@ -26,17 +26,20 @@
    :debug cfg/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]
-                 (when-let [[_ _ query-and-fragment]
-                            (re-matches #"file://.*?/(app/electron|static/index)\.html(.*)" (.. event -request -url))]
-                   (set! (.. event -request -url) (str "http://localhost/electron.html" query-and-fragment)))
-                 (doseq [value (.. event -exception -values)]
-                   (doseq [frame (.. value -stacktrace -frames)]
-                     (when (not-empty (.. frame -filename))
-                       (when-let [[_ filename]
-                                  (re-matches #"file://.*?/app/(js/.*\.js)" (.. frame -filename))]
-                         (set! (.. frame -filename) (str "/static/" filename))
-                         ;; NOTE: No idea of why there's a 2-line offset.
-                         (set! (.. frame -lineno) (- (.. frame -lineno) 2))))))
+                 (try
+                   (when-let [[_ _ query-and-fragment]
+                              (re-matches #"file://.*?/(app/electron|static/index)\.html(.*)" (.. event -request -url))]
+                     (set! (.. event -request -url) (str "http://localhost/electron.html" query-and-fragment)))
+                   (doseq [value (.. event -exception -values)]
+                     (doseq [frame (.. value -stacktrace -frames)]
+                       (when (not-empty (.. frame -filename))
+                         (when-let [[_ filename]
+                                    (re-matches #"file://.*?/app/(js/.*\.js)" (.. frame -filename))]
+                           (set! (.. frame -filename) (str "/static/" filename))
+                           ;; NOTE: No idea of why there's a 2-line offset.
+                           (set! (.. frame -lineno) (- (.. frame -lineno) 2))))))
+                   (catch :default e
+                     (js/console.error e)))
                  event)})
 
 (defn init []
