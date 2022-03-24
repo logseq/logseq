@@ -453,6 +453,11 @@
      (when-let [block (d/entity db [:block/uuid block-id])]
        (:block/parent block)))))
 
+(defn top-block?
+  [block]
+  (= (:db/id (:block/parent block))
+     (:db/id (:block/page block))))
+
 ;; non recursive query
 (defn get-block-parents
   ([repo block-id]
