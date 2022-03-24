@@ -702,10 +702,12 @@
          (util/format "((%s))" id)]))))
 
 (defn inline-text
-  [format v]
-  (when (string? v)
-    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-      [:div.inline.mr-1 (map-inline {} inline-list)])))
+  ([format v]
+   (inline-text {} format v))
+  ([config format v]
+   (when (string? v)
+     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -1680,7 +1682,7 @@
        (util/unquote-string v)
 
        :else
-       (inline-text (:block/format block) (str v)))]))
+       (inline-text config (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]
