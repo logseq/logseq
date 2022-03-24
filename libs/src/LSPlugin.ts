@@ -360,6 +360,10 @@ export interface IAppProxy {
   onPageHeadActionsSlotted: IUserSlotHook
   onRouteChanged: IUserHook<{ path: string, template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
+
+  // internal
+  _installPluginHook: (pid: string, hook: string) => void
+  _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 
 /**
@@ -581,6 +585,17 @@ export interface IDBProxy {
     txData: Array<IDatom>,
     txMeta?: { outlinerOp: string, [key: string]: any }
   }>
+
+  /**
+   * Subscribe a specific block changed event
+   */
+  onBlockChanged (
+    uuid: BlockUUID,
+    callback: (
+      block: BlockEntity,
+      txData: Array<IDatom>,
+      txMeta?: { outlinerOp: string, [key: string]: any }) => void
+  ): IUserOffHook
 }
 
 /**

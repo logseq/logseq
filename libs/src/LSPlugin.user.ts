@@ -22,7 +22,8 @@ import {
   IUserOffHook,
   IGitProxy,
   IUIProxy,
-  UserProxyTags
+  UserProxyTags, BlockUUID,
+  BlockEntity, IDatom
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -217,7 +218,32 @@ const editor: Partial<IEditorProxy> = {
   }
 }
 
-const db: Partial<IDBProxy> = {}
+const db: Partial<IDBProxy> = {
+  onBlockChanged (
+    this: LSPluginUser,
+    uuid: BlockUUID,
+    callback: (block: BlockEntity, txData: Array<IDatom>, txMeta?: { outlinerOp: string; [p: string]: any }) => void
+  ): IUserOffHook {
+    const pid = this.baseInfo.id
+    const hook = `hook:db:block:${uuid}`
+    const aBlockChange = (block: BlockEntity) => {
+      if (block.uuid !== uuid) {
+        return
+      }
+
+      callback(block, null, null)
+    }
+
+    this.caller.on(hook, aBlockChange)
+    this.App._installPluginHook(pid, hook)
+
+    return () => {
+      this.caller.off(hook, aBlockChange)
+      this.App._uninstallPluginHook(pid, hook)
+    }
+  }
+}
+
 const git: Partial<IGitProxy> = {}
 const ui: Partial<IUIProxy> = {}
 
@@ -472,7 +498,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
         return function (this: any, ...args: any) {
           if (origMethod) {
-            const ret = origMethod.apply(that, args)
+            const ret = origMethod.apply(that, args.concat(tag))
             if (ret !== PROXY_CONTINUE) return
           }
 
@@ -494,13 +520,10 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
               if (isOff) {
                 return () => {
                   caller.off(type, handler)
-
-                  // @ts-ignore
-                  that.App.uninstallPluginHook(pid, type)
+                  that.App._uninstallPluginHook(pid, type)
                 }
               } else {
-                // @ts-ignore
-                return that.App.installPluginHook(pid, type)
+                return that.App._installPluginHook(pid, type)
               }
             }
           }
