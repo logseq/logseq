@@ -710,6 +710,7 @@
    ^{:doc "Others"}
    [:pdf/previous-page
     :pdf/next-page
+    :command/toggle-favorite
     :command/run
     :command-palette/toggle
     :graph/open
