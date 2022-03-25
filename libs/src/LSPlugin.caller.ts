@@ -95,7 +95,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`[host (async) -> *user] ${this._debugTag}`, ns, type, payload)
+        debug(`[host (async) -> *user] ${this._debugTag} ns=${ns} type=${type}`, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)

@@ -225,13 +225,13 @@ const db: Partial<IDBProxy> = {
     callback: (block: BlockEntity, txData: Array<IDatom>, txMeta?: { outlinerOp: string; [p: string]: any }) => void
   ): IUserOffHook {
     const pid = this.baseInfo.id
-    const hook = `hook:db:block:${uuid}`
-    const aBlockChange = (block: BlockEntity) => {
+    const hook = `hook:db:${safeSnakeCase(`block:${uuid}`)}`
+    const aBlockChange = ({block, txData, txMeta}) => {
       if (block.uuid !== uuid) {
         return
       }
 
-      callback(block, null, null)
+      callback(block, txData, txMeta)
     }
 
     this.caller.on(hook, aBlockChange)

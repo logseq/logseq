@@ -437,6 +437,14 @@
   ([type payload] (hook-plugin-db type payload nil))
   ([type payload plugin-id] (hook-plugin :db type payload plugin-id)))
 
+(defn hook-plugin-block-changes
+  [{:keys [blocks tx-data tx-meta]}]
+
+  (doseq [b blocks
+          :let [tx-data' (group-by first tx-data)
+                type     (str "block:" (:block/uuid b))]]
+    (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
+
 (defn get-ls-dotdir-root
   []
   (ipc/ipc "getLogseqDotDirRoot"))
