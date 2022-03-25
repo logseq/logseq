@@ -343,8 +343,12 @@ jobs:
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
+      - name: Fetch deps and fix dugit arch for arm64
+        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+        working-directory: ./static
+
       - name: Build/Release Electron App for arm64
-        run: npx cross-env npm_config_arch=arm64 yarn install && yarn electron:make-macos-arm64
+        run: yarn electron:make-macos-arm64
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
