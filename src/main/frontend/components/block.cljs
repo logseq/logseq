@@ -1941,7 +1941,8 @@
                      (:db/id block)
                      :block-ref
                      {:block block}))}
-       block-refs-count])))
+       block-refs-count])
+    nil))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
