@@ -1268,7 +1268,7 @@
             nil))
 
         (and plugin-handler/lsp-enabled? (= name "renderer"))
-        (when-let [block-uuid (str (:block/uuid config))]
+        (when-let [block-uuid (not-empty (str (:block/uuid config)))]
           (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
         (get @macro/macros name)
