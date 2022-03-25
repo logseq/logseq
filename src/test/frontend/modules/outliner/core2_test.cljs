@@ -37,12 +37,18 @@
    {:data 13 :level 2}
    {:data 14 :level 3}])
 
+(def big-tree (map-indexed (fn [i m] (assoc m :data i)) (flatten (repeat 800 tree))))
+
 (defn- build-db-records
   [tree]
   (let [conn (d/create-conn {:block/next {:db/valueType :db.type/ref
                                           :db/unique :db.unique/value}
+                             :block/next-sibling {:db/valueType :db.type/ref
+                                                  :db/unique :db.unique/value}
                              :block/parent {:db/valueType :db.type/ref
                                             :db/index true}
+                             :block/page {:db/valueType :db.type/ref}
+                             :block/page+next {:db/tupleAttrs [:block/page :block/next]}
                              :data {:db/unique :db.unique/identity}})]
     (d/transact! conn [[:db/add 1 :page-block true]])
     (d/transact! conn (outliner-core/insert-nodes @conn tree 1 false))
@@ -52,7 +58,7 @@
   [db]
   (sequence
    (comp
-    (map #(select-keys % [:data :block/parent :db/id]))
+    (map #(select-keys % [:data :block/parent :db/id :block/next-sibling :block/page]))
     (map #(update % :block/parent :db/id)))
    (outliner-core/get-page-nodes db (d/entity db 1))))
 
@@ -70,7 +76,8 @@
                   (constantly "- ")
                   :data
                   (constantly " #")
-                  :db/id))
+                  :db/id
+                  #(some-> % :block/next-sibling :db/id ((fn [id] (str " ↓" id))))))
            (apply str)
            println)
       (recur (assoc parents (:db/id node) (inc (get parents (:db/id (:block/parent node)) -1))) tail))))
@@ -237,6 +244,21 @@
           (when tail
             (recur tail)))))))
 
+(defn- validate-nodes-next-sibling
+  "Validate every node's next-sibling is correct.
+  NODE is the first-node.
+  (validate-nodes-next-sibling db) = (validate-nodes-next-sibling db (get-next {:db/id 1}))"
+  ([db] (validate-nodes-next-sibling db (outliner-core/get-next db (d/entity db 1))))
+  ([db node]
+   (when node
+     ;; verify siblings have the same parent, print first node of siblings when failed
+     (assert (apply = (mapv #(outliner-core/get-parent db %) (outliner-core/get-next-sibling-nodes db node))) node)
+     (let [siblings+node (cons node (outliner-core/get-next-sibling-nodes db node))]
+       ;; recursively verify each node's children
+       (doseq [node siblings+node]
+         (when-let [first-child (outliner-core/get-first-child db node)]
+           (validate-nodes-next-sibling db first-child)))))))
+
 
 (defn- gen-random-tree
   "PREFIX: used for generating unique data, :data is :db/unique in this test-file for test"
@@ -248,6 +270,25 @@
           (conj! coll {:data (str prefix "-" i) :level level})
           (recur (inc i) level))))
     (persistent! coll)))
+
+(defn- random-range-nodes
+  [db]
+  (let [start (rand-int (count (d/datoms db :avet :data)))
+        num (inc (rand-int 5))
+        first-node (outliner-core/get-next db (d/entity db 1))
+        nodes (transient [])]
+    (when first-node
+      (loop [started start num num node first-node]
+        (when node
+          (cond
+            (pos? started)
+            (recur (dec started) num (outliner-core/get-next db node))
+            (pos? num)
+            (do (conj! nodes node)
+                (recur started (dec num) (outliner-core/get-next db node))))))
+      (let [nodes* (persistent! nodes)]
+        (when (seq nodes*)
+          (outliner-core/with-children-nodes db nodes*))))))
 
 (defn- op-insert-nodes
   [db seq-state]
@@ -298,8 +339,7 @@
   (let [datoms (d/datoms db :avet :data)]
     (if (empty? datoms)
       {:txs-data [] :nodes-count-change 0}
-      (let [node (d/entity db (:e (g/generate (g/elements datoms))))
-            nodes (outliner-core/get-children-nodes db node)
+      (let [nodes (random-range-nodes db)
             target (loop [n 10 maybe-node (d/entity db (:e (g/generate (g/elements datoms))))]
                      (cond
                        (= 0 n)
@@ -308,6 +348,7 @@
                        (recur (dec n) (d/entity db (:e (g/generate (g/elements datoms)))))
                        :else
                        maybe-node))]
+
         (if-not target
           {:txs-data [] :nodes-count-change 0}
           {:txs-data (outliner-core/move-nodes db nodes target (g/generate g/boolean))
@@ -348,16 +389,17 @@
           (let [{:keys [txs-data nodes-count-change]}
                 ((g/generate (g/elements [op-insert-nodes
                                           op-delete-nodes
-                                          op-indent-nodes
-                                          op-outdent-nodes
+                                          ;; op-indent-nodes
+                                          ;; op-outdent-nodes
                                           op-move-nodes
                                           op-move-nodes-up
                                           op-move-nodes-down
-                                          ])) @conn seq-state)]
+                                          ]))@conn seq-state)]
             (d/transact! conn txs-data)
             (vswap! nodes-count #(+ % nodes-count-change))
             (let [page-nodes (get-page-nodes2 @conn)]
               (validate-nodes-parent2 page-nodes @conn)
+              (validate-nodes-next-sibling @conn)
               (is (= @nodes-count (count page-nodes))) ; check node count
               )))))))
 
@@ -448,3 +490,20 @@
           (is (not= origin-db @conn))
           (undo-tx-data! conn @*tx-data)
           (is (= origin-db @conn)))))))
+
+(comment
+  (defn nodes [db ids] (mapv #(d/entity db %) ids))
+  (def conn
+    (d/create-conn {:next {:db/valueType :db.type/ref
+                           :db/unique :db.unique/value}
+                    :page {:db/valueType :db.type/ref}
+                    :next+page {:db/tupleAttrs [:next :page]}}))
+  (d/transact! conn [{:db/id 10 :is-page true}
+                     {:db/id 11 :is-page true}
+                     {:db/id -3 :data 222}
+                     {:db/id -2 :next -3 :page 10}
+                     {:db/id -1 :next -2 :page 10}
+                     {:db/id -4 :page 11}])
+
+
+  )

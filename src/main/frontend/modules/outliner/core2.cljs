@@ -12,11 +12,238 @@
             [clojure.set :as set]))
 
 ;;; Commentary
-;; properties related to block position:
+;; properties related to outliner.core:
 ;; - :block/next: next node's :db/id
 ;; - DELETED :block/level: node's indent level (>= 1)
 ;; - :block/parent: node's parent :db/id
 ;; - :block/page: which page this node belongs to
+;; - :block/next-sibling: next sibling node
+;; - :block/next+page: tupleAttr [:block/next :block/page]
+;;   used for get-page-nodes
+
+;;; Node apis
+(defprotocol Node
+  (-get-id [this] "return :db/id or nil")
+  (-get-next [this db] "return next entity or nil")
+  (-get-next-sibling [this db] "return next sibling or nil")
+  (-get-prev [this db] "return prev entity or nil")
+  (-get-parent [this] "return parent node or nil")
+  (-get-page [this db] "return page node")
+  (-unset-next [this] "transaction to remove :block/next attr")
+  (-unset-next-sibling [this] "transaction to remove :block/next-sibling attr")
+  (-set-next [this id-or-node] "transaction to add :block/next attr")
+  (-set-parent [this id-or-node] "transaction to add :block/parent attr")
+  (-set-next-sibling [this id-or-node] "transaction to add :block/next-sibling attr")
+  (-set-page [this id-or-node] "transaction to add :block/page attr"))
+
+(declare id-map page-node?)
+(extend-protocol Node
+  de/Entity
+  (-get-id [this] (:db/id this))
+  (-get-next [this _] (:block/next this))
+  (-get-next-sibling [this _] (:block/next-sibling this))
+  (-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
+  (-get-parent [this] (:block/parent this))
+  (-get-page [this db] (if (page-node? db this) this(:block/page this)))
+  (-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
+  (-unset-next-sibling [this] [:db.fn/retractAttribute (:db/id this) :block/next-sibling])
+  (-set-next [this id-or-node]
+    (when id-or-node
+      (cond->> id-or-node
+        (not (number? id-or-node)) :db/id
+        true (assoc (id-map this) :block/next))))
+  (-set-parent [this id-or-node]
+    (when id-or-node
+      (cond->> id-or-node
+        (not (number? id-or-node)) :db/id
+        true (assoc (id-map this) :block/parent))))
+  (-set-next-sibling [this id-or-node]
+    (when id-or-node
+      (cond->> id-or-node
+        (not (number? id-or-node)) :db/id
+        true (assoc (id-map this) :block/next-sibling))))
+  (-set-page [this id-or-node]
+    (when id-or-node
+      (cond->> id-or-node
+        (not (number? id-or-node)) :db/id
+        true (assoc (id-map this) :block/page)))))
+
+(defn- map-get-id [this] (:db/id this))
+(defn- map-get-next [this db] (d/entity db (:db/id (:block/next this))))
+(defn- map-get-next-sibling [this db] (d/entity db (:db/id (:block/next-sibling this))))
+(defn- map-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
+(defn- map-get-parent [this db] (d/entity db (:db/id (:block/parent this))))
+(defn- map-get-page [this db] (d/entity db (:db/id (if (page-node? db this) this (:block/page this)))))
+(defn- map-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
+(defn- map-unset-next-sibling [this] [:db.fn/retractAttribute (:db/id this) :block/next-sibling])
+(defn- map-set-next [this id-or-node]
+  (when id-or-node
+    (cond->> id-or-node
+      (not (number? id-or-node)) :db/id
+      true (assoc (id-map this) :block/next))))
+(defn- map-set-parent [this id-or-node]
+  (when id-or-node
+    (cond->> id-or-node
+      (not (number? id-or-node)) :db/id
+      true (assoc (id-map this) :block/parent))))
+(defn- map-set-next-sibling [this id-or-node]
+  (when id-or-node
+    (cond->> id-or-node
+      (not (number? id-or-node)) :db/id
+      true (assoc (id-map this) :block/next-sibling))))
+(defn- map-set-page [this id-or-node]
+  (when id-or-node
+    (cond->> id-or-node
+      (not (number? id-or-node)) :db/id
+      true (assoc (id-map this) :block/page))))
+
+
+(defn unify-node+map-fn [node-fn map-fn o & args]
+  (cond
+    (implements? Node o)
+    (apply node-fn o args)
+
+    (map? o)
+    (apply map-fn o args)
+
+    :else
+    (throw (js/Error. (str "cannot " (-> node-fn meta :name) " on " o)))))
+
+(defn get-id [o]
+  (cond
+    (implements? Node o)
+    (-get-id o)
+
+    (map? o)
+    (map-get-id o)
+
+    :else
+    (throw (js/Error. (str "cannot get-id on " o)))))
+
+(defn get-next [db o]
+  (cond
+    (implements? Node o)
+    (-get-next o db)
+
+    (map? o)
+    (map-get-next o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-next on " o)))))
+
+(defn get-next-sibling [db o]
+  (cond
+    (implements? Node o)
+    (-get-next-sibling o db)
+
+    (map? o)
+    (map-get-next-sibling o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-next-sibling on " o)))))
+
+(defn get-prev [db o]
+  (cond
+    (implements? Node o)
+    (-get-prev o db)
+
+    (map? o)
+    (map-get-prev o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-prev on " o)))))
+
+(defn get-parent [db o]
+  (cond
+    (implements? Node o)
+    (-get-parent o)
+
+    (map? o)
+    (map-get-parent o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-parent on " o)))))
+
+(defn get-page [db o]
+  (cond
+    (implements? Node o)
+    (-get-page o db)
+
+    (map? o)
+    (map-get-page o db)
+
+    :else
+    (throw (js/Error. (str "cannot get-page on " o)))))
+
+(defn unset-next [o]
+  (cond
+    (implements? Node o)
+    (-unset-next o)
+
+    (map? o)
+    (map-unset-next o)
+
+    :else
+    (throw (js/Error. (str "cannot unset-next on " o)))))
+
+(defn unset-next-sibling [o]
+  (cond
+    (implements? Node o)
+    (-unset-next-sibling o)
+
+    (map? o)
+    (map-unset-next-sibling o)
+
+    :else
+    (throw (js/Error. (str "cannot unset-next-sibling on " o)))))
+
+(defn set-next [o id-or-node]
+  (cond
+    (implements? Node o)
+    (-set-next o id-or-node)
+
+    (map? o)
+    (map-set-next o id-or-node)
+
+    :else
+    (throw (js/Error. (str "cannot set-next on " o)))))
+
+(defn set-parent [o id-or-node]
+  (cond
+    (implements? Node o)
+    (-set-parent o id-or-node)
+
+    (map? o)
+    (map-set-parent o id-or-node)
+
+    :else
+    (throw (js/Error. (str "cannot set-parent on " o)))))
+
+(defn set-next-sibling [o id-or-node]
+  (cond
+    (implements? Node o)
+    (-set-next-sibling o id-or-node)
+
+    (map? o)
+    (map-set-next-sibling o id-or-node)
+
+    :else
+    (throw (js/Error. (str "cannot set-next-sibling on " o)))))
+
+(defn set-page [o id-or-node]
+  (cond
+    (implements? Node o)
+    (-set-page o id-or-node)
+
+    (map? o)
+    (map-set-page o id-or-node)
+
+    :else
+    (throw (js/Error. (str "cannot set-page on " o)))))
+
+(defn node= [o1 o2] (= (get-id o1) (get-id o2)))
+
+;;; node apis ends here
 
 ;;; utils
 (defn- block-with-timestamps
@@ -65,131 +292,88 @@
         (contains? parent-nodes (get-parent db node)) last-node
         :else (recur node (get-next db node))))))
 
-;;; Node apis
-(defprotocol Node
-  (-get-id [this] "return :db/id or nil")
-  (-get-next [this db] "return next entity or nil")
-  (-get-prev [this db] "return prev entity or nil")
-  (-get-parent [this] "return parent node or nil")
-  (-unset-next [this] "transaction to remove :block/next attr")
-  (-set-next [this id-or-node] "transaction to add :block/next attr")
-  (-set-parent [this id-or-node] "transaction to add :block/parent attr"))
+(declare node=)
+(defn split-diff-level-toplevel-nodes
+  "e.g.
+  - 1
+    - 2
+      - 3
+    - 4
+      - 5
+  - 6
+  (get-toplevel-nodes [3 4 5 6]) = [3 4 6]
+  (split-diff-level-toplevel-nodes [3 4 6]) = [[3] [4] [6]]
+  "
+  [db toplevel-nodes]
+  (let [diff-level-nodes (transient [])]
+    (loop [last-node nil
+           [node & tail] toplevel-nodes
+           current-level-nodes nil]
+      (if-not node
+        (when (seq current-level-nodes)
+          (conj! diff-level-nodes current-level-nodes))
+        (if (and last-node
+                 (node= (get-parent db last-node)
+                        (get-parent db node)))
+          (recur node tail (conj current-level-nodes node))
+          (do
+            (when (seq current-level-nodes)
+              (conj! diff-level-nodes current-level-nodes))
+            (recur node tail [node])))))
+    (persistent! diff-level-nodes)))
+
+(declare get-prev-sibling-node get-top-level-children contains-node? get-first-child)
+
+(defn- alter-next-siblings-when-delete
+  "Return :block/next-siblings transaction data when delete nodes (TOPLEVEL-NODES of nodes as param)"
+  [db toplevel-nodes]
+  (let [diff-level-nodes (split-diff-level-toplevel-nodes db toplevel-nodes)]
+    (->>
+     (for [same-level-nodes diff-level-nodes]
+       (let [last-node       (last same-level-nodes)
+             next-last-node  (get-next-sibling db last-node)
+             prev-first-node (get-prev-sibling-node db (first same-level-nodes))
+             origin-pos-re-construct-txs
+             (remove nil?
+                     [(when next-last-node (unset-next-sibling last-node))
+                      (when prev-first-node
+                        (if next-last-node
+                          (set-next-sibling prev-first-node next-last-node)
+                          (unset-next-sibling prev-first-node)))])]
+         origin-pos-re-construct-txs))
+     (apply concat))))
 
 
-(extend-protocol Node
-  de/Entity
-  (-get-id [this] (:db/id this))
-  (-get-next [this _] (:block/next this))
-  (-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
-  (-get-parent [this] (:block/parent this))
-  (-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
-  (-set-next [this id-or-node]
-    (when id-or-node
-      (cond->> id-or-node
-        (not (number? id-or-node)) :db/id
-        true (assoc (id-map this) :block/next))))
-  (-set-parent [this id-or-node]
-    (when id-or-node
-      (cond->> id-or-node
-        (not (number? id-or-node)) :db/id
-        true (assoc (id-map this) :block/parent)))))
+(defn- alter-next-siblings-when-move
+  [db toplevel-nodes target-node sibling?]
+  (let [diff-level-nodes            (split-diff-level-toplevel-nodes db toplevel-nodes)
+        ;; first, delete nodes at origin position
+        origin-pos-re-construct-txs (alter-next-siblings-when-delete db toplevel-nodes)
+        ;; second, align to the same level
+        align-txs                   (transient [])
+        target-prev-sibling-node    (when sibling? target-node)
+        target-next-sibling-node
+        (if sibling?
+          (when-let [target-next-sibling (get-next-sibling db target-node)]
+            (when-not (contains-node? toplevel-nodes target-next-sibling)
+              target-next-sibling))
+          (when-let [first-child (get-first-child db target-node)]
+            (when-not (contains-node? toplevel-nodes first-child)
+              first-child)))
+        ;; finally, connect to target pos
+        connect-txs
+        (remove
+         nil?
+         [(when target-prev-sibling-node (set-next-sibling target-prev-sibling-node (first toplevel-nodes)))
+          (when target-next-sibling-node (set-next-sibling (last toplevel-nodes) target-next-sibling-node))])]
+    (loop [[[first-node last-node] & tail] (mapv #(list (first %) (last %)) diff-level-nodes)
+           prev-last-node                  nil]
+      (when first-node
+        (when prev-last-node
+          (conj! align-txs (set-next-sibling prev-last-node first-node)))
+        (recur tail last-node)))
+    (concat origin-pos-re-construct-txs (persistent! align-txs) connect-txs)))
 
-(defn- map-get-id [this] (:db/id this))
-(defn- map-get-next [this db] (d/entity db (:db/id (:block/next this))))
-(defn- map-get-prev [this db] (d/entity db [:block/next (:db/id this)]))
-(defn- map-get-parent [this db] (d/entity db (:db/id (:block/parent this))))
-(defn- map-unset-next [this] [:db.fn/retractAttribute (:db/id this) :block/next])
-(defn- map-set-next [this id-or-node]
-  (when id-or-node
-    (cond->> id-or-node
-      (not (number? id-or-node)) :db/id
-      true (assoc (id-map this) :block/next))))
-(defn- map-set-parent [this id-or-node]
-  (when id-or-node
-    (cond->> id-or-node
-      (not (number? id-or-node)) :db/id
-      true (assoc (id-map this) :block/parent))))
-
-(defn get-id [o]
-  (cond
-    (implements? Node o)
-    (-get-id o)
-
-    (map? o)
-    (map-get-id o)
-
-    :else
-    (throw (js/Error. (str "cannot get-id on " o)))))
-
-(defn get-next [db o]
-  (cond
-    (implements? Node o)
-    (-get-next o db)
-
-    (map? o)
-    (map-get-next o db)
-
-    :else
-    (throw (js/Error. (str "cannot get-next on " o)))))
-
-(defn get-prev [db o]
-  (cond
-    (implements? Node o)
-    (-get-prev o db)
-
-    (map? o)
-    (map-get-prev o db)
-
-    :else
-    (throw (js/Error. (str "cannot get-prev on " o)))))
-
-(defn get-parent [db o]
-  (cond
-    (implements? Node o)
-    (-get-parent o)
-
-    (map? o)
-    (map-get-parent o db)
-
-    :else
-    (throw (js/Error. (str "cannot get-parent on " o)))))
-
-(defn unset-next [o]
-  (cond
-    (implements? Node o)
-    (-unset-next o)
-
-    (map? o)
-    (map-unset-next o)
-
-    :else
-    (throw (js/Error. (str "cannot unset-next on " o)))))
-
-(defn set-next [o id-or-node]
-  (cond
-    (implements? Node o)
-    (-set-next o id-or-node)
-
-    (map? o)
-    (map-set-next o id-or-node)
-
-    :else
-    (throw (js/Error. (str "cannot set-next on " o)))))
-
-(defn set-parent [o id-or-node]
-  (cond
-    (implements? Node o)
-    (-set-parent o id-or-node)
-
-    (map? o)
-    (map-set-parent o id-or-node)
-
-    :else
-    (throw (js/Error. (str "cannot set-parent on " o)))))
-
-(defn node= [o1 o2] (= (get-id o1) (get-id o2)))
-
-;;; node apis ends here
 
 (defn save-node
   "Generate datascript transaction data,
@@ -232,6 +416,7 @@
     id-or-entity
     (d/entity db id-or-entity)))
 
+;; TODO: reimpl with :block/next-siblings
 (defn get-top-level-nodes
   "Get toplevel nodes of consecutive NODES"
   [db nodes]
@@ -245,8 +430,9 @@
           (recur next-node))))
     (persistent! toplevel-nodes)))
 
+;; TODO: reimpl with :block/next-sibling
 (defn get-top-level-children
-  "Get toplevel consecutive children of NODES"
+  "Get toplevel consecutive children of NODE"
   [db node]
   (let [parent-nodes (set (get-parent-nodes db node))
         children (transient [])]
@@ -323,14 +509,27 @@
         (recur (get-next db node))))
     (persistent! children-nodes)))
 
-(defn get-page-nodes
-  "Return lazy PAGE-NODE's sorted nodes"
+(defn get-page-node-indexes
   [db page-node]
-  (lazy-seq
-   (let [next-node (get-next db page-node)]
-     (when next-node
-       (cons next-node (get-page-nodes db next-node))))))
+  {:pre [(page-node? db page-node)]}
+  (let [page-id (get-id page-node)
+        next-rel-map
+        (time (into {}
+                   (mapv (juxt :e #(nth (:v %) 1))
+                         (d/index-range db :block/page+next [page-id nil] [page-id js/Number.MAX_SAFE_INTEGER]))))
+        r (transient [])]
+    (loop [node-id (get-id (get-next db page-node))]
+      (when node-id
+        (conj! r node-id)
+        (recur (get next-rel-map node-id))))
+    (persistent! r)))
 
+(defn get-page-nodes
+  "Return PAGE-NODE's sorted nodes"
+  [db page-node]
+  (mapv #(d/entity db %) (get-page-node-indexes db page-node)))
+
+;; TODO: reimpl with :block/next-sibling
 (defn get-prev-sibling-node
   "Return previous node whose :block/parent is same as NODE
   or nil(when NODE is first node in the page or it's the first child of its parent)"
@@ -346,6 +545,7 @@
             (= parent-node node) nil
             :else (recur (get-prev db node))))))))
 
+;; TODO: reimpl with :block/next-sibling
 (defn get-next-sibling-node
   "Return next node whose :block/parent is same as NODE
   or nil(when NODE is final one in the page or it's the last child of its parent)"
@@ -362,6 +562,21 @@
             (contains? parent-parent-nodes parent-node*) nil
             :else (recur (get-next db node))))))))
 
+(defn get-next-sibling-nodes
+  "Return NODE's next siblings."
+  [db node]
+  (let [r (transient [node])]
+    (loop [node node]
+      (when-let [next-sibling (get-next-sibling db node)]
+          (conj! r next-sibling)
+          (recur next-sibling)))
+    (persistent! r)))
+
+(defn get-first-child
+  [db node]
+  (when-let [next-node (get-next db node)]
+    (when (node= (get-parent db next-node) node)
+      next-node)))
 
 (defn with-children-nodes
   "Return nodes includes NODES themselves and their children.
@@ -375,17 +590,9 @@
   NODES = [1 3 4],  return [1 2 3 4 5]
   NODES = [1 3],    return [1 2 3 4 5]"
   [db nodes]
-  {:post [(spec/valid? (s/coll-of some?) %)]}
-  (let [node-ids-set (set (mapv get-id nodes))
-        r (transient [])]
-    (loop [node (first nodes)]
-      (when node
-        (let [node-and-children (get-children-nodes db node)]
-          (conj! r node-and-children)
-          (when-let [next-sibling (get-next-sibling-node db node)]
-            (when (contains? node-ids-set (get-id next-sibling))
-              (recur next-sibling))))))
-    (flatten (persistent! r))))
+  {:pre  [(seq nodes)]
+   :post [(spec/valid? (s/coll-of some?) %)]}
+  (mapcat #(get-children-nodes db %) (get-top-level-nodes db nodes)))
 
 
 ;;; write-operations on outliner nodes (no side effects) ;;;;;;;;;;;;;;;;
@@ -411,24 +618,42 @@
         last-node (last nodes)
         parent-node
         (if (and (not (page-node? db target)) sibling?) (get-parent db target) target)
+        page-node (get-page db target)
+        ;; setup :block/page
+        update-page-txs
+        (mapv #(set-page % page-node) nodes)
+        ;; setup first&last nodes' next attr
         update-next-id-txs
         [(set-next target* first-node)
          (set-next last-node next)]
+        ;; setup internal next attrs of NODES
         update-internal-nodes-next-id-txs
         (for [i (range)
               :let [n1 (nth nodes i nil)
                     n2 (nth nodes (inc i) nil)]
               :while (and n1 n2)]
           (set-next n1 n2))
-        update-parent-txs (transient [])]
-    (loop [parent-node-map {0 parent-node}
+        ;; NODES' parent attr
+        update-parent-txs (transient [])
+        ;; NODES' next-sibling attr
+        update-next-sibling-txs (transient [])]
+    (loop [parent-node-array (if sibling? [parent-node target] [parent-node]) ; index means level
            [node & tail] nodes]
-      (when node
-        (let [level (:level node)]
-          (conj! update-parent-txs
-                 (save-node db (merge (dissoc node :level) (set-parent node (get parent-node-map (dec level))))))
-          (recur (assoc parent-node-map level node) tail))))
-    (vec (concat (flatten (persistent! update-parent-txs)) update-next-id-txs update-internal-nodes-next-id-txs))))
+      (when-let [level (and node (:level node))]
+        (conj! update-parent-txs (save-node db (merge (dissoc node :level)
+                                                      (set-parent node (nth parent-node-array (dec level))))))
+        (when-let [prev-sibling-node (nth parent-node-array level nil)]
+          (conj! update-next-sibling-txs (set-next-sibling prev-sibling-node node)))
+        (recur (conj (subvec parent-node-array 0 level) node) tail)))
+    (let [last-sibling (last (filterv #(= 1 (:level %)) nodes))
+          last-sibling's-next-sibling
+          (if sibling? (get-next-sibling db target) (get-first-child db target))
+          ;; set last sibling(in NODES)'s next-sibling
+          last-sibling's-next-sibling-txs
+          (when last-sibling's-next-sibling [(set-next-sibling last-sibling last-sibling's-next-sibling)])]
+      (vec (concat (flatten (persistent! update-parent-txs))
+                   (persistent! update-next-sibling-txs) last-sibling's-next-sibling-txs
+                   update-next-id-txs update-internal-nodes-next-id-txs update-page-txs)))))
 
 (defn move-nodes
   "Move consecutive sorted NODES after target as siblings or children.
@@ -442,6 +667,11 @@
   (validate-nodes-not-contains-target db nodes target-id-or-entity)
   (let [node-ids-set (into #{} (map get-id) nodes)
         target (target-entity db target-id-or-entity)
+        target-page-node (get-page db target)
+        origin-page-node (get-page db (first nodes))
+        ;; alter :block/page
+        update-page-txs (when-not (node= target-page-node origin-page-node)
+                          (mapv #(set-page % target-page-node) nodes))
         ;; if target is page-node, sibling? must be false
         sibling? (if (page-node? db target) false sibling?)
         ;; target* = last-child(node-ids-set doesn't contain it)
@@ -452,6 +682,8 @@
         ;;   - 2    move 3,4 to target(1) as sibling=true
         ;;     - 3
         ;;   - 4
+
+        ;; TODO: no need to use loop here
         target*
         (if sibling?
           (loop [target* (get-last-child-or-itself db target)]
@@ -471,7 +703,7 @@
         last-node (last nodes)
         origin-next-last-node (get-next db last-node)
         parent-node (if sibling? (get-parent db target) target)]
-    (into
+    (concat
      ;; alter :block/next
      (if (and target-next (node= first-node target-next))
        ;; no need to set-next if first-node is next node of target
@@ -486,7 +718,11 @@
           (set-next origin-prev-first-node origin-next-last-node))])
      (let [toplevel-nodes (get-top-level-nodes db nodes)]
        ;; alter :block/parent
-       (map #(set-parent % parent-node) toplevel-nodes)))))
+       (map #(set-parent % parent-node) toplevel-nodes))
+     ;; alter :block/next-sibling
+     (alter-next-siblings-when-move db (get-top-level-nodes db nodes) target sibling?)
+     ;; alter :block/page
+     update-page-txs)))
 
 
 ;; move nodes up/down examples:
@@ -522,8 +758,7 @@
 ;;   - 4
 ;;   - 5
 ;;   - 3
-(def reverse-list (comp reverse list))
-
+(def ^:private reverse-list (comp reverse list))
 (defn move-nodes-up
   [db nodes]
   {:pre [(seq nodes)]}
@@ -561,12 +796,15 @@
   (let [first-node (first nodes)
         last-node (last nodes)
         target-node (get-prev db first-node)
-        next-node (get-next db last-node)]
-    (conj
+        next-node (get-next db last-node)
+        toplevel-nodes (get-top-level-nodes db nodes)]
+    (concat
      ;; retract nodes
      (mapv (fn [node] [:db/retractEntity (get-id node)]) nodes)
      ;; alter :block/next
-     (set-next target-node next-node))))
+     (when next-node [(set-next target-node next-node)])
+     ;; alter :block/next-sibling
+     (alter-next-siblings-when-delete db toplevel-nodes))))
 
 
 ;; indent/outdent rule:
@@ -597,10 +835,13 @@
   "Indent consecutive sorted nodes.
   Returns transaction data."
   [db nodes]
-  (let [filtered-nodes (get-min-level-nodes db nodes)]
-    (when-let [target-node (some->> (first filtered-nodes) (get-prev-sibling-node db))]
-      (mapv #(set-parent % target-node) filtered-nodes))))
+  {:pre [(seq nodes)]}
+  (let [first-node (first nodes)
+        prev-sibling (get-prev-sibling-node db first-node)
+        target (if prev-sibling prev-sibling (get-parent db first-node))]
+    (move-nodes db nodes target false)))
 
+;; TODO: alter :block/next-sibling
 (defn outdent-nodes
   "Outdent consecutive sorted nodes.
   Returns transaction data."
@@ -614,7 +855,9 @@
             (recur (get-next-sibling-node db node))))
         (concat
          (mapv #(set-parent % target-node) filtered-nodes)
-         (mapv #(set-parent % (last filtered-nodes)) (persistent! next-siblings)))))))
+         (mapv #(set-parent % (last filtered-nodes)) (persistent! next-siblings))
+
+         )))))
 
 
 ;;; predicates
