@@ -1,4 +1,5 @@
 (ns frontend.dicts
+  "Provides dictionary entries for most of the application"
   (:require [frontend.config :as config]
             [shadow.resource :as rc]
             [tongue.core :as tongue]))

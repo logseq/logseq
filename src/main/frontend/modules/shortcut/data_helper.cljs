@@ -77,19 +77,6 @@
         ns (namespace k)]
     (keyword (str "command." ns) n)))
 
-(defn desc-helper []
-  (->> (vals @config/config)
-       (apply merge)
-       (map (fn [[k {:keys [desc]}]]
-              {(decorate-namespace k) desc}))
-       (into {})))
-
-(defn category-helper []
-  (->> config/category
-       (map (fn [[k v]]
-              {k (:doc (meta v))}))
-       (into {})))
-
 (defn decorate-binding [binding]
   (-> (if (string? binding) binding (str/join "+"  binding))
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))

@@ -22,7 +22,7 @@
         _ (when (nil? preferred-language)
             (state/set-preferred-language! (fetch-local-language)))
         dicts (or (get @translate-dicts preferred-language)
-                  (let [result (some-> (deep-merge dicts/dicts shortcut-dict/dict)
+                  (let [result (some-> (deep-merge dicts/dicts shortcut-dict/dicts)
                                        dicts/translate)]
                     (swap! translate-dicts assoc preferred-language result)
                     result))]
