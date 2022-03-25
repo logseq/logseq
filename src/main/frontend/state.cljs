@@ -894,7 +894,7 @@
   [theme]
   (set-state! :ui/theme theme)
   (when (mobile-util/native-ios?)
-    (if (= theme "white")
+    (if (= theme "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
   (storage/set :ui/theme theme))
@@ -902,7 +902,7 @@
 (defn sync-system-theme!
   []
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme! (if system-dark? "dark" "white"))
+    (set-theme! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
@@ -910,7 +910,7 @@
   [theme-mode]
   (if-not (= theme-mode "system")
     (do
-      (set-theme! (if (= theme-mode "light") "white" theme-mode))
+      (set-theme! theme-mode)
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))
     (sync-system-theme!)))
@@ -926,7 +926,7 @@
 (defn toggle-theme!
   []
   (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "white" "dark")]
+        theme' (if (= theme "dark") "light" "dark")]
     (use-theme-mode! theme')))
 
 (defn set-root-component!

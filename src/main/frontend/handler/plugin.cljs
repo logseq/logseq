@@ -345,7 +345,7 @@
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
     (when-let [theme (first themes)]
       (let [theme-mode (:mode theme)]
-        (and theme-mode (state/set-theme! (if (= theme-mode "light") "white" theme-mode)))
+        (and theme-mode (state/set-theme! theme-mode))
         (js/LSPluginCore.selectTheme (bean/->js theme))))))
 
 (defn update-plugin-settings-state
