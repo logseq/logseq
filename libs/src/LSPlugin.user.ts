@@ -1,24 +1,33 @@
-import { deepMerge, mergeSettingsWithSchema, safetyPathJoin } from './helpers'
-import { LSPluginCaller } from './LSPlugin.caller'
+import * as CSS from 'csstype'
+
 import {
-  IAppProxy, IDBProxy,
+  BlockCommandCallback,
+  BlockIdentity,
+  BlockPageName,
+  IAppProxy,
+  IDBProxy,
   IEditorProxy,
+  IHookEvent,
   ILSPluginUser,
+  IUserOffHook,
   LSPluginBaseInfo,
   LSPluginUserEvents,
+  SettingSchemaDesc,
+  SimpleCommandCallback,
+  SimpleCommandKeybinding,
   SlashCommandAction,
-  BlockCommandCallback,
   StyleString,
-  ThemeOptions,
-  UIOptions, IHookEvent, BlockIdentity,
-  BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding, SettingSchemaDesc, IUserOffHook
+  Theme,
+  UIContainerAttrs,
+  UIOptions
 } from './LSPlugin'
+import { deepMerge, mergeSettingsWithSchema, safetyPathJoin } from './helpers'
+
 import Debug from 'debug'
-import * as CSS from 'csstype'
-import { snakeCase } from 'snake-case'
 import EventEmitter from 'eventemitter3'
+import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { snakeCase } from 'snake-case'
 
 declare global {
   interface Window {
@@ -329,7 +338,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     return this
   }
 
-  provideTheme (theme: ThemeOptions) {
+  provideTheme (theme: Theme) {
     this.caller.call('provider:theme', theme)
     return this
   }

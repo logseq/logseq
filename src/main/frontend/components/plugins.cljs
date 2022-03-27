@@ -45,12 +45,15 @@
   [state]
   (let [*cursor (::cursor state)
         *total (::total state)
-        themes (state/sub :plugin/installed-themes)
+        mode (state/sub :ui/theme)
+        themes (filter #(= (:mode %) mode) (state/sub :plugin/installed-themes))
         selected (state/sub :plugin/selected-theme)
-        themes (cons {:name "Default Theme" :url nil :description "Logseq default light/dark theme."} themes)
+        themes (cons {:name "Default Theme"
+                      :url nil
+                      :description (string/join " " ["Logseq default" mode "theme."])
+                      :mode mode} themes)
         themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
         _ (reset! *total (count themes))]
-
     [:div.cp__themes-installed
      {:tab-index -1}
      [:h1.mb-4.text-2xl.p-1 (t :themes)]
@@ -60,11 +63,11 @@
                plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
            [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
             {:key      (str idx (:url opt))
-             :title    (when current-selected "Cancel selected theme")
+             :title    (:description opt)
              :class    (util/classnames
                          [{:is-selected current-selected
                            :is-active   (= idx @*cursor)}])
-             :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
+             :on-click #(do (js/LSPluginCore.selectTheme (bean/->js (dissoc opt :selected)))
                             (state/close-modal!))}
             [:section
              [:strong.block

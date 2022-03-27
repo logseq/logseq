@@ -70,8 +70,9 @@
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
+     :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
@@ -890,11 +891,11 @@
 
 (defn set-theme!
   [theme]
-  (set-state! :ui/theme theme)
   (when (mobile-util/native-ios?)
     (if (= theme "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
+  (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
 
 (defn sync-system-theme!
@@ -906,12 +907,24 @@
 
 (defn use-theme-mode!
   [theme-mode]
-  (if-not (= theme-mode "system")
+  (if (= theme-mode "system")
+    (sync-system-theme!)
     (do
       (set-theme! theme-mode)
       (set-state! :ui/system-theme? false)
-      (storage/set :ui/system-theme? false))
-    (sync-system-theme!)))
+      (storage/set :ui/system-theme? false))))
+
+(defn toggle-theme!
+  []
+  (let [theme (:ui/theme @state)
+        theme' (if (= theme "dark") "light" "dark")]
+    (use-theme-mode! theme')))
+
+(defn set-custom-theme!
+  [mode theme]
+  (do
+    (set-state! [:ui/custom-theme (keyword mode)] theme)
+    (storage/set :ui/custom-theme (:ui/custom-theme @state))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -920,12 +933,6 @@
 (defn get-editing-block-dom-id
   []
   (:editor/block-dom-id @state))
-
-(defn toggle-theme!
-  []
-  (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "light" "dark")]
-    (use-theme-mode! theme')))
 
 (defn set-root-component!
   [component]

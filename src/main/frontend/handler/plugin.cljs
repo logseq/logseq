@@ -301,9 +301,7 @@
   [pid]
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
     (when-let [theme (first themes)]
-      (let [theme-mode (:mode theme)]
-        (and theme-mode (state/set-theme! theme-mode))
-        (js/LSPluginCore.selectTheme (bean/->js theme))))))
+      (js/LSPluginCore.selectTheme (bean/->js theme)))))
 
 (defn update-plugin-settings-state
   [id settings]
@@ -519,11 +517,13 @@
                                        (swap! state/state assoc :plugin/installed-themes
                                               (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
-                (.on "theme-selected" (fn [^js opts]
-                                        (let [opts (bean/->clj opts)
-                                              url (:url opts)
-                                              mode (:mode opts)]
-                                          (when mode (state/set-theme! mode))
+                (.on "theme-selected" (fn [^js theme]
+                                        (let [theme (bean/->clj theme)
+                                              url (:url theme)
+                                              mode (:mode theme)]
+                                          (when mode
+                                            (do (state/set-custom-theme! mode theme)
+                                                (state/set-theme! mode)))
                                           (state/set-state! :plugin/selected-theme url))))
 
                 (.on "settings-changed" (fn [id ^js settings]
