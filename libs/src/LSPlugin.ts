@@ -114,6 +114,9 @@ export interface AppUserConfigs {
   preferredLanguage: string
   preferredWorkflow: string
 
+  currentGraph: string
+  showBracket: boolean
+
   [key: string]: any
 }
 

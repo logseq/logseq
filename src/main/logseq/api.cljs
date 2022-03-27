@@ -92,6 +92,7 @@
          :preferred-todo        (state/get-preferred-todo)
          :preferred-date-format (state/get-date-formatter)
          :current-graph         (state/get-current-repo)
+         :show-brackets         (state/show-brackets?)
          :me                    (state/get-me)}))))
 
 (def ^:export get_current_graph
