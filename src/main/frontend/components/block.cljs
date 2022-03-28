@@ -179,23 +179,23 @@
     (ui/resize-provider
      (ui/resize-consumer
       (cond->
-        {:className "resize image-resize"
-         :onSizeChanged (fn [value]
-                          (when (and (not @*resizing-image?)
-                                     (some? @size)
-                                     (not= value @size))
-                            (reset! *resizing-image? true))
-                          (reset! size value))
-         :onMouseUp (fn []
-                      (when (and @size @*resizing-image?)
-                        (when-let [block-id (:block/uuid config)]
-                          (let [size (bean/->clj @size)]
-                            (editor-handler/resize-image! block-id metadata full_text size))))
-                      (when @*resizing-image?
+       {:className "resize image-resize"
+        :onSizeChanged (fn [value]
+                         (when (and (not @*resizing-image?)
+                                    (some? @size)
+                                    (not= value @size))
+                           (reset! *resizing-image? true))
+                         (reset! size value))
+        :onMouseUp (fn []
+                     (when (and @size @*resizing-image?)
+                       (when-let [block-id (:block/uuid config)]
+                         (let [size (bean/->clj @size)]
+                           (editor-handler/resize-image! block-id metadata full_text size))))
+                     (when @*resizing-image?
                         ;; TODO: need a better way to prevent the clicking to edit current block
-                        (js/setTimeout #(reset! *resizing-image? false) 200)))
-         :onClick (fn [e]
-                    (when @*resizing-image? (util/stop e)))}
+                       (js/setTimeout #(reset! *resizing-image? false) 200)))
+        :onClick (fn [e]
+                   (when @*resizing-image? (util/stop e)))}
         (and (:width metadata) (not (util/mobile?)))
         (assoc :style {:width (:width metadata)}))
       [:div.asset-container
@@ -422,7 +422,7 @@
                    page-name-in-block ;; page-name-in-block might be overrided (legacy)
                    original-name)
                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
-                                                         " page-name-in-block: " page-name-in-block))]
+                                                        " page-name-in-block: " page-name-in-block))]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
@@ -702,10 +702,12 @@
          (util/format "((%s))" id)]))))
 
 (defn inline-text
-  [format v]
-  (when (string? v)
-    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-      [:div.inline.mr-1 (map-inline {} inline-list)])))
+  ([format v]
+   (inline-text {} format v))
+  ([config format v]
+   (when (string? v)
+     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -946,9 +948,9 @@
             (->elem
              :a
              (cond->
-               {:href      (str "file://" path)
-                :data-href path
-                :target    "_blank"}
+              {:href      (str "file://" path)
+               :data-href path
+               :target    "_blank"}
                title
                (assoc :title title))
              (map-inline config label)))
@@ -1005,9 +1007,9 @@
                     (->elem
                      :a
                      (cond->
-                       {:href      (str "file://" href*)
-                        :data-href href*
-                        :target    "_blank"}
+                      {:href      (str "file://" href*)
+                       :data-href href*
+                       :target    "_blank"}
                        title
                        (assoc :title title))
                      (map-inline config label))))))
@@ -1033,8 +1035,8 @@
             (->elem
              :a.external-link
              (cond->
-               {:href (ar-url->http-url href)
-                :target "_blank"}
+              {:href (ar-url->http-url href)
+               :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))
@@ -1043,8 +1045,8 @@
             (->elem
              :a.external-link
              (cond->
-               {:href href
-                :target "_blank"}
+              {:href href
+               :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -1147,8 +1149,8 @@
                    f (sci/eval-string fn-string)]
                (when (fn? f)
                  (try (f query-result)
-                   (catch js/Error e
-                     (js/console.error e)))))))
+                      (catch js/Error e
+                        (js/console.error e)))))))
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
@@ -1266,7 +1268,7 @@
             nil))
 
         (and plugin-handler/lsp-enabled? (= name "renderer"))
-        (when-let [block-uuid (str (:block/uuid config))]
+        (when-let [block-uuid (not-empty (str (:block/uuid config)))]
           (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
         (get @macro/macros name)
@@ -1398,9 +1400,9 @@
             (when (map? child)
               (let [child (dissoc child :block/meta)
                     config (cond->
-                             (-> config
-                                 (assoc :block/uuid (:block/uuid child))
-                                 (dissoc :breadcrumb-show? :embed-parent))
+                            (-> config
+                                (assoc :block/uuid (:block/uuid child))
+                                (dissoc :breadcrumb-show? :embed-parent))
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
@@ -1680,7 +1682,7 @@
        (util/unquote-string v)
 
        :else
-       (inline-text (:block/format block) (str v)))]))
+       (inline-text config (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]
@@ -1819,24 +1821,24 @@
            (not (:block/pre-block? block)))
       (let [move-to (rum/react *move-to)]
         (when-not
-            (or (and top? (not= move-to :top))
-                (and (not top?) (= move-to :top))
-                (and block-content? (not= move-to :nested))
-                (and (not block-content?)
-                     (seq (:block/children block))
-                     (= move-to :nested)))
+         (or (and top? (not= move-to :top))
+             (and (not top?) (= move-to :top))
+             (and block-content? (not= move-to :nested))
+             (and (not block-content?)
+                  (seq (:block/children block))
+                  (= move-to :nested)))
           (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
   [block body]
-  [:div {:style {:max-width 100}}
-   (when (and (state/enable-timetracking?)
-              (or (= (:block/marker block) "DONE")
-                  (contains? #{"TODO" "LATER"} (:block/marker block))))
-     (let [summary (clock/clock-summary body true)]
-       (when (and summary
-                  (not= summary "0m")
-                  (not (string/blank? summary)))
+  (when (and (state/enable-timetracking?)
+             (or (= (:block/marker block) "DONE")
+                 (contains? #{"TODO" "LATER"} (:block/marker block))))
+    (let [summary (clock/clock-summary body true)]
+      (when (and summary
+                 (not= summary "0m")
+                 (not (string/blank? summary)))
+        [:div {:style {:max-width 100}}
          (ui/tippy {:html        (fn []
                                    (when-let [logbook (drawer/get-logbook body)]
                                      (let [clocks (->> (last logbook)
@@ -1851,7 +1853,7 @@
                     :delay       [1000, 100]}
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
-                     summary]]))))])
+                     summary]])]))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -1867,9 +1869,9 @@
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
         attrs (cond->
-                {:blockid       (str uuid)
-                 :data-type (name block-type)
-                 :style {:width "100%"}}
+               {:blockid       (str uuid)
+                :data-type (name block-type)
+                :style {:width "100%"}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id content edit-input-id))))]
@@ -1885,7 +1887,7 @@
        (not slide?)
        (merge attrs))
 
-     [:span
+     [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
         (cond
@@ -1931,19 +1933,18 @@
 
 (rum/defc block-refs-count < rum/reactive db-mixins/query
   [block]
-  (let [block-refs-count (model/get-block-refs-count (:db/id block))]
-    (when (and block-refs-count (> block-refs-count 0))
-      [:div
-       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-        {:title "Open block references"
-         :style {:margin-top -1}
-         :on-click (fn []
-                     (state/sidebar-add-block!
-                      (state/get-current-repo)
-                      (:db/id block)
-                      :block-ref
-                      {:block block}))}
-        block-refs-count]])))
+  (if-let [block-refs-count (model/get-block-refs-count (:db/id block))]
+    (when (> block-refs-count 0)
+      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+       {:title "Open block references"
+        :on-click (fn []
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     (:db/id block)
+                     :block-ref
+                     {:block block}))}
+       block-refs-count])
+    nil))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -1968,11 +1969,11 @@
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
          (ui/block-error "Block Render Error:"
-                  {:content (:block/content block)
-                   :section-attrs
-                   {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+                         {:content (:block/content block)
+                          :section-attrs
+                          {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
-       [:div.flex.flex-row
+       [:div.flex.flex-row.items-center
         (when (and (:embed? config)
                    (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
@@ -2239,15 +2240,15 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl"))
-        :blockid (str uuid)
-        :haschild (str has-child?)}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-xl"))
+       :blockid (str uuid)
+       :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2350,7 +2351,7 @@
         (->elem
          :li
          (cond->
-           {:checked checked?}
+          {:checked checked?}
            number
            (assoc :value number))
          (vec-cat
@@ -2463,9 +2464,9 @@
                          ;; and are meant to go directly to full text search
                          (and (util/electron?) (symbol? form)) ; full-text search
                          (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                                (when (seq blocks)
-                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                    (reset! result-atom result))))
+                           (when (seq blocks)
+                             (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                               (reset! result-atom result))))
 
                          (symbol? form)
                          (atom nil)
@@ -2583,8 +2584,8 @@
                                                                    true)
                                                :group-by-page? blocks-grouped-by-page?
                                                :ref? true)
-                                        children?
-                                        (assoc :ref? true))
+                                  children?
+                                  (assoc :ref? true))
                          {:style {:margin-top "0.25rem"
                                   :margin-left "0.25rem"}})
 
@@ -2671,185 +2672,185 @@
                    :markdown)]
     (try
       (match item
-             ["Drawer" name lines]
-             (when (or (not= name "logbook")
-                       (and
-                        (= name "logbook")
-                        (state/enable-timetracking?)
-                        (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                             (when (get-in (state/get-config)
-                                           [:logbook/settings :enabled-in-timestamped-blocks] true)
-                               (or (:block/scheduled (:block config))
-                                   (:block/deadline (:block config)))))))
-               [:div
-                [:div.text-sm
-                 [:div.drawer {:data-drawer-name name}
-                  (ui/foldable
-                   [:div.opacity-50.font-medium.logbook
-                    (util/format ":%s:" (string/upper-case name))]
-                   [:div.opacity-50.font-medium
-                    (if (= name "logbook")
-                      (logbook-cp lines)
-                      (apply str lines))
-                    [:div ":END:"]]
-                   {:default-collapsed? true
-                    :title-trigger? true})]]])
+        ["Drawer" name lines]
+        (when (or (not= name "logbook")
+                  (and
+                   (= name "logbook")
+                   (state/enable-timetracking?)
+                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get-in (state/get-config)
+                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
+                          (or (:block/scheduled (:block config))
+                              (:block/deadline (:block config)))))))
+          [:div
+           [:div.text-sm
+            [:div.drawer {:data-drawer-name name}
+             (ui/foldable
+              [:div.opacity-50.font-medium.logbook
+               (util/format ":%s:" (string/upper-case name))]
+              [:div.opacity-50.font-medium
+               (if (= name "logbook")
+                 (logbook-cp lines)
+                 (apply str lines))
+               [:div ":END:"]]
+              {:default-collapsed? true
+               :title-trigger? true})]]])
 
-             ["Properties" m]
-             [:div.properties
-              (for [[k v] (dissoc m :roam_alias :roam_tags)]
-                (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                           (not (= k :title))
-                           (not (= k :filters)))
-                  [:div.property
-                   [:span.font-medium.mr-1 (str (name k) ": ")]
-                   (if (coll? v)
-                     (let [vals (for [item v]
-                                  (if (coll? v)
-                                    (let [config (when (= k :alias)
-                                                   (assoc config :block/alias? true))]
-                                      (page-cp config {:block/name item}))
-                                    (inline-text format item)))]
-                       (interpose [:span ", "] vals))
-                     (inline-text format v))]))]
+        ["Properties" m]
+        [:div.properties
+         (for [[k v] (dissoc m :roam_alias :roam_tags)]
+           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                      (not (= k :title))
+                      (not (= k :filters)))
+             [:div.property
+              [:span.font-medium.mr-1 (str (name k) ": ")]
+              (if (coll? v)
+                (let [vals (for [item v]
+                             (if (coll? v)
+                               (let [config (when (= k :alias)
+                                              (assoc config :block/alias? true))]
+                                 (page-cp config {:block/name item}))
+                               (inline-text format item)))]
+                  (interpose [:span ", "] vals))
+                (inline-text format v))]))]
 
              ;; for file-level property in orgmode: #+key: value
              ;; only display caption. https://orgmode.org/manual/Captions.html.
-             ["Directive" key value]
-             [:div.file-level-property
-              (when (contains? #{"caption"} (string/lower-case key))
-                [:span.font-medium
-                 [:span.font-bold (string/upper-case key)]
-                 (str ": " value)])]
+        ["Directive" key value]
+        [:div.file-level-property
+         (when (contains? #{"caption"} (string/lower-case key))
+           [:span.font-medium
+            [:span.font-bold (string/upper-case key)]
+            (str ": " value)])]
 
-             ["Paragraph" l]
+        ["Paragraph" l]
              ;; TODO: speedup
-             (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-               (->elem :div (map-inline config l))
-               (->elem :div.is-paragraph (map-inline config l)))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+          (->elem :div (map-inline config l))
+          (->elem :div.is-paragraph (map-inline config l)))
 
-             ["Horizontal_Rule"]
-             (when-not (:slide? config)
-               [:hr])
-             ["Heading" h]
-             (block-container config h)
-             ["List" l]
-             (let [lists (divide-lists l)]
-               (if (= 1 (count lists))
-                 (let [l (first lists)]
-                   (->elem
-                    (list-element l)
-                    (map #(list-item config %) l)))
-                 [:div.list-group
-                  (for [l lists]
-                    (->elem
-                     (list-element l)
-                     (map #(list-item config %) l)))]))
-             ["Table" t]
-             (table config t)
-             ["Math" s]
-             (if html-export?
-               (latex/html-export s true true)
-               (latex/latex (str (d/squuid)) s true true))
-             ["Example" l]
-             [:pre.pre-wrap-white-space
-              (join-lines l)]
-             ["Quote" l]
-             (->elem
-              :blockquote
-              (markup-elements-cp config l))
-             ["Raw_Html" content]
-             (when (not html-export?)
-               [:div.raw_html {:dangerouslySetInnerHTML
-                               {:__html content}}])
-             ["Export" "html" _options content]
-             (when (not html-export?)
-               [:div.export_html {:dangerouslySetInnerHTML
-                                  {:__html content}}])
-             ["Hiccup" content]
-             (ui/catch-error
-              [:div.warning {:title "Invalid hiccup"}
-               content]
-              (-> (safe-read-string content)
-                  (security/remove-javascript-links-in-href)))
+        ["Horizontal_Rule"]
+        (when-not (:slide? config)
+          [:hr])
+        ["Heading" h]
+        (block-container config h)
+        ["List" l]
+        (let [lists (divide-lists l)]
+          (if (= 1 (count lists))
+            (let [l (first lists)]
+              (->elem
+               (list-element l)
+               (map #(list-item config %) l)))
+            [:div.list-group
+             (for [l lists]
+               (->elem
+                (list-element l)
+                (map #(list-item config %) l)))]))
+        ["Table" t]
+        (table config t)
+        ["Math" s]
+        (if html-export?
+          (latex/html-export s true true)
+          (latex/latex (str (d/squuid)) s true true))
+        ["Example" l]
+        [:pre.pre-wrap-white-space
+         (join-lines l)]
+        ["Quote" l]
+        (->elem
+         :blockquote
+         (markup-elements-cp config l))
+        ["Raw_Html" content]
+        (when (not html-export?)
+          [:div.raw_html {:dangerouslySetInnerHTML
+                          {:__html content}}])
+        ["Export" "html" _options content]
+        (when (not html-export?)
+          [:div.export_html {:dangerouslySetInnerHTML
+                             {:__html content}}])
+        ["Hiccup" content]
+        (ui/catch-error
+         [:div.warning {:title "Invalid hiccup"}
+          content]
+         (-> (safe-read-string content)
+             (security/remove-javascript-links-in-href)))
 
-             ["Export" "latex" _options content]
-             (if html-export?
-               (latex/html-export content true false)
-               (latex/latex (str (d/squuid)) content true false))
+        ["Export" "latex" _options content]
+        (if html-export?
+          (latex/html-export content true false)
+          (latex/latex (str (d/squuid)) content true false))
 
-             ["Custom" "query" _options _result content]
-             (try
-               (let [query (reader/read-string content)]
-                 (custom-query config query))
-               (catch :default e
-                 (log/error :read-string-error e)
-                 (ui/block-error "Invalid query:" {:content content})))
+        ["Custom" "query" _options _result content]
+        (try
+          (let [query (reader/read-string content)]
+            (custom-query config query))
+          (catch :default e
+            (log/error :read-string-error e)
+            (ui/block-error "Invalid query:" {:content content})))
 
-             ["Custom" "note" _options result _content]
-             (admonition config "note" result)
+        ["Custom" "note" _options result _content]
+        (admonition config "note" result)
 
-             ["Custom" "tip" _options result _content]
-             (admonition config "tip" result)
+        ["Custom" "tip" _options result _content]
+        (admonition config "tip" result)
 
-             ["Custom" "important" _options result _content]
-             (admonition config "important" result)
+        ["Custom" "important" _options result _content]
+        (admonition config "important" result)
 
-             ["Custom" "caution" _options result _content]
-             (admonition config "caution" result)
+        ["Custom" "caution" _options result _content]
+        (admonition config "caution" result)
 
-             ["Custom" "warning" _options result _content]
-             (admonition config "warning" result)
+        ["Custom" "warning" _options result _content]
+        (admonition config "warning" result)
 
-             ["Custom" "pinned" _options result _content]
-             (admonition config "pinned" result)
+        ["Custom" "pinned" _options result _content]
+        (admonition config "pinned" result)
 
-             ["Custom" "center" _options l _content]
-             (->elem
-              :div.text-center
-              (markup-elements-cp config l))
+        ["Custom" "center" _options l _content]
+        (->elem
+         :div.text-center
+         (markup-elements-cp config l))
 
-             ["Custom" name _options l _content]
-             (->elem
-              :div
-              {:class name}
-              (markup-elements-cp config l))
+        ["Custom" name _options l _content]
+        (->elem
+         :div
+         {:class name}
+         (markup-elements-cp config l))
 
-             ["Latex_Fragment" l]
-             [:p.latex-fragment
-              (inline config ["Latex_Fragment" l])]
+        ["Latex_Fragment" l]
+        [:p.latex-fragment
+         (inline config ["Latex_Fragment" l])]
 
-             ["Latex_Environment" name option content]
-             (let [content (latex-environment-content name option content)]
-               (if html-export?
-                 (latex/html-export content true true)
-                 (latex/latex (str (d/squuid)) content true true)))
+        ["Latex_Environment" name option content]
+        (let [content (latex-environment-content name option content)]
+          (if html-export?
+            (latex/html-export content true true)
+            (latex/latex (str (d/squuid)) content true true)))
 
-             ["Displayed_Math" content]
-             (if html-export?
-               (latex/html-export content true true)
-               (latex/latex (str (d/squuid)) content true true))
+        ["Displayed_Math" content]
+        (if html-export?
+          (latex/html-export content true true)
+          (latex/latex (str (d/squuid)) content true true))
 
-             ["Footnote_Definition" name definition]
-             (let [id (util/url-encode name)]
-               [:div.footdef
-                [:div.footpara
-                 (conj
-                  (markup-element-cp config ["Paragraph" definition])
-                  [:a.ml-1 {:id (str "fn." id)
-                            :style {:font-size 14}
-                            :class "footnum"
-                            :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
-                   [:sup.fn (str name "↩︎")]])]])
+        ["Footnote_Definition" name definition]
+        (let [id (util/url-encode name)]
+          [:div.footdef
+           [:div.footpara
+            (conj
+             (markup-element-cp config ["Paragraph" definition])
+             [:a.ml-1 {:id (str "fn." id)
+                       :style {:font-size 14}
+                       :class "footnum"
+                       :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
+              [:sup.fn (str name "↩︎")]])]])
 
-             ["Src" options]
-             [:div.cp__fenced-code-block
-              (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
-                (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
-                (src-cp config options html-export?))]
+        ["Src" options]
+        [:div.cp__fenced-code-block
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
+           (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+           (src-cp config options html-export?))]
 
-             :else
-             "")
+        :else
+        "")
       (catch js/Error e
         (println "Convert to html failed, error: " e)
         ""))))
