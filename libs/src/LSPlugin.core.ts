@@ -1524,8 +1524,9 @@ class LSPluginCore
       this._currentTheme.eject()
       this._currentTheme = null
 
-      const { themes } = this._userPreferences
+      const { theme, themes } = this._userPreferences
       await this.saveUserPreferences({
+        theme: theme?.pid === id ? null : theme,
         themes: {
           ...themes,
           light: themes.light?.pid === id ? null : themes.light,

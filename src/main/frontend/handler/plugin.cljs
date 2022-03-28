@@ -530,7 +530,8 @@
                                             (let [themes (bean/->clj themes)
                                                   custom-theme (dissoc themes :mode)
                                                   mode (:mode themes)]
-                                              (state/set-custom-theme! custom-theme)
+                                              (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
+                                                                        :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                               (state/set-theme! mode))))
 
                 (.on "settings-changed" (fn [id ^js settings]
