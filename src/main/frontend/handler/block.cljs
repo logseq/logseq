@@ -101,8 +101,10 @@
   (get-timestamp block "Deadline"))
 
 (defn load-more!
-  [block? db-id start-id]
+  [db-id start-id]
   (let [repo (state/get-current-repo)
+        block (db/entity repo db-id)
+        block? (not (:block/name block))
         k (if block?
             :frontend.db.react/block-and-children
             :frontend.db.react/page-blocks)

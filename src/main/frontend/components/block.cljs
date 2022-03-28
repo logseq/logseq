@@ -577,13 +577,15 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config uuid]
   (when-let [block (db/entity [:block/uuid uuid])]
-    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block))]
+    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
+                                          {:scoped-block-id (:db/id block)})]
       [:div.color-level.embed-block.bg-base-2
        {:style {:z-index 2}
         :on-double-click #(edit-parent-block % config)
         :on-mouse-down (fn [e] (.stopPropagation e))}
        [:div.px-3.pt-1.pb-2
         (blocks-container blocks (assoc config
+                                        :db/id (:db/id block)
                                         :id (str uuid)
                                         :embed-id uuid
                                         :embed? true
@@ -2877,12 +2879,12 @@
   [config flat-blocks]
   (when-let [db-id (:db/id config)]
     (let [last-block-id (:db/id (last flat-blocks))]
-      (block-handler/load-more! (:block? config)
-                               db-id
-                               last-block-id))))
+      (block-handler/load-more! db-id last-block-id))))
 
 (rum/defcs lazy-blocks < rum/reactive
-  {:did-remount (fn [_old-state new-state]
+  {:init (fn [state]
+           (assoc state ::id (str (random-uuid))))
+   :did-remount (fn [_old-state new-state]
                   ;; Loading more when pressing Enter, expand blocks or paste
                   (let [[config flat-blocks _] (:rum/args new-state)]
                     (when-not (:db/id config)
@@ -2906,15 +2908,17 @@
                            (load-more-blocks! config flat-blocks)
                            (reset! *last-idx idx)))
         has-more? (if db-id
-                    (not= last-block-id (model/get-block-last-child db-id))
-                    (>= (count flat-blocks) (inc idx)))]
-    [:div#lazy-blocks
+                    (and (not= last-block-id (model/get-block-last-child db-id))
+                         (not= last-block-id db-id))
+                    (>= (count flat-blocks) (inc idx)))
+        dom-id (str "lazy-blocks-" (::id state))]
+    [:div {:id dom-id}
      (ui/infinite-list
       "main-content-container"
       (block-list config blocks)
       {:on-load bottom-reached
        :bottom-reached (fn []
-                         (when-let [node (gdom/getElement "lazy-blocks")]
+                         (when-let [node (gdom/getElement dom-id)]
                            (ui/bottom-reached? node 1000)))
        :has-more has-more?
        :more (if (or (:preview? config) (:sidebar? config))
