@@ -522,9 +522,16 @@
                                               url (:url theme)
                                               mode (:mode theme)]
                                           (when mode
-                                            (do (state/set-custom-theme! mode theme)
-                                                (state/set-theme! mode)))
+                                            (state/set-custom-theme! mode theme)
+                                            (state/set-theme! mode))
                                           (state/set-state! :plugin/selected-theme url))))
+                                        
+                (.on "reset-custom-theme" (fn [^js themes]
+                                            (let [themes (bean/->clj themes)
+                                                  custom-theme (dissoc themes :mode)
+                                                  mode (:mode themes)]
+                                              (state/set-custom-theme! custom-theme)
+                                              (state/set-theme! mode))))
 
                 (.on "settings-changed" (fn [id ^js settings]
                                           (let [id (keyword id)]

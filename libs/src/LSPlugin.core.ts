@@ -1114,6 +1114,7 @@ class LSPluginCore
     | 'unregistered'
     | 'theme-changed'
     | 'theme-selected'
+    | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
     | 'beforereload'
@@ -1175,16 +1176,25 @@ class LSPluginCore
     }
   }
 
+  /**
+   * Activate the user preferences.
+   *
+   * Steps:
+   *
+   * 1. Load the custom theme.
+   *
+   * @memberof LSPluginCore
+   */
   async activateUserPreferences() {
-    const { theme, themes } = this._userPreferences
+    const { theme: legacyTheme, themes } = this._userPreferences
     const currentTheme = themes[themes.mode]
 
     // If there is currently a theme that has been set
     if (currentTheme) {
       await this.selectTheme(currentTheme, { effect: false })
-    } else if (theme) {
+    } else if (legacyTheme) {
       // Otherwise compatible with older versions
-      await this.selectTheme(theme, { effect: false })
+      await this.selectTheme(legacyTheme, { effect: false })
     }
   }
 
@@ -1463,11 +1473,13 @@ class LSPluginCore
       { effect: true, emit: true },
       options
     )
-    // Clear current theme before injecting
+
+    // Clear current theme before injecting.
     if (this._currentTheme) {
       this._currentTheme.eject()
     }
 
+    // Detect if it is the default theme (no url).
     if (!theme.url) {
       this._currentTheme = null
     } else {
@@ -1500,7 +1512,7 @@ class LSPluginCore
   }
 
   async unregisterTheme(id: PluginLocalIdentity, effect = true) {
-    debug('Unregistere theme #', id)
+    debug('Unregister theme #', id)
 
     if (!this._registeredThemes.has(id)) {
       return
@@ -1512,9 +1524,8 @@ class LSPluginCore
       this._currentTheme.eject()
       this._currentTheme = null
 
-      const { theme, themes } = this._userPreferences
+      const { themes } = this._userPreferences
       await this.saveUserPreferences({
-        theme: theme?.pid === id ? null : theme,
         themes: {
           ...themes,
           light: themes.light?.pid === id ? null : themes.light,
@@ -1523,7 +1534,7 @@ class LSPluginCore
       })
 
       // Reset current theme if it is unregistered
-      this.emit('theme-selected', { mode: themes.mode })
+      this.emit('reset-custom-theme', this._userPreferences.themes)
     }
   }
 }

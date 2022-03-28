@@ -921,10 +921,11 @@
     (use-theme-mode! theme')))
 
 (defn set-custom-theme!
-  [mode theme]
-  (do
-    (set-state! [:ui/custom-theme (keyword mode)] theme)
-    (storage/set :ui/custom-theme (:ui/custom-theme @state))))
+  ([custom-theme]
+   (set-custom-theme! nil custom-theme))
+  ([mode theme]
+   (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
+   (storage/set :ui/custom-theme (:ui/custom-theme @state))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
