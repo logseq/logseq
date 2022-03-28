@@ -12,7 +12,7 @@
 
 (def initial-blocks-length 50)
 
-(def step-loading-blocks 25)
+(def step-loading-blocks 50)
 
 ;;  Fns
 
@@ -103,10 +103,14 @@
 (defn load-more!
   [block? db-id start-id]
   (let [repo (state/get-current-repo)
-        query-k (if block?
-                  [repo :frontend.db.react/block-and-children (:block/uuid (db/pull db-id))]
-                  [repo :frontend.db.react/page-blocks db-id])
-        more-data (db-model/get-paginated-blocks-no-cache start-id {:limit step-loading-blocks})]
+        k (if block?
+            :frontend.db.react/block-and-children
+            :frontend.db.react/page-blocks)
+        query-k [repo k db-id]
+        option (cond-> {:limit step-loading-blocks}
+                 block?
+                 (assoc :scoped-block-id db-id))
+        more-data (db-model/get-paginated-blocks-no-cache start-id option)]
     (db-react/swap-new-result! query-k
                                (fn [result]
                                  (->> (concat result more-data)

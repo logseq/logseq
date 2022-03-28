@@ -47,10 +47,10 @@
     (let [root (if block-id
                  (db/pull [:block/uuid block-id])
                  (model/get-page page-name))
-          blocks (db/get-paginated-blocks repo (:db/id root))]
-      (if block-id
-        (cons root blocks)
-        blocks))))
+          opts (if block-id
+                 {:scoped-block-id (:db/id root)}
+                 {})]
+      (db/get-paginated-blocks repo (:db/id root) opts))))
 
 (defn- open-first-block!
   [state]
