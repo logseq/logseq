@@ -2881,7 +2881,9 @@
       (block-list config blocks)
       (let [last-block-id (:db/id (last flat-blocks))
             bottom-reached (fn []
-                             (when db-id
+                             (when (and db-id
+                                        ;; To prevent scrolling after inserting new blocks
+                                        (> (- (util/time-ms) (:start-time config)) 200))
                                (load-more-blocks! config flat-blocks)))
             has-more? (when db-id
                         (and (not= last-block-id (model/get-block-last-child db-id))
@@ -2914,7 +2916,8 @@
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
       (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
-            flat-blocks (vec blocks)]
+            flat-blocks (vec blocks)
+            config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config flat-blocks blocks->vec-tree)]))))
