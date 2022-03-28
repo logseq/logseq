@@ -481,45 +481,28 @@
        parent-sibling
        (get-next-outdented-block (:db/id parent))))))
 
-(defn- get-paginated-blocks-aux
+(defn get-paginated-blocks-no-cache
   "Result should be sorted."
   [start-id {:keys [limit include-start?]}]
   (when-let [start (db-utils/entity start-id)]
     (let [conn (conn/get-conn false)
           result (loop [block start
-                        next-siblings '()
                         result []]
                    (let [block-id (:db/id block)
                          block-parent-id (:db/id (:block/parent block))
                          next-sibling (get-by-parent-&-left conn block-parent-id block-id)
-                         next-block (if (collapsed-and-has-children? block) ; skips children
+                         next-block (if (and next-sibling (collapsed-and-has-children? block)) ; skips children
                                       next-sibling
                                       (let [child-block (get-by-parent-&-left conn block-id block-id)]
                                         (or child-block
                                             next-sibling
-                                            (get-next-outdented-block block-id))))
-                         next-siblings (if next-sibling
-                                         (cons next-sibling next-siblings)
-                                         next-siblings)]
+                                            (get-next-outdented-block block-id))))]
                      (cond
                        (and limit (>= (count result) limit))
                        result
 
-                       (and (nil? next-block) (empty? next-siblings))
-                       result
-
                        next-block
-                       (let [next-siblings (if (= next-block (first next-siblings))
-                                             (rest next-siblings)
-                                             next-siblings)]
-                         (recur next-block
-                                next-siblings
-                                (conj result next-block)))
-
-                       (and (nil? next-block) (seq next-siblings))
-                       (recur (first next-siblings)
-                              (rest next-siblings)
-                              (conj result (first next-siblings)))
+                       (recur next-block (conj result next-block))
 
                        :else
                        result)))]
@@ -545,8 +528,8 @@
      (some->
       (react/q repo-url [:frontend.db.react/page-blocks block-id]
         {:query-fn (fn [db tx-report result]
-                     (let [blocks (get-paginated-blocks-aux block-id {:limit limit
-                                                                      :include-start? (not page?)})
+                     (let [blocks (get-paginated-blocks-no-cache block-id {:limit limit
+                                                                           :include-start? (not page?)})
                            block-eids (map :db/id blocks)
                            blocks (db-utils/pull-many repo-url pull-keys block-eids)]
                        (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}

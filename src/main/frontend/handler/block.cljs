@@ -5,7 +5,8 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as db-react]
             [frontend.state :as state]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as block]
+            [frontend.util :as util]))
 
 ;; lazy loading
 
@@ -105,7 +106,8 @@
         query-k (if block?
                   [repo :frontend.db.react/block-and-children (:block/uuid (db/pull db-id))]
                   [repo :frontend.db.react/page-blocks db-id])
-        more-data (db-model/get-paginated-blocks start-id {:limit step-loading-blocks})]
+        more-data (db-model/get-paginated-blocks-no-cache start-id {:limit step-loading-blocks})]
     (db-react/swap-new-result! query-k
                                (fn [result]
-                                 (concat result more-data)))))
+                                 (->> (concat result more-data)
+                                      (util/distinct-by :db/id))))))
