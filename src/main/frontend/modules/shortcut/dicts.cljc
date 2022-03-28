@@ -1,4 +1,4 @@
-(ns ^:bb-compatible frontend.modules.shortcut.dict
+(ns ^:bb-compatible frontend.modules.shortcut.dicts
   "Provides dictionary entries for shortcuts"
   (:require [medley.core :as medley]))
 
@@ -126,6 +126,9 @@
 
 (def ^:large-vars/data-var dicts
   {:en (merge
+        ;; Dynamically add this ns since command descriptions have to
+        ;; stay in sync with shortcut.config command ids which do not
+        ;; have a namespce
         (medley/map-keys decorate-namespace all-default-keyboard-shortcuts)
         category)
    :zh-CN   {:shortcut.category/formatting            "格式化"

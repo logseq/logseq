@@ -16,10 +16,7 @@ In order to run the commands in this doc, you will need to install
 Language translations are in two files,
 [frontend/dicts.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljs)
 and
-[shortcut/dict.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dict.cljs).
-When translating `shortcut/dict.cljs` you will want to refer to
-https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/config.cljs
-for the English equivalent.
+[shortcut/dict.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljs).
 
 ## Language Overview
 
@@ -88,4 +85,4 @@ detect this error and helpfully show you what was typoed.
 
 To add a new language, add an entry to `frontend.dicts/languages`. Then add a
 new locale keyword to `frontend.dicts/dicts` and to
-`frontend.modules.shortcut.dict/dict` and start translating as described above.
+`frontend.modules.shortcut.dicts/dicts` and start translating as described above.

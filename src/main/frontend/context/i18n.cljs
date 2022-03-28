@@ -1,7 +1,8 @@
 (ns frontend.context.i18n
   (:require [frontend.dicts :as dicts]
-            [frontend.modules.shortcut.dict :as shortcut-dict]
+            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [medley.core :refer [deep-merge]]
+            [tongue.core :as tongue]
             [frontend.state :as state]))
 
 ;; TODO
@@ -16,14 +17,17 @@
 
 (defonce translate-dicts (atom {}))
 
+(defn- translate [dicts]
+  (tongue/build-translate dicts))
+
 (defn t
   [& args]
   (let [preferred-language (keyword (state/sub :preferred-language))
         _ (when (nil? preferred-language)
             (state/set-preferred-language! (fetch-local-language)))
         dicts (or (get @translate-dicts preferred-language)
-                  (let [result (some-> (deep-merge dicts/dicts shortcut-dict/dicts)
-                                       dicts/translate)]
+                  (let [result (some-> (deep-merge dicts/dicts shortcut-dicts/dicts)
+                                       translate)]
                     (swap! translate-dicts assoc preferred-language result)
                     result))]
     (apply (partial dicts preferred-language) args)))

@@ -11,7 +11,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.modules.shortcut.dict :as dict]
+            [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
@@ -19,8 +19,13 @@
             [clojure.data :as data]
             [medley.core :as medley]))
 
+;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
+;; `:command.date-picker/complete`. They are namespaced in translation but
+;; almost everywhere else they are not which could cause needless conflicts
+;; with other config keys
+
 ;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dict/all-default-keyboard-shortcuts
+;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -364,10 +369,10 @@
 
 (let [keyboard-shortcuts
       {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
-       ::dict/keyboard-shortcuts (set (keys dict/all-default-keyboard-shortcuts))}]
-  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::dict/keyboard-shortcuts keyboard-shortcuts))
+       ::dicts/keyboard-shortcuts (set (keys dicts/all-default-keyboard-shortcuts))}]
+  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts))
           (str "Keys for keyboard shortcuts must be the same "
-               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dict/keyboard-shortcuts keyboard-shortcuts)))))
+               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
 
 (defn build-category-map [symbols]
   (reduce into {}
@@ -511,7 +516,7 @@
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dict/category
+;; a description for it in frontend.modules.shortcut.dicts/category
 (def ^:large-vars/data-var category
   "Categories for docs purpose"
   {:shortcut.category/basics
@@ -632,10 +637,10 @@
     :date-picker/complete]})
 
 (let [category-maps {::category (set (keys category))
-                     ::dict/category (set (keys dict/category))}]
-  (assert (= (::category category-maps) (::dict/category category-maps))
+                     ::dicts/category (set (keys dicts/category))}]
+  (assert (= (::category category-maps) (::dicts/category category-maps))
           (str "Keys for category maps must be the same "
-               (data/diff (::category category-maps) (::dict/category category-maps)))))
+               (data/diff (::category category-maps) (::dicts/category category-maps)))))
 
 
 (defn add-shortcut!
