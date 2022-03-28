@@ -110,6 +110,7 @@
         "react-textarea-autosize": "8.3.3",
         "react-tippy": "1.4.0",
         "react-transition-group": "4.3.0",
+        "react-virtuoso": "^2.8.5",
         "reakit": "0.11.1",
         "remove-accents": "0.4.2",
         "send-intent": "3.0.11",

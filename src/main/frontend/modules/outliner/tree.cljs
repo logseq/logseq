@@ -80,3 +80,20 @@
   [blocks-exclude-root root]
   (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
     (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
+
+(defn blocks-with-level
+  "`blocks` should be sorted already."
+  [blocks]
+  (let [level->block (atom {})]
+    (loop [blocks blocks
+           result []]
+      (if-let [block (first blocks)]
+        (let [parent-id (:db/id (:block/parent block))
+              parent-level (get @level->block parent-id)
+              level' (inc (or parent-level 0))
+              block (assoc block :block/level level')]
+          (when-not parent-level
+            (swap! level->block assoc parent-id parent-level))
+          (swap! level->block assoc (:db/id block) level')
+          (recur (rest blocks) (conj result block)))
+        result))))

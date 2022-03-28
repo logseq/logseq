@@ -2238,7 +2238,8 @@
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-xl"))
        :blockid (str uuid)
-       :haschild (str has-child?)}
+       :haschild (str has-child?)
+       :style {:padding-left (* (- level 1) 24)}}
 
        level
        (assoc :level level)
@@ -2274,7 +2275,7 @@
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
-     (block-children config children collapsed?)
+     ;; (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2846,24 +2847,26 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
+(defn- block-item
+  [config blocks idx item]
+  (let [item (->
+              (dissoc item :block/meta)
+              (assoc :block/top? (zero? idx)
+                     :block/bottom? (= (count blocks) (inc idx))))
+        config (assoc config :block/uuid (:block/uuid item))]
+    (rum/with-key (block-container config item)
+      (str (:block/uuid item)))))
+
 (defn- block-list
   [config blocks]
   (for [[idx item] (medley/indexed blocks)]
-    (let [item (->
-                (dissoc item :block/meta)
-                (assoc :block/top? (zero? idx)
-                       :block/bottom? (= (count blocks) (inc idx))))
-          config (assoc config :block/uuid (:block/uuid item))]
-      (rum/with-key (block-container config item)
-        (str (:block/uuid item))))))
+    (block-item config blocks idx item)))
 
 (defn- custom-query-or-ref?
   [config]
   (let [ref? (:ref? config)
         custom-query? (:custom-query? config)]
     (or custom-query? ref?)))
-
-;; TODO: virtual tree for better UX and memory usage reduce
 
 (defn- load-more-blocks!
   [config flat-blocks]
@@ -2874,33 +2877,20 @@
 (rum/defcs lazy-blocks < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state config flat-blocks blocks->vec-tree]
-  (let [db-id (:db/id config)
-        blocks (blocks->vec-tree flat-blocks)]
-    (if (:custom-query? config)
-      (block-list config blocks)
-      (let [last-block-id (:db/id (last flat-blocks))
-            bottom-reached (fn []
-                             (when (and db-id
-                                        ;; To prevent scrolling after inserting new blocks
-                                        (> (- (util/time-ms) (:start-time config)) 200))
-                               (load-more-blocks! config flat-blocks)))
-            has-more? (when db-id
-                        (and (not= last-block-id (model/get-block-last-child db-id))
-                             (not= last-block-id db-id)))
-            dom-id (str "lazy-blocks-" (::id state))]
-        [:div {:id dom-id}
-         (ui/infinite-list
-          "main-content-container"
-          (block-list config blocks)
-          {:on-load bottom-reached
-           :bottom-reached (fn []
-                             (when-let [node (gdom/getElement dom-id)]
-                               (ui/bottom-reached? node 1000)))
-           :has-more has-more?
-           :more (if (or (:preview? config) (:sidebar? config))
-                   "More"
-                   (ui/loading "Loading"))})]))))
+  [state config blocks blocks->vec-tree]
+  (let [db-id (:db/id config)]
+    (if (or (:custom-query? config) (not db-id))
+      (let [blocks (blocks->vec-tree blocks)]
+        (block-list config blocks))
+      (let [blocks (tree/blocks-with-level blocks)
+            bottom-reached (fn [] (load-more-blocks! config blocks))]
+        (ui/virtual-list {:style {:height "calc(100vh - 180px)"}
+                          :data (bean/->js blocks)
+                          :end-reached bottom-reached
+                          :overscan 200
+                          :item-content (fn [idx block]
+                                          (let [block (bean/->clj block)]
+                                            (block-item config blocks idx block)))})))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
