@@ -1667,6 +1667,7 @@
    "{" "}"
    "(" ")"
    "`" "`"
+   "\"" "\""
    "~" "~"
    "*" "*"
    "_" "_"
@@ -2860,7 +2861,7 @@
 
         (and
          (contains? (set/difference (set (keys reversed-autopair-map))
-                                    #{"`"})
+                                    #{"`" "\""})
                     key)
          (= (get-current-input-char input) key))
         (do
