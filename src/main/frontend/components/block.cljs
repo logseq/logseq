@@ -575,19 +575,20 @@
     (editor-handler/edit-block! config :max (:block/uuid config))))
 
 (rum/defc block-embed < rum/reactive db-mixins/query
-  [config id]
-  (let [blocks (db/get-paginated-blocks (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2
-     {:style {:z-index 2}
-      :on-double-click #(edit-parent-block % config)
-      :on-mouse-down (fn [e] (.stopPropagation e))}
-     [:div.px-3.pt-1.pb-2
-      (blocks-container blocks (assoc config
-                                      :id (str id)
-                                      :embed-id id
-                                      :embed? true
-                                      :embed-parent (:block config)
-                                      :ref? false))]]))
+  [config uuid]
+  (when-let [block (db/entity [:block/uuid uuid])]
+    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block))]
+      [:div.color-level.embed-block.bg-base-2
+       {:style {:z-index 2}
+        :on-double-click #(edit-parent-block % config)
+        :on-mouse-down (fn [e] (.stopPropagation e))}
+       [:div.px-3.pt-1.pb-2
+        (blocks-container blocks (assoc config
+                                        :id (str uuid)
+                                        :embed-id uuid
+                                        :embed? true
+                                        :embed-parent (:block config)
+                                        :ref? false))]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -1916,20 +1917,21 @@
         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
         nil)]]))
 
-(rum/defc block-refs-count < rum/reactive db-mixins/query
+(rum/defc block-refs-count < rum/static
   [block]
-  (if-let [block-refs-count (model/get-block-refs-count (:db/id block))]
+  (let [block-refs-count (count (:block/_refs block))]
     (when (> block-refs-count 0)
-      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-       {:title "Open block references"
-        :on-click (fn []
-                    (state/sidebar-add-block!
-                     (state/get-current-repo)
-                     (:db/id block)
-                     :block-ref
-                     {:block block}))}
-       block-refs-count])
-    nil))
+      [:div
+       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+        {:title "Open block references"
+         :style {:margin-top -1}
+         :on-click (fn []
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id block)
+                      :block-ref
+                      {:block block}))}
+        block-refs-count]])))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -2860,41 +2862,48 @@
 
 ;; TODO: virtual tree for better UX and memory usage reduce
 
-
 (defn- get-segment
-  [_config flat-blocks idx blocks->vec-tree]
+  [flat-blocks idx]
   (let [new-idx (if (< idx block-handler/initial-blocks-length)
                   block-handler/initial-blocks-length
                   (+ idx block-handler/step-loading-blocks))
         max-idx (count flat-blocks)
         idx (min max-idx new-idx)
         blocks (util/safe-subvec flat-blocks 0 idx)]
-    [(blocks->vec-tree blocks)
+    [blocks
      idx]))
+
+(defn- load-more-blocks!
+  [config flat-blocks]
+  (when-let [db-id (:db/id config)]
+    (let [last-block-id (:db/id (last flat-blocks))]
+      (block-handler/load-more! (:block? config)
+                               db-id
+                               last-block-id))))
 
 (rum/defcs lazy-blocks < rum/reactive
   {:did-remount (fn [_old-state new-state]
-                  ;; Loading more when pressing Enter or paste
-                  (let [*last-idx (::last-idx new-state)
-                        new-idx (if (zero? *last-idx)
-                                  1
-                                  (inc @*last-idx))]
-                    (reset! *last-idx new-idx))
+                  ;; Loading more when pressing Enter, expand blocks or paste
+                  (let [[config flat-blocks _] (:rum/args new-state)]
+                    (when-not (:db/id config)
+                      (let [*last-idx (::last-idx new-state)
+                           new-idx (if (zero? *last-idx)
+                                     1
+                                     (inc @*last-idx))]
+                       (reset! *last-idx new-idx))))
                   new-state)}
   (rum/local 0 ::last-idx)
   [state config flat-blocks blocks->vec-tree]
   (let [*last-idx (::last-idx state)
         db-id (:db/id config)
-        [blocks idx] (get-segment config
-                                  flat-blocks
-                                  @*last-idx
-                                  blocks->vec-tree)
+        [blocks idx] (if db-id
+                       [flat-blocks 0]
+                       (get-segment flat-blocks @*last-idx))
+        blocks (blocks->vec-tree blocks)
         last-block-id (:db/id (last flat-blocks))
         bottom-reached (fn []
                          (if db-id
-                           (block-handler/load-more! (:block? config)
-                                                     db-id
-                                                     last-block-id)
+                           (load-more-blocks! config flat-blocks)
                            (reset! *last-idx idx)))
         has-more? (if db-id
                     (not= last-block-id (model/get-block-last-child db-id))

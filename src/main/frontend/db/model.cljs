@@ -408,37 +408,6 @@
   ([repo block-id]
    (some? (:block/_parent (db-utils/entity repo [:block/uuid block-id])))))
 
-;; TODO: both zipmap and map lookup are slow in cljs
-;; zipmap 20k blocks takes 30ms on my M1 Air.
-(defn sort-blocks
-  [blocks parent {:keys [limit] :as config}]
-  (let [ids->blocks (zipmap (map
-                              (fn [b]
-                                [(:db/id (:block/parent b))
-                                 (:db/id (:block/left b))])
-                              blocks)
-                            blocks)]
-    (loop [node parent
-           next-siblings '()
-           result []]
-      (if (or (nil? node) (and limit (= (count result) limit)))
-        result
-        (let [id (:db/id node)
-              child-block (get ids->blocks [id id])
-              next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
-              next-siblings (if (and next-sibling child-block)
-                              (cons next-sibling next-siblings)
-                              next-siblings)
-              collapsed? (:block/collapsed? node)]
-          (if-let [node (and
-                         (or (not (and collapsed? (has-children? (:block/uuid node))))
-                             (= (:db/id node) (:db/id parent)))
-                         (or child-block next-sibling))]
-            (recur node next-siblings (conj result node))
-            (if-let [sibling (first next-siblings)]
-              (recur sibling (rest next-siblings) (conj result sibling))
-              result)))))))
-
 (defn get-block-refs-count
   [block-db-id]
   (when-let [repo-url (state/get-current-repo)]
@@ -488,24 +457,25 @@
     (let [conn (conn/get-conn false)
           result (loop [block start
                         result []]
-                   (let [block-id (:db/id block)
-                         block-parent-id (:db/id (:block/parent block))
-                         next-sibling (get-by-parent-&-left conn block-parent-id block-id)
-                         next-block (if (and next-sibling (collapsed-and-has-children? block)) ; skips children
-                                      next-sibling
-                                      (let [child-block (get-by-parent-&-left conn block-id block-id)]
-                                        (or child-block
-                                            next-sibling
-                                            (get-next-outdented-block block-id))))]
-                     (cond
-                       (and limit (>= (count result) limit))
-                       result
+                   (if (and limit (>= (count result) limit))
+                     result
+                     (let [block-id (:db/id block)
+                           block-parent-id (:db/id (:block/parent block))
+                           next-block (or
+                                       (if (collapsed-and-has-children? block) ; skips children
+                                         ;; Sibling
+                                         (get-by-parent-&-left conn block-parent-id block-id)
+                                         (or
+                                          ;; Child
+                                          (get-by-parent-&-left conn block-id block-id)
+                                          ;; Sibling
+                                          (get-by-parent-&-left conn block-parent-id block-id)))
 
-                       next-block
-                       (recur next-block (conj result next-block))
-
-                       :else
-                       result)))]
+                                       ;; Next outdented block
+                                       (get-next-outdented-block block-id))]
+                       (if next-block
+                         (recur next-block (conj result next-block))
+                         result))))]
       (if include-start?
         (cons start result)
         result))))
@@ -528,10 +498,23 @@
      (some->
       (react/q repo-url [:frontend.db.react/page-blocks block-id]
         {:query-fn (fn [db tx-report result]
-                     (let [blocks (get-paginated-blocks-no-cache block-id {:limit limit
+                     (let [[tx-id->block cached-id->block] (when (and tx-report result)
+                                                             (let [tx-block-ids (distinct (mapv :e (:tx-data tx-report)))
+                                                                   blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
+                                                                               (remove nil?))]
+                                                               [(zipmap (mapv :db/id blocks) blocks)
+                                                                (zipmap (mapv :db/id @result) @result)]))
+                           limit (if (and result @result) (+ (count @result) 5) limit)
+                           blocks (get-paginated-blocks-no-cache block-id {:limit limit
                                                                            :include-start? (not page?)})
                            block-eids (map :db/id blocks)
-                           blocks (db-utils/pull-many repo-url pull-keys block-eids)]
+                           blocks (if (seq tx-id->block)
+                                    (map (fn [id]
+                                           (or (get tx-id->block id)
+                                               (get cached-id->block id)
+                                               (db-utils/pull repo-url pull-keys id))) block-eids)
+                                    (db-utils/pull-many repo-url pull-keys block-eids))]
+
                        (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
         nil)
       react))))

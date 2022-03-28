@@ -10,9 +10,9 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 100)
+(def initial-blocks-length 50)
 
-(def step-loading-blocks 30)
+(def step-loading-blocks 25)
 
 ;;  Fns
 
