@@ -524,27 +524,29 @@
       (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block
-  (fn [uuid]
-    (when-let [block (db-model/query-block-by-uuid uuid)]
+  (fn [block-uuid]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
       (let [{:block/keys [parent left]} block
             block (when-not (= parent left) (db-utils/pull (:db/id left)))]
         (and block (bean/->js (normalize-keyword-for-json block)))))))
 
 (def ^:export get_next_sibling_block
-  (fn [uuid]
-    (when-let [block (db-model/query-block-by-uuid uuid)]
+  (fn [block-uuid]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
       (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
         (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
 
 (def ^:export set_block_collapsed
-  (fn [uuid ^js opts]
-    (when-let [block (db-model/get-block-by-uuid uuid)]
+  (fn [block-uuid ^js opts]
+    (when-let [block (db-model/get-block-by-uuid block-uuid)]
       (let [{:keys [flag]} (bean/->clj opts)
+            block-uuid (uuid block-uuid)
             flag (if (= "toggle" flag)
                    (not (util/collapsed? block))
                    (boolean flag))]
-        (if flag (editor-handler/collapse-block! uuid)
-                 (editor-handler/expand-block! uuid))))))
+        (if flag (editor-handler/collapse-block! block-uuid)
+                 (editor-handler/expand-block! block-uuid))
+        nil))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
