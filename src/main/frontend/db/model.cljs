@@ -408,17 +408,6 @@
   ([repo block-id]
    (some? (:block/_parent (db-utils/entity repo [:block/uuid block-id])))))
 
-(defn get-block-refs-count
-  [block-db-id]
-  (when-let [repo-url (state/get-current-repo)]
-    (when block-db-id
-      (some->
-       (react/q repo-url [:frontend.db.react/block-refs-count block-db-id]
-         {:query-fn (fn [_db _tx-report _result]
-                      (count (:block/_refs (db-utils/entity repo-url block-db-id))))}
-         nil)
-       react))))
-
 (defn- collapsed-and-has-children?
   [block]
   (and (:block/collapsed? block) (has-children? (:block/uuid block))))
@@ -530,7 +519,7 @@
   ([repo-url block-id]
    (get-paginated-blocks repo-url block-id {}))
   ([repo-url block-id {:keys [pull-keys start-block limit use-cache? scoped-block-id]
-                       :or {pull-keys '[*]
+                       :or {pull-keys '[* :block/_refs]
                             limit 50
                             use-cache? true
                             scoped-block-id nil}}]
@@ -550,7 +539,11 @@
       (react/q repo-url [query-key block-id]
         {:use-cache? use-cache?
          :query-fn (fn [db tx-report result]
-                     (let [tx-block-ids (distinct (mapv :e (:tx-data tx-report)))
+                     (let [tx-data (:tx-data tx-report)
+                           refs (some->> (filter #(= :block/refs (:a %)) tx-data)
+                                         (map :v))
+                           tx-block-ids (distinct (->> (map :e tx-data)
+                                                       (concat refs)))
                            [tx-id->block cached-id->block] (when (and tx-report result)
                                                              (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                (remove nil?))]

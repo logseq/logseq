@@ -10,7 +10,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [frontend.db-schema :as db-schema]
             [cljs.spec.alpha :as s]
             [clojure.core.async :as async]))
 
@@ -18,9 +17,6 @@
 ;; ::block
 ;; pull-block react-query
 (s/def ::block (s/tuple #(= ::block %) uuid?))
-;; ::block-refs-count
-;; (count (:block/refs block)) react-query
-(s/def ::block-refs-count (s/tuple #(= ::block-refs-count %) int?))
 ;; ::page-blocks
 ;; get page-blocks react-query
 (s/def ::page-blocks (s/tuple #(= ::page-blocks %) int?))
@@ -49,7 +45,6 @@
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
-                                :block-refs-count ::block-refs-count
                                 :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
                                 :journals ::journals
@@ -254,7 +249,7 @@
                               (let [entity (db-utils/entity ref)]
                                 (if (:block/name entity) ; page
                                   [::page-blocks ref]
-                                  [::block-refs-count ref])))
+                                  [::page-blocks (:db/id (:block/page entity))])))
                             refs))
         others (->>
                 (keys @query-state)
@@ -311,7 +306,7 @@
                  (or (get affected-keys (vec (rest k)))
                      custom?
                      kv?))
-            (let [{:keys [query query-fn result]} cache]
+            (let [{:keys [query query-fn]} cache]
               (when (or query query-fn)
                 (try
                   (let [f #(execute-query! repo-url db k tx cache)]
