@@ -57,7 +57,7 @@
   [filename]
   (p/let [[repo-dir assets-dir]
           (editor-handler/ensure-assets-dir! (state/get-current-repo))
-          path (str repo-dir "/" assets-dir "/" filename)]
+          path (path/join repo-dir assets-dir filename)]
     (if (mobile-util/native-android?)
       path
       (js/encodeURI (js/decodeURI path)))))
