@@ -25,7 +25,8 @@
 ;; with other config keys
 
 ;; To add a new entry to this map, first add it here and then
-;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts
+;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; :inactive key is for commands that are not active for a given platform or feature condition
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
@@ -275,9 +276,9 @@
    :graph/save                     {:fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
-   :command/run                    (when (util/electron?)
-                                     {:binding "mod+shift+1"
-                                      :fn      #(state/pub-event! [:command/run])})
+   :command/run                    {:binding "mod+shift+1"
+                                    :inactive (not (util/electron?))
+                                    :fn      #(state/pub-event! [:command/run])}
 
    :go/home                        {:binding "g h"
                                     :fn      route-handler/redirect-to-home!}
@@ -328,24 +329,24 @@
    :ui/toggle-contents              {:binding "mod+shift+c"
                                      :fn      ui-handler/toggle-contents!}
 
-   :ui/open-new-window              (when (util/electron?)
-                                      {:binding "mod+n"
-                                       :fn      #(state/pub-event! [:graph/open-new-window nil])})
+   :ui/open-new-window              {:binding "mod+n"
+                                     :inactive (not (util/electron?))
+                                     :fn      #(state/pub-event! [:graph/open-new-window nil])}
 
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app (when (util/electron?)
-                                      {:binding false
-                                       :fn      page-handler/open-file-in-default-app})
+   :editor/open-file-in-default-app {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   (when (util/electron?)
-                                      {:binding false
-                                       :fn      page-handler/open-file-in-directory})
+   :editor/open-file-in-directory   {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/open-file-in-directory}
 
-   :editor/copy-current-file        (when (util/electron?)
-                                      {:binding false
-                                       :fn      page-handler/copy-current-file})
+   :editor/copy-current-file        {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/copy-current-file}
 
    :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
@@ -353,9 +354,9 @@
    :ui/select-theme-color           {:binding "t i"
                                      :fn      plugin-handler/show-themes-modal!}
 
-   :ui/goto-plugins                  (when plugin-handler/lsp-enabled?
-                                       {:binding "t p"
-                                        :fn      plugin-handler/goto-plugins-dashboard!})
+   :ui/goto-plugins                 {:binding "t p"
+                                     :inactive (not plugin-handler/lsp-enabled?)
+                                     :fn      plugin-handler/goto-plugins-dashboard!}
 
 
    :editor/toggle-open-blocks       {:binding "t o"
@@ -374,9 +375,10 @@
           (str "Keys for keyboard shortcuts must be the same "
                (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
 
-(defn build-category-map [symbols]
-  (reduce into {}
-          (map (fn [sym] {sym (get all-default-keyboard-shortcuts sym)}) symbols)))
+(defn build-category-map [ks]
+  (->> (select-keys all-default-keyboard-shortcuts ks)
+       (remove (comp :inactive val))
+       (into {})))
 
 (defonce ^:large-vars/data-var config
   (atom
@@ -517,8 +519,8 @@
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.modules.shortcut.dicts/category
-(def ^:large-vars/data-var category
-  "Categories for docs purpose"
+(def ^:large-vars/data-var category*
+  "Full list of categories for docs purpose"
   {:shortcut.category/basics
    [:editor/new-block
     :editor/new-line
@@ -636,12 +638,17 @@
     :date-picker/next-week
     :date-picker/complete]})
 
-(let [category-maps {::category (set (keys category))
+(let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
   (assert (= (::category category-maps) (::dicts/category category-maps))
           (str "Keys for category maps must be the same "
                (data/diff (::category category-maps) (::dicts/category category-maps)))))
 
+(def category
+  "Active list of categories for docs purpose"
+  (medley/map-vals (fn [v]
+                     (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))
+                   category*))
 
 (defn add-shortcut!
   [handler-id id shortcut-map]
