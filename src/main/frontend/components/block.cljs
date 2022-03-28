@@ -2865,17 +2865,6 @@
 
 ;; TODO: virtual tree for better UX and memory usage reduce
 
-(defn- get-segment
-  [flat-blocks idx]
-  (let [new-idx (if (< idx block-handler/initial-blocks-length)
-                  block-handler/initial-blocks-length
-                  (+ idx block-handler/step-loading-blocks))
-        max-idx (count flat-blocks)
-        idx (min max-idx new-idx)
-        blocks (util/safe-subvec flat-blocks 0 idx)]
-    [blocks
-     idx]))
-
 (defn- load-more-blocks!
   [config flat-blocks]
   (when-let [db-id (:db/id config)]
@@ -2884,47 +2873,32 @@
 
 (rum/defcs lazy-blocks < rum/reactive
   {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))
-   :did-remount (fn [_old-state new-state]
-                  ;; Loading more when pressing Enter, expand blocks or paste
-                  (let [[config flat-blocks _] (:rum/args new-state)]
-                    (when-not (:db/id config)
-                      (let [*last-idx (::last-idx new-state)
-                           new-idx (if (zero? *last-idx)
-                                     1
-                                     (inc @*last-idx))]
-                       (reset! *last-idx new-idx))))
-                  new-state)}
-  (rum/local 0 ::last-idx)
+           (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
-  (let [*last-idx (::last-idx state)
-        db-id (:db/id config)
-        [blocks idx] (if db-id
-                       [flat-blocks 0]
-                       (get-segment flat-blocks @*last-idx))
-        blocks (blocks->vec-tree blocks)
-        last-block-id (:db/id (last flat-blocks))
-        bottom-reached (fn []
-                         (if db-id
-                           (load-more-blocks! config flat-blocks)
-                           (reset! *last-idx idx)))
-        has-more? (if db-id
-                    (and (not= last-block-id (model/get-block-last-child db-id))
-                         (not= last-block-id db-id))
-                    (>= (count flat-blocks) (inc idx)))
-        dom-id (str "lazy-blocks-" (::id state))]
-    [:div {:id dom-id}
-     (ui/infinite-list
-      "main-content-container"
+  (let [db-id (:db/id config)
+        blocks (blocks->vec-tree flat-blocks)]
+    (if (:custom-query? config)
       (block-list config blocks)
-      {:on-load bottom-reached
-       :bottom-reached (fn []
-                         (when-let [node (gdom/getElement dom-id)]
-                           (ui/bottom-reached? node 1000)))
-       :has-more has-more?
-       :more (if (or (:preview? config) (:sidebar? config))
-               "More"
-               (ui/loading "Loading"))})]))
+      (let [last-block-id (:db/id (last flat-blocks))
+            bottom-reached (fn []
+                             (when db-id
+                               (load-more-blocks! config flat-blocks)))
+            has-more? (when db-id
+                        (and (not= last-block-id (model/get-block-last-child db-id))
+                             (not= last-block-id db-id)))
+            dom-id (str "lazy-blocks-" (::id state))]
+        [:div {:id dom-id}
+         (ui/infinite-list
+          "main-content-container"
+          (block-list config blocks)
+          {:on-load bottom-reached
+           :bottom-reached (fn []
+                             (when-let [node (gdom/getElement dom-id)]
+                               (ui/bottom-reached? node 1000)))
+           :has-more has-more?
+           :more (if (or (:preview? config) (:sidebar? config))
+                   "More"
+                   (ui/loading "Loading"))})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]

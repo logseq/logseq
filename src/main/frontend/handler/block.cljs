@@ -3,7 +3,7 @@
             [clojure.walk :as walk]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db.react :as db-react]
+            [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.format.block :as block]
             [frontend.util :as util]))
@@ -113,7 +113,7 @@
                  block?
                  (assoc :scoped-block-id db-id))
         more-data (db-model/get-paginated-blocks-no-cache start-id option)]
-    (db-react/swap-new-result! query-k
-                               (fn [result]
-                                 (->> (concat result more-data)
-                                      (util/distinct-by :db/id))))))
+    (react/swap-new-result! query-k
+                            (fn [result]
+                              (->> (concat result more-data)
+                                   (util/distinct-by :db/id))))))

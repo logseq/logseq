@@ -1,14 +1,11 @@
 (ns frontend.db.outliner
-  (:require [datascript.core :as d]
-            [clojure.set :as set]))
+  (:require [datascript.core :as d]))
 
 (defn get-by-id
   [conn id]
   (try
     (d/pull @conn '[*] id)
     (catch js/Error _e nil)))
-
-
 
 ;; key [:block/children parent-id]
 

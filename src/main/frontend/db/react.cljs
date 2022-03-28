@@ -69,7 +69,7 @@
 
 (def ^:dynamic *query-component*)
 
-;; key -> components
+;; component -> query-key
 (defonce query-components (atom {}))
 
 (defn set-new-result!
@@ -117,27 +117,20 @@
 
 (defn remove-q!
   [k]
-  (swap! query-state dissoc k)
-  (state/delete-reactive-query-db! k))
+  (swap! query-state dissoc k))
 
 (defn add-query-component!
   [key component]
-  (swap! query-components update key
-         (fn [components]
-           (distinct (conj components component)))))
+  (when (and key component)
+    (swap! query-components assoc component key)))
 
 (defn remove-query-component!
   [component]
-  (reset!
-   query-components
-   (->> (for [[k components] @query-components
-              :let [new-components (remove #(= component %) components)]]
-          (if (empty? new-components) ; no subscribed components
-            (do (remove-q! k)
-                nil)
-            [k new-components]))
-        (keep identity)
-        (into {}))))
+  (when-let [query (get @query-components component)]
+    (let [matched-queries (filter #(= query %) (vals @query-components))]
+      (when (= 1 (count matched-queries))
+        (remove-q! query))))
+  (swap! query-components dissoc component))
 
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
@@ -160,28 +153,6 @@
              result-atom (or result-atom (atom nil))]
          (set! (.-state result-atom) result)
          (add-q! k nil nil result-atom identity identity identity))))))
-
-(defn- new-db
-  [cached-result tx-data old-db k]
-  (when-not (= :custom (second k))
-    (try
-      (let [empty-db (d/empty-db db-schema/schema)
-            db (or old-db
-                   (when (and (sequential? cached-result)
-                              (or (map? (first cached-result))
-                                  (empty? cached-result)))
-                     (let [cached-result (util/remove-nils cached-result)]
-                       (-> empty-db
-                           (d/with cached-result)
-                           (:db-after)))))]
-        (when db
-          (:db-after (d/with db tx-data))))
-      (catch js/Error e
-        (prn "New db: " {:k k
-                         :old-db old-db
-                         :cached-result cached-result})
-        (js/console.error e)
-        old-db))))
 
 (defn get-query-cached-result
   [k]
@@ -222,10 +193,7 @@
             (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
-              (do
-                (let [db' (new-db result nil nil k)]
-                  (state/set-reactive-query-db! k db'))
-                (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))))
+              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))))))))
 
 
 ;; TODO: Extract several parts to handlers
@@ -339,27 +307,21 @@
         (let [custom? (= :custom (second k))
               kv? (= :kv (second k))]
           (when (and
-                (= (first k) repo-url)
-                (or (get affected-keys (vec (rest k)))
-                    custom?
-                    kv?))
-           (let [{:keys [query query-fn result]} cache]
-             (when (or query query-fn)
-               (try
-                 (let [db' (when (and (vector? k) (not= (second k) :kv))
-                             (let [query-db (state/get-reactive-query-db k)
-                                   result (new-db @result tx-data query-db k)]
-                               (state/set-reactive-query-db! k result)
-                               result))
-                       db (or db' db)
-                       f #(execute-query! repo-url db k tx cache)]
-                   (if (and custom?
-                            ;; modifying during cards review need to be executed immediately
-                            (not (:cards-query? (meta query))))
-                     (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                     (f)))
-                 (catch js/Error e
-                   (js/console.error e)))))))))))
+                 (= (first k) repo-url)
+                 (or (get affected-keys (vec (rest k)))
+                     custom?
+                     kv?))
+            (let [{:keys [query query-fn result]} cache]
+              (when (or query query-fn)
+                (try
+                  (let [f #(execute-query! repo-url db k tx cache)]
+                    (if (and custom?
+                             ;; modifying during cards review need to be executed immediately
+                             (not (:cards-query? (meta query))))
+                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                      (f)))
+                  (catch js/Error e
+                    (js/console.error e)))))))))))
 
 (defn set-key-value
   [repo-url key value]

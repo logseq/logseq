@@ -514,6 +514,16 @@
         left-id
         (or (get-block-last-child (:db/id left)) left-id)))))
 
+(defn recursive-child?
+  [repo child-id parent-id]
+  (loop [node (db-utils/entity repo child-id)]
+    (if node
+      (let [parent (:block/parent node)]
+        (if (= (:db/id parent) parent-id)
+          true
+          (recur parent)))
+      false)))
+
 (defn get-paginated-blocks
   "Get paginated blocks for a page or a specific block.
    `block?`: if true, returns its children only."
@@ -554,20 +564,26 @@
 
                                     (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)
                                     (let [cached-ids (set (conj (map :db/id @result) page-id))
-                                          first-insert-id (some #(when (not (contains? cached-ids %)) %) tx-block-ids)
+                                          first-insert-id (some #(when (and (not (contains? cached-ids %))
+                                                                            (recursive-child? repo-url % block-id))
+                                                                   %) tx-block-ids)
                                           start-id (get-prev-open-block first-insert-id)
-                                          previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                                          more (get-paginated-blocks-no-cache start-id {:limit 25
-                                                                                        :include-start? true
-                                                                                        :scoped-block-id scoped-block-id})]
-                                      (concat previous-blocks more))
+                                          start-page? (:block/name (db-utils/entity start-id))]
+                                      (when-not start-page?
+                                        (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
+                                              more (get-paginated-blocks-no-cache start-id {:limit 25
+                                                                                            :include-start? true
+                                                                                            :scoped-block-id scoped-block-id})]
+                                          (concat previous-blocks more))))
 
                                     ;; TODO: drag && drop, move blocks up/down
 
                                     :else
-                                    (get-paginated-blocks-no-cache block-id {:limit limit
-                                                                             :include-start? (not page?)
-                                                                             :scoped-block-id scoped-block-id}))
+                                    nil)
+                           blocks (or blocks
+                                      (get-paginated-blocks-no-cache block-id {:limit limit
+                                                                               :include-start? (not page?)
+                                                                               :scoped-block-id scoped-block-id}))
                            block-eids (map :db/id blocks)
                            blocks (if (seq tx-id->block)
                                     (map (fn [id]
