@@ -17,7 +17,7 @@
     (is (= "Acerca de Logseq"
            (i18n/t :help/about))))
 
-  (testing "shortcut/dict.cljs translations"
+  (testing "shortcut/dicts.cljs translations"
     (state/set-preferred-language! :en)
     (is (= "Go to journals"
            (i18n/t :command.go/journals))

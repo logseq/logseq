@@ -3,9 +3,9 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
             [frontend.fs :as fs]
@@ -542,10 +542,10 @@
              (state/set-current-repo! repo)
              (db/start-db-conn! nil repo)
              (when-not config/publishing?
-               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
              (when-not config/publishing?
-               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
@@ -683,9 +683,9 @@
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
-     step 1. [In HERE]  a window         --persistGraph----->   electron  
-     step 2.            electron         --persistGraph----->   window holds the graph  
-     step 3.            window w/ graph  --persistGraphDone->   electron  
+     step 1. [In HERE]  a window         --persistGraph----->   electron
+     step 2.            electron         --persistGraph----->   window holds the graph
+     step 3.            window w/ graph  --persistGraphDone->   electron
      step 4. [In HERE]  electron         --persistGraphDone->   all windows"
   [graph]
   (p/create (fn [resolve _]
