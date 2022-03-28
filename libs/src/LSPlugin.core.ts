@@ -1292,9 +1292,7 @@ class LSPluginCore
           continue
         }
 
-        if (sdkVersion &&
-          (isDbBlockChangeHook || invokeHostExportedApi('should_exec_plugin_hook', p.id, hook))
-        ) {
+        if (sdkVersion && invokeHostExportedApi('should_exec_plugin_hook', p.id, hook)) {
           act(p)
         }
       } else if (pid === p.id) {
