@@ -611,6 +611,7 @@
        (let [page (model/get-page page-name)
              blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
          (blocks-container blocks (assoc config
+                                         :db/id (:db/id page)
                                          :id page-name
                                          :embed? true
                                          :page-embed? true
