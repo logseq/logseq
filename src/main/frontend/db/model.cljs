@@ -439,12 +439,52 @@
        parent-sibling
        (get-next-outdented-block (:db/id parent))))))
 
+(defn get-block-parent
+  ([block-id]
+   (get-block-parent (state/get-current-repo) block-id))
+  ([repo block-id]
+   (when-let [conn (conn/get-conn repo)]
+     (when-let [block (d/entity conn [:block/uuid block-id])]
+       (:block/parent block)))))
+
+;; non recursive query
+(defn get-block-parents
+  ([repo block-id]
+   (get-block-parents repo block-id 100))
+  ([repo block-id depth]
+   (when-let [conn (conn/get-conn repo)]
+     (loop [block-id block-id
+            parents (list)
+            d 1]
+       (if (> d depth)
+         parents
+         (if-let [parent (get-block-parent repo block-id)]
+           (recur (:block/uuid parent) (conj parents parent) (inc d))
+           parents))))))
+
+(comment
+  (defn get-immediate-children-v2
+    [repo block-id]
+    (d/pull (conn/get-conn repo)
+            '[:block/_parent]
+            [:block/uuid block-id])))
+
+;; Use built-in recursive
+(defn get-block-parents-v2
+  [repo block-id]
+  (d/pull (conn/get-conn repo)
+          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
+          [:block/uuid block-id]))
+
 (defn get-paginated-blocks-no-cache
   "Result should be sorted."
   [start-id {:keys [limit include-start? scoped-block-id]}]
   (when-let [start (db-utils/entity start-id)]
-    (let [scoped-block-parent (when scoped-block-id
-                                (:db/id (:block/parent (db-utils/entity scoped-block-id))))
+    (let [scoped-block-parents (when scoped-block-id
+                                 (let [block (db-utils/entity scoped-block-id)]
+                                   (->> (get-block-parents (state/get-current-repo) (:block/uuid block))
+                                        (map :db/id)
+                                        (set))))
           conn (conn/get-conn false)
           result (loop [block start
                         result []]
@@ -465,7 +505,8 @@
                                        ;; Next outdented block
                                        (get-next-outdented-block block-id))]
                        (if next-block
-                         (if (and scoped-block-parent (= (:db/id (:block/parent next-block)) scoped-block-parent))
+                         (if (and (seq scoped-block-parents)
+                                  (contains? scoped-block-parents (:db/id (:block/parent next-block))))
                            result
                            (recur next-block (conj result next-block)))
                          result))))]
@@ -627,41 +668,6 @@
      (let [datoms (d/datoms db :avet :block/page page-id)]
        (and (= (count datoms) 1)
             (= "" (:block/content (db-utils/pull (:e (first datoms))))))))))
-
-(defn get-block-parent
-  ([block-id]
-   (get-block-parent (state/get-current-repo) block-id))
-  ([repo block-id]
-   (when-let [conn (conn/get-conn repo)]
-     (when-let [block (d/entity conn [:block/uuid block-id])]
-       (:block/parent block)))))
-
-;; non recursive query
-(defn get-block-parents
-  [repo block-id depth]
-  (when-let [conn (conn/get-conn repo)]
-    (loop [block-id block-id
-           parents (list)
-           d 1]
-      (if (> d depth)
-        parents
-        (if-let [parent (get-block-parent repo block-id)]
-          (recur (:block/uuid parent) (conj parents parent) (inc d))
-          parents)))))
-
-(comment
-  (defn get-immediate-children-v2
-    [repo block-id]
-    (d/pull (conn/get-conn repo)
-            '[:block/_parent]
-            [:block/uuid block-id])))
-
-;; Use built-in recursive
-(defn get-block-parents-v2
-  [repo block-id]
-  (d/pull (conn/get-conn repo)
-          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
-          [:block/uuid block-id]))
 
 (defn parents-collapsed?
   [repo block-id]
