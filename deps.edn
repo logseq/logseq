@@ -2,7 +2,7 @@
  :deps
  {org.clojure/clojure                   {:mvn/version "1.10.0"}
   cheshire/cheshire                     {:mvn/version "5.10.0"}
-  rum/rum                               {:mvn/version "0.12.3"}
+  rum/rum                               {:mvn/version "0.12.8"}
   datascript/datascript                 {:mvn/version "1.3.8"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:git/url "https://github.com/borkdude/rewrite-edn"

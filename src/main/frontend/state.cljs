@@ -112,7 +112,6 @@
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
      ;; This key is not currently used but may be useful later?
-     :editor/last-edit-block-input-id       nil
      :editor/in-composition?                false
      :editor/content                        {}
      :editor/block                          nil
@@ -851,22 +850,16 @@
                 (-> state
                     (assoc-in [:editor/content edit-input-id] content)
                     (assoc
-                      :editor/block block
-                      :editor/editing? {edit-input-id true}
-                      :editor/last-edit-block-input-id edit-input-id
-                      :editor/last-edit-block block
-                      :editor/last-key-code nil
-                      :cursor-range cursor-range))))
-
+                     :editor/block block
+                     :editor/editing? {edit-input-id true}
+                     :editor/last-edit-block block
+                     :editor/last-key-code nil
+                     :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
          (let [pos (count cursor-range)]
            (when content
-             (util/set-change-value input content)
-             ;; FIXME
-             ;; use set-change-value for now
-             ;; until somebody can figure out why set! value doesn't work here
-             ;; it seems to me textarea autoresize is completely broken
-             #_(set! (.-value input) (string/trim content)))
+             (util/set-change-value input content))
+
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 

@@ -2178,7 +2178,7 @@
                nil)
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
@@ -2230,16 +2230,16 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-      {:id block-id
-       :data-refs data-refs
-       :data-refs-self data-refs-self
-       :data-collapsed (and collapsed? has-child?)
-       :class (str uuid
-                   (when pre-block? " pre-block")
-                   (when (and card? (not review-cards?)) " shadow-xl"))
-       :blockid (str uuid)
-       :haschild (str has-child?)
-       :style {:padding-left (* (- level 1) 24)}}
+       {:id block-id
+        :data-refs data-refs
+        :data-refs-self data-refs-self
+        :data-collapsed (and collapsed? has-child?)
+        :class (str uuid
+                    (when pre-block? " pre-block")
+                    (when (and card? (not review-cards?)) " shadow-xl"))
+        :blockid (str uuid)
+        :haschild (str has-child?)
+        :style {:padding-left (* (- level 1) 24)}}
 
        level
        (assoc :level level)
