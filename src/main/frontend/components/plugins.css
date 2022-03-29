@@ -712,7 +712,6 @@
 
       &.is-dragging {
         /*height: var(--ls-draggable-handle-height) !important;*/
-        overflow: hidden;
         opacity: .7;
 
         > .draggable-handle {

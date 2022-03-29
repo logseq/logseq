@@ -200,18 +200,20 @@ class LSPluginCaller extends EventEmitter {
   async _setupIframeSandbox () {
     const pl = this._pluginLocal!
     const id = pl.id
+    const domId = `${id}_lsp_main`
     const url = new URL(pl.options.entry!)
 
     url.searchParams
       .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
 
     // clear zombie sandbox
-    const zb = document.querySelector(`#${id}`)
+    const zb = document.querySelector(`#${domId}`)
     if (zb) zb.parentElement.removeChild(zb)
 
     const cnt = document.createElement('div')
     cnt.classList.add('lsp-iframe-sandbox-container')
-    cnt.id = id
+    cnt.id = domId
+    cnt.dataset.pid = id
 
     // TODO: apply any container layout data
     try {

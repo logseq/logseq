@@ -240,6 +240,9 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
       if (!pluginLocal.shadow && el && (autoFocus !== false)) {
         (el.querySelector('iframe') as HTMLIFrameElement)?.contentWindow?.focus()
       }
+    } else {
+      // @ts-ignore set activeElement back to `body`
+      el.ownerDocument.activeElement.blur()
     }
 
     if (cursor) {
