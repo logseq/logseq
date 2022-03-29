@@ -30,13 +30,14 @@
     (when r (->Block r))))
 
 (defn- get-by-parent-&-left
-  [parent-id left-id]
-  (some->
-   (db-model/get-by-parent-&-left
-    (conn/get-conn false)
-    [:block/uuid parent-id]
-    [:block/uuid left-id])
-   (block)))
+  [parent-uuid left-uuid]
+  (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
+        left-id (:db/id (db/entity [:block/uuid left-uuid]))]
+    (some->
+     (db-model/get-by-parent-&-left (conn/get-conn false) parent-id left-id)
+     :db/id
+     db/pull
+     block)))
 
 (defn- block-with-timestamps
   [block]
