@@ -125,7 +125,6 @@
                               :db/id (:db/id block-entity)
                               :block? block?
                               :editor-box editor/box
-                              :page page
                               :document/mode? document-mode?}
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
