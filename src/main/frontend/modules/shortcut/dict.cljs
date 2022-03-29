@@ -527,7 +527,17 @@
                :command.sidebar/open-today-page         "Abrir a página de hoje na barra lateral direita"
                :command.ui/select-theme-color           "Selecionar as cores do tema disponível"
                :command.ui/toggle-cards                 "Trocar cartas"
-               :command.ui/toggle-left-sidebar          "Trocar barra lateral esquerda"}
+               :command.ui/toggle-left-sidebar          "Trocar barra lateral esquerda"
+               :command.auto-complete/open-link         "Auto-completar: Abra o item selecionado no navegador"
+               :command.command/run                     "Execute o comando Git"
+               :command.editor/copy-current-file        "Copiar o arquivo atual"
+               :command.editor/open-file-in-default-app "Abra o arquivo no aplicativo padrão"
+               :command.editor/open-file-in-directory   "Abra o arquivo na pasta"
+               :command.graph/save                      "Salvar gráfico atual no computador"
+               :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
+               :command.ui/goto-plugins                 "Ir para o painel de plugins"
+               :command.ui/open-new-window              "Abra uma nova janela"
+               }
 
     :ja   {:shortcut.category/formatting                "フォーマット"
                :shortcut.category/basics                "基本操作"
