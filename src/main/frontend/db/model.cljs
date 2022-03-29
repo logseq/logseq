@@ -569,7 +569,7 @@
                                                                                             :scoped-block-id scoped-block-id})]
                                           (concat previous-blocks more))))
 
-                                    ;; TODO: drag && drop, move blocks up/down
+                                    ;; TODO: expand | collapse, drag && drop, move blocks up/down
 
                                     :else
                                     nil)

@@ -130,7 +130,7 @@
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body))))]
+                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta))))]
       [pages blocks])
     (catch js/Error e
       (log/error :exception e))))
