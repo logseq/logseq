@@ -63,20 +63,13 @@
          (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
-        (do
-          (when (util/electron?)
-            (debug/set-ack-step! path :saved-successfully)
-            (debug/ack-file-write! path))
-          (p/let [disk-content (encrypt/decrypt disk-content)]
-            (state/pub-event! [:file/not-matched-from-disk path disk-content content])))
+        (p/let [disk-content (encrypt/decrypt disk-content)]
+          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
         :else
         (->
          (p/let [result (ipc/ipc "writeFile" repo path content)
                  mtime (gobj/get result "mtime")]
-           (when (util/electron?)
-             (debug/set-ack-step! path :saved-successfully)
-             (debug/ack-file-write! path))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)

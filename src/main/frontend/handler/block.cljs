@@ -8,17 +8,12 @@
             [frontend.format.block :as block]
             [frontend.util :as util]))
 
-;; lazy loading
-
-(def initial-blocks-length 50)
-
-(def step-loading-blocks 50)
 
 ;;  Fns
 
 (defn long-page?
   [repo page-id]
-  (>= (db/get-page-blocks-count repo page-id) initial-blocks-length))
+  (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
 
 (defn get-block-refs-with-children
   [block]
@@ -109,7 +104,7 @@
             :frontend.db.react/block-and-children
             :frontend.db.react/page-blocks)
         query-k [repo k db-id]
-        option (cond-> {:limit step-loading-blocks}
+        option (cond-> {:limit db-model/step-loading-blocks}
                  block?
                  (assoc :scoped-block-id db-id))
         more-data (->> (db-model/get-paginated-blocks-no-cache start-id option)

@@ -24,7 +24,6 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["react-virtuoso" :refer [Virtuoso]]
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
@@ -34,7 +33,6 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
-(defonce virtual-list (r/adapt-class Virtuoso))
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))

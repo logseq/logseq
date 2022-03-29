@@ -53,13 +53,12 @@
 
 (defn sync-to-file
   [{page-db-id :db/id}]
-  ;; (if (nil? page-db-id)
-  ;;   (notification/show!
-  ;;    "Write file failed, can't find the current page!"
-  ;;    :error)
-  ;;   (when-let [repo (state/get-current-repo)]
-  ;;     (async/put! write-chan [repo page-db-id])))
-  )
+  (if (nil? page-db-id)
+    (notification/show!
+     "Write file failed, can't find the current page!"
+     :error)
+    (when-let [repo (state/get-current-repo)]
+      (async/put! write-chan [repo page-db-id]))))
 
 (util/batch write-chan
             batch-write-interval

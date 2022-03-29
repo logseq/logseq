@@ -131,7 +131,7 @@
 
                 (and (mobile/native-android?) (not= "/" (first file)))
                 file
-                
+
                 (and (mobile/native-ios?) (not= "/" (first file)))
                 file
 
@@ -244,7 +244,6 @@
                           (-> (p/let [_ (or
                                          (util/electron?)
                                          (nfs/check-directory-permission! repo))]
-                                (debug/set-ack-step! path :write-file)
                                 (fs/write-file! repo (config/get-repo-dir repo) path content
                                                 {:old-content original-content}))
                               (p/catch (fn [error]
@@ -300,9 +299,6 @@
     (async/go-loop []
       (let [args (async/<! chan)
             files (second args)]
-
-        (doseq [path (map first files)]
-          (debug/set-ack-step! path :start-write-file))
 
         ;; return a channel
         (try

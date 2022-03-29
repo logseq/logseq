@@ -637,6 +637,19 @@
   [value]
   (set-state! :editor/show-zotero value))
 
+;; TODO: refactor, use one state
+(defn clear-editor-show-state!
+  []
+  (swap! state (fn [state]
+                 (assoc state
+                        :editor/show-input nil
+                        :editor/show-zotero false
+                        :editor/show-date-picker? false
+                        :editor/show-block-search? false
+                        :editor/show-template-search? false
+                        :editor/show-page-search? false
+                        :editor/show-page-search-hashtag? false))))
+
 (defn set-edit-input-id!
   [input-id]
   (swap! state update :editor/editing?

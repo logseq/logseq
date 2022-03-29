@@ -19,6 +19,13 @@
             [frontend.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 
+;; lazy loading
+
+(def initial-blocks-length 100)
+
+(def step-loading-blocks 50)
+
+
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
 
@@ -555,27 +562,27 @@
 
 ;; TODO: outliners ops should be merged to :save-nodes, :insert-nodes,
 ;; :delete-nodes and :move-nodes
-(defn- build-panigated-blocks-from-cache
+(defn- build-paginated-blocks-from-cache
   [repo-url result outliner-op page-id block-id tx-block-ids scoped-block-id]
   (cond
     (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
     @result
 
-    (contains? #{:insert-node :insert-nodes :save-and-insert-node :collapse-expand-blocks :indent-outdent-nodes
-                 ;; :move-subtree
-                 } outliner-op)
+    (contains? #{:insert-node :insert-nodes :save-and-insert-node
+                 :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
     (let [cached-ids (set (conj (map :db/id @result) page-id))
+          move? (= :move-subtree outliner-op)
           insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)
           first-changed-id (some #(when (and (or (and insert? (not (contains? cached-ids %)))
                                                  true)
                                              (recursive-child? repo-url % block-id))
                                     %) tx-block-ids)
-          start-id (get-prev-open-block first-changed-id)
+          start-id (if move? first-changed-id (get-prev-open-block first-changed-id))
           start-page? (:block/name (db-utils/entity start-id))]
       (when-not start-page?
         (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
               previous-count (count previous-blocks)
-              limit (max 10 (- 50 previous-count))
+              limit (max step-loading-blocks (- initial-blocks-length previous-count))
               more (get-paginated-blocks-no-cache start-id {:limit limit
                                                             :include-start? true
                                                             :scoped-block-id scoped-block-id})]
@@ -591,7 +598,7 @@
    (get-paginated-blocks repo-url block-id {}))
   ([repo-url block-id {:keys [pull-keys start-block limit use-cache? scoped-block-id]
                        :or {pull-keys '[* :block/_refs]
-                            limit 50
+                            limit initial-blocks-length
                             use-cache? true
                             scoped-block-id nil}}]
    (assert (integer? block-id))
@@ -622,13 +629,14 @@
                                                                 (zipmap (mapv :db/id @result) @result)]))
                            limit (if (and result @result) (+ (count @result) 5) limit)
                            outliner-op (get-in tx-report [:tx-meta :outliner-op])
-                           blocks (build-panigated-blocks-from-cache repo-url result outliner-op page-id block-id tx-block-ids scoped-block-id)
+                           blocks (build-paginated-blocks-from-cache repo-url result outliner-op page-id block-id tx-block-ids scoped-block-id)
                            blocks (or blocks
                                       (get-paginated-blocks-no-cache block-id {:limit limit
                                                                                :include-start? (not page?)
                                                                                :scoped-block-id scoped-block-id}))
                            block-eids (map :db/id blocks)
-                           blocks (if (seq tx-id->block)
+                           blocks (if (and (seq tx-id->block)
+                                           (not (contains? #{:indent-outdent-nodes :move-subtree} outliner-op)))
                                     (map (fn [id]
                                            (or (get tx-id->block id)
                                                (get cached-id->block id)

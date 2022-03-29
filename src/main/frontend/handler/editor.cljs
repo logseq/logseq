@@ -544,22 +544,15 @@
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
-    (profile
-     "outliner insert block"
-     (outliner-insert-block! config current-block next-block {:sibling? sibling?}))
+    (outliner-insert-block! config current-block next-block {:sibling? sibling?})
     ;; WORKAROUND: The block won't refresh itself even if the content is empty.
     (when block-self?
       (gobj/set input "value" ""))
-    (profile "ok handler" (ok-handler next-block))))
+    (ok-handler next-block)))
 
 (defn clear-when-saved!
   []
-  (state/set-editor-show-input! nil)
-  (state/set-editor-show-zotero! false)
-  (state/set-editor-show-date-picker! false)
-  (state/set-editor-show-page-search! false)
-  (state/set-editor-show-block-search! false)
-  (state/set-editor-show-template-search! false)
+  (state/clear-editor-show-state!)
   (commands/restore-state true))
 
 (defn get-state
@@ -1836,7 +1829,7 @@
                        (let [nodes (mapv outliner-core/block blocks)]
                          (outliner-core/move-nodes nodes up?)
                          (rehighlight-selected-nodes)
-                         (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]

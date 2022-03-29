@@ -2238,8 +2238,7 @@
                     (when pre-block? " pre-block")
                     (when (and card? (not review-cards?)) " shadow-xl"))
         :blockid (str uuid)
-        :haschild (str has-child?)
-        :style {:padding-left (* (- level 1) 24)}}
+        :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2275,7 +2274,7 @@
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
-     ;; (block-children config children collapsed?)
+     (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2877,20 +2876,28 @@
 (rum/defcs lazy-blocks < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state config blocks blocks->vec-tree]
-  (let [db-id (:db/id config)]
-    (if (or (:custom-query? config) (not db-id))
-      (let [blocks (blocks->vec-tree blocks)]
-        (block-list config blocks))
-      (let [blocks (tree/blocks-with-level blocks)
-            bottom-reached (fn [] (load-more-blocks! config blocks))]
-        (ui/virtual-list {:style {:height "calc(100vh - 180px)"}
-                          :data (bean/->js blocks)
-                          :end-reached bottom-reached
-                          :overscan 200
-                          :item-content (fn [idx block]
-                                          (let [block (bean/->clj block)]
-                                            (block-item config blocks idx block)))})))))
+  [state config flat-blocks blocks->vec-tree]
+  (let [db-id (:db/id config)
+        blocks (blocks->vec-tree flat-blocks)]
+    (if (:custom-query? config)
+      (block-list config blocks)
+      (let [last-block-id (:db/id (last flat-blocks))
+            bottom-reached (fn []
+                             (when (and db-id
+                                        ;; To prevent scrolling after inserting new blocks
+                                        (> (- (util/time-ms) (:start-time config)) 100))
+                               (load-more-blocks! config flat-blocks)))
+            dom-id (str "lazy-blocks-" (::id state))]
+        [:div {:id dom-id}
+         (ui/infinite-list
+          "main-content-container"
+          (block-list config blocks)
+          {:on-load bottom-reached
+           :bottom-reached (fn []
+                             (when-let [node (gdom/getElement dom-id)]
+                               (ui/bottom-reached? node 1000)))
+           :has-more true
+           :more "More"})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
