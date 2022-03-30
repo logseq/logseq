@@ -2044,7 +2044,7 @@
           parent-block (db/pull parent)
           left (:db/id (:block/left editing-block))
           left-block (db/pull left)
-          [_ _ config] (state/get-editor-args)
+          config (last (state/get-editor-args))
           block-id (:block/uuid editing-block)
           block-self? (block-self-alone-when-insert? config block-id)
           has-children? (db/has-children? (state/get-current-repo)
@@ -3441,7 +3441,7 @@
 
 (defn- skip-collapsing-in-db?
   []
-  (let [config (:config (state/get-editor-args))]
+  (let [config (last (state/get-editor-args))]
     (:ref? config)))
 
 (defn- set-blocks-collapsed!

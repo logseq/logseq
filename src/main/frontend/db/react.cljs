@@ -310,9 +310,12 @@
               (when (or query query-fn)
                 (try
                   (let [f #(execute-query! repo-url db k tx cache)]
+                    (f)
+                    ;; Detects whether user is editing in a custom query, if so, execute the query immediately
                     (if (and custom?
                              ;; modifying during cards review need to be executed immediately
-                             (not (:cards-query? (meta query))))
+                             (not (:cards-query? (meta query)))
+                             (not (state/edit-in-query-component)))
                       (async/put! (state/get-reactive-custom-queries-chan) [f query])
                       (f)))
                   (catch js/Error e
