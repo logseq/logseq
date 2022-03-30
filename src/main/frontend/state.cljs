@@ -125,6 +125,9 @@
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
 
+     ;; for audio record
+     :editor/recording?                     false
+     
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}

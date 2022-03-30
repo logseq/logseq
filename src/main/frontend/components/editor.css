@@ -28,6 +28,28 @@
   }
 }
 
+#audio-record-toolbar {
+  position: fixed;
+  bottom: 50px;
+  left: 10px;
+  transition: none;
+  display: flex;
+  z-index: 9999;
+  
+  button {
+    padding: 7px 10px;
+  }
+  
+  .record-commands {
+    justify-content: space-between;
+    display: flex;
+    align-items: center;
+    overflow-x: overlay;
+    overflow-y: hidden;
+  }
+}
+
+
 .editor-wrapper {
   width: 100%;
   margin: 0 auto;

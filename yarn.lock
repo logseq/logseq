@@ -424,6 +424,13 @@
     "@babel/helper-validator-option" "^7.16.7"
     "@babel/plugin-transform-typescript" "^7.16.7"
 
+"@babel/runtime@7.11.2":
+  version "7.11.2"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.11.2.tgz#f549c13c754cc40b87644b9fa9f09a6a95fe0736"
+  integrity sha512-TeWkU52so0mPtDcaCTxNBI/IHiz0pZgr8VEFqXFtZWpYD08ZB6FaSwVAS8MKRQAP3bYKiVjwysOJgMFY28o6Tw==
+  dependencies:
+    regenerator-runtime "^0.13.4"
+
 "@babel/runtime@^7.10.2", "@babel/runtime@^7.5.5", "@babel/runtime@^7.8.7":
   version "7.17.7"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.17.7.tgz#a5f3328dc41ff39d803f311cfe17703418cf9825"
@@ -1902,6 +1909,13 @@ caniuse-lite@^1.0.0, caniuse-lite@^1.0.30001109, caniuse-lite@^1.0.30001317:
   version "1.0.30001317"
   resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001317.tgz#0548fb28fd5bc259a70b8c1ffdbe598037666a1b"
   integrity sha512-xIZLh8gBm4dqNX0gkzrBeyI86J2eCjWzYAs40q88smG844YIrN4tVQl/RhquHvKEKImWWFIVh1Lxe5n1G/N+GQ==
+
+capacitor-voice-recorder@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-2.1.0.tgz#142e7bfa62e88530279f478b79735a0dc68a7d1a"
+  integrity sha512-H0c/sUVD7cduVS5VqutKk00whyqXZUFi56ChRMl9Ke/LBU71HhHwzonPmheT8i9gQmgOaplc3TOpaKqckXb+3A==
+  dependencies:
+    get-blob-duration "^1.2.0"
 
 chalk@^2.0.0, chalk@^2.4.1:
   version "2.4.2"
@@ -3500,6 +3514,13 @@ gensync@^1.0.0-beta.2:
   version "1.0.0-beta.2"
   resolved "https://registry.yarnpkg.com/gensync/-/gensync-1.0.0-beta.2.tgz#32a6ee76c3d7f52d46b2b1ae5d93fea8580a25e0"
   integrity sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==
+
+get-blob-duration@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/get-blob-duration/-/get-blob-duration-1.2.0.tgz#73cf7dac2fbaa219a5a03d5e5093e06e43814d49"
+  integrity sha512-2xNJa+oKznR21eC2ThMzw4a1931a3ogA8aHoY92xruZufc/02G7pl/P793GJZytkyI8xMJ2DepEQ7MWvg/tn/Q==
+  dependencies:
+    "@babel/runtime" "7.11.2"
 
 get-caller-file@^1.0.1:
   version "1.0.3"
@@ -6732,6 +6753,8 @@ react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.13.1, react-is@^16.3.1, react-is@^16.7.0:
   version "16.13.1"

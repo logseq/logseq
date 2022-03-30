@@ -26,7 +26,8 @@
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.history :as history]))
+            [frontend.handler.history :as history]
+            [frontend.mobile.record :as record]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -276,6 +277,7 @@
       (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag")
       (mobile-bar-command editor-handler/cycle-priority! "a-b")
       (mobile-bar-command editor-handler/toggle-list! "list")
+      (mobile-bar-command #(record/start-recording) "microphone")
       (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
       (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
       (mobile-bar-command editor-handler/html-link-format! "link")
@@ -288,6 +290,15 @@
       (mobile-bar-command editor-handler/highlight-format! "paint")]
      [:div.toolbar-hide-keyboard
       (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
+
+(rum/defc record-bar < rum/reactive
+  [_parent-state _parent-id]
+  [:div#audio-record-toolbar.bg-base-2
+   [:div.record-commands.flex.flex-cols
+    (mobile-bar-command #(record/stop-recording) "player-stop")
+    (if (= (state/sub :editor/recording?) "PAUSED")
+      (mobile-bar-command #(record/resume-recording) "player-record")
+      (mobile-bar-command #(record/pause-recording) "player-pause"))]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -584,6 +595,9 @@
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
+     (when (and (mobile-util/is-native-platform?)
+                (not= (state/sub :editor/recording?) "NONE"))
+       (record-bar state id))
      (when (or (mobile-util/is-native-platform?) config/mobile?)
        (mobile-bar state id))
      (ui/ls-textarea
