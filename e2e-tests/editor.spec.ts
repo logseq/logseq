@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, IsMac } from './utils'
-import { dispatch_kb_events, press_with_events, macos_pinyin_left_full_bracket } from './util/keyboard-events'
+import { createRandomPage } from './utils'
+import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
 test(
