@@ -24,6 +24,10 @@
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
 	},
 	{
+		"pkg": "capacitor-voice-recorder",
+		"classpath": "com.tchvu3.capacitorvoicerecorder.VoiceRecorder"
+	},
+	{
 		"pkg": "send-intent",
 		"classpath": "de.mindlib.sendIntent.SendIntent"
 	}
