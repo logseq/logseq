@@ -177,10 +177,10 @@
   (when-let [node (gdom/getElement (str id))]
     (when-let [cursor-range (state/get-cursor-range)]
       (when-let [range cursor-range]
-        (let [pos (:editor/pos @state/state)
+        (let [pos (state/get-editor-last-pos)
               pos (or pos (diff/find-position markup range))]
           (cursor/move-cursor-to node pos)
-          (state/set-state! :editor/pos nil))))))
+          (state/clear-editor-last-pos!))))))
 
 (defn highlight-block!
   [block-uuid]
@@ -1897,7 +1897,7 @@
 
   (state/set-editor-show-input! nil)
 
-  (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+  (when-let [saved-cursor (state/get-editor-last-pos)]
     (when-let [input (gdom/getElement id)]
       (.focus input)
       (cursor/move-cursor-to input saved-cursor))))
@@ -1907,7 +1907,7 @@
   (when-let [id (state/get-edit-input-id)]
     (when-let [input (gdom/getElement id)]
       (let [current-pos (cursor/pos input)
-            pos (:editor/last-saved-cursor @state/state)
+            pos (state/get-editor-last-pos)
             edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
@@ -1922,7 +1922,7 @@
              (not (wrapped-by? input "[[" "]]")))
     (when (get-search-q)
       (let [value (gobj/get input "value")
-            pos (:editor/last-saved-cursor @state/state)
+            pos (state/get-editor-last-pos)
             current-pos (cursor/pos input)
             between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
         (when (and between
@@ -2786,8 +2786,10 @@
 (defn indent-outdent
   [indent?]
   (state/set-editor-op! :indent-outdent)
-  (let [{:keys [block]} (get-state)]
+  (let [pos (some-> (state/get-input) cursor/pos)
+        {:keys [block]} (get-state)]
     (when block
+      (state/set-editor-last-pos! pos)
       (let [current-node (outliner-core/block block)]
         (outliner-core/indent-outdent-nodes [current-node] indent?)))
     (state/set-editor-op! :nil)))
@@ -2797,16 +2799,11 @@
   (fn [e]
     (cond
       (state/editing?)
-      (let [input (state/get-input)
-            pos (cursor/pos input)]
-        (when (and (not (state/get-editor-show-input))
-                   (not (state/get-editor-show-date-picker?))
-                   (not (state/get-editor-show-template-search?)))
-          (util/stop e)
-          (indent-outdent (not (= :left direction)))
-          (and input pos
-               (when-let [input (state/get-input)]
-                 (cursor/move-cursor-to input pos)))))
+      (when (and (not (state/get-editor-show-input))
+                 (not (state/get-editor-show-date-picker?))
+                 (not (state/get-editor-show-template-search?)))
+        (util/stop e)
+        (indent-outdent (not (= :left direction))))
 
       (state/selection?)
       (do
@@ -2885,8 +2882,8 @@
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (if (= key "#")
-            (state/set-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
-            (state/set-last-pos! (cursor/pos input)))
+            (state/set-editor-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
+            (state/set-editor-last-pos! (cursor/pos input)))
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (let [sym "$"]
@@ -2937,7 +2934,7 @@
                   value (gobj/get input "value")
                   square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
                   pos (+ square-pos 2)
-                  _ (state/set-last-pos! pos)
+                  _ (state/set-editor-last-pos! pos)
                   pos (assoc orig-pos :pos pos)
                   command-step (if (= \# (util/nth-safe value (dec square-pos)))
                                  :editor/search-page-hashtag

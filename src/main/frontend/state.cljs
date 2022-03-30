@@ -118,7 +118,6 @@
      :editor/block-dom-id                   nil
      :editor/set-timestamp-block            nil
      :editor/last-input-time                nil
-     :editor/pos                            nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
      :editor/on-paste?                      false
@@ -524,16 +523,7 @@
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
      (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value)))
-     ;; followers
-     ;; (when-let [s (util/extract-uuid input-id)]
-     ;;   (let [input (gdom/getElement input-id)
-     ;;         leader-parent (util/rec-get-block-node input)
-     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-     ;;                        (remove #(= leader-parent %)))]
-     ;;     (prn "followers: " (count followers))
-     ;;     ))
-     )))
+                                      (assoc m input-id value))))))
 
 (defn get-edit-input-id
   []
@@ -891,9 +881,17 @@
                       :cursor-range      nil
                       :editor/code-mode? true}))
 
-(defn set-last-pos!
+(defn set-editor-last-pos!
   [new-pos]
   (set-state! :editor/last-saved-cursor new-pos))
+
+(defn clear-editor-last-pos!
+  []
+  (set-state! :editor/last-saved-cursor nil))
+
+(defn get-editor-last-pos
+  []
+  (:editor/last-saved-cursor @state))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
