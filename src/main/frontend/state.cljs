@@ -126,7 +126,7 @@
      :editor/last-key-code                  nil
 
      ;; for audio record
-     :editor/recording?                     false
+     :editor/record-status                  "NONE"
      
      :db/last-transact-time                 {}
      ;; whether database is persisted

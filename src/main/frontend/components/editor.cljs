@@ -296,7 +296,7 @@
   [:div#audio-record-toolbar.bg-base-2
    [:div.record-commands.flex.flex-cols
     (mobile-bar-command #(record/stop-recording) "player-stop")
-    (if (= (state/sub :editor/recording?) "PAUSED")
+    (if (= (state/sub :editor/record-status) "PAUSED")
       (mobile-bar-command #(record/resume-recording) "player-record")
       (mobile-bar-command #(record/pause-recording) "player-pause"))]])
 
@@ -596,7 +596,7 @@
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when (and (mobile-util/is-native-platform?)
-                (not= (state/sub :editor/recording?) "NONE"))
+                (not= (state/sub :editor/record-status) "NONE"))
        (record-bar state id))
      (when (or (mobile-util/is-native-platform?) config/mobile?)
        (mobile-bar state id))

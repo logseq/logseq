@@ -24,11 +24,9 @@
   (p/catch
    (p/then (.getCurrentStatus VoiceRecorder)
            (fn [^js result]
-             (prn :result result)
              (let [{:keys [status]}
                    (js->clj result :keywordize-keys true)]
-               (state/set-state! :editor/recording? status)
-               (prn :status status :editor/recording? (state/sub :editor/recording?)))))
+               (state/set-state! :editor/record-status status))))
    (fn [error]
      (js/console.error error))))
 
@@ -39,9 +37,9 @@
     (when permission-granted?
       (p/catch
        (p/then (.startRecording VoiceRecorder)
-               (fn [^js result]
+               (fn [^js _result]
                  (set-recording-state)
-                 (js/console.log (.-value result))))
+                 (js/console.log "Start recording...")))
        (fn [error]
          (log/error :start-recording-error error))))))
 
@@ -80,25 +78,27 @@
             (js->clj value :keywordize-keys true)]
         (set-recording-state)
         (when (string? recordDataBase64)
-          (embed-audio recordDataBase64)))))
+          (embed-audio recordDataBase64)
+          (js/console.log "Stop recording...")
+          ))))
    (fn [error]
      (js/console.error error))))
 
 (defn pause-recording []
   (p/catch
    (p/then (.pauseRecording VoiceRecorder)
-           (fn [^js result]
+           (fn [^js _result]
              (set-recording-state)
-             (js/console.log (.-value result))))
+             (js/console.log "Pause recording...")))
    (fn [error]
      (js/console.error error))))
 
 (defn resume-recording []
   (p/catch
    (p/then (.resumeRecording VoiceRecorder)
-           (fn [^js result]
+           (fn [^js _result]
              (set-recording-state)
-             (js/console.log (.-value result))))
+             (js/console.log "Resume recording...")))
    (fn [error]
      (js/console.error error))))
 
