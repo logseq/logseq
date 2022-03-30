@@ -98,6 +98,7 @@
 (defn load-more!
   [db-id start-id]
   (let [repo (state/get-current-repo)
+        db (db/get-conn repo)
         block (db/entity repo db-id)
         block? (not (:block/name block))
         k (if block?
@@ -107,7 +108,7 @@
         option (cond-> {:limit db-model/step-loading-blocks}
                  block?
                  (assoc :scoped-block-id db-id))
-        more-data (->> (db-model/get-paginated-blocks-no-cache start-id option)
+        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id option)
                        (map #(db/pull (:db/id %))))]
     (react/swap-new-result! query-k
                             (fn [result]

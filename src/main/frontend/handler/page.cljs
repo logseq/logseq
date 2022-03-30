@@ -471,7 +471,7 @@
                                     (outliner-core/block)
                                     (outliner-tree/-get-down)
                                     (outliner-core/get-data))
-          to-last-direct-child-id (model/get-block-last-direct-child to-id)
+          to-last-direct-child-id (model/get-block-last-direct-child (db/get-conn) to-id)
           repo (state/get-current-repo)
           conn (conn/get-conn repo false)
           datoms (d/datoms @conn :avet :block/page from-id)

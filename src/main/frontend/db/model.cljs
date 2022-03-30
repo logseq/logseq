@@ -411,18 +411,18 @@
 
 (defn has-children?
   ([block-id]
-   (has-children? (state/get-current-repo) block-id))
-  ([repo block-id]
-   (some? (:block/_parent (db-utils/entity repo [:block/uuid block-id])))))
+   (has-children? (conn/get-conn) block-id))
+  ([db block-id]
+   (some? (:block/_parent (d/entity db [:block/uuid block-id])))))
 
 (defn- collapsed-and-has-children?
-  [block]
-  (and (:block/collapsed? block) (has-children? (:block/uuid block))))
+  [db block]
+  (and (:block/collapsed? block) (has-children? db (:block/uuid block))))
 
 (defn get-by-parent-&-left
-  [conn parent-id left-id]
+  [db parent-id left-id]
   (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity @conn left-id))]
+    (let [lefts (:block/_left (d/entity db left-id))]
       (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
                                   (not= parent-id (:db/id node)))
                          node)) lefts))))
@@ -436,14 +436,14 @@
   - d
 
   The next outdented block of `c` is `d`."
-  [id]
-  (when-let [block (db-utils/entity id)]
+  [db id]
+  (when-let [block (d/entity db id)]
     (let [parent (:block/parent block)]
-      (if-let [parent-sibling (get-by-parent-&-left (conn/get-conn false)
+      (if-let [parent-sibling (get-by-parent-&-left db
                                                     (:db/id (:block/parent parent))
                                                     (:db/id parent))]
        parent-sibling
-       (get-next-outdented-block (:db/id parent))))))
+       (get-next-outdented-block db (:db/id parent))))))
 
 (defn get-block-parent
   ([block-id]
@@ -483,24 +483,23 @@
           [:block/uuid block-id]))
 
 (defn get-next-open-block
-  ([block]
-   (get-next-open-block block nil))
-  ([block scoped-block-id]
-   (let [conn (conn/get-conn false)
-         block-id (:db/id block)
+  ([db block]
+   (get-next-open-block db block nil))
+  ([db block scoped-block-id]
+   (let [block-id (:db/id block)
          block-parent-id (:db/id (:block/parent block))
          next-block (or
-                     (if (collapsed-and-has-children? block) ; skips children
+                     (if (collapsed-and-has-children? db block) ; skips children
                        ;; Sibling
-                       (get-by-parent-&-left conn block-parent-id block-id)
+                       (get-by-parent-&-left db block-parent-id block-id)
                        (or
                         ;; Child
-                        (get-by-parent-&-left conn block-id block-id)
+                        (get-by-parent-&-left db block-id block-id)
                         ;; Sibling
-                        (get-by-parent-&-left conn block-parent-id block-id)))
+                        (get-by-parent-&-left db block-parent-id block-id)))
 
                      ;; Next outdented block
-                     (get-next-outdented-block block-id))]
+                     (get-next-outdented-block db block-id))]
      (if (and scoped-block-id next-block)
        (let [parents (->> (get-block-parents (state/get-current-repo) (:block/uuid next-block))
                           (map :db/id)
@@ -511,10 +510,10 @@
 
 (defn get-paginated-blocks-no-cache
   "Result should be sorted."
-  [start-id {:keys [limit include-start? scoped-block-id]}]
-  (when-let [start (db-utils/entity start-id)]
+  [db start-id {:keys [limit include-start? scoped-block-id]}]
+  (when-let [start (d/entity db start-id)]
     (let [scoped-block-parents (when scoped-block-id
-                                 (let [block (db-utils/entity scoped-block-id)]
+                                 (let [block (d/entity db scoped-block-id)]
                                    (->> (get-block-parents (state/get-current-repo) (:block/uuid block))
                                         (map :db/id)
                                         (set))))
@@ -522,7 +521,7 @@
                         result []]
                    (if (and limit (>= (count result) limit))
                      result
-                     (let [next-block (get-next-open-block block)]
+                     (let [next-block (get-next-open-block db block)]
                        (if next-block
                          (if (and (seq scoped-block-parents)
                                   (contains? scoped-block-parents (:db/id (:block/parent next-block))))
@@ -534,34 +533,33 @@
         result))))
 
 (defn get-block-last-direct-child
-  [db-id]
-  (when-let [block (db-utils/entity db-id)]
-    (when-not (collapsed-and-has-children? block)
+  [db db-id]
+  (when-let [block (d/entity db db-id)]
+    (when-not (collapsed-and-has-children? db block)
       (let [children (:block/_parent block)
             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
             all-ids (set (map :db/id children))]
         (first (set/difference all-ids all-left))))))
 
 (defn get-block-last-child
-  [db-id]
-  (let [last-child (get-block-last-direct-child db-id)]
+  [db db-id]
+  (let [last-child (get-block-last-direct-child db db-id)]
     (loop [prev last-child
            last-child last-child]
       (if last-child
-        (recur last-child (get-block-last-direct-child last-child))
+        (recur last-child (get-block-last-direct-child db last-child))
         prev))))
 
-(defn- get-prev-open-block
-  [id]
-  (let [conn (conn/get-conn false)
-        block (db-utils/entity id)
+(defn get-prev-open-block
+  [db id]
+  (let [block (d/entity db id)
         left (:block/left block)
         left-id (:db/id left)]
     (if (= (:db/id left) (:db/id (:block/parent block)))
       left-id
       (if (util/collapsed? left)
         left-id
-        (or (get-block-last-child (:db/id left)) left-id)))))
+        (or (get-block-last-child db (:db/id left)) left-id)))))
 
 (defn recursive-child?
   [repo child-id parent-id]
@@ -576,33 +574,38 @@
 ;; TODO: outliners ops should be merged to :save-nodes, :insert-nodes,
 ;; :delete-nodes and :move-nodes
 (defn- build-paginated-blocks-from-cache
-  [repo-url result outliner-op page-id block-id tx-block-ids scoped-block-id]
-  (cond
-    (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
-    @result
+  "Notice: tx-report could be nil."
+  [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
+  (let [{:keys [db-before]} tx-report
+        current-db (conn/get-conn repo-url)
+        db-before (or db-before current-db)]
+    (cond
+     (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
+     @result
 
-    (contains? #{:insert-node :insert-nodes :save-and-insert-node
-                 :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
-    (let [cached-ids (set (conj (map :db/id @result) page-id))
-          move? (= :move-subtree outliner-op)
-          insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)
-          first-changed-id (some #(when (and (or (and insert? (not (contains? cached-ids %)))
-                                                 true)
-                                             (recursive-child? repo-url % block-id))
-                                    %) tx-block-ids)
-          start-id (if move? first-changed-id (get-prev-open-block first-changed-id))
-          start-page? (:block/name (db-utils/entity start-id))]
-      (when-not start-page?
-        (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-              previous-count (count previous-blocks)
-              limit (max step-loading-blocks (- initial-blocks-length previous-count))
-              more (get-paginated-blocks-no-cache start-id {:limit limit
-                                                            :include-start? true
-                                                            :scoped-block-id scoped-block-id})]
-          (concat previous-blocks more))))
+     (contains? #{:insert-node :insert-nodes :save-and-insert-node
+                  :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
+     (let [cached-ids (set (conj (map :db/id @result) page-id))
+           move? (= :move-subtree outliner-op)
+           insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)
+           first-changed-id (some #(when (and (or (and insert? (not (contains? cached-ids %)))
+                                                  true)
+                                              (recursive-child? repo-url % block-id))
+                                     %) tx-block-ids)
+           start-id (if move? first-changed-id (or (get-prev-open-block db-before first-changed-id)
+                                                   (get-prev-open-block current-db first-changed-id)))
+           start-page? (:block/name (db-utils/entity start-id))]
+       (when-not start-page?
+         (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
+               previous-count (count previous-blocks)
+               limit (max step-loading-blocks (- initial-blocks-length previous-count))
+               more (get-paginated-blocks-no-cache current-db start-id {:limit limit
+                                                                      :include-start? true
+                                                                      :scoped-block-id scoped-block-id})]
+           (concat previous-blocks more))))
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn get-paginated-blocks
   "Get paginated blocks for a page or a specific block.
@@ -642,11 +645,11 @@
                                                                 (zipmap (mapv :db/id @result) @result)]))
                            limit (if (and result @result) (+ (count @result) 5) limit)
                            outliner-op (get-in tx-report [:tx-meta :outliner-op])
-                           blocks (build-paginated-blocks-from-cache repo-url result outliner-op page-id block-id tx-block-ids scoped-block-id)
+                           blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
                            blocks (or blocks
-                                      (get-paginated-blocks-no-cache block-id {:limit limit
-                                                                               :include-start? (not page?)
-                                                                               :scoped-block-id scoped-block-id}))
+                                      (get-paginated-blocks-no-cache (conn/get-conn repo-url) block-id {:limit limit
+                                                                                                        :include-start? (not page?)
+                                                                                                        :scoped-block-id scoped-block-id}))
                            block-eids (map :db/id blocks)
                            blocks (if (and (seq tx-id->block)
                                            (not (contains? #{:indent-outdent-nodes :move-subtree} outliner-op)))

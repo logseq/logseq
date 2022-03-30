@@ -26,7 +26,7 @@
 ;;                :block/left [:block/uuid "2"]}]
 ;;         _ (d/transact! conn data)
 ;;         result (outliner/get-by-parent-&-left
-;;                  conn [:block/uuid "1"] [:block/uuid "2"])]
+;;                  @conn [:block/uuid "1"] [:block/uuid "2"])]
 ;;     (is (= "3" (:block/uuid result)))))
 
 (deftest test-get-by-parent-id

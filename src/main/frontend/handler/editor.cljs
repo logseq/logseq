@@ -460,8 +460,7 @@
         skip-save-current-block? (:skip-save-current-block? config)
         [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
-        has-children? (db/has-children? (state/get-current-repo)
-                                        (tree/-get-id current-node))
+        has-children? (db/has-children? (tree/-get-id current-node))
         sibling? (cond
                    ref-top-block?
                    false
@@ -2047,8 +2046,7 @@
           config (last (state/get-editor-args))
           block-id (:block/uuid editing-block)
           block-self? (block-self-alone-when-insert? config block-id)
-          has-children? (db/has-children? (state/get-current-repo)
-                                          (:block/uuid editing-block))
+          has-children? (db/has-children? (:block/uuid editing-block))
           collapsed? (util/collapsed? editing-block)]
       (conj (match (mapv boolean [(seq fst-block-text) (seq snd-block-text)
                                   block-self? has-children? (= parent left) collapsed?])
@@ -2668,17 +2666,17 @@
         value (gobj/get input "value")
         repo (state/get-current-repo)
         right (outliner-core/get-right-node (outliner-core/block current-block))
-        current-block-has-children? (db/has-children? repo (:block/uuid current-block))
+        current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
         first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
                      (:data right)
                      first-child)]
     (cond
-      (and collapsed? right (db/has-children? repo (tree/-get-id right)))
+      (and collapsed? right (db/has-children? (tree/-get-id right)))
       nil
 
-      (and (not collapsed?) first-child (db/has-children? repo (:block/uuid first-child)))
+      (and (not collapsed?) first-child (db/has-children? (:block/uuid first-child)))
       nil
 
       :else

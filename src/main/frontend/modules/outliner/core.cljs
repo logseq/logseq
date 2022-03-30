@@ -34,7 +34,7 @@
   (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
         left-id (:db/id (db/entity [:block/uuid left-uuid]))]
     (some->
-     (db-model/get-by-parent-&-left (conn/get-conn false) parent-id left-id)
+     (db-model/get-by-parent-&-left (conn/get-conn) parent-id left-id)
      :db/id
      db/pull
      block)))
