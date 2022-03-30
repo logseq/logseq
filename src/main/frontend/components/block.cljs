@@ -709,10 +709,12 @@
          (util/format "((%s))" id)]))))
 
 (defn inline-text
-  [format v]
-  (when (string? v)
-    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-      [:div.inline.mr-1 (map-inline {} inline-list)])))
+  ([format v]
+   (inline-text {} format v))
+  ([config format v]
+   (when (string? v)
+     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -1718,7 +1720,7 @@
        (util/unquote-string v)
 
        :else
-       (inline-text (:block/format block) (str v)))]))
+       (inline-text config (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]
@@ -1868,14 +1870,14 @@
 
 (defn clock-summary-cp
   [block body]
-  [:div {:style {:max-width 100}}
-   (when (and (state/enable-timetracking?)
-              (or (= (:block/marker block) "DONE")
-                  (contains? #{"TODO" "LATER"} (:block/marker block))))
-     (let [summary (clock/clock-summary body true)]
-       (when (and summary
-                  (not= summary "0m")
-                  (not (string/blank? summary)))
+  (when (and (state/enable-timetracking?)
+             (or (= (:block/marker block) "DONE")
+                 (contains? #{"TODO" "LATER"} (:block/marker block))))
+    (let [summary (clock/clock-summary body true)]
+      (when (and summary
+                 (not= summary "0m")
+                 (not (string/blank? summary)))
+        [:div {:style {:max-width 100}}
          (ui/tippy {:html        (fn []
                                    (when-let [logbook (drawer/get-logbook body)]
                                      (let [clocks (->> (last logbook)
@@ -1890,7 +1892,7 @@
                     :delay       [1000, 100]}
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
-                     summary]]))))])
+                     summary]])]))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -1924,7 +1926,7 @@
        (not slide?)
        (merge attrs))
 
-     [:span
+     [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
         (cond
@@ -1970,19 +1972,18 @@
 
 (rum/defc block-refs-count < rum/reactive db-mixins/query
   [block]
-  (let [block-refs-count (model/get-block-refs-count (:db/id block))]
-    (when (and block-refs-count (> block-refs-count 0))
-      [:div
-       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-        {:title "Open block references"
-         :style {:margin-top -1}
-         :on-click (fn []
-                     (state/sidebar-add-block!
-                      (state/get-current-repo)
-                      (:db/id block)
-                      :block-ref
-                      {:block block}))}
-        block-refs-count]])))
+  (if-let [block-refs-count (model/get-block-refs-count (:db/id block))]
+    (when (> block-refs-count 0)
+      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+       {:title "Open block references"
+        :on-click (fn []
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     (:db/id block)
+                     :block-ref
+                     {:block block}))}
+       block-refs-count])
+    nil))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -2011,7 +2012,7 @@
                           :section-attrs
                           {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
          (block-content config block edit-input-id block-id slide?))]
-       [:div.flex.flex-row
+       [:div.flex.flex-row.items-center
         (when (and (:embed? config)
                    (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline

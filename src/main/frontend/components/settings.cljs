@@ -568,7 +568,7 @@
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "white" "dark")]
+        switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
      (when-not (mobile-util/is-native-platform?)
        (version-row t version))

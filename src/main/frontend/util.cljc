@@ -263,7 +263,6 @@
             (Integer/parseInt x)
             x)))
 
-
 (defn safe-parse-int
   [x]
   #?(:cljs (let [result (parse-int x)]
@@ -382,7 +381,6 @@
 #?(:cljs
    (defn stop-propagation [e]
      (when e (.stopPropagation e))))
-
 
 #?(:cljs
    (defn cur-doc-top []
@@ -1233,7 +1231,7 @@
 
         :else
         (do (swap! buf conj v)
-          (recur buf t))))))
+            (recur buf t))))))
 
 #?(:cljs
    (defn trace!
@@ -1305,11 +1303,11 @@
   "
   [args]
   (into #{} (mapcat
-              #(if (map? %)
-                 (for [[k v] %]
-                   (when v (name k)))
-                 (name %))
-              args)))
+             #(if (map? %)
+                (for [[k v] %]
+                  (when v (name k)))
+                (name %))
+             args)))
 
 #?(:cljs
    (defn- get-dom-top
@@ -1445,7 +1443,7 @@
 
 #?(:cljs
    (defn onchange-event-is-composing?
-      "Check if onchange event of Input is a composing (IME) event.
+     "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
      [e]
      (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
@@ -1454,7 +1452,7 @@
    (defn open-url
      [url]
      (let [route? (or (string/starts-with? url
-                        (string/replace js/location.href js/location.hash ""))
+                                           (string/replace js/location.href js/location.hash ""))
                       (string/starts-with? url "#"))]
        (if (and (not route?) (electron?))
          (js/window.apis.openExternal url)

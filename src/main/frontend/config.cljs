@@ -194,6 +194,16 @@
     ["[]()" 1]
     ["" 0]))
 
+(defn link-format
+  [format label link]
+  (if label
+    (case format
+      :org
+      (util/format "[[%s][%s]]" link label)
+      :markdown
+      (util/format "[%s](%s)" label link))
+    link))
+
 (defn with-default-link
   [format link]
   (case format
