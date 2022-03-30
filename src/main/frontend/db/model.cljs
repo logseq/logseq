@@ -571,41 +571,60 @@
           (recur parent)))
       false)))
 
+(defn- get-start-id-for-pagination-query
+  [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
+   result outliner-op page-id block-id tx-block-ids]
+  (let [db-before (or db-before current-db)
+        cached-ids (map :db/id @result)
+        cached-ids-set (set (conj cached-ids page-id))
+        first-changed-id (if (= outliner-op :move-subtree)
+                           (let [{:keys [move-blocks target from-page to-page]} tx-meta]
+                             (if (not= from-page to-page)
+                               (if (= page-id from-page)
+                                 (first move-blocks)
+                                 target)
+                               ;; same page, get the most top block before dragging
+                               (let [match-ids (set (conj move-blocks target))]
+                                 (loop [[id & others] cached-ids]
+                                   (if (contains? match-ids id)
+                                     id
+                                     (recur others))))))
+                           (let [insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)]
+                             (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
+                                                   true)
+                                               (recursive-child? repo-url % block-id))
+                                      %) tx-block-ids)))]
+    (when first-changed-id
+      (or (get-prev-open-block db-before first-changed-id)
+          (get-prev-open-block current-db first-changed-id)))))
+
 ;; TODO: outliners ops should be merged to :save-nodes, :insert-nodes,
 ;; :delete-nodes and :move-nodes
 (defn- build-paginated-blocks-from-cache
   "Notice: tx-report could be nil."
   [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
-  (let [{:keys [db-before]} tx-report
-        current-db (conn/get-conn repo-url)
-        db-before (or db-before current-db)]
+  (let [{:keys [tx-meta]} tx-report
+        current-db (conn/get-conn repo-url)]
     (cond
-     (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
-     @result
+      (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
+      @result
 
-     (contains? #{:insert-node :insert-nodes :save-and-insert-node
-                  :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
-     (let [cached-ids (set (conj (map :db/id @result) page-id))
-           move? (= :move-subtree outliner-op)
-           insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)
-           first-changed-id (some #(when (and (or (and insert? (not (contains? cached-ids %)))
-                                                  true)
-                                              (recursive-child? repo-url % block-id))
-                                     %) tx-block-ids)
-           start-id (if move? first-changed-id (or (get-prev-open-block db-before first-changed-id)
-                                                   (get-prev-open-block current-db first-changed-id)))
-           start-page? (:block/name (db-utils/entity start-id))]
-       (when-not start-page?
-         (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-               previous-count (count previous-blocks)
-               limit (max step-loading-blocks (- initial-blocks-length previous-count))
-               more (get-paginated-blocks-no-cache current-db start-id {:limit limit
-                                                                      :include-start? true
-                                                                      :scoped-block-id scoped-block-id})]
-           (concat previous-blocks more))))
+      (contains? #{:insert-node :insert-nodes :save-and-insert-node
+                   :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
+      (when-let [start-id (get-start-id-for-pagination-query
+                           repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
+        (let [start-page? (:block/name (db-utils/entity start-id))]
+          (when-not start-page?
+            (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
+                  previous-count (count previous-blocks)
+                  limit 25
+                  more (get-paginated-blocks-no-cache current-db start-id {:limit limit
+                                                                           :include-start? true
+                                                                           :scoped-block-id scoped-block-id})]
+              (concat previous-blocks more)))))
 
-     :else
-     nil)))
+      :else
+      nil)))
 
 (defn get-paginated-blocks
   "Get paginated blocks for a page or a specific block.

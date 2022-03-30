@@ -601,7 +601,9 @@
       (let [root-page (:db/id (:block/page (:data root)))
             target-page (:db/id (:block/page (:data target-node)))
             not-same-page? (not= root-page target-page)
-            opts (cond-> {:outliner-op :move-subtree}
+            opts (cond-> {:outliner-op :move-subtree
+                          :move-blocks [(:db/id (get-data root))]
+                          :target (:db/id (get-data target-node))}
                    not-same-page?
                    (assoc :from-page root-page
                           :target-page target-page))]
