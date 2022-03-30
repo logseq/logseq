@@ -482,6 +482,33 @@
           '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
           [:block/uuid block-id]))
 
+(defn get-next-open-block
+  ([block]
+   (get-next-open-block block nil))
+  ([block scoped-block-id]
+   (let [conn (conn/get-conn false)
+         block-id (:db/id block)
+         block-parent-id (:db/id (:block/parent block))
+         next-block (or
+                     (if (collapsed-and-has-children? block) ; skips children
+                       ;; Sibling
+                       (get-by-parent-&-left conn block-parent-id block-id)
+                       (or
+                        ;; Child
+                        (get-by-parent-&-left conn block-id block-id)
+                        ;; Sibling
+                        (get-by-parent-&-left conn block-parent-id block-id)))
+
+                     ;; Next outdented block
+                     (get-next-outdented-block block-id))]
+     (if (and scoped-block-id next-block)
+       (let [parents (->> (get-block-parents (state/get-current-repo) (:block/uuid next-block))
+                          (map :db/id)
+                          (set))]
+         (when (contains? parents scoped-block-id)
+           next-block))
+       next-block))))
+
 (defn get-paginated-blocks-no-cache
   "Result should be sorted."
   [start-id {:keys [limit include-start? scoped-block-id]}]
@@ -491,25 +518,11 @@
                                    (->> (get-block-parents (state/get-current-repo) (:block/uuid block))
                                         (map :db/id)
                                         (set))))
-          conn (conn/get-conn false)
           result (loop [block start
                         result []]
                    (if (and limit (>= (count result) limit))
                      result
-                     (let [block-id (:db/id block)
-                           block-parent-id (:db/id (:block/parent block))
-                           next-block (or
-                                       (if (collapsed-and-has-children? block) ; skips children
-                                         ;; Sibling
-                                         (get-by-parent-&-left conn block-parent-id block-id)
-                                         (or
-                                          ;; Child
-                                          (get-by-parent-&-left conn block-id block-id)
-                                          ;; Sibling
-                                          (get-by-parent-&-left conn block-parent-id block-id)))
-
-                                       ;; Next outdented block
-                                       (get-next-outdented-block block-id))]
+                     (let [next-block (get-next-open-block block)]
                        (if next-block
                          (if (and (seq scoped-block-parents)
                                   (contains? scoped-block-parents (:db/id (:block/parent next-block))))

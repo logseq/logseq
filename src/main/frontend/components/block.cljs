@@ -2879,14 +2879,15 @@
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
         blocks (blocks->vec-tree flat-blocks)]
-    (if (:custom-query? config)
+    (if-not db-id
       (block-list config blocks)
-      (let [last-block-id (:db/id (last flat-blocks))
-            bottom-reached (fn []
-                             (when (and db-id
-                                        ;; To prevent scrolling after inserting new blocks
-                                        (> (- (util/time-ms) (:start-time config)) 100))
+      (let [bottom-reached (fn []
+                             ;; To prevent scrolling after inserting new blocks
+                             (when (> (- (util/time-ms) (:start-time config)) 100)
                                (load-more-blocks! config flat-blocks)))
+            has-more? (and
+                       (> (count flat-blocks) model/initial-blocks-length)
+                       (some? (model/get-next-open-block (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}
          (ui/infinite-list
@@ -2896,8 +2897,10 @@
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
                                (ui/bottom-reached? node 1000)))
-           :has-more true
-           :more "More"})]))))
+           :has-more has-more?
+           :more (if (or (:preview? config) (:sidebar? config))
+                   "More"
+                   (ui/loading "Loading"))})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
