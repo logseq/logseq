@@ -10,11 +10,6 @@
             [lambdaisland.glogi :as log]
             [frontend.util :as util]))
 
-(defn- can-device-voice-record? []
-  (p/then
-   (.canDeviceVoiceRecord VoiceRecorder)
-   (fn [^js result] (.-value result))))
-
 (defn request-audio-recording-permission []
   (p/then
    (.requestAudioRecordingPermission VoiceRecorder)
@@ -38,13 +33,17 @@
      (js/console.error error))))
 
 (defn start-recording []
-  (p/catch
-   (p/then (.startRecording VoiceRecorder)
-           (fn [^js result]
-             (set-recording-state)
-             (js/console.log (.-value result))))
-   (fn [error]
-     (log/error :start-recording-error error))))
+  (p/let [permission-granted? (has-audio-recording-permission?)
+          permission-granted? (or permission-granted?
+                                  (request-audio-recording-permission))]
+    (when permission-granted?
+      (p/catch
+       (p/then (.startRecording VoiceRecorder)
+               (fn [^js result]
+                 (set-recording-state)
+                 (js/console.log (.-value result))))
+       (fn [error]
+         (log/error :start-recording-error error))))))
 
 (defn get-asset-path [filename]
   (p/let [[repo-dir assets-dir]
