@@ -2464,9 +2464,7 @@
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :select.graph/add-graph "Ja, legg til en ny graf"}
 
-   :pt-BR {:tutorial/text (rc/inline "tutorial-en.md")
-           :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
-           :on-boarding/title "Olá, bem-vindo ao Logseq!"
+   :pt-BR {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "compartilhar"
            :on-boarding/is-a " é um bloco de notas "
            :on-boarding/vision "Uma plataforma de código-aberto focada na privacidade para gestão de conhecimento e colaboração."
