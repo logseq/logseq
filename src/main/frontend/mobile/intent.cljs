@@ -53,15 +53,6 @@
       (state/append-current-edit-content! values)
       (editor-handler/api-insert-new-block! values {:page page}))))
 
-(defn get-asset-path
-  [filename]
-  (p/let [[repo-dir assets-dir]
-          (editor-handler/ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
-
 (defn- handle-received-media [result]
   (p/let [{:keys [title url]} result
           page (or (state/get-current-page)
@@ -70,7 +61,7 @@
           time (date/get-current-time)
           basename (path/basename url)
           label (-> basename util/node-path.name)
-          path (get-asset-path (or (path/basename url) title))
+          path (editor-handler/get-asset-path (or (path/basename url) title))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]

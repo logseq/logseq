@@ -3,9 +3,7 @@
             ["capacitor-voice-recorder" :refer [VoiceRecorder]]
             [promesa.core :as p]
             [frontend.handler.editor :as editor-handler]
-            ["path" :as path]
             [frontend.state :as state]
-            [frontend.mobile.util :as mobile-util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]))
@@ -43,19 +41,11 @@
        (fn [error]
          (log/error :start-recording-error error))))))
 
-(defn get-asset-path [filename]
-  (p/let [[repo-dir assets-dir]
-          (editor-handler/ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
-
 (defn- embed-audio [database64]
   (p/let [filename (str (date/get-date-time-string-2) ".mp3")
           edit-block (state/get-edit-block)
           format (:block/format edit-block)
-          path (get-asset-path filename)
+          path (editor-handler/get-asset-path filename)
           _file (p/catch
                  (.writeFile Filesystem (clj->js {:data database64
                                                   :path path
