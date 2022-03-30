@@ -544,9 +544,7 @@
                        (wrap-parse-block))
         sibling? (when block-self? false)]
     (outliner-insert-block! config current-block next-block {:sibling? sibling?})
-    ;; WORKAROUND: The block won't refresh itself even if the content is empty.
-    (when block-self?
-      (gobj/set input "value" ""))
+    (util/set-change-value input fst-block-text)
     (ok-handler next-block)))
 
 (defn clear-when-saved!
