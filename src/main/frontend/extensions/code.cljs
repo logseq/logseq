@@ -286,11 +286,7 @@
                       (when-let [textarea (rum/ref-node state textarea-ref-name)]
                         (gobj/set textarea "defaultValue" code)
                         (gobj/set textarea "value" code))))
-                  state)
-
-   :did-update (fn [state]
-                 (load-and-render! state)
-                 state)}
+                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
