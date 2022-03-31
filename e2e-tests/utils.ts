@@ -63,9 +63,14 @@ export async function lastBlock(page: Page): Promise<Locator> {
   // discard any popups
   await page.keyboard.press('Escape')
   // click last block
-  await page.click('.page-blocks-inner .ls-block >> nth=-1')
+  if (await page.locator('text="Click here to edit..."').isVisible()) {
+    await page.click('text="Click here to edit..."')
+  } else {
+    await page.click('.page-blocks-inner .ls-block >> nth=-1')
+  }
   // wait for textarea
   await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
+  await page.waitForTimeout(100)
   return page.locator('textarea >> nth=0')
 }
 
@@ -93,10 +98,10 @@ export async function newInnerBlock(page: Page): Promise<Locator> {
 }
 
 export async function newBlock(page: Page): Promise<Locator> {
-  let blockNumber = await page.locator('.ls-block').count()
+  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
   const prev = await lastBlock(page)
   await page.press('textarea >> nth=0', 'Enter')
-  await page.waitForSelector(`.ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
+  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
 

@@ -1,6 +1,6 @@
-import { expect } from '@playwright/test'
+import { expect, Page } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, activateNewPage, enterNextBlock } from './utils'
+import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, enterNextBlock } from './utils'
 
 /***
  * Test alias features
@@ -25,7 +25,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   await page.keyboard.press(hotkeyOpenLink)
 
   // build target Page with diacritics
-  await activateNewPage(page)
+  await lastBlock(page)
   await page.type('textarea >> nth=0', 'Diacritic title test content')
 
   await page.keyboard.press('Enter')
@@ -43,7 +43,7 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlo
   await page.keyboard.press("Escape")
 })
 
-async function alias_test(page, page_name: string, search_kws: string[]) {
+async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   let hotkeyOpenLink = 'Control+o'
   let hotkeyBack = 'Control+['
   if (IsMac) {
@@ -65,22 +65,32 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
   await page.keyboard.press(hotkeyOpenLink)
 
   await lastBlock(page)
+  await page.waitForTimeout(500)
+
   // build target Page with alias
-  await page.fill('textarea >> nth=0', 'alias:: [[' + alias_name + ']]')
+  await page.type('textarea >> nth=0', 'alias:: [[' + alias_name)
+  await page.press('textarea >> nth=0', 'ArrowRight')
+  await page.press('textarea >> nth=0', 'ArrowRight')
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
-  await enterNextBlock(page)
+  await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
+  await page.waitForTimeout(500)
   await page.type('textarea >> nth=0', alias_test_content_1)
   await page.keyboard.press(hotkeyBack)
 
+  await page.waitForTimeout(100) // await navigation
   // create alias ref in origin Page
   await newBlock(page)
-  await page.fill('textarea >> nth=0', '[[' + alias_name + ']]')
+  await page.type('textarea >> nth=0', '[[' + alias_name)
+  await page.waitForTimeout(100)
+
   await page.keyboard.press(hotkeyOpenLink)
+  await page.waitForTimeout(100) // await navigation
 
   // shortcut opening test
   await lastBlock(page)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_1)
-  await newInnerBlock(page)
+
+  await enterNextBlock(page)
   await page.type('textarea >> nth=0', alias_test_content_2)
   await page.keyboard.press(hotkeyBack)
 
