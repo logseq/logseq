@@ -579,10 +579,16 @@
         cached-ids-set (set (conj cached-ids page-id))
         first-changed-id (if (= outliner-op :move-subtree)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
-                             (if (not= from-page to-page)
+                             (cond
+                               (= page-id target) ; move to the first block
+                               nil
+
+                               (and from-page to-page (not= from-page to-page))
                                (if (= page-id from-page)
                                  (first move-blocks)
                                  target)
+
+                               :else
                                ;; same page, get the most top block before dragging
                                (let [match-ids (set (conj move-blocks target))]
                                  (loop [[id & others] cached-ids]
