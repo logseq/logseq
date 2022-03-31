@@ -19,7 +19,7 @@ test('switch code editing mode', async ({ page }) => {
   // NOTE: multiple textarea elements are existed in the editor, be careful to select the right one
 
   // code block with 0 line
-  await page.type(':nth-match(textarea, 1)', '```clojure\n')
+  await page.type('textarea >> nth=0', '```clojure\n')
   // line number: 1
   await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
   expect(await page.locator('.CodeMirror-gutter-wrapper .CodeMirror-linenumber').innerText()).toBe('1')
@@ -28,10 +28,10 @@ test('switch code editing mode', async ({ page }) => {
 
   await page.press('.CodeMirror textarea', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'hidden' })
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('```clojure\n```')
+  expect(await page.inputValue('textarea >> nth=0')).toBe('```clojure\n```')
 
   await page.waitForTimeout(200)
-  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.press('textarea >> nth=0', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
 
   // NOTE: must wait here, await loading of CodeMirror editor

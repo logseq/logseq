@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInnerBlock, activateNewPage } from './utils'
+import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastBlock, activateNewPage, enterNextBlock } from './utils'
 
 /***
  * Test alias features
@@ -21,15 +21,15 @@ import { IsMac, createRandomPage, newBlock, newInnerBlock, randomString, lastInn
   // diacritic opening test
   await createRandomPage(page)
 
-  await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1')
+  await page.fill('textarea >> nth=0', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-1')
   await page.keyboard.press(hotkeyOpenLink)
 
   // build target Page with diacritics
   await activateNewPage(page)
-  await page.type(':nth-match(textarea, 1)', 'Diacritic title test content')
+  await page.type('textarea >> nth=0', 'Diacritic title test content')
 
   await page.keyboard.press('Enter')
-  await page.fill(':nth-match(textarea, 1)', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
+  await page.fill('textarea >> nth=0', '[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2')
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed
@@ -61,45 +61,46 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
   // shortcut opening test
   let parent_title = await createRandomPage(page)
 
-  await page.fill(':nth-match(textarea, 1)', '[[' + target_name + ']]')
+  await page.fill('textarea >> nth=0', '[[' + target_name + ']]')
   await page.keyboard.press(hotkeyOpenLink)
 
+  await lastBlock(page)
   // build target Page with alias
-  await page.type(':nth-match(textarea, 1)', 'alias:: [[' + alias_name + ']]')
-  await page.press(':nth-match(textarea, 1)', 'Enter') // double Enter for exit property editing
-  await page.press(':nth-match(textarea, 1)', 'Enter')
-  await page.type(':nth-match(textarea, 1)', alias_test_content_1)
+  await page.fill('textarea >> nth=0', 'alias:: [[' + alias_name + ']]')
+  await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
+  await enterNextBlock(page)
+  await page.type('textarea >> nth=0', alias_test_content_1)
   await page.keyboard.press(hotkeyBack)
 
   // create alias ref in origin Page
   await newBlock(page)
-  await page.type(':nth-match(textarea, 1)', '[[' + alias_name + ']]')
+  await page.fill('textarea >> nth=0', '[[' + alias_name + ']]')
   await page.keyboard.press(hotkeyOpenLink)
 
   // shortcut opening test
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_1)
+  await lastBlock(page)
+  expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_1)
   await newInnerBlock(page)
-  await page.type(':nth-match(textarea, 1)', alias_test_content_2)
+  await page.type('textarea >> nth=0', alias_test_content_2)
   await page.keyboard.press(hotkeyBack)
 
   // pressing enter opening test
-  await lastInnerBlock(page)
-  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_2)
+  await lastBlock(page)
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+  await page.press('textarea >> nth=0', 'Enter')
+  await lastBlock(page)
+  expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_2)
   await newInnerBlock(page)
-  await page.type(':nth-match(textarea, 1)', alias_test_content_3)
+  await page.type('textarea >> nth=0', alias_test_content_3)
   await page.keyboard.press(hotkeyBack)
 
   // clicking opening test
   await page.waitForSelector('.page-blocks-inner .ls-block .page-ref >> nth=-1')
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
-  await lastInnerBlock(page)
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
+  await lastBlock(page)
+  expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_3)
 
   // TODO: test alias from graph clicking
 
@@ -127,8 +128,8 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
     page.keyboard.press("Enter")
     await page.waitForNavigation()
     await page.waitForTimeout(100)
-    await lastInnerBlock(page)
-    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(alias_test_content_3)
+    await lastBlock(page)
+    expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_3)
 
     // test search clicking (block)
     await page.click('#search-button')
@@ -138,8 +139,8 @@ async function alias_test(page, page_name: string, search_kws: string[]) {
     page.click(":nth-match(.menu-link, 2)")
     await page.waitForNavigation()
     await page.waitForTimeout(500)
-    await lastInnerBlock(page)
-    expect(await page.inputValue(':nth-match(textarea, 1)')).toBe("[[" + alias_name + "]]")
+    await lastBlock(page)
+    expect(await page.inputValue('textarea >> nth=0')).toBe("[[" + alias_name + "]]")
     await page.keyboard.press(hotkeyBack)
   }
 

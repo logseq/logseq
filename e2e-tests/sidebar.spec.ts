@@ -1,12 +1,13 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, searchAndJumpToPage } from './utils'
+import { createRandomPage, openLeftSidebar, searchAndJumpToPage } from './utils'
 
 /***
  * Test side bar features
  ***/
 
 test('favorite item and recent item test', async ({ page }) => {
+  await openLeftSidebar(page)
   // add page to fav
   const fav_page_name = await createRandomPage(page)
   let favs = await page.$$('.favorite-item a')
@@ -37,10 +38,10 @@ test('favorite item and recent item test', async ({ page }) => {
 
 test('recent is updated #4320', async ({ page }) => {
   const page1 = await createRandomPage(page)
-  await page.fill(':nth-match(textarea, 1)', 'Random Thought')
+  await page.fill('textarea >> nth=0', 'Random Thought')
 
   const page2 = await createRandomPage(page)
-  await page.fill(':nth-match(textarea, 1)', 'Another Random Thought')
+  await page.fill('textarea >> nth=0', 'Another Random Thought')
 
   const firstRecent = page.locator('.nav-content-item.recent li >> nth=0')
   expect(await firstRecent.textContent()).toContain(page2)

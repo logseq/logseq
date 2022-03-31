@@ -642,7 +642,8 @@
                             limit initial-blocks-length
                             use-cache? true
                             scoped-block-id nil}}]
-   (assert (integer? block-id))
+   (when block-id
+     (assert (integer? block-id) (str "wrong block-id: " block-id))
    (let [entity (db-utils/entity repo-url block-id)
          page? (some? (:block/name entity))
          page-entity (if page? entity (:block/page entity))
@@ -686,7 +687,7 @@
                            blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
                        (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
         nil)
-      react))))
+      react)))))
 
 (defn get-page-blocks-no-cache
   ([page]
