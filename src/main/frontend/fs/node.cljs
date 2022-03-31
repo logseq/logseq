@@ -9,8 +9,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.debug :as debug]))
+            [promesa.core :as p]))
 
 (defn concat-path
   [dir path]

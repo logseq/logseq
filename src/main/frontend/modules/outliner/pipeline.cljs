@@ -1,9 +1,6 @@
 (ns frontend.modules.outliner.pipeline
   (:require [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.modules.outliner.file :as file]
-            [frontend.db :as db]
-            [frontend.util :as util]
-            [frontend.debug :as debug]))
+            [frontend.modules.outliner.file :as file]))
 
 (defn updated-page-hook
   [page]

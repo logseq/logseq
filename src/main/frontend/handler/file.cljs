@@ -21,7 +21,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.debug :as debug]
             [frontend.mobile.util :as mobile]
             [clojure.set :as set]))
 
@@ -297,9 +296,7 @@
   []
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
-      (let [args (async/<! chan)
-            files (second args)]
-
+      (let [args (async/<! chan)]
         ;; return a channel
         (try
           (<p! (apply alter-files-handler! args))

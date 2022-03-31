@@ -2662,7 +2662,6 @@
         ^js input (state/get-input)
         current-pos (cursor/pos input)
         value (gobj/get input "value")
-        repo (state/get-current-repo)
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? (:block/uuid current-block))
         collapsed? (util/collapsed? current-block)
