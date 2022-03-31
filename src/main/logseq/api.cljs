@@ -249,19 +249,22 @@
             cmd (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key (:key cmd)
             keybinding (:keybinding cmd)
-            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))
+            action' #(state/pub-event! [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}])]
 
         ;; handle simple commands
         (plugin-handler/register-plugin-simple-command pid cmd action)
 
         ;; handle palette commands
-        (when palette-cmd
+        (when palette?
           (palette-handler/register palette-cmd))
 
         ;; handle keybinding commands
-        (when-let [shortcut-args (and palette-cmd keybinding
-                                      (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
-          (let [dispatch-cmd (fn [_ _e] (palette-handler/invoke-command palette-cmd))
+        (when-let [shortcut-args (and keybinding (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
+          (let [dispatch-cmd (fn [_e]
+                               (if palette?
+                                 (palette-handler/invoke-command palette-cmd)
+                                 (action')))
                 [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
             (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
