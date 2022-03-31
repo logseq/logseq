@@ -111,7 +111,6 @@
      :editor/show-zotero                    false
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
-     ;; This key is not currently used but may be useful later?
      :editor/in-composition?                false
      :editor/content                        {}
      :editor/block                          nil

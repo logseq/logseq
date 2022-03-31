@@ -1950,8 +1950,9 @@
                      :block-parent-id block-id
                      :format format
                      :heading-level heading-level
-                     :on-hide (fn [_value event]
+                     :on-hide (fn [value event]
                                 (when (= event :esc)
+                                  (editor-handler/save-block! (editor-handler/get-state) value)
                                   (editor-handler/escape-editing)))}
                     edit-input-id
                     config))]
