@@ -17,18 +17,19 @@ if (fs.existsSync(testTmpDir)) {
 
 export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
-// NOTE: This is a console log watcher for error logs.
+// NOTE: This following is a console log watcher for error logs.
+// Save and print all logs when error happens.
+let logs: string
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-    // console.log(msg.text())
-  let msgText = msg.text()
-  expect(msgText).not.toMatch(/^Failed to/)
+  // console.log(msg.text())
+  logs += msg.text() + '\n'
+    expect(msg.text(), logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
-  if (!msgText.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
-    expect(msgText).not.toMatch(/^Error/)
+  if (!logs.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+    expect(logs).not.toMatch(/^Error/)
   }
 
-  expect(msgText).not.toMatch(/^Uncaught/)
   // NOTE: React warnings will be logged as error.
   // expect(msg.type()).not.toBe('error')
 }

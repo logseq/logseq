@@ -105,7 +105,6 @@ test('delete and backspace', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill('textarea >> nth=0', 'test')
-
   expect(await page.inputValue('textarea >> nth=0')).toBe('test')
 
   // backspace
@@ -114,7 +113,8 @@ test('delete and backspace', async ({ page }) => {
   expect(await page.inputValue('textarea >> nth=0')).toBe('te')
 
   // refill
-  await page.fill('textarea >> nth=0', 'test')
+  await enterNextBlock(page)
+  await page.type('textarea >> nth=0', 'test')
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
 

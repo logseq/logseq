@@ -232,9 +232,11 @@
   (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)
-    (when (and (seq matched)
-             (> (count matched)
-                @current-idx))
+    ;; FIXME: on-chosen-open-link might be nil
+    (when (and on-chosen-open-link
+               (seq matched)
+               (> (count matched)
+                  @current-idx))
       (on-chosen-open-link (nth matched @current-idx) false))))
 
 ;; date-picker
