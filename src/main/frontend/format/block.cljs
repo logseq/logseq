@@ -496,10 +496,9 @@
                   blocks)
                  blocks)
         blocks (map (fn [block]
-                      (let [delete-keys (if with-body?
-                                          [:block/anchor]
-                                          [:block/anchor :block/body])]
-                        (apply dissoc block delete-keys))) blocks)]
+                      (if with-body?
+                        block
+                        (dissoc block :block/body))) blocks)]
     (with-path-refs blocks)))
 
 (defn ^:large-vars/cleanup-todo extract-blocks
