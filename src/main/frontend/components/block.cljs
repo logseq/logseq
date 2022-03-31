@@ -198,7 +198,7 @@
                    (when @*resizing-image? (util/stop e)))}
         (and (:width metadata) (not (util/mobile?)))
         (assoc :style {:width (:width metadata)}))
-      [:div.asset-container
+      [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
         (merge
          {:loading "lazy"
