@@ -72,7 +72,7 @@
         {:on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
-      [(when-not (state/publishing-enable-editing?)
+      [(when (state/enable-editing?)
          {:title (t :settings)
           :options {:on-click state/open-settings!}
           :icon (ui/icon "settings")})
@@ -92,7 +92,7 @@
           :options {:on-click #(state/set-modal! export/export)}
           :icon (ui/icon "database-export")})
 
-       (when current-repo
+       (when (and current-repo (state/enable-editing?))
          {:title (t :import)
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})

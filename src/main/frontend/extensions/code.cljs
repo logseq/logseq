@@ -135,6 +135,7 @@
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
+            [frontend.config :as ui-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -234,6 +235,7 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
+                           :readOnly (if ui-config/publishing? "nocursor" false)
                            :extraKeys #js {"Esc" (fn [cm]
                                                    (save-file-or-block-when-blur-or-esc! cm textarea config state)
                                                    (when-let [block-id (:block/uuid config)]

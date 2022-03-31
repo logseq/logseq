@@ -244,7 +244,7 @@
 
       (favorites t)
 
-      (when left-sidebar-open? (recent-pages t))
+      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       [:nav.px-2 {:aria-label "Sidebar"
                   :class      "new-page"}

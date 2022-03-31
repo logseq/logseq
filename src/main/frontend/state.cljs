@@ -824,6 +824,10 @@
   []
   (and @publishing? (:publishing/enable-editing? (get-config))))
 
+(defn enable-editing?
+  []
+  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
+
 (defn set-editing!
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
