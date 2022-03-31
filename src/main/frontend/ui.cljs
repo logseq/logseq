@@ -834,7 +834,7 @@
                                (log/error :exception e)
                                [:div]))
                            [:div {:key "tippy"} ""])))
-           [:<> {:key "tippy-children"} child])))
+            (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
