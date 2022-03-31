@@ -81,11 +81,25 @@ const app: Partial<IAppProxy> = {
     action: SimpleCommandCallback) {
 
     const { key, label, keybinding } = opts
-    const group = 'global-palette-command'
+    const group = '$palette$'
 
     return registerSimpleCommand.call(
       this, group,
       { key, label, palette: true, keybinding },
+      action)
+  },
+
+  registerCommandShortcut (
+    keybinding: SimpleCommandKeybinding,
+    action: SimpleCommandCallback
+  ) {
+    const { binding } = keybinding
+    const group = '$shortcut$'
+    const key = group + safeSnakeCase(binding)
+
+    return registerSimpleCommand.call(
+      this, group,
+      { key, palette: false, keybinding},
       action)
   },
 

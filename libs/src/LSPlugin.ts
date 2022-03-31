@@ -278,6 +278,11 @@ export interface IAppProxy {
     },
     action: SimpleCommandCallback) => void
 
+  registerCommandShortcut: (
+    keybinding: SimpleCommandKeybinding,
+    action: SimpleCommandCallback
+  ) => void
+
   invokeExternalCommand: (
     type: ExternalCommandType,
     ...args: Array<any>) => Promise<void>
