@@ -4,15 +4,23 @@
  * https://stackoverflow.com/questions/8892238/detect-keyboard-layout-with-javascript
  * ***/
 
-export let dispatch_kb_events = async function (page, selector, keyboard_events ){
-    for (let idx in keyboard_events){
-      let { event_type, event, latency } = keyboard_events[idx]
-      await page.waitForTimeout(latency)
-      await page.dispatchEvent(selector, event_type, event)
-    }
+import { Page } from '@playwright/test'
+
+interface RecordedEvent {
+  event_type: string;
+  event: any; // KeyboardEvent is too heavy
+  latency: number;
 }
 
-export let macos_pinyin_left_full_bracket = [
+export let dispatch_kb_events = async function (page: Page, selector: string, keyboard_events: RecordedEvent[] ){
+  for (let kbev of keyboard_events){
+    let { event_type, event, latency } = kbev
+    await page.waitForTimeout(latency)
+    await page.dispatchEvent(selector, event_type, event)
+  }
+}
+
+export let macos_pinyin_left_full_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -60,7 +68,7 @@ export let macos_pinyin_left_full_bracket = [
   }
 ]
 
-export let win10_pinyin_left_full_bracket = [
+export let win10_pinyin_left_full_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -128,7 +136,7 @@ export let win10_pinyin_left_full_bracket = [
   }
 ]
 
-export let win10_legacy_pinyin_left_full_bracket = [
+export let win10_legacy_pinyin_left_full_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -181,7 +189,7 @@ export let win10_legacy_pinyin_left_full_bracket = [
   }
 ]
 
-export let macos_pinyin_selecting_candidate_double_left_bracket = [
+export let macos_pinyin_selecting_candidate_double_left_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -349,7 +357,7 @@ export let macos_pinyin_selecting_candidate_double_left_bracket = [
   }
 ]
 
-export let win10_RIME_selecting_candidate_double_left_bracket = [
+export let win10_RIME_selecting_candidate_double_left_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {

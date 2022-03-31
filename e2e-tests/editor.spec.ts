@@ -9,19 +9,20 @@ test(
   "but dont trigger RIME #3440 ",
   // cases should trigger [[]] #3251
   async ({ page }) => {
-    for (let left_full_bracket of [
-      kb_events.macos_pinyin_left_full_bracket,
+    for (let [idx, left_full_bracket] of [
       kb_events.win10_pinyin_left_full_bracket,
+      kb_events.macos_pinyin_left_full_bracket
       // TODO: support #3741
       // kb_events.win10_legacy_pinyin_left_full_bracket,
-    ]) {
+    ].entries()) {
       await createRandomPage(page)
-      await page.type(':nth-match(textarea, 1)', "【")
+      let check_text = "#3251 test " + idx
+      await page.fill(':nth-match(textarea, 1)', check_text + "【")
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', left_full_bracket)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('【')
-      await page.type(':nth-match(textarea, 1)', "【")
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
+      await page.fill(':nth-match(textarea, 1)', check_text + "【【")
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', left_full_bracket)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('[[]]')
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
     };
 
     // dont trigger RIME #3440
@@ -31,7 +32,7 @@ test(
     ].entries()) {
       await createRandomPage(page)
       let check_text = "#3440 test " + idx
-      await page.type(':nth-match(textarea, 1)', check_text)
+      await page.fill(':nth-match(textarea, 1)', check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', selecting_candidate_left_bracket)
