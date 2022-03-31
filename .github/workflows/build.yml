@@ -181,6 +181,10 @@ jobs:
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
 
+      # If not building, the `event_` of `goog.event.KeyboardEvent` would be missing
+      - name: Build app
+        run: clojure -M:cljs compile app
+
       - name: Run Playwright test
         run: xvfb-run -- yarn e2e-test
         env:
