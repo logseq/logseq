@@ -257,7 +257,7 @@
     (->>
      (concat repo-links
              [(when (seq repo-links) {:hr true})
-              {:title (t :new-graph) :options {:href (rfe/href :repo-add)}}
+              {:title (t :new-graph) :options {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}}
               {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
               refresh-link
               reindex-link
