@@ -6,7 +6,9 @@
             [frontend.state :as state]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.string :as string]
+            [frontend.db :as db]))
 
 (defn request-audio-recording-permission []
   (p/then
@@ -22,8 +24,7 @@
   (p/catch
    (p/then (.getCurrentStatus VoiceRecorder)
            (fn [^js result]
-             (let [{:keys [status]}
-                   (js->clj result :keywordize-keys true)]
+             (let [{:keys [status]} (js->clj result :keywordize-keys true)]
                (state/set-state! :editor/record-status status))))
    (fn [error]
      (js/console.error error))))
@@ -42,9 +43,10 @@
          (log/error :start-recording-error error))))))
 
 (defn- embed-audio [database64]
-  (p/let [filename (str (date/get-date-time-string-2) ".mp3")
+  (p/let [page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          filename (str (date/get-date-time-string-2) ".mp3")
           edit-block (state/get-edit-block)
-          format (:block/format edit-block)
+          format (or (:block/format edit-block) (db/get-page-format page))
           path (editor-handler/get-asset-path filename)
           _file (p/catch
                  (.writeFile Filesystem (clj->js {:data database64
@@ -55,8 +57,10 @@
                                                   :error error})))
           url (util/format "../assets/%s" filename)
           file-link (editor-handler/get-asset-file-link format url filename true)]
-    (when edit-block
-      (state/append-current-edit-content! file-link))))
+    (if edit-block
+      (state/append-current-edit-content! file-link)
+      (do (prn :called :file-link file-link)
+          (editor-handler/api-insert-new-block! file-link {:page page})))))
 
 (defn stop-recording []
   (p/catch
@@ -69,8 +73,7 @@
         (set-recording-state)
         (when (string? recordDataBase64)
           (embed-audio recordDataBase64)
-          (js/console.log "Stop recording...")
-          ))))
+          (js/console.log "Stop recording...")))))
    (fn [error]
      (js/console.error error))))
 

@@ -62,7 +62,8 @@
                     (when (state/get-current-repo)
                       (let [is-active? (.-isActive state)]
                         (when is-active?
-                          (editor-handler/save-current-block!))))))))
+                          (editor-handler/save-current-block!))))))
+
     (.addEventListener js/window "sendIntentReceived"
-                       #(intent/handle-received))
+                       #(intent/handle-received))))
 

@@ -5,6 +5,7 @@
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
             [frontend.components.repo :as repo]
+            [frontend.components.editor :refer [mobile-bar-command]]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
@@ -32,7 +33,8 @@
             [frontend.extensions.srs :as srs]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
-            [frontend.handler.mobile.swipe :as swipe]))
+            [frontend.handler.mobile.swipe :as swipe]
+            [frontend.mobile.record :as record]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -437,6 +439,15 @@
   (when-not (gobj/get e "shiftKey")
     (editor-handler/clear-selection!)))
 
+(rum/defc record-bar < rum/reactive
+  []
+  [:div#audio-record-toolbar.bg-base-2
+   [:div.record-commands.flex.flex-cols
+    (mobile-bar-command #(record/stop-recording) "player-stop")
+    (if (= (state/sub :editor/record-status) "PAUSED")
+      (mobile-bar-command #(record/resume-recording) "player-record")
+      (mobile-bar-command #(record/pause-recording) "player-pause"))]])
+
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -528,6 +539,10 @@
 
        [:div#app-single-container]]
 
+      (when (and (mobile-util/is-native-platform?)
+                 (not= (state/sub :editor/record-status) "NONE"))
+        (record-bar))
+      
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
