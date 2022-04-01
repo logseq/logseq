@@ -137,7 +137,7 @@
                        (when icon icon)
                        [:div {:style {:margin-right "8px"}} title]])]
           (if hr
-            [:hr.my-1]
+            [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
               (menu-link new-options child)
               title))))
@@ -834,7 +834,7 @@
                                (log/error :exception e)
                                [:div]))
                            [:div {:key "tippy"} ""])))
-           child)))
+            (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]

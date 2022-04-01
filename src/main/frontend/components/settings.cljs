@@ -385,7 +385,8 @@
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
 (defn journal-row [t enable-journals?]
-  [(toggle "enable_journals"
+  [:span
+   (toggle "enable_journals"
            (t :settings-page/enable-journals)
            enable-journals?
            (fn []
