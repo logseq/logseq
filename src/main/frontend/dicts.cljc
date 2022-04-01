@@ -364,6 +364,7 @@
         :help/shortcut-page-title "Keyboard shortcuts"
 
         :plugin/installed "Installed"
+        :plugin/not-installed "Not installed"
         :plugin/installing "Installing"
         :plugin/install "Install"
         :plugin/reload "Reload"
@@ -1255,6 +1256,7 @@
            :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"
 
            :plugin/installed "已安装"
+           :plugin/not-installed "未安装"
            :plugin/installing "安装中"
            :plugin/install "安装"
            :plugin/reload "重载"
