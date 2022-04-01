@@ -577,10 +577,17 @@
                      (util/get-relative-path edit-block-file-path ref-file-path)
                      page)
         (let [journal? (date/valid-journal-title? page)
-              ref-file-path (str (get-directory journal?)
-                                 "/"
-                                 (get-file-name journal? page)
-                                 ".org")]
+              ref-file-path (str
+                             (if (or (util/electron?) (mobile-util/is-native-platform?))
+                               (-> (config/get-repo-dir (state/get-current-repo))
+                                   js/decodeURI
+                                   (string/replace #"/+$" "")
+                                   (str "/"))
+                               "")
+                             (get-directory journal?)
+                             "/"
+                             (get-file-name journal? page)
+                             ".org")]
           (create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
