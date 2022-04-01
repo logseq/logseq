@@ -90,12 +90,11 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     ;; `(state/set-db-restoring! true)` already executed before restoring
-                     (-> (p/all (db/restore!
-                                 (assoc me :repos repos)
-                                 old-db-schema
-                                 (fn [repo]
-                                   (file-handler/restore-config! repo false))))
+                     (-> (db/restore!
+                          (assoc me :repos repos)
+                          old-db-schema
+                          (fn [repo]
+                            (file-handler/restore-config! repo false)))
                          (p/then
                           (fn []
                             ;; try to load custom css only for current repo

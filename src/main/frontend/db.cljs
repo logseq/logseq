@@ -183,16 +183,14 @@
                 (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
-;; TODO: only restore the current graph instead of all the graphs to speedup and
 ;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
-  (doall
-   (for [{:keys [url]} repos]
-     (let [repo url]
-       (p/let [_ (restore-graph! repo me)]
-         (restore-config-handler repo)
-         (listen-and-persist! repo))))))
+  (let [repo (or (state/get-current-repo) (:url (first repos)))]
+    (when repo
+      (p/let [_ (restore-graph! repo me)]
+        (restore-config-handler repo)
+        (listen-and-persist! repo)))))
 
 (defn run-batch-txs!
   []
