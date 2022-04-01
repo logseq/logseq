@@ -20,7 +20,7 @@ export let dispatch_kb_events = async function (page: Page, selector: string, ke
   }
 }
 
-export let macos_pinyin_left_full_bracket: RecordedEvent[] = [
+export let macos_pinyin_left_full_square_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -68,7 +68,7 @@ export let macos_pinyin_left_full_bracket: RecordedEvent[] = [
   }
 ]
 
-export let win10_pinyin_left_full_bracket: RecordedEvent[] = [
+export let win10_pinyin_left_full_square_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -136,7 +136,7 @@ export let win10_pinyin_left_full_bracket: RecordedEvent[] = [
   }
 ]
 
-export let win10_legacy_pinyin_left_full_bracket: RecordedEvent[] = [
+export let win10_legacy_pinyin_left_full_square_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -189,7 +189,7 @@ export let win10_legacy_pinyin_left_full_bracket: RecordedEvent[] = [
   }
 ]
 
-export let macos_pinyin_selecting_candidate_double_left_bracket: RecordedEvent[] = [
+export let macos_pinyin_selecting_candidate_double_left_square_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
@@ -357,7 +357,7 @@ export let macos_pinyin_selecting_candidate_double_left_bracket: RecordedEvent[]
   }
 ]
 
-export let win10_RIME_selecting_candidate_double_left_bracket: RecordedEvent[] = [
+export let win10_RIME_selecting_candidate_double_left_square_bracket: RecordedEvent[] = [
   {
     "event_type": "keydown",
     "event": {
