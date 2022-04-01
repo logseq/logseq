@@ -97,6 +97,11 @@ body[data-page=import] {
             > .choose {
               padding-top: 48px;
               width: 100%;
+              cursor: pointer;
+
+              &:active {
+                opacity: .8;
+              }
 
               i {
                 width: 180px;
@@ -337,6 +342,7 @@ body[data-page=import] {
       user-select: none;
       border-radius: 12px;
       overflow: hidden;
+      cursor: pointer;
 
       small {
         font-size: 11px;
