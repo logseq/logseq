@@ -446,7 +446,8 @@
     (mobile-bar-command #(record/stop-recording) "player-stop")
     (if (= (state/sub :editor/record-status) "PAUSED")
       (mobile-bar-command #(record/resume-recording) "player-record")
-      (mobile-bar-command #(record/pause-recording) "player-pause"))]])
+      (mobile-bar-command #(record/pause-recording) "player-pause"))
+    (mobile-bar-command #(record/cancel-recording) "circle-x")]])
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)

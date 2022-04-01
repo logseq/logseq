@@ -95,3 +95,13 @@
    (fn [error]
      (js/console.error error))))
 
+(defn cancel-recording []
+  (p/catch
+   (p/then
+    (.stopRecording VoiceRecorder)
+    (fn [^js _result]
+      (set-recording-state)
+      (js/console.log "Cancel recording...")))
+   (fn [error]
+     (js/console.error error))))
+
