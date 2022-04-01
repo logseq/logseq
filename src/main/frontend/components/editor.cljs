@@ -26,7 +26,8 @@
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.history :as history]))
+            [frontend.handler.history :as history]
+            [frontend.handler.config :as config-handler]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -238,18 +239,21 @@
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (def ^:private mobile-bar-icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :microphone :camera
+  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
    :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
 
-(def ^:private mobile-bar-commands-state
-  (atom (into {} (mapv (fn [name] [name {:counts 0}])
-                       mobile-bar-icons-keywords))))
+(def ^:private mobile-bar-commands-stats
+  (atom (or (:mobile/toolbar-stats (state/get-config))
+            (into {} (mapv (fn [name] [name {:counts 0}])
+                           mobile-bar-icons-keywords)))))
 
-(defn set-command-state [icon]
+(defn set-command-stats [icon]
   (let [key (keyword icon)
-        counts (get-in @mobile-bar-commands-state [key :counts])]
-    (swap! mobile-bar-commands-state
-           assoc-in [key :counts] (inc counts))))
+        counts (get-in @mobile-bar-commands-stats [key :counts])]
+    (swap! mobile-bar-commands-stats
+           assoc-in [key :counts] (inc counts))
+    (config-handler/set-config!
+     :mobile/toolbar-stats @mobile-bar-commands-stats)))
 
 (rum/defc mobile-bar-command
   [command-handler icon & [count? event?]]
@@ -258,7 +262,7 @@
     {:on-mouse-down (fn [e]
                       (util/stop e)
                       (when count?
-                        (set-command-state icon))
+                        (set-command-stats icon))
                       (if event?
                         (command-handler e)
                         (command-handler)))}
@@ -277,7 +281,6 @@
       (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
       (mobile-bar-command editor-handler/cycle-priority! "a-b" true)
       (mobile-bar-command editor-handler/toggle-list! "list" true)
-      (mobile-bar-command #(record/start-recording) "microphone" true)
       (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera" true)
       (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube" true)
       (mobile-bar-command editor-handler/html-link-format! "link" true)
@@ -293,7 +296,8 @@
   [parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
         vw-pending? (state/sub :ui/visual-viewport-pending?)
-        commands (mobile-bar-commands parent-state parent-id)]
+        commands (mobile-bar-commands parent-state parent-id)
+        sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2
      {:style {:bottom (if vw-state
                         (- (.-clientHeight js/document.documentElement)
@@ -307,8 +311,8 @@
       (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
       (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
       (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")
-      (for [command-key (sort-by val > @mobile-bar-commands-state)]
-        ((first command-key) commands))]
+      (for [command sorted-commands]
+        ((first command) commands))]
      [:div.toolbar-hide-keyboard
       (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
 
