@@ -1,4 +1,6 @@
-{:paths ["scripts/src"]
+{:paths ["scripts/src" "src/main"]
+ :deps
+ {medley/medley {:mvn/version "1.3.0"}}
  :tasks
  {dev:watch
   logseq.tasks.dev/watch
