@@ -683,7 +683,7 @@
                         :margin-left -30}}
              (not title-trigger?)
              (assoc :on-mouse-down on-mouse-down))
-           [:span {:class (if @control? "control-show cursor-pointer" "control-hide")}
+           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
             (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
