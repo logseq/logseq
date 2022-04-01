@@ -109,7 +109,7 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo) 
+  (p/let [current-repo (state/get-current-repo)
           _ (repo-handler/persist-db! current-repo persist-db-noti-m)
           _ (repo-handler/persist-otherwindow-db! graph)
           _ (repo-handler/restore-and-setup-repo! graph)]

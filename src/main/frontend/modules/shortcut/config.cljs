@@ -571,8 +571,7 @@
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy              (:misc/copy              all-default-keyboard-shortcuts)
-     :command-palette/toggle (:command-palette/toggle all-default-keyboard-shortcuts)}
+    {:misc/copy              (:misc/copy              all-default-keyboard-shortcuts)}
 
     :shortcut.handler/global-non-editing-only
     (->
@@ -710,6 +709,7 @@
    ^{:doc "Others"}
    [:pdf/previous-page
     :pdf/next-page
+    :command/toggle-favorite
     :command/run
     :command-palette/toggle
     :graph/open

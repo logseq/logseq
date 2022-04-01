@@ -5,6 +5,7 @@
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             #_:clj-kondo/ignore
             ["@capacitor/status-bar" :refer [^js StatusBar]]
+            [frontend.mobile.intent :as intent]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.handler.editor :as editor-handler]
@@ -62,3 +63,6 @@
                       (let [is-active? (.-isActive state)]
                         (when is-active?
                           (editor-handler/save-current-block!))))))))
+    (.addEventListener js/window "sendIntentReceived"
+                       #(intent/handle-received))
+

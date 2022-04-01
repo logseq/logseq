@@ -570,7 +570,6 @@
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
             review-cards result
-            query-string (if (string/blank? query-string) "All" query-string)
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
             modal? (:modal? config)]
@@ -579,7 +578,7 @@
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
            (ui/icon "infinity" {:style {:font-size 20}})
-           [:div.ml-1.text-sm.font-medium query-string]]
+           [:div.ml-1.text-sm.font-medium (if (string/blank? query-string) "All" query-string)]]
 
           [:div.flex.flex-row.items-center
 

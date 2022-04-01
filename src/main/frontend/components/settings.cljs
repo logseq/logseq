@@ -385,7 +385,8 @@
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
 (defn journal-row [t enable-journals?]
-  [(toggle "enable_journals"
+  [:span
+   (toggle "enable_journals"
            (t :settings-page/enable-journals)
            enable-journals?
            (fn []
@@ -568,7 +569,7 @@
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "white" "dark")]
+        switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
      (when-not (mobile-util/is-native-platform?)
        (version-row t version))

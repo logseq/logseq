@@ -244,7 +244,7 @@
 
       (favorites t)
 
-      (when left-sidebar-open? (recent-pages t))
+      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       [:nav.px-2 {:aria-label "Sidebar"
                   :class      "new-page"}
@@ -464,7 +464,7 @@
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         system-theme? (state/sub :ui/system-theme?)
-        white? (= "white" (state/sub :ui/theme))
+        light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
         settings-open? (state/sub :ui/settings-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
@@ -504,7 +504,7 @@
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:open-fn        open-fn
-                        :white?         white?
+                        :light?         light?
                         :current-repo   current-repo
                         :logged?        logged?
                         :page?          page?
@@ -519,7 +519,7 @@
                :home?               home?
                :route-name          route-name
                :indexeddb-support?  indexeddb-support?
-               :white?              white?
+               :light?              light?
                :db-restoring?       db-restoring?
                :main-content        main-content})
 
