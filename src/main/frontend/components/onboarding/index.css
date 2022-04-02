@@ -18,13 +18,7 @@ body[data-page=import] {
 .cp__onboarding {
   &-setups {
     background-color: var(--ls-primary-background-color);
-    position: absolute;
-    width: 100%;
-    top: 0;
-    left: 0;
     z-index: 1;
-    height: 100vh;
-    overflow-y: auto;
 
     .as-flex-center {
       display: flex;
@@ -33,9 +27,6 @@ body[data-page=import] {
     }
 
     .inner-card {
-      min-height: 100vh;
-      width: 100%;
-      padding-top: 55px;
       background-color: var(--ls-secondary-background-color);
 
       > h1 {
@@ -66,7 +57,6 @@ body[data-page=import] {
       > article {
         background-color: var(--ls-secondary-background-color);
         border-radius: 20px;
-        width: 100%;
         flex: 1;
 
         > section {
@@ -250,10 +240,6 @@ body[data-page=import] {
 
 
       @screen lg {
-        transform: translateY(-60px);
-        height: unset;
-        min-height: unset;
-        padding-top: unset;
         background-color: unset;
 
         > h1 {
@@ -272,18 +258,12 @@ body[data-page=import] {
         }
 
         > article {
-          width: 1040px;
-          height: 510px;
           max-width: 100vw;
           flex: unset;
 
           > section {
             &.a {
               border-radius: 20px 0 0 20px;
-
-              > small {
-                padding: 0 95px;
-              }
 
               > .choose {
                 .control {
@@ -381,7 +361,7 @@ html.is-native-iphone-without-notch {
                 > h2 {
                     margin-bottom: 25px;
                 }
-                
+
                 > article {
                     > section {
                         &.a {
@@ -396,14 +376,14 @@ html.is-native-iphone-without-notch {
                                 line-height: 1.5rem;
                                 font-size: 1rem;
                             }
-      
+
                             > .choose {
                                 padding-top: 25px;
                         }
                         }
                     }
                 }
-                
+
             }
         }
     }

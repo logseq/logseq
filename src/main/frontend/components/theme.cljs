@@ -56,11 +56,17 @@
     (rum/use-effect!
      (fn []
        (when-not db-restoring?
-         (if-not (seq (filter #(not (:example? %)) (state/get-repos)))
-           (route-handler/redirect! {:to :repo-add})
-           (do
-             (ui-handler/restore-right-sidebar-state!)
-             (set-restored-sidebar? true)))))
+         (let [repos (state/get-repos)]
+           (if-not (or
+                    ;; demo graph only
+                    (and (= 1 (count repos)) (:example? (first repos))
+                         (not (util/mobile?)))
+                    ;; other graphs exists
+                    (seq repos))
+            (route-handler/redirect! {:to :repo-add})
+            (do
+              (ui-handler/restore-right-sidebar-state!)
+              (set-restored-sidebar? true))))))
      [db-restoring?])
 
     (rum/use-effect!
