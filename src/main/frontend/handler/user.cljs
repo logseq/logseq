@@ -7,8 +7,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p])
-  (:import [goog.format EmailAddress]))
+            [promesa.core :as p]))
 
 (defn set-cors!
   [cors-proxy]
