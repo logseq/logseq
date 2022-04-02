@@ -88,18 +88,20 @@ test('create page and blocks, save to disk', async ({ page, graphDir }) => {
 
   await page.waitForTimeout(2000) // wait for saving to disk
 
-  const contentOnDisk = fs.readFileSync(
+  const contentOnDisk = await fs.readFile(
     path.join(graphDir, `pages/${pageTitle}.md`),
     'utf8'
   )
+
   expect(contentOnDisk.trim()).toEqual(`
 - this is my first bullet
 - this is my second bullet
-\t- this is my third bullet
-\t- continue editing test
-\tcontinue
+	- this is my third bullet
+	- continue editing test
+	  continue
 - test ok`.trim())
 })
+
 
 test('delete and backspace', async ({ page }) => {
   await createRandomPage(page)
