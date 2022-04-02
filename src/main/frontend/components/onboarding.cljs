@@ -1,6 +1,5 @@
 (ns frontend.components.onboarding
-  (:require [frontend.components.svg :as svg]
-            [frontend.context.i18n :refer [t]]
+  (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.route :as route-handler]
             [rum.core :as rum]
             [frontend.ui :as ui]

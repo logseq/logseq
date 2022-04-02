@@ -6,7 +6,6 @@
             [frontend.components.journal :as journal]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
-            [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
@@ -283,7 +282,6 @@
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (= :home route-name))]
-    (prn {:route-name route-name})
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -350,7 +348,6 @@
         parsing? (state/sub :repo/parsing-files?)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        me (state/sub :me)
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div

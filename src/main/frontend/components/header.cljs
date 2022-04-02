@@ -202,7 +202,7 @@
         (back-and-forward))
 
       (new-block-mode)
-      
+
       (repo/sync-status current-repo)
 
       (when show-open-folder?

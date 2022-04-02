@@ -1,10 +1,7 @@
 (ns frontend.components.journal
   (:require [clojure.string :as string]
-            [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
-            [frontend.components.widgets :as widgets]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -16,11 +13,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.context.i18n :refer [t]]
-            [frontend.components.onboarding.setups :as setups]))
+            [rum.core :as rum]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}

@@ -5,16 +5,6 @@ body[data-page=import] {
   }
 }
 
-@screen lg {
-  body[data-page=repo-add],
-  body[data-page=import] {
-    #left-sidebar, #right-sidebar, #left-menu,
-    .cp__header .toggle-right-sidebar {
-      display: none;
-    }
-  }
-}
-
 .cp__onboarding {
   &-setups {
     background-color: var(--ls-primary-background-color);
