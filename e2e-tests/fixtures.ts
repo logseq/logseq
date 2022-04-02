@@ -1,5 +1,5 @@
-import fs from 'fs'
-import path from 'path'
+import * as fs from 'fs'
+import * as path from 'path'
 import { test as base, expect, ConsoleMessage } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { loadLocalGraph, randomString } from './utils';
@@ -19,10 +19,16 @@ export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  // console.log(msg.text())
-  expect(msg.text()).not.toMatch(/^Failed to/)
-  expect(msg.text()).not.toMatch(/^Error/)
-  expect(msg.text()).not.toMatch(/^Uncaught/)
+    // console.log(msg.text())
+  let msgText = msg.text()
+  expect(msgText).not.toMatch(/^Failed to/)
+
+  // youtube video
+  if (!msgText.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+    expect(msgText).not.toMatch(/^Error/)
+  }
+
+  expect(msgText).not.toMatch(/^Uncaught/)
   // NOTE: React warnings will be logged as error.
   // expect(msg.type()).not.toBe('error')
 }
@@ -63,7 +69,7 @@ base.beforeAll(async () => {
     expect('page must not crash!').toBe('page crashed')
   })
   page.on('pageerror', (err) => {
-    console.log(err)
+    console.error("[pageerror]", err)
     expect('page must not have errors!').toBe('page has some error')
   })
 

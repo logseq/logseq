@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
-import fs from 'fs/promises'
-import path from 'path'
+import * as fs from 'fs'
+import * as path from 'path'
 import { test, graphDir } from './fixtures'
 import { randomString, createRandomPage, newBlock } from './utils'
 
@@ -87,7 +87,7 @@ test('create page and blocks', async ({ page }) => {
 
   await page.waitForTimeout(1000)
 
-  const contentOnDisk = await fs.readFile(
+  const contentOnDisk = fs.readFileSync(
     path.join(graphDir, `pages/${pageTitle}.md`),
     'utf8'
   )
@@ -281,8 +281,8 @@ test('auto completion and auto pair', async ({ page }) => {
 // FIXME: Electron with filechooser is not working
 test.skip('open directory', async ({ page }) => {
   await page.click('#left-sidebar >> text=Journals')
-  await page.waitForSelector('h1:has-text("Open a local directory")')
-  await page.click('h1:has-text("Open a local directory")')
+  await page.waitForSelector('strong:has-text("Choose a folder")')
+  await page.click('strong:has-text("Choose a folder")')
 
   // await page.waitForEvent('filechooser')
   await page.keyboard.press('Escape')

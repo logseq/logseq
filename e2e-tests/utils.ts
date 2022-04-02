@@ -1,6 +1,6 @@
 import { Page, Locator } from 'playwright'
 import { expect } from '@playwright/test'
-import process from 'process'
+import * as process from 'process'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -138,12 +138,12 @@ export async function setMockedOpenDirPath(
 export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
   await setMockedOpenDirPath(page, path);
 
-  await page.click('#left-menu.button')
-  const hasOpenButton = await page.$('#head >> .button >> text=Open')
+  const onboardingOpenButton = page.locator('strong:has-text("Choose a folder")')
 
-  if (hasOpenButton) {
-    await page.click('#head >> .button >> text=Open')
+  if (await onboardingOpenButton.isVisible()) {
+    await onboardingOpenButton.click()
   } else {
+    await page.click('#left-menu.button')
     let sidebar = page.locator('#left-sidebar')
     if (!/is-open/.test(await sidebar.getAttribute('class'))) {
       await page.click('#left-menu.button')
@@ -154,8 +154,11 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('h1:has-text("Open a local directory")', { state: 'visible' })
-    await page.click('h1:has-text("Open a local directory")')
+    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.click('strong:has-text("Choose a folder")')
+
+    const skip = page.locator('a:has-text("Skip")')
+    await skip.click()
   }
 
   setMockedOpenDirPath(page, ''); // reset it
@@ -165,7 +168,12 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     timeout: 1000 * 60 * 5,
   })
 
-  await page.waitForFunction('window.document.title != "Loading"')
+  const title = await page.title()
+  if (title === "Import data into Logseq" || title === "Add another repo") {
+    await page.click('a.button >> text=Skip')
+  }
+
+  await page.waitForFunction('window.document.title === "Logseq"')
 
   console.log('Graph loaded for ' + path)
 }

@@ -1056,12 +1056,6 @@
   (or (:block/original-name page)
       (:block/name page)))
 
-(defn lowercase-first
-  [s]
-  (when s
-    (str (string/lower-case (.charAt s 0))
-         (subs s 1))))
-
 #?(:cljs
    (defn add-style!
      [style]
