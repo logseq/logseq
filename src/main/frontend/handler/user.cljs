@@ -10,10 +10,6 @@
             [promesa.core :as p])
   (:import [goog.format EmailAddress]))
 
-(defn email? [v]
-  (and v
-       (.isValid (EmailAddress. v))))
-
 (defn set-cors!
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
