@@ -535,7 +535,7 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! nil repo option))
 
-; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict 
+; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict
 ; to avoid circular dependency
 ; TODO: Remove copied functions once circular dependency is resolved
 (defn fetch-local-language []
@@ -566,7 +566,7 @@
                 (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
              (when-not config/publishing?
-                (let [tutorial (t :tutorial/text)
+               (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
@@ -605,20 +605,6 @@
   []
   (js/setInterval #(push-if-auto-enabled! (state/get-current-repo))
                   (* (config/git-push-secs) 1000)))
-
-(defn create-repo!
-  [repo-url branch]
-  (spec/validate :repos/url repo-url)
-  (util/post (str config/api "repos")
-             {:url repo-url
-              :branch branch}
-             (fn [result]
-               (if (:installation_id result)
-                 (set! (.-href js/window.location) config/website)
-                 (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))))
-             (fn [error]
-               (println "Something wrong!")
-               (js/console.dir error))))
 
 (defn- clone-and-load-db
   [repo-url]
@@ -704,9 +690,9 @@
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
-     step 1. [In HERE]  a window         --persistGraph----->   electron  
-     step 2.            electron         --persistGraph----->   window holds the graph  
-     step 3.            window w/ graph  --persistGraphDone->   electron  
+     step 1. [In HERE]  a window         --persistGraph----->   electron
+     step 2.            electron         --persistGraph----->   window holds the graph
+     step 3.            window w/ graph  --persistGraphDone->   electron
      step 4. [In HERE]  electron         --persistGraphDone->   all windows"
   [graph]
   (p/create (fn [resolve _]

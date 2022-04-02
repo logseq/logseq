@@ -19,10 +19,16 @@ export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
 // NOTE: This is a console log watcher for error logs.
 const consoleLogWatcher = (msg: ConsoleMessage) => {
-  // console.log(msg.text())
-  expect(msg.text()).not.toMatch(/^Failed to/)
-  expect(msg.text()).not.toMatch(/^Error/)
-  expect(msg.text()).not.toMatch(/^Uncaught/)
+    // console.log(msg.text())
+  let msgText = msg.text()
+  expect(msgText).not.toMatch(/^Failed to/)
+
+  // youtube video
+  if (!msgText.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+    expect(msgText).not.toMatch(/^Error/)
+  }
+
+  expect(msgText).not.toMatch(/^Uncaught/)
   // NOTE: React warnings will be logged as error.
   // expect(msg.type()).not.toBe('error')
 }

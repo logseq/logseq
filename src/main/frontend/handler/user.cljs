@@ -14,18 +14,6 @@
   (and v
        (.isValid (EmailAddress. v))))
 
-(defn set-email!
-  [email]
-  (when (email? email)
-    (util/post (str config/api "email")
-               {:email email}
-               (fn [_result]
-                 (db/transact! [{:me/email email}])
-                 (swap! state/state assoc-in [:me :email] email))
-               (fn [_error]
-                 (notification/show! "Email already exists!"
-                                     :error)))))
-
 (defn set-cors!
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
