@@ -1510,9 +1510,17 @@
                                    (editor-handler/check block)))}))))
 
 (defn list-checkbox
-  [checked?]
-  (ui/checkbox {:style {:margin-right 6}
-                :checked checked?}))
+  [config checked?]
+  (ui/checkbox
+   {:style {:margin-right 6}
+    :checked checked?
+    :on-change (fn [event]
+                 (let [target (.-target event)
+                       block (:block config)
+                       item-content (.. target -nextSibling -data)
+                       item-full-content (str (if checked? "[X]" "[ ]") " " item-content)
+                       new-item-full-content (str (if checked? "[ ]" "[X]") " " item-content)]
+                   (editor-handler/toggle-list-checkbox block item-full-content new-item-full-content)))}))
 
 (defn marker-switch
   [{:block/keys [marker] :as block}]
@@ -2365,7 +2373,7 @@
          (vec-cat
           [(->elem
             :p
-            (list-checkbox checkbox)
+            (list-checkbox config checkbox)
             content)]
           [items]))))))
 
