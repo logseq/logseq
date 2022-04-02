@@ -5,7 +5,7 @@
             [frontend.ui :as ui]
             [frontend.components.onboarding.setups :as setups]))
 
-(rum/defc ^:large-vars/cleanup-todo intro
+(rum/defc intro
   []
   (setups/picker))
 

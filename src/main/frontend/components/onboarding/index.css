@@ -17,7 +17,8 @@ body[data-page=import] {
     }
 
     .inner-card {
-      background-color: var(--ls-secondary-background-color);
+        background-color: var(--ls-secondary-background-color);
+        padding-top: 55px;
 
       > h1 {
         font-size: 30px;
@@ -248,12 +249,18 @@ body[data-page=import] {
         }
 
         > article {
+          width: 1040px;
+          height: 510px;
           max-width: 100vw;
           flex: unset;
 
           > section {
             &.a {
               border-radius: 20px 0 0 20px;
+
+              > small {
+                padding: 0 95px;
+              }
 
               > .choose {
                 .control {
@@ -345,8 +352,17 @@ html.is-native-iphone,
 html.is-native-iphone-without-notch {
     .cp__onboarding {
         &-setups {
+            position: absolute;
+            width: 100%;
+            top: 0;
+            left: 0;
+             height: 100vh;
+             overflow-y: auto;
+            
             .inner-card {
-                padding-top: 25px;
+                padding-top: 30px;
+                min-height: 100vh;
+                width: 100%;
 
                 > h2 {
                     margin-bottom: 25px;
