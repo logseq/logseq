@@ -1,6 +1,44 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, IsMac } from './utils'
+import { createRandomPage } from './utils'
+import { dispatch_kb_events } from './util/keyboard-events'
+import * as kb_events from './util/keyboard-events'
+
+test(
+  "press Chinese parenthesis 【 by 2 times #3251 should trigger [[]], " +
+  "but dont trigger RIME #3440 ",
+  // cases should trigger [[]] #3251
+  async ({ page }) => {
+    for (let [idx, events] of [
+      kb_events.win10_pinyin_left_full_square_bracket,
+      kb_events.macos_pinyin_left_full_square_bracket
+      // TODO: support #3741
+      // kb_events.win10_legacy_pinyin_left_full_square_bracket,
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3251 test " + idx
+      await page.fill(':nth-match(textarea, 1)', check_text + "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
+      await page.fill(':nth-match(textarea, 1)', check_text + "【【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
+    };
+
+    // dont trigger RIME #3440
+    for (let [idx, events] of [
+      kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
+      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3440 test " + idx
+      await page.fill(':nth-match(textarea, 1)', check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+    }
+  })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
@@ -67,3 +105,4 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 //     await page.keyboard.press('Control+Shift+v')
 //   }  
 // })
+  

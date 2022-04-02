@@ -4,8 +4,10 @@
             [lambdaisland.glogi :as log]
             [expound.alpha :as expound]))
 
-;; disable in production
-(when config/dev? (s/check-asserts true))
+;; Enabled for all environments. We want asserts to run in production e.g.
+;; frontend.storage one is preventing data corruption. If we introduce asserts
+;; that are not perf sensitive, we will need to reconsider.
+(s/check-asserts true)
 
 (set! s/*explain-out* expound/printer)
 
@@ -15,7 +17,7 @@
   (when config/dev?
     (if (s/explain-data spec value)
      (let [error-message (expound/expound-str spec value)
-           ex (ex-info "Error in validate" {})]
+           ex (ex-info "Error in validate" {:value value})]
        (log/error :exception ex :spec/validate-failed error-message)
        false)
      true)))

@@ -3,9 +3,9 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
             [frontend.fs :as fs]
@@ -534,26 +534,6 @@
   [repo option]
   (state/set-current-repo! repo)
   (db/start-db-conn! nil repo option))
-
-; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict
-; to avoid circular dependency
-; TODO: Remove copied functions once circular dependency is resolved
-(defn fetch-local-language []
-  (.. js/window -navigator -language))
-
-(defonce translate-dicts (atom {}))
-
-(defn t
-  [& args]
-  (let [preferred-language (keyword (state/sub :preferred-language))
-        _ (when (nil? preferred-language)
-            (state/set-preferred-language! (fetch-local-language)))
-        dicts (or (get @translate-dicts preferred-language)
-                  (let [result (some-> dicts/dicts
-                                       dicts/translate)]
-                    (swap! translate-dicts assoc preferred-language result)
-                    result))]
-    (apply (partial dicts preferred-language) args)))
 
 (defn setup-local-repo-if-not-exists!
   []
