@@ -101,7 +101,7 @@
   "Embedded page searching popup"
   [id format]
   (when (state/sub :editor/show-page-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)]
       (when input
         (let [current-pos (cursor/pos input)
@@ -191,7 +191,7 @@
                    state)}
   [state id _format]
   (when (state/sub :editor/show-block-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)
           [id format] (:rum/args state)
           current-pos (cursor/pos input)
@@ -208,7 +208,7 @@
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (when (state/sub :editor/show-template-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)]
       (when input
         (let [current-pos (cursor/pos input)
@@ -234,7 +234,6 @@
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
-                      (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                       (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
@@ -573,7 +572,8 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
+           (assoc state ::heading-level (:heading-level (first (:rum/args state)))
+                  ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}

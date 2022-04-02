@@ -188,14 +188,10 @@
         :else
         nil))))
 
-;; Avoid reentrancy
-(def *code-saving (atom false))
-(defn save-file-or-block-when-blur-or-esc!
+(defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
-  (when-not @*code-saving
-    (reset! *code-saving true)
-    (save-file-or-block! editor textarea config state)
-    (reset! *code-saving false)))
+  (state/set-block-component-editing-mode! false)
+  (save-file-or-block! editor textarea config state))
 
 (defn- text->cm-mode
   ([text]
@@ -237,6 +233,8 @@
                           {:mode mode
                            :readOnly (if ui-config/publishing? "nocursor" false)
                            :extraKeys #js {"Esc" (fn [cm]
+                                                   ;; Avoid reentrancy
+                                                   (gobj/set cm "escPressed" true)
                                                    (save-file-or-block-when-blur-or-esc! cm textarea config state)
                                                    (when-let [block-id (:block/uuid config)]
                                                      (let [block (db/pull [:block/uuid block-id])]
@@ -251,10 +249,10 @@
           (.on editor "change" (fn [_cm _e]
                                  (let [new-code (.getValue editor)]
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
-        (.on editor "blur" (fn [_cm e]
+        (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (state/set-block-component-editing-mode! false)
-                             (save-file-or-block-when-blur-or-esc! editor textarea config state)))
+                             (when-not (gobj/get cm "escPressed")
+                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (state/clear-selection!)
@@ -289,7 +287,7 @@
                         (gobj/set textarea "defaultValue" code)
                         (gobj/set textarea "value" code))))
                   state)
-
+   ;; codemirror need to be re-rendered to get the new pos_meta
    :did-update (fn [state]
                  (load-and-render! state)
                  state)}

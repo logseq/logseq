@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage } from './utils'
+import { createRandomPage, enterNextBlock, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -43,23 +43,24 @@ test(
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.type(':nth-match(textarea, 1)', '#foo bar')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
-  await page.type(':nth-match(textarea, 1)', 'bar [[blah]]')
-  for (let i = 0; i < 12; i++) {
-    await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
-  }
-  await page.type(':nth-match(textarea, 1)', ' ')
-  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+  await page.type('textarea >> nth=0', '#foo bar')
+  await enterNextBlock(page)
+  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: 100})
 
-  await page.type(':nth-match(textarea, 1)', '#')
+  for (let i = 0; i < 12; i++) {
+    await page.press('textarea >> nth=0', 'ArrowLeft')
+  }
+  await page.type('textarea >> nth=0', ' ')
+  await page.press('textarea >> nth=0', 'ArrowLeft')
+
+  await page.type('textarea >> nth=0', '#')
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
 
-  await page.type(':nth-match(textarea, 1)', 'fo')
+  await page.type('textarea >> nth=0', 'fo')
 
   await page.click('.absolute >> text=' + 'foo')
 
-  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(
+  expect(await page.inputValue('textarea >> nth=0')).toBe(
     '#foo bar [[blah]]'
   )
 })
@@ -68,7 +69,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 // test('copy & paste block ref and replace its content', async ({ page }) => {
 //   await createRandomPage(page)
 
-//   await page.type(':nth-match(textarea, 1)', 'Some random text')
+//   await page.type('textarea >> nth=0', 'Some random text')
 //   if (IsMac) {
 //     await page.keyboard.press('Meta+c')
 //   } else {
@@ -77,7 +78,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 
 //   await page.pause()
 
-//   await page.press(':nth-match(textarea, 1)', 'Enter')
+//   await page.press('textarea >> nth=0', 'Enter')
 //   if (IsMac) {
 //     await page.keyboard.press('Meta+v')
 //   } else {
@@ -95,7 +96,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 
 //   // Move cursor into the block ref
 //   for (let i = 0; i < 4; i++) {
-//     await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+//     await page.press('textarea >> nth=0', 'ArrowLeft')
 //   }
 
 //   // Trigger replace-block-reference-with-content-at-point
@@ -103,6 +104,5 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 //     await page.keyboard.press('Meta+Shift+r')
 //   } else {
 //     await page.keyboard.press('Control+Shift+v')
-//   }  
+//   }
 // })
-  

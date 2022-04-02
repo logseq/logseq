@@ -68,15 +68,16 @@
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list "main-content-container"
-                     (for [{:block/keys [name format]} latest-journals]
-                       [:div.journal-item.content {:key name}
-                        (journal-cp [name format])])
-                     {:has-more (page-handler/has-more-journals?)
-                      :more-class "text-4xl"
-                      :on-top-reached page-handler/create-today-journal!
-                      :on-load (fn []
-                                 (page-handler/load-more-journals!))})])
+   (ui/infinite-list
+    "main-content-container"
+    (for [{:block/keys [name format]} latest-journals]
+      [:div.journal-item.content {:key name}
+       (journal-cp [name format])])
+    {:has-more (page-handler/has-more-journals?)
+     :more-class "text-4xl"
+     :on-top-reached page-handler/create-today-journal!
+     :on-load (fn []
+                (page-handler/load-more-journals!))})])
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

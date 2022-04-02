@@ -94,7 +94,7 @@
         page (db/entity [:block/name page-name])
         journal? (:journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-page-blocks repo page-name)
+        blocks (-> (db/get-paginated-blocks repo (:db/id page))
                    (outliner-tree/blocks->vec-tree page-name))
         blocks (if journal?
                  (rest blocks)
