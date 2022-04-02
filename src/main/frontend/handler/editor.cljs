@@ -2339,6 +2339,11 @@
                 (cursor/move-cursor-backward input move-to-pos)))
             (insert "\n")))))))
 
+(defn toggle-list-checkbox
+  [{:block/keys [content] :as block} old-item-content new-item-content]
+  (let [new-content (string/replace-first content old-item-content new-item-content)]
+    (save-block-if-changed! block new-content)))
+
 (defn- dwim-in-list
   [_state]
   (when-not (auto-complete?)
