@@ -264,24 +264,6 @@
   [:svg {:class "info" :view-box "0 0 16 16" :width "16px" :height "16px"}
    [:g [:path {:style {:transform "scale(0.25)"} :d "m32 2c-16.568 0-30 13.432-30 30s13.432 30 30 30 30-13.432 30-30-13.432-30-30-30m5 49.75h-10v-24h10v24m-5-29.5c-2.761 0-5-2.238-5-5s2.239-5 5-5c2.762 0 5 2.238 5 5s-2.238 5-5 5"}]]])
 
-(defn play []
-  [:svg
-   {:stroke                "currentColor"
-    :view-box              "0 0 24 24"
-    :preserve-aspect-ratio "none"
-    :fill                  "none"}
-   [:path
-    {:d
-                      "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-     :stroke-width    "2"
-     :stroke-linejoin "round"
-     :stroke-linecap  "round"}]
-   [:path
-    {:d               "M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-     :stroke-width    "2"
-     :stroke-linejoin "round"
-     :stroke-linecap  "round"}]])
-
 (defn zoom-in
   ([] (zoom-in 16))
   ([size]
