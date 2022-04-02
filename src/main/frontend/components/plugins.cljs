@@ -334,7 +334,7 @@
     :intent "logseq"
     :target "_blank"))
 
-(rum/defc panel-control-tabs < rum/static
+(rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by
    selected-unpacked-pkg market? develop-mode? reload-market-fn]
