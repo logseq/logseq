@@ -285,3 +285,6 @@ html.is-mobile {
   transition: all 100ms ease-in 0ms;
 }
 
+.bg-quaternary {
+  background-color: var(--ls-quaternary-background-color);
+}

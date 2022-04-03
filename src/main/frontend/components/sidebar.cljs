@@ -7,7 +7,6 @@
             [frontend.components.repo :as repo]
             [frontend.components.editor :refer [mobile-bar-command]]
             [frontend.components.right-sidebar :as right-sidebar]
-            [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
             [frontend.components.plugins :as plugins]
@@ -35,6 +34,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.mobile.record :as record]))
+            [frontend.components.onboarding :as onboarding]))
+
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -246,7 +247,7 @@
 
       (favorites t)
 
-      (when left-sidebar-open? (recent-pages t))
+      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
       [:nav.px-2 {:aria-label "Sidebar"
                   :class      "new-page"}
@@ -281,8 +282,9 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
   [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
-
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
+  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
+        onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
+                                  (= :home route-name))]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -296,10 +298,9 @@
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
-       (when-not (mobile-util/is-native-platform?)
+       (when (and (not (mobile-util/is-native-platform?))
+                  (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-
-       (widgets/github-integration-soon-deprecated-alert)
 
        (cond
          (not indexeddb-support?)
@@ -312,14 +313,16 @@
 
          :else
          [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
-                :style {:margin-bottom (if global-graph-pages? 0 120)
+                :style {:margin-bottom (cond
+                                         global-graph-pages? 0
+                                         onboarding-and-home? -48
+                                         :else 120)
                         :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
-          main-content])]]]))
+          main-content])
 
-(rum/defc footer
-  []
-  (when-let [user-footer (and config/publishing? (get-in (state/get-config) [:publish-common-footer]))]
-    [:div.p-6 user-footer]))
+       (when onboarding-and-home?
+         [:div {:style {:padding-bottom 200}}
+          (onboarding/intro)])]]]))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
@@ -342,16 +345,12 @@
                  (reset! sidebar-inited? true))))
            state)}
   []
-  (let [cloning? (state/sub :repo/cloning?)
-        default-home (get-default-home-if-valid)
+  (let [default-home (get-default-home-if-valid)
         parsing? (state/sub :repo/parsing-files?)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        me (state/sub :me)
         journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        preferred-format (state/sub [:me :preferred_format])
-        logged? (:name me)]
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div
      (cond
        (and default-home
@@ -371,27 +370,8 @@
        loading-files?
        (ui/loading (t :loading-files))
 
-       (and (not logged?) latest-journals)
-       (journal/journals latest-journals)
-
-       (and logged? (not preferred-format))
-       (widgets/choose-preferred-format)
-
-       ;; TODO: delay this
-       (and logged? (nil? (:email me)))
-       (settings/set-email)
-
-       cloning?
-       (ui/loading (t :cloning))
-
        (seq latest-journals)
        (journal/journals latest-journals)
-
-       (or
-        (and (mobile-util/is-native-platform?)
-             (nil? (state/get-current-repo)))
-        (and logged? (empty? (:repos me))))
-       (widgets/add-graph)
 
        ;; FIXME: why will this happen?
        :else
@@ -533,9 +513,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})
-
-        (footer)]
+               :main-content        main-content})]
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]

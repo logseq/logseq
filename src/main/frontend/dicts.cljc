@@ -1,11 +1,12 @@
-(ns frontend.dicts
-  (:require [frontend.config :as config]
-            [shadow.resource :as rc]
-            [tongue.core :as tongue]))
+(ns ^:bb-compatible frontend.dicts
+  "Provides dictionary entries for most of the application"
+  #?(:cljs (:require [shadow.resource :as rc])))
 
 (def ^:large-vars/data-var dicts
-  {:en {:tutorial/text (rc/inline "tutorial-en.md")
-        :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
+  {:en {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                          :default "tutorial-en.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                 :default "dummy-notes-en.md")
         :on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "sharing"
         :on-boarding/is-a " is a "
@@ -295,9 +296,8 @@
         :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"
 
         :unlink "unlink"
-        :search (if config/publishing?
-                  "Search"
-                  "Search or create page")
+        :search/publishing "Search"
+        :search "Search or create page"
         :page-search "Search in the current page"
         :graph-search "Search graph"
         :new-page "New page"
@@ -364,6 +364,7 @@
         :help/shortcut-page-title "Keyboard shortcuts"
 
         :plugin/installed "Installed"
+        :plugin/not-installed "Not installed"
         :plugin/installing "Installing"
         :plugin/install "Install"
         :plugin/reload "Reload"
@@ -595,9 +596,8 @@
         :re-index "Neu indizieren"
         :export-json "Als JSON exportieren"
         :unlink "Verknüpfung aufheben"
-        :search (if config/publishing?
-                  "Suchen"
-                  "Suchen oder Seite erstellen")
+        :search/publishing "Suchen"
+        :search "Suchen oder Seite erstellen"
         :new-page "Neue Seite"
         :new-file "Neue Datei"
         :graph "Graph"
@@ -880,9 +880,8 @@
         :re-index "Ré-indexer"
         :export-json "Exporter au format JSON"
         :unlink "délier"
-        :search (if config/publishing?
-                  "Rechercher"
-                  "Rechercher ou Créer la Page")
+        :search/publishing "Rechercher"
+        :search "Rechercher ou Créer la Page"
         :new-page "Nouvelle page"
         :new-file "Nouveau fichier"
         :graph "Graphe"
@@ -1196,9 +1195,8 @@
            :export-opml "以 OPML 格式导出"
            :convert-markdown "转换 Markdown 格式(Unordered list 或 Heading)"
            :unlink "解除绑定"
-           :search (if config/publishing?
-                     "搜索"
-                     "搜索或者创建新页面")
+           :search/publishing "搜索"
+           :search "搜索或者创建新页面"
            :page-search "在当前页面搜索"
            :graph-search "搜索图谱"
            :new-page "新页面"
@@ -1258,6 +1256,7 @@
            :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"
 
            :plugin/installed "已安装"
+           :plugin/not-installed "未安装"
            :plugin/installing "安装中"
            :plugin/install "安装"
            :plugin/reload "重载"
@@ -1525,9 +1524,8 @@
              :export-opml "以 OPML 格式導出"
              :convert-markdown "轉換 Markdown 格式(Unordered list 或 Heading)"
              :unlink "解除綁定"
-             :search (if config/publishing?
-                       "搜索"
-                       "搜索或者創建新頁面")
+             :search/publishing "搜索"
+             :search "搜索或者創建新頁面"
              :new-page "新頁面"
              :graph "圖譜"
              :publishing "發布/下載 HTML 文件"
@@ -2018,9 +2016,8 @@
         :close "Cerrar"
         :re-index "Reindexar"
         :unlink "desenlazar"
-        :search (if config/publishing?
-                  "Buscar"
-                  "Buscar o Crear Página")
+        :search/publishing "Buscar"
+        :search "Buscar o Crear Página"
         :page-search "Buscar en la página actual"
         :new-page "Nueva página"
         :new-file "Nuevo archivo"
@@ -2357,9 +2354,8 @@
            :sync-from-local-files "Oppfrisk"
            :sync-from-local-files-detail "Importer endringer fra lokale filer"
            :unlink "koble fra"
-           :search (if config/publishing?
-                     "Søk"
-                     "Søk eller Opprett Side")
+           :search/publishing "Søk"
+           :search "Søk eller Opprett Side"
            :page-search "Søk i denne siden"
            :graph-search "Søk graf"
            :new-page "Ny side"
@@ -2494,7 +2490,7 @@
            :on-boarding/features-backlinks "Backlinks entre [[Página]]s"
            :on-boarding/features-block-embed "Incorporar bloco"
            :on-boarding/features-page-embed "Incorporar página"
-           :on-boarding/features-graph-vis "Visualização de grafo"
+           :on-boarding/features-graph-vis "Visualização de gráfico"
            :on-boarding/features-heading-properties "Propriedades de cabeçalho"
            :on-boarding/features-datalog "Consultas de Datalog, a base de dados de notas usa "
            :on-boarding/features-custom-view-component "Vista personalizada de componente"
@@ -2504,7 +2500,7 @@
            :on-boarding/supports-code-highlights "Destaque de código"
            :on-boarding/supports-katex-latex "Katex latex"
            :on-boarding/raw "Raw "
-           :on-boarding/raw-html "Html raw"
+           :on-boarding/raw-html "HTML raw"
            :on-boarding/learn-more "Saber mais"
            :on-boarding/discord-desc " onde a comunidade faz perguntas e compartilha dicas"
            :on-boarding/github-desc " todos são encorajados a relatar problemas!"
@@ -2518,8 +2514,8 @@
            :on-boarding/cuekeeper-desc " - Sistema de GTD (lista de tarefas) baseado no navegador."
            :on-boarding/sci-desc " - Interpretador Compacto de Clojure"
            :on-boarding/isomorphic-git-desc " - Uma implementação de git em JavaScript puro para node e navegadores!"
-           :on-boarding/demo-graph "Esse é um grafo de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
-           :on-boarding/add-graph "Adicionar grafo"
+           :on-boarding/demo-graph "Esse é um gráfico de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
+           :on-boarding/add-graph "Adicionar gráfico"
            :on-boarding/open-local-dir "Abrir pasta local"
            :on-boarding/new-graph-desc-1 "Logseq funciona com Markdown e Org-mode. Você pode abrir uma pasta existente ou criar uma nova em seu dispositivo. Seus dados serão armazenados apenas neste dispositivo."
            :on-boarding/new-graph-desc-2 "Após abrir sua pasta, três pastas serão criadas nela:"
@@ -2537,7 +2533,7 @@
            :help/privacy "Política de privacidade"
            :help/terms "Termos"
            :help/community "Comunidade de Discord"
-           :help/awesome-logseq "Awesome Logseq"
+           :help/awesome-logseq "Incrível Logseq"
            :help/shortcuts "Atalhos de Teclado"
            :help/shortcuts-triggers "Gatilhos"
            :help/shortcut "Atalho"
@@ -2567,11 +2563,11 @@
            :right-side-bar/help "Ajuda"
            :right-side-bar/switch-theme "Temas"
            :right-side-bar/theme "Tema {1}"
-           :right-side-bar/page "Grafo da página"
+           :right-side-bar/page "Gráfico da página"
            :right-side-bar/recent "Recente"
            :right-side-bar/contents "Conteúdo"
            :right-side-bar/favorites "Favoritos"
-           :right-side-bar/page-graph "Grafo da página"
+           :right-side-bar/page-graph "Gráfico da página"
            :right-side-bar/block-ref "Referência de bloco"
            :right-side-bar/journals "Diários"
            :right-side-bar/flashcards "Flashcards"
@@ -2583,7 +2579,7 @@
            :git/push "Enviar agora"
            :git/push-failed "Envio falhou!"
            :git/local-changes-synced "Todas as alterações locais foram sincronizadas!"
-           :git/pull "Puxar agora"
+           :git/pull "Atualizar agora"
            :git/last-pull "Última atualização em"
            :git/version "Versão"
            :git/import-notes "Importar as suas notas"
@@ -2625,7 +2621,7 @@
            :page/make-public "Tornar pública para publicação"
            :page/version-history "Ver histórico da página"
            :page/make-private "Tornar privada"
-           :page/delete "Apagar página"
+           :page/delete "Excluir página"
            :page/publish "Publicar esta página em Logseq"
            :page/cancel-publishing "Cancelar publicação em Logseq"
            :page/publish-as-slide "Publicar esta página como um slide em Logseq"
@@ -2636,17 +2632,17 @@
            :page/hide-name "Esconder nome da página"
            :block/name "Nome da página"
            :page/last-modified "Última modificação em"
-           :page/new-title "Qual o novo título da nova página?"
+           :page/new-title "Qual o novo título da página?"
            :page/earlier "Antes"
            :page/no-more-journals "Não há mais diários"
            :publishing/pages "Páginas"
            :publishing/page-name "Nome da página"
            :publishing/current-project "Projeto Atual"
-           :publishing/delete-from-logseq "Apagar do servidor Logseq"
+           :publishing/delete-from-logseq "Excluir do servidor Logseq"
            :publishing/edit "Editar"
            :publishing/save "Guardar"
            :publishing/cancel "Cancelar"
-           :publishing/delete "Apagar"
+           :publishing/delete "Excluir"
            :journal/multiple-files-with-different-formats "Parece que tem vários arquivos (em vários formatos) de diário para o mesmo mês, por favor salve apenas um arquivo de diário para cada mês."
            :journal/go-to "Ir para arquivos"
            :file/name "Nome do arquivo"
@@ -2659,20 +2655,20 @@
            :page/backlinks "Back Links"
            :editor/block-search "Pesquisar por um bloco"
            :editor/image-uploading "Enviando"
-           :draw/invalid-file "Não foi possível carregar este arquivo excalidraw inválido"
+           :draw/invalid-file "Não foi possível carregar. Arquivo Excalidraw inválido."
            :draw/specify-title "Por favor indique um título primeiro!"
            :draw/rename-success "Arquivo foi renomeado com sucesso!"
-           :draw/rename-failure "Renomear arquivo falhou, motivo: "
+           :draw/rename-failure "Falha ao renomear, motivo: "
            :draw/title-placeholder "Sem título"
-           :draw/save "Guardar"
-           :draw/save-changes "Guardar alterações"
+           :draw/save "Salvar"
+           :draw/save-changes "Salvar alterações"
            :draw/new-file "Novo arquivo"
            :draw/list-files "Listar arquivos"
-           :draw/delete "Apagar"
+           :draw/delete "Excluir"
            :draw/more-options "Mais opções"
            :draw/back-to-logseq "Voltar a logseq"
            :text/image "Imagem"
-           :asset/confirm-delete "Tem certeza que quer apagar este {1}?"
+           :asset/confirm-delete "Tem certeza que quer excluir este {1}?"
            :asset/physical-delete "Remover também o arquivo (não poderá ser restaurado)"
            :content/copy "Copiar"
            :content/cut "Cortar"
@@ -2712,14 +2708,14 @@
            :settings-page/disable-developer-mode "Desativar modo de desenvolvimento"
            :settings-page/developer-mode-desc "O modo de desenvolvimento ajuda os contribuidores e programadores de extensões a testar as suas integrações com o Logseq de forma eficiente."
            :settings-page/current-version "Versão atual"
-           :settings-page/current-graph "Grafo atual"
+           :settings-page/current-graph "Gráfico atual"
            :settings-page/tab-general "Geral"
            :settings-page/tab-editor "Editor"
            :settings-page/tab-shortcuts "Atalhos"
            :settings-page/tab-advanced "Avançado"
            :settings-page/tab-version-control "Controle de Versões"
            :logseq "Logseq"
-           :on "ON"
+           :on "Ligado"
            :more-options "Mais opções"
            :to "para"
            :yes "Sim"
@@ -2727,23 +2723,22 @@
            :submit "Submeter"
            :cancel "Cancelar"
            :close "Fechar"
-           :delete "Apagar"
+           :delete "Excluir"
            :re-index "Re-indexar"
            :unlink "remover ligação"
-           :search (if config/publishing?
-                     "Pesquisar"
-                     "Pesquisar ou Criar Página")
+           :search/publishing "Pesquisar"
+           :search "Pesquisar ou Criar Página"
            :page-search "Pesquisar na página atual"
-           :graph-search "Pesquisar grafo"
+           :graph-search "Pesquisar gráfico"
            :new-page "Nova página"
            :new-file "Novo arquivo"
-           :new-graph "Adicionar novo grafo"
-           :graph "Grafo"
-           :graph-view "Ver Grafo"
+           :new-graph "Adicionar novo gráfico"
+           :graph "Gráfico"
+           :graph-view "Ver Gráfico"
            :cards-view "Ver Cartões"
-           :publishing "Publicar"
+           :publishing "Publicando"
            :export "Exportar"
-           :export-graph "Exportar Grafo"
+           :export-graph "Exportar Gráfico"
            :export-markdown "Exportar como Markdown padrão (sem propriedades de bloco)"
            :export-opml "Exportar como OPML"
            :export-page "Exportar página"
@@ -2753,12 +2748,12 @@
            :export-edn "Exportar como EDN"
            :export-datascript-edn "Exportar datascript EDN"
            :convert-markdown "Converter cabeçalhos Markdown para listas não-ordenadas (# -> -)"
-           :all-graphs "Todos os grafos"
+           :all-graphs "Todos os gráficos"
            :all-pages "Todas as páginas"
            :all-files "Todos os arquivos"
            :all-journals "Todos os diários"
            :my-publishing "Minhas publicações"
-           :settings "Definições"
+           :settings "Configurações"
            :plugins "Plugins"
            :themes "Temas"
            :developer-mode-alert "É necessário reiniciar a aplicação para ativar o sistema de plugins. Quer reiniciar agora?"
@@ -2779,15 +2774,15 @@
            :or "ou"
            :download "Baixar"
            :repo/download-zip "Baixar um zip com todos os arquivos"
-           :language "Linguagem"
+           :language "Idioma"
            :white "Claro"
            :dark "Escuro"
            :remove-background "Remover fundo"
-           :re-index-detail "Re-indexar grafo"
+           :re-index-detail "Re-indexar gráfico"
            :open "Abrir"
            :open-a-directory "Abrir uma pasta local"
            :open-new-window "Nova janela"
-           :user/delete-account "Apagar conta"
+           :user/delete-account "Excluir conta"
            :user/delete-your-account "Apague a sua conta"
            :user/delete-account-notice "Todas as suas páginas publicadas em logseq.com serão apagadas."
 
@@ -2817,7 +2812,7 @@
 
            :plugin/delete-alert "Certeza que deseja excluir o plugin? [{1}]?"
            :plugin/disabled "Desabilitado"
-           :plugin/downloads "Downloads"
+           :plugin/downloads "Baixados"
            :plugin/enabled "Habilitado"
            :plugin/install "Instalar"
            :plugin/installed "Instalado"
@@ -2837,13 +2832,13 @@
            :plugin/update-available "Atualização disponível"
            :plugin/updating "Atualizando"
            :right-side-bar/all-pages "Todas as páginas"
-           :right-side-bar/graph-view "Ver grafo"
+           :right-side-bar/graph-view "Ver gráfico"
            :search/page-names "Procurar nome da página"
            :plugin/stars "Estrelas"
            :select/default-prompt "Selecione um"
-           :select.graph/prompt "Selecione um grafo"
-           :select.graph/add-graph "Sim, adicionar outro grafo"
-           :select.graph/empty-placeholder-description "Nenhum grafo encontrado. Deseja adicionar um novo?"
+           :select.graph/prompt "Selecione um gráfico"
+           :select.graph/add-graph "Sim, adicionar outro gráfico"
+           :select.graph/empty-placeholder-description "Nenhum gráfico encontrado. Deseja adicionar um novo?"
            :settings-page/enable-shortcut-tooltip "Habilitar dicas de atalho"
            :tips/all-done "Tudo certo"
            :updater/new-version-install "Uma nova versão foi baixada"
@@ -2855,7 +2850,23 @@
            :settings-page/auto-updater "Auto atualizar"
            :settings-page/custom-configuration "Configuração personalizada"
            :settings-page/custom-theme "Tema personalizado"
-           :settings-page/edit-custom-css "Editar custom.css"}
+           :settings-page/edit-custom-css "Editar custom.css"
+           :re-index-multiple-windows-warning "Você precisa fechar as outras janelas antes de reindexar este gráfico."
+           :re-index-discard-unsaved-changes-warning "A reindexação descartará o gráfico atual e processará todos os arquivos novamente conforme estão armazenados no disco. Você perderá as alterações não salvas e pode demorar um pouco. Continuar?"
+           :sync-from-local-changes-detected "Atualizar detecta e processa arquivos modificados em seu disco e que são diferentes do conteúdo atual da página do Logseq. Continuar?"
+           :page/open-backup-directory "Abra a listagem de backups de página"
+           :save "Salvar"
+           :type "Tipo"
+           :host "Host"
+           :port "Porta"
+           :settings-of-plugins "Configurações de Plugin"
+           :graph/persist "O Logseq está sincronizando seu status interno, aguarde alguns segundos."
+           :graph/persist-error "Falha na sincronização do status interno."
+           :graph/save "Salvando..."
+           :graph/save-success "Salvo com sucesso"
+           :graph/save-error "Falha ao salvar"
+           :settings-page/plugin-system "Sistema de Plugins"
+           :settings-page/network-proxy "Proxy de Rede"}
 
    :pt-PT {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "partilhar"
@@ -2886,7 +2897,7 @@
            :on-boarding/features-datalog "Consultas de Datalog, a base de dados de notas usa "
            :on-boarding/features-custom-view-component "Vista personalizada de componente"
            :on-boarding/integration " integração"
-           :on-boarding/slide-support " suporte para diapositivos"
+           :on-boarding/slide-support " suporte para dispositivos"
            :on-boarding/built-in-supports "Suporte integrado para:"
            :on-boarding/supports-code-highlights "Destaque de código"
            :on-boarding/supports-katex-latex "Katex latex"
@@ -3131,9 +3142,8 @@
            :sync-from-local-files "Atualizar"
            :sync-from-local-files-detail "Importar alterações de ficheiros locais"
            :unlink "remover ligação"
-           :search (if config/publishing?
-                     "Pesquisar"
-                     "Pesquisar ou Criar Página")
+           :search/publishing "Pesquisar"
+           :search "Pesquisar ou Criar Página"
            :page-search "Pesquisar na página atual"
            :graph-search "Pesquisar grafo"
            :new-page "Nova página"
@@ -3514,9 +3524,8 @@
         :re-index "Переиндексировать (перестроить граф)"
         :sync-from-local-files "Обновить (импортировать изменния из локальных файлов)"
         :unlink "отвязать"
-        :search (if config/publishing?
-                  "Искать"
-                  "Искать или создать страницу")
+        :search/publishing "Искать"
+        :search "Искать или создать страницу"
         :page-search "Искать на текущей странице"
         :graph-search "Искать граф"
         :new-page "Новая страница"
@@ -3611,8 +3620,10 @@
 
         :command-palette/prompt "Набери команду"}
 
-   :ja {:tutorial/text (rc/inline "tutorial-ja.md")
-        :tutorial/dummy-notes (rc/inline "dummy-notes-ja.md")
+   :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
+                                :default "tutorial-ja.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ja.md")
+                                       :default "dummy-notes-ja.md")
         :on-boarding/title "こんにちは、Logseq へようこそ!"
         :on-boarding/sharing "共有"
         :on-boarding/is-a "は"
@@ -3891,9 +3902,8 @@
         :sync-from-local-files "再表示"
         :sync-from-local-files-detail "ローカルファイルの変更点をインポート"
         :unlink "リンク解除"
-        :search (if config/publishing?
-                  "検索"
-                  "検索／新規ページ名")
+        :search/publishing "検索"
+        :search "検索／新規ページ名"
         :page-search "現在のページを検索"
         :graph-search "グラフを検索"
         :new-page "新規ページ"
@@ -4007,7 +4017,6 @@
 
    :tongue/fallback :en})
 
-
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}
                 {:label "Deutsch" :value :de}
@@ -4020,6 +4029,3 @@
                 {:label "Português (Europeu)" :value :pt-PT}
                 {:label "Русский" :value :ru}
                 {:label "日本語" :value :ja}])
-
-(defn translate [dicts]
-  (tongue/build-translate dicts))

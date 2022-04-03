@@ -198,7 +198,7 @@
                    (when @*resizing-image? (util/stop e)))}
         (and (:width metadata) (not (util/mobile?)))
         (assoc :style {:width (:width metadata)}))
-      [:div.asset-container
+      [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
         (merge
          {:loading "lazy"
@@ -582,19 +582,22 @@
     (editor-handler/edit-block! config :max (:block/uuid config))))
 
 (rum/defc block-embed < rum/reactive db-mixins/query
-  [config id]
-  (let [blocks (db/sub-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2
-     {:style {:z-index 2}
-      :on-double-click #(edit-parent-block % config)
-      :on-mouse-down (fn [e] (.stopPropagation e))}
-     [:div.px-3.pt-1.pb-2
-      (blocks-container blocks (assoc config
-                                      :id (str id)
-                                      :embed-id id
-                                      :embed? true
-                                      :embed-parent (:block config)
-                                      :ref? false))]]))
+  [config uuid]
+  (when-let [block (db/entity [:block/uuid uuid])]
+    (let [blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id block)
+                                          {:scoped-block-id (:db/id block)})]
+      [:div.color-level.embed-block.bg-base-2
+       {:style {:z-index 2}
+        :on-double-click #(edit-parent-block % config)
+        :on-mouse-down (fn [e] (.stopPropagation e))}
+       [:div.px-3.pt-1.pb-2
+        (blocks-container blocks (assoc config
+                                        :db/id (:db/id block)
+                                        :id (str uuid)
+                                        :embed-id uuid
+                                        :embed? true
+                                        :embed-parent (:block config)
+                                        :ref? false))]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
@@ -612,8 +615,10 @@
                   page-name)
             (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
-       (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
+       (let [page (model/get-page page-name)
+             blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
          (blocks-container blocks (assoc config
+                                         :db/id (:db/id page)
                                          :id page-name
                                          :embed? true
                                          :page-embed? true
@@ -748,27 +753,6 @@
                 (not html-export?)
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 "]]"])]))
-
-(rum/defcs tutorial-video  <
-  (rum/local true)
-  [state]
-  (let [lite-mode? (:rum/local state)]
-    [:div.tutorial-video-container.relative
-     {:style {:height 367 :width 653}}
-     (if @lite-mode?
-       [:div
-        [:img.w-full.h-full.absolute
-         {:src "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg"}]
-        [:button
-         {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
-          :on-click (fn [_] (swap! lite-mode? not))}
-         (svg/play)]]
-       [:iframe.w-full.h-full
-        {:allow-full-screen "allowfullscreen"
-         :allow
-         "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-         :frame-border "0"
-         :src "https://www.youtube.com/embed/Afmqowr0qEQ?autoplay=1"}])]))
 
 (declare custom-query)
 
@@ -1548,9 +1532,17 @@
                                    (editor-handler/check block)))}))))
 
 (defn list-checkbox
-  [checked?]
-  (ui/checkbox {:style {:margin-right 6}
-                :checked checked?}))
+  [config checked?]
+  (ui/checkbox
+   {:style {:margin-right 6}
+    :checked checked?
+    :on-change (fn [event]
+                 (let [target (.-target event)
+                       block (:block config)
+                       item-content (.. target -nextSibling -data)
+                       item-full-content (str (if checked? "[X]" "[ ]") " " item-content)
+                       new-item-full-content (str (if checked? "[ ]" "[X]") " " item-content)]
+                   (editor-handler/toggle-list-checkbox block item-full-content new-item-full-content)))}))
 
 (defn marker-switch
   [{:block/keys [marker] :as block}]
@@ -1970,20 +1962,21 @@
         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
         nil)]]))
 
-(rum/defc block-refs-count < rum/reactive db-mixins/query
+(rum/defc block-refs-count < rum/static
   [block]
-  (if-let [block-refs-count (model/get-block-refs-count (:db/id block))]
+  (let [block-refs-count (count (:block/_refs block))]
     (when (> block-refs-count 0)
-      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-       {:title "Open block references"
-        :on-click (fn []
-                    (state/sidebar-add-block!
-                     (state/get-current-repo)
-                     (:db/id block)
-                     :block-ref
-                     {:block block}))}
-       block-refs-count])
-    nil))
+      [:div
+       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+        {:title "Open block references"
+         :style {:margin-top -1}
+         :on-click (fn []
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id block)
+                      :block-ref
+                      {:block block}))}
+        block-refs-count]])))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -1999,8 +1992,9 @@
                      :block-parent-id block-id
                      :format format
                      :heading-level heading-level
-                     :on-hide (fn [_value event]
+                     :on-hide (fn [value event]
                                 (when (= event :esc)
+                                  (editor-handler/save-block! (editor-handler/get-state) value)
                                   (editor-handler/escape-editing)))}
                     edit-input-id
                     config))]
@@ -2227,7 +2221,7 @@
                nil)
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed? :block/children
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
@@ -2279,15 +2273,15 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-      {:id block-id
-       :data-refs data-refs
-       :data-refs-self data-refs-self
-       :data-collapsed (and collapsed? has-child?)
-       :class (str uuid
-                   (when pre-block? " pre-block")
-                   (when (and card? (not review-cards?)) " shadow-xl"))
-       :blockid (str uuid)
-       :haschild (str has-child?)}
+       {:id block-id
+        :data-refs data-refs
+        :data-refs-self data-refs-self
+        :data-collapsed (and collapsed? has-child?)
+        :class (str uuid
+                    (when pre-block? " pre-block")
+                    (when (and card? (not review-cards?)) " shadow-xl"))
+        :blockid (str uuid)
+        :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2404,7 +2398,7 @@
          (vec-cat
           [(->elem
             :p
-            (list-checkbox checkbox)
+            (list-checkbox config checkbox)
             content)]
           [items]))))))
 
@@ -2895,16 +2889,20 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
+(defn- block-item
+  [config blocks idx item]
+  (let [item (->
+              (dissoc item :block/meta)
+              (assoc :block/top? (zero? idx)
+                     :block/bottom? (= (count blocks) (inc idx))))
+        config (assoc config :block/uuid (:block/uuid item))]
+    (rum/with-key (block-container config item)
+      (str (:block/uuid item)))))
+
 (defn- block-list
   [config blocks]
   (for [[idx item] (medley/indexed blocks)]
-    (let [item (->
-                (dissoc item :block/meta)
-                (assoc :block/top? (zero? idx)
-                       :block/bottom? (= (count blocks) (inc idx))))
-          config (assoc config :block/uuid (:block/uuid item))]
-      (rum/with-key (block-container config item)
-        (str (:block/uuid item))))))
+    (block-item config blocks idx item)))
 
 (defn- custom-query-or-ref?
   [config]
@@ -2912,50 +2910,40 @@
         custom-query? (:custom-query? config)]
     (or custom-query? ref?)))
 
-;; TODO: virtual tree for better UX and memory usage reduce
-
-
-(defn- get-segment
-  [_config flat-blocks idx blocks->vec-tree]
-  (let [new-idx (if (< idx block-handler/initial-blocks-length)
-                  block-handler/initial-blocks-length
-                  (+ idx block-handler/step-loading-blocks))
-        max-idx (count flat-blocks)
-        idx (min max-idx new-idx)
-        blocks (util/safe-subvec flat-blocks 0 idx)]
-    [(blocks->vec-tree blocks)
-     idx]))
+(defn- load-more-blocks!
+  [config flat-blocks]
+  (when-let [db-id (:db/id config)]
+    (let [last-block-id (:db/id (last flat-blocks))]
+      (block-handler/load-more! db-id last-block-id))))
 
 (rum/defcs lazy-blocks < rum/reactive
-  {:did-remount (fn [_old-state new-state]
-                  ;; Loading more when pressing Enter or paste
-                  (let [*last-idx (::last-idx new-state)
-                        new-idx (if (zero? *last-idx)
-                                  1
-                                  (inc @*last-idx))]
-                    (reset! *last-idx new-idx))
-                  new-state)}
-  (rum/local 0 ::last-idx)
+  {:init (fn [state]
+           (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
-  (let [*last-idx (::last-idx state)
-        [segment idx] (get-segment config
-                                   flat-blocks
-                                   @*last-idx
-                                   blocks->vec-tree)
-        bottom-reached (fn [] (reset! *last-idx idx))
-        has-more? (>= (count flat-blocks) (inc idx))]
-    [:div#lazy-blocks
-     (ui/infinite-list
-      "main-content-container"
-      (block-list config segment)
-      {:on-load bottom-reached
-       :bottom-reached (fn []
-                         (when-let [node (gdom/getElement "lazy-blocks")]
-                           (ui/bottom-reached? node 1000)))
-       :has-more has-more?
-       :more (if (or (:preview? config) (:sidebar? config))
-               "More"
-               (ui/loading "Loading"))})]))
+  (let [db-id (:db/id config)
+        blocks (blocks->vec-tree flat-blocks)]
+    (if-not db-id
+      (block-list config blocks)
+      (let [bottom-reached (fn []
+                             ;; To prevent scrolling after inserting new blocks
+                             (when (> (- (util/time-ms) (:start-time config)) 100)
+                               (load-more-blocks! config flat-blocks)))
+            has-more? (and
+                       (> (count flat-blocks) model/initial-blocks-length)
+                       (some? (model/get-next-open-block (db/get-conn) (last flat-blocks) db-id)))
+            dom-id (str "lazy-blocks-" (::id state))]
+        [:div {:id dom-id}
+         (ui/infinite-list
+          "main-content-container"
+          (block-list config blocks)
+          {:on-load bottom-reached
+           :bottom-reached (fn []
+                             (when-let [node (gdom/getElement dom-id)]
+                               (ui/bottom-reached? node 1000)))
+           :has-more has-more?
+           :more (if (or (:preview? config) (:sidebar? config))
+                   "More"
+                   (ui/loading "Loading"))})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]
@@ -2971,7 +2959,8 @@
         doc-mode? (:document/mode? config)]
     (when (seq blocks)
       (let [blocks->vec-tree #(if (custom-query-or-ref? config) % (tree/blocks->vec-tree % (:id config)))
-            flat-blocks (vec blocks)]
+            flat-blocks (vec blocks)
+            config (assoc config :start-time (util/time-ms))]
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config flat-blocks blocks->vec-tree)]))))

@@ -3,9 +3,9 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
             [frontend.fs :as fs]
@@ -211,8 +211,8 @@
         (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-parsing-files! false)
-    (state/pub-event! [:graph/added repo-url])))
+    (state/pub-event! [:graph/added repo-url opts])
+    (state/set-parsing-files! false)))
 
 (defn- parse-files-and-create-default-files!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
@@ -256,7 +256,7 @@
       (js/setTimeout f 100))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph?]}]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
@@ -279,7 +279,8 @@
     (cond
       (and (not (seq diffs)) nfs-files)
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true
-                                                       :new-graph? new-graph?})
+                                                       :new-graph? new-graph?
+                                                       :empty-graph? empty-graph?})
 
       (and first-clone? (not nfs-files))
       (->
@@ -534,26 +535,6 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! nil repo option))
 
-; Add translate function t in src/main/frontend/context/i18n.cljs without shortcut-dict/dict 
-; to avoid circular dependency
-; TODO: Remove copied functions once circular dependency is resolved
-(defn fetch-local-language []
-  (.. js/window -navigator -language))
-
-(defonce translate-dicts (atom {}))
-
-(defn t
-  [& args]
-  (let [preferred-language (keyword (state/sub :preferred-language))
-        _ (when (nil? preferred-language)
-            (state/set-preferred-language! (fetch-local-language)))
-        dicts (or (get @translate-dicts preferred-language)
-                  (let [result (some-> dicts/dicts
-                                       dicts/translate)]
-                    (swap! translate-dicts assoc preferred-language result)
-                    result))]
-    (apply (partial dicts preferred-language) args)))
-
 (defn setup-local-repo-if-not-exists!
   []
   (if js/window.pfs
@@ -565,7 +546,7 @@
                 (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
              (when-not config/publishing?
-                (let [tutorial (t :tutorial/text)
+               (let [tutorial (t :tutorial/text)
                      tutorial (string/replace-first tutorial "$today" (date/today))]
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
@@ -604,20 +585,6 @@
   []
   (js/setInterval #(push-if-auto-enabled! (state/get-current-repo))
                   (* (config/git-push-secs) 1000)))
-
-(defn create-repo!
-  [repo-url branch]
-  (spec/validate :repos/url repo-url)
-  (util/post (str config/api "repos")
-             {:url repo-url
-              :branch branch}
-             (fn [result]
-               (if (:installation_id result)
-                 (set! (.-href js/window.location) config/website)
-                 (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))))
-             (fn [error]
-               (println "Something wrong!")
-               (js/console.dir error))))
 
 (defn- clone-and-load-db
   [repo-url]
@@ -703,9 +670,9 @@
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
-     step 1. [In HERE]  a window         --persistGraph----->   electron  
-     step 2.            electron         --persistGraph----->   window holds the graph  
-     step 3.            window w/ graph  --persistGraphDone->   electron  
+     step 1. [In HERE]  a window         --persistGraph----->   electron
+     step 2.            electron         --persistGraph----->   window holds the graph
+     step 3.            window w/ graph  --persistGraphDone->   electron
      step 4. [In HERE]  electron         --persistGraphDone->   all windows"
   [graph]
   (p/create (fn [resolve _]

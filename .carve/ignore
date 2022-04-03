@@ -58,6 +58,8 @@ frontend.ui/reset-ios-whole-page-offset!
 frontend.util/d
 ;; Future use?
 frontend.util/safe-search-normalize
+frontend.components.external/import-cp
+frontend.components.repo/add-repo
 ;; For debugging
 frontend.util/trace!
 ;; Repl fn

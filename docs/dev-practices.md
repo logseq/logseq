@@ -116,3 +116,15 @@ be sure to have [enabled custom
 formatters](https://github.com/binaryage/cljs-devtools/blob/master/docs/installation.md#enable-custom-formatters-in-chrome)
 in the desktop app and browser. Without this enabled, most of the log messages
 aren't readable.
+
+## Data validation and generation
+
+We currently use [spec](https://github.com/clojure/spec.alpha) for data
+validation (and generation someday). We may switch to
+[malli](https://github.com/metosin/malli) if we need to datafy our data models
+at some point.
+
+Specs should go under `src/main/frontend/spec/` and be compatible with clojure
+and clojurescript. See `frontend.spec.storage` for an example. By following
+these conventions, specs should also be usable by babashka. This is helpful as it
+allows for third party tools to be written with logseq's data model.

@@ -339,6 +339,9 @@
                                 (search-result-item "Page" original-name))
                         nil))}))])
 
+(def default-placeholder
+  (if config/publishing? (t :search/publishing) (t :search)))
+
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
   (mixins/event-mixin
@@ -366,7 +369,7 @@
                          (t :graph-search)
                          :page
                          (t :page-search)
-                         (t :search))
+                         default-placeholder)
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
         :on-change     (fn [e]

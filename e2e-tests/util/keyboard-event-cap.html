@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script>
+    'use strict';
+
+    const keys = [
+      // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent
+      // without deprecated / non-standard
+      "altKey", "code", "ctrlKey", "isComposing", "key", "locale", "location", "metaKey",
+      "repeat", "shiftKey"
+    ]
+
+    let output_list = [];
+    let last_timestamp = Date.now();
+
+    function select_keys(obj, keys) {
+      let new_obj = {}
+      for (let k in event)
+        if (keys.indexOf(k) != -1)
+          new_obj[k] = event[k];
+      return new_obj
+    }
+
+    let key_handler_builder = (event_type) => (event) => {
+      if (event["target"].id != "input")
+        return;
+      let cur_timestamp = Date.now();
+      let output = {
+        "event_type": event_type,
+        "event": select_keys(event, keys),
+        "latency": cur_timestamp - last_timestamp // Time to wait before firing event
+      }
+      last_timestamp = cur_timestamp;
+      output_list.push(output);
+      let to_print = JSON.stringify(
+        output_list,
+        undefined,
+        2);
+      document.getElementById("outputs").innerText = to_print;
+    }
+
+    document.addEventListener('keydown', key_handler_builder('keydown'), false);
+    document.addEventListener('keyup', key_handler_builder('keyup'), false);
+    document.addEventListener('keypress', key_handler_builder('keypress'), false);
+    document.addEventListener('compositionstart', key_handler_builder('compositionstart'), false);
+    document.addEventListener('compositionend', key_handler_builder('compositionend'), false);
+    document.addEventListener('compositionupdate', key_handler_builder('compositionupdate'), false);
+
+    window.onload = (e) => {
+      document.getElementById("input").focus();
+    }
+
+  </script>
+</head>
+
+<body>
+  <input id="input" />
+  <h2>Key Down</h2>
+  <p id="outputs" style="white-space: pre;" />
+</body>
+
+</html>

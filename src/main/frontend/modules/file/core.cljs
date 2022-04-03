@@ -7,7 +7,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.debug :as debug]
             [frontend.util.property :as property]))
 
 (defn- indented-block-content
@@ -107,8 +106,6 @@
     (assert (some? chan) "File write chan shouldn't be nil")
     (let [chan-callback (:chan-callback opts)]
       (async/put! chan [repo files opts])
-      (doseq [file (map first files)]
-        (debug/set-ack-step! file :pushed-to-channel))
       (when chan-callback
         (chan-callback)))))
 
