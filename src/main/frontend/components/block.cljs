@@ -1210,9 +1210,6 @@
         (when-let [seconds (youtube/parse-timestamp timestamp)]
           (youtube/timestamp seconds)))
 
-      (= name "tutorial-video")
-      (tutorial-video)
-
       (= name "zotero-imported-file")
       (let [[item-key filename] arguments]
         (when (and item-key filename)

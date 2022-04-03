@@ -33,9 +33,8 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
-            [frontend.mobile.record :as record]))
+            [frontend.mobile.record :as record]
             [frontend.components.onboarding :as onboarding]))
-
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
