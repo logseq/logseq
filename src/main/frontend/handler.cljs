@@ -4,6 +4,7 @@
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
@@ -89,12 +90,11 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     ;; `(state/set-db-restoring! true)` already executed before restoring
-                     (-> (p/all (db/restore!
-                                 (assoc me :repos repos)
-                                 old-db-schema
-                                 (fn [repo]
-                                   (file-handler/restore-config! repo false))))
+                     (-> (db/restore!
+                          (assoc me :repos repos)
+                          old-db-schema
+                          (fn [repo]
+                            (file-handler/restore-config! repo false)))
                          (p/then
                           (fn []
                             ;; try to load custom css only for current repo
@@ -210,6 +210,7 @@
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
+    (i18n/start)
     (instrument/init)
     (set-network-watcher!)
 
@@ -225,10 +226,10 @@
     (events/run!)
 
     (p/let [repos (get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! me repos logged? db-schema)
-      (when (mobile-util/is-native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+           (state/set-repos! repos)
+           (restore-and-setup! me repos logged? db-schema)
+           (when (mobile-util/is-native-platform?)
+             (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)

@@ -13,8 +13,10 @@
 (s/def :command/tag vector?)
 
 (s/def :command/command
-  (s/keys :req-un [:command/id :command/desc :command/action]
-          :opt-un [:command/shortcut :command/tag]))
+  (s/keys :req-un [:command/id :command/action]
+          ;; :command/desc is optional for internal commands since view
+          ;; checks translation ns first
+          :opt-un [:command/desc :command/shortcut :command/tag]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global

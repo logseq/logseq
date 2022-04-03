@@ -7,7 +7,7 @@
             [frontend.handler.notification :as notifications]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
-            [medley.core :as md]
+            [medley.core :as medley]
             [frontend.fs :as fs]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
@@ -245,7 +245,7 @@
 
 (defn unregister-plugin-slash-command
   [pid]
-  (swap! state/state md/dissoc-in [:plugin/installed-slash-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)]))
 
 (def keybinding-mode-handler-map
   {:global      :shortcut.handler/editor-global
@@ -289,7 +289,7 @@
 
 (defn unregister-plugin-simple-command
   [pid]
-  (swap! state/state md/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
 (defn register-plugin-ui-item
   [pid {:keys [type] :as opts}]
@@ -316,7 +316,7 @@
 (defn unregister-plugin-resources
   [pid]
   (when-let [pid (keyword pid)]
-    (swap! state/state md/dissoc-in [:plugin/installed-resources pid])
+    (swap! state/state medley/dissoc-in [:plugin/installed-resources pid])
     true))
 
 (defn unregister-plugin-themes
@@ -555,7 +555,7 @@
                                         ;; effects
                                         (unregister-plugin-themes pid)
                                         ;; plugins
-                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
+                                        (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
                                         (clear-commands! pid))))
 

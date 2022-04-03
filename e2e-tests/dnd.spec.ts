@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage } from './utils'
+import { createRandomPage, enterNextBlock } from './utils'
 
 /**
  * Drag and Drop tests.
@@ -11,14 +11,14 @@ import { createRandomPage } from './utils'
 test('drop to left center', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block a')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill('textarea >> nth=0', 'block a')
+  await enterNextBlock(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block b')
-  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.fill('textarea >> nth=0', 'block b')
+  await page.press('textarea >> nth=0', 'Escape')
 
   const bullet = page.locator('span.bullet-container >> nth=-1')
-  const where = page.locator('div.ls-block >> nth=0')
+  const where = page.locator('.ls-block >> nth=0')
   await bullet.dragTo(where, {
     targetPosition: {
       x: 30,
@@ -26,22 +26,24 @@ test('drop to left center', async ({ page }) => {
     }
   })
 
-  expect.soft(await page.locator('div.ls-block >> nth=0').innerText()).toBe("block b")
-  expect.soft(await page.locator('div.ls-block >> nth=1').innerText()).toBe("block a")
+  await page.keyboard.press('Escape')
+
+  const pageElem = page.locator('.page-blocks-inner')
+  await expect(pageElem).toHaveText('block b\nblock a', {useInnerText: true})
 })
 
 
 test('drop to upper left', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block a')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill('textarea >> nth=0', 'block a')
+  await enterNextBlock(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block b')
-  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.fill('textarea >> nth=0', 'block b')
+  await page.press('textarea >> nth=0', 'Escape')
 
   const bullet = page.locator('span.bullet-container >> nth=-1')
-  const where = page.locator('div.ls-block >> nth=0')
+  const where = page.locator('.ls-block >> nth=0')
   await bullet.dragTo(where, {
     targetPosition: {
       x: 30,
@@ -49,21 +51,23 @@ test('drop to upper left', async ({ page }) => {
     }
   })
 
-  expect.soft(await page.locator('div.ls-block >> nth=0').innerText()).toBe("block b")
-  expect.soft(await page.locator('div.ls-block >> nth=1').innerText()).toBe("block a")
+  await page.keyboard.press('Escape')
+
+  const pageElem = page.locator('.page-blocks-inner')
+  await expect(pageElem).toHaveText('block b\nblock a', {useInnerText: true})
 })
 
 test('drop to bottom left', async ({ page }) => {
   await createRandomPage(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block a')
-  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill('textarea >> nth=0', 'block a')
+  await enterNextBlock(page)
 
-  await page.fill(':nth-match(textarea, 1)', 'block b')
-  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.fill('textarea >> nth=0', 'block b')
+  await page.press('textarea >> nth=0', 'Escape')
 
   const bullet = page.locator('span.bullet-container >> nth=-1')
-  const where = page.locator('div.ls-block >> nth=0')
+  const where = page.locator('.ls-block >> nth=0')
   await bullet.dragTo(where, {
     targetPosition: {
       x: 30,
@@ -71,6 +75,8 @@ test('drop to bottom left', async ({ page }) => {
     }
   })
 
-  expect.soft(await page.locator('div.ls-block >> nth=0').innerText()).toBe("block a")
-  expect.soft(await page.locator('div.ls-block >> nth=1').innerText()).toBe("block b")
+  await page.keyboard.press('Escape')
+
+  const pageElem = page.locator('.page-blocks-inner')
+  await expect(pageElem).toHaveText('block a\nblock b', {useInnerText: true})
 })

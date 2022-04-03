@@ -153,10 +153,13 @@
 
     (rum/use-effect!
      (fn []
-       (let [^js el (rum/deref *el-ref)
-             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
-         (set! (.. el -style -transform)
-               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)")))
+       (js/setTimeout
+        (fn []
+          (let [^js el (rum/deref *el-ref)
+               {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
+           (set! (.. el -style -transform)
+                 (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
+        10)
        #())
      [])
 

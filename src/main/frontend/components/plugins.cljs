@@ -336,10 +336,10 @@
     :intent "logseq"
     :target "_blank"))
 
-(rum/defc panel-control-tabs < rum/static
+(rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
-   sort-or-filter-by *sort-or-filter-by selected-unpacked-pkg
-   market? develop-mode? reload-market-fn]
+   sort-by *sort-by filter-by *filter-by
+   selected-unpacked-pkg market? develop-mode? reload-market-fn]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
@@ -363,47 +363,70 @@
       (panel-tab-search search-key *search-key *search-ref)
 
       ;; sorter & filter
-      (ui/dropdown-with-links
-        (fn [{:keys [toggle-fn]}]
-          (ui/button
-            [:span (ui/icon (if market? "arrows-sort" "filter"))]
-            :class (str (when-not (contains? #{:default :downloads} sort-or-filter-by) "picked ") "sort-or-filter-by")
-            :on-click toggle-fn
-            :intent "link"))
-        (let [aim-icon #(if (= sort-or-filter-by %) "check" "circle")]
+      (let [aim-icon #(if (= filter-by %) "check" "circle")]
+        (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            (ui/button
+              [:span (ui/icon "filter")]
+              :class (str (when-not (contains? #{:default} filter-by) "picked ") "sort-or-filter-by")
+              :on-click toggle-fn
+              :intent "link"))
+
           (if market?
-            [{:title   (t :plugin/downloads)
-              :options {:on-click #(reset! *sort-or-filter-by :downloads)}
-              :icon    (ui/icon (aim-icon :downloads))}
+            [{:title   (t :plugin/all)
+              :options {:on-click #(reset! *filter-by :default)}
+              :icon    (ui/icon (aim-icon :default))}
 
-             {:title   (t :plugin/stars)
-              :options {:on-click #(reset! *sort-or-filter-by :stars)}
-              :icon    (ui/icon (aim-icon :stars))}
+             {:title   (t :plugin/installed)
+              :options {:on-click #(reset! *filter-by :installed)}
+              :icon    (ui/icon (aim-icon :installed))}
 
-             {:title   (str (t :plugin/title) " (A - Z)")
-              :options {:on-click #(reset! *sort-or-filter-by :letters)}
-              :icon    (ui/icon (aim-icon :letters))}]
+             {:title   (t :plugin/not-installed)
+              :options {:on-click #(reset! *filter-by :not-installed)}
+              :icon    (ui/icon (aim-icon :not-installed))}]
 
             [{:title   (t :plugin/all)
-              :options {:on-click #(reset! *sort-or-filter-by :default)}
+              :options {:on-click #(reset! *filter-by :default)}
               :icon    (ui/icon (aim-icon :default))}
 
              {:title   (t :plugin/enabled)
-              :options {:on-click #(reset! *sort-or-filter-by :enabled)}
+              :options {:on-click #(reset! *filter-by :enabled)}
               :icon    (ui/icon (aim-icon :enabled))}
 
              {:title   (t :plugin/disabled)
-              :options {:on-click #(reset! *sort-or-filter-by :disabled)}
+              :options {:on-click #(reset! *filter-by :disabled)}
               :icon    (ui/icon (aim-icon :disabled))}
 
              {:title   (t :plugin/unpacked)
-              :options {:on-click #(reset! *sort-or-filter-by :unpacked)}
+              :options {:on-click #(reset! *filter-by :unpacked)}
               :icon    (ui/icon (aim-icon :unpacked))}
 
              {:title   (t :plugin/update-available)
-              :options {:on-click #(reset! *sort-or-filter-by :update-available)}
-              :icon    (ui/icon (aim-icon :update-available))}]))
-        {})
+              :options {:on-click #(reset! *filter-by :update-available)}
+              :icon    (ui/icon (aim-icon :update-available))}])
+          nil))
+
+      (when market?
+        (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            (ui/button
+              [:span (ui/icon "arrows-sort")]
+              :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
+              :on-click toggle-fn
+              :intent "link"))
+          (let [aim-icon #(if (= sort-by %) "check" "circle")]
+            [{:title   (t :plugin/downloads)
+              :options {:on-click #(reset! *sort-by :downloads)}
+              :icon    (ui/icon (aim-icon :downloads))}
+
+             {:title   (t :plugin/stars)
+              :options {:on-click #(reset! *sort-by :stars)}
+              :icon    (ui/icon (aim-icon :stars))}
+
+             {:title   (str (t :plugin/title) " (A - Z)")
+              :options {:on-click #(reset! *sort-by :letters)}
+              :icon    (ui/icon (aim-icon :letters))}])
+          {}))
 
       ;; more - updater
       (ui/dropdown-with-links
@@ -440,6 +463,7 @@
     (rum/local "" ::search-key)
     (rum/local :plugins ::category)
     (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
+    (rum/local :default ::filter-by)
     (rum/local nil ::error)
     {:did-mount (fn [s]
                   (let [reload-fn (fn [force-refresh?]
@@ -462,12 +486,19 @@
         *search-key (::search-key state)
         *category (::category state)
         *sort-by (::sort-by state)
+        *filter-by (::filter-by state)
         *fetching (::fetching state)
         *error (::error state)
         filtered-pkgs (when (seq pkgs)
                         (if (= @*category :themes)
                           (filter #(:theme %) pkgs)
                           (filter #(not (:theme %)) pkgs)))
+        filtered-pkgs (if (and (seq filtered-pkgs) (not= :default @*filter-by))
+                        (filter #(apply
+                                   (if (= :installed @*filter-by) identity not)
+                                   [(contains? installed-plugins (keyword (:id %)))])
+                                filtered-pkgs)
+                        filtered-pkgs)
         filtered-pkgs (if-not (string/blank? @*search-key)
                         (if-let [author (and (string/starts-with? @*search-key "@")
                                              (subs @*search-key 1))]
@@ -496,8 +527,8 @@
      (panel-control-tabs
        @*search-key *search-key
        @*category *category
-       @*sort-by *sort-by nil true
-       develop-mode? (::reload state))
+       @*sort-by *sort-by @*filter-by *filter-by
+       nil true develop-mode? (::reload state))
 
      (cond
        (not online?)
@@ -530,6 +561,7 @@
   < rum/static rum/reactive
     (rum/local "" ::search-key)
     (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
+    (rum/local :default ::sort-by)
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub [:plugin/installed-plugins])
@@ -539,6 +571,7 @@
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
         *filter-by (::filter-by state)
+        *sort-by (::sort-by state)
         *search-key (::search-key state)
         *category (::category state)
         default-filter-by? (= :default @*filter-by)
@@ -577,6 +610,7 @@
      (panel-control-tabs
        @*search-key *search-key
        @*category *category
+       @*sort-by *sort-by
        @*filter-by *filter-by
        selected-unpacked-pkg
        false develop-mode? nil)

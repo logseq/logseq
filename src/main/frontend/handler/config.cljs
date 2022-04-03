@@ -13,7 +13,6 @@
     (set-config! :ui/show-brackets? (not show-brackets?))))
 
 (defn toggle-logical-outdenting! []
-  (js/alert "toggle-logical-outdenting!")
   (let [logical-outdenting? (state/logical-outdenting?)]
     (set-config! :editor/logical-outdenting? (not logical-outdenting?))))
 

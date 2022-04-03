@@ -30,13 +30,14 @@
     (when r (->Block r))))
 
 (defn- get-by-parent-&-left
-  [parent-id left-id]
-  (some->
-    (db-outliner/get-by-parent-&-left
-      (conn/get-conn false)
-      [:block/uuid parent-id]
-      [:block/uuid left-id])
-    (block)))
+  [parent-uuid left-uuid]
+  (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
+        left-id (:db/id (db/entity [:block/uuid left-uuid]))]
+    (some->
+     (db-model/get-by-parent-&-left (conn/get-conn) parent-id left-id)
+     :db/id
+     db/pull
+     block)))
 
 (defn- block-with-timestamps
   [block]
@@ -125,7 +126,7 @@
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
                 (dissoc :block/children :block/meta :block/top? :block/bottom?
-                        :block/title :block/body)
+                        :block/title :block/body :block/level)
                 (util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
@@ -600,7 +601,9 @@
       (let [root-page (:db/id (:block/page (:data root)))
             target-page (:db/id (:block/page (:data target-node)))
             not-same-page? (not= root-page target-page)
-            opts (cond-> {:outliner-op :move-subtree}
+            opts (cond-> {:outliner-op :move-subtree
+                          :move-blocks [(:db/id (get-data root))]
+                          :target (:db/id (get-data target-node))}
                    not-same-page?
                    (assoc :from-page root-page
                           :target-page target-page))]

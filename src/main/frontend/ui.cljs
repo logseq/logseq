@@ -391,7 +391,7 @@
   (let [list-element-id (first (:rum/args state))
         opts (-> state :rum/args (nth 2))
         node (js/document.getElementById list-element-id)
-        debounced-on-scroll (debounce #(on-scroll node opts) 500)]
+        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
     (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <

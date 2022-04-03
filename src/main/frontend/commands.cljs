@@ -496,7 +496,7 @@
 (defmethod handle-step :editor/restore-saved-cursor [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (cursor/move-cursor-to current-input (:editor/last-saved-cursor @state/state)))))
+      (cursor/move-cursor-to current-input (state/get-editor-last-pos)))))
 
 (defmethod handle-step :editor/clear-current-slash [[_ space?]]
   (when-let [input-id (state/get-edit-input-id)]
