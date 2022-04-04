@@ -77,19 +77,6 @@
         ns (namespace k)]
     (keyword (str "command." ns) n)))
 
-(defn desc-helper []
-  (->> (vals @config/config)
-       (apply merge)
-       (map (fn [[k {:keys [desc]}]]
-              {(decorate-namespace k) desc}))
-       (into {})))
-
-(defn category-helper []
-  (->> config/category
-       (map (fn [[k v]]
-              {k (:doc (meta v))}))
-       (into {})))
-
 (defn decorate-binding [binding]
   (-> (if (string? binding) binding (str/join "+"  binding))
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
@@ -190,9 +177,7 @@
 
 (defn shortcuts->commands [handler-id]
   (let [m (get @config/config handler-id)]
-    ;; NOTE: remove nil vals, since some commands are conditional
     (->> m
-         (filter (comp some? val))
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)
                                (rename-keys {:binding :shortcut

@@ -1,11 +1,12 @@
-(ns frontend.dicts
-  (:require [frontend.config :as config]
-            [shadow.resource :as rc]
-            [tongue.core :as tongue]))
+(ns ^:bb-compatible frontend.dicts
+  "Provides dictionary entries for most of the application"
+  #?(:cljs (:require [shadow.resource :as rc])))
 
 (def ^:large-vars/data-var dicts
-  {:en {:tutorial/text (rc/inline "tutorial-en.md")
-        :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
+  {:en {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
+                          :default "tutorial-en.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")
+                                 :default "dummy-notes-en.md")
         :on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "sharing"
         :on-boarding/is-a " is a "
@@ -168,6 +169,7 @@
         :page/make-public "Make it public for publishing"
         :page/version-history "Check page history"
         :page/open-backup-directory "Open page backups directory"
+        :page/file-sync-versions "Page versions"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/publish "Publish this page on Logseq"
@@ -295,9 +297,8 @@
         :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"
 
         :unlink "unlink"
-        :search (if config/publishing?
-                  "Search"
-                  "Search or create page")
+        :search/publishing "Search"
+        :search "Search or create page"
         :page-search "Search in the current page"
         :graph-search "Search graph"
         :new-page "New page"
@@ -364,6 +365,7 @@
         :help/shortcut-page-title "Keyboard shortcuts"
 
         :plugin/installed "Installed"
+        :plugin/not-installed "Not installed"
         :plugin/installing "Installing"
         :plugin/install "Install"
         :plugin/reload "Reload"
@@ -595,9 +597,8 @@
         :re-index "Neu indizieren"
         :export-json "Als JSON exportieren"
         :unlink "Verknüpfung aufheben"
-        :search (if config/publishing?
-                  "Suchen"
-                  "Suchen oder Seite erstellen")
+        :search/publishing "Suchen"
+        :search "Suchen oder Seite erstellen"
         :new-page "Neue Seite"
         :new-file "Neue Datei"
         :graph "Graph"
@@ -880,9 +881,8 @@
         :re-index "Ré-indexer"
         :export-json "Exporter au format JSON"
         :unlink "délier"
-        :search (if config/publishing?
-                  "Rechercher"
-                  "Rechercher ou Créer la Page")
+        :search/publishing "Rechercher"
+        :search "Rechercher ou Créer la Page"
         :new-page "Nouvelle page"
         :new-file "Nouveau fichier"
         :graph "Graphe"
@@ -1073,6 +1073,7 @@
            :page/make-public "导出 HTML 时发布本页面"
            :page/version-history "查看页面历史记录"
            :page/open-backup-directory "打开页面备份文件夹"
+           :page/file-sync-versions "页面历史"
            :page/make-private "导出 HTML 时取消发布本页面"
            :page/delete "删除本页"
            :page/publish "将本页发布至 Logseq"
@@ -1196,9 +1197,8 @@
            :export-opml "以 OPML 格式导出"
            :convert-markdown "转换 Markdown 格式(Unordered list 或 Heading)"
            :unlink "解除绑定"
-           :search (if config/publishing?
-                     "搜索"
-                     "搜索或者创建新页面")
+           :search/publishing "搜索"
+           :search "搜索或者创建新页面"
            :page-search "在当前页面搜索"
            :graph-search "搜索图谱"
            :new-page "新页面"
@@ -1258,6 +1258,7 @@
            :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"
 
            :plugin/installed "已安装"
+           :plugin/not-installed "未安装"
            :plugin/installing "安装中"
            :plugin/install "安装"
            :plugin/reload "重载"
@@ -1525,9 +1526,8 @@
              :export-opml "以 OPML 格式導出"
              :convert-markdown "轉換 Markdown 格式(Unordered list 或 Heading)"
              :unlink "解除綁定"
-             :search (if config/publishing?
-                       "搜索"
-                       "搜索或者創建新頁面")
+             :search/publishing "搜索"
+             :search "搜索或者創建新頁面"
              :new-page "新頁面"
              :graph "圖譜"
              :publishing "發布/下載 HTML 文件"
@@ -2018,9 +2018,8 @@
         :close "Cerrar"
         :re-index "Reindexar"
         :unlink "desenlazar"
-        :search (if config/publishing?
-                  "Buscar"
-                  "Buscar o Crear Página")
+        :search/publishing "Buscar"
+        :search "Buscar o Crear Página"
         :page-search "Buscar en la página actual"
         :new-page "Nueva página"
         :new-file "Nuevo archivo"
@@ -2357,9 +2356,8 @@
            :sync-from-local-files "Oppfrisk"
            :sync-from-local-files-detail "Importer endringer fra lokale filer"
            :unlink "koble fra"
-           :search (if config/publishing?
-                     "Søk"
-                     "Søk eller Opprett Side")
+           :search/publishing "Søk"
+           :search "Søk eller Opprett Side"
            :page-search "Søk i denne siden"
            :graph-search "Søk graf"
            :new-page "Ny side"
@@ -2470,9 +2468,7 @@
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :select.graph/add-graph "Ja, legg til en ny graf"}
 
-   :pt-BR {:tutorial/text (rc/inline "tutorial-en.md")
-           :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
-           :on-boarding/title "Olá, bem-vindo ao Logseq!"
+   :pt-BR {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "compartilhar"
            :on-boarding/is-a " é um bloco de notas "
            :on-boarding/vision "Uma plataforma de código-aberto focada na privacidade para gestão de conhecimento e colaboração."
@@ -2732,9 +2728,8 @@
            :delete "Excluir"
            :re-index "Re-indexar"
            :unlink "remover ligação"
-           :search (if config/publishing?
-                     "Pesquisar"
-                     "Pesquisar ou Criar Página")
+           :search/publishing "Pesquisar"
+           :search "Pesquisar ou Criar Página"
            :page-search "Pesquisar na página atual"
            :graph-search "Pesquisar gráfico"
            :new-page "Nova página"
@@ -3149,9 +3144,8 @@
            :sync-from-local-files "Atualizar"
            :sync-from-local-files-detail "Importar alterações de ficheiros locais"
            :unlink "remover ligação"
-           :search (if config/publishing?
-                     "Pesquisar"
-                     "Pesquisar ou Criar Página")
+           :search/publishing "Pesquisar"
+           :search "Pesquisar ou Criar Página"
            :page-search "Pesquisar na página atual"
            :graph-search "Pesquisar grafo"
            :new-page "Nova página"
@@ -3420,7 +3414,8 @@
         :page/open-with-default-app "Открыть через приложение по умолчанию"
         :page/action-publish "Опубликовать"
         :page/make-public "Сделать доступным для публикации"
-        :page/version-history "Проверить историю страницы"
+        :page/version-history "проверить историю git страницы"
+        :page/file-sync-versions "история страницы"
         :page/make-private "Сделать приватным"
         :page/delete "Удалить страницу"
         :page/publish "Опубликовать эту страницу на Logseq"
@@ -3532,9 +3527,8 @@
         :re-index "Переиндексировать (перестроить граф)"
         :sync-from-local-files "Обновить (импортировать изменния из локальных файлов)"
         :unlink "отвязать"
-        :search (if config/publishing?
-                  "Искать"
-                  "Искать или создать страницу")
+        :search/publishing "Искать"
+        :search "Искать или создать страницу"
         :page-search "Искать на текущей странице"
         :graph-search "Искать граф"
         :new-page "Новая страница"
@@ -3629,8 +3623,10 @@
 
         :command-palette/prompt "Набери команду"}
 
-   :ja {:tutorial/text (rc/inline "tutorial-ja.md")
-        :tutorial/dummy-notes (rc/inline "dummy-notes-ja.md")
+   :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
+                                :default "tutorial-ja.md")
+        :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ja.md")
+                                       :default "dummy-notes-ja.md")
         :on-boarding/title "こんにちは、Logseq へようこそ!"
         :on-boarding/sharing "共有"
         :on-boarding/is-a "は"
@@ -3909,9 +3905,8 @@
         :sync-from-local-files "再表示"
         :sync-from-local-files-detail "ローカルファイルの変更点をインポート"
         :unlink "リンク解除"
-        :search (if config/publishing?
-                  "検索"
-                  "検索／新規ページ名")
+        :search/publishing "検索"
+        :search "検索／新規ページ名"
         :page-search "現在のページを検索"
         :graph-search "グラフを検索"
         :new-page "新規ページ"
@@ -4025,7 +4020,6 @@
 
    :tongue/fallback :en})
 
-
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}
                 {:label "Deutsch" :value :de}
@@ -4038,6 +4032,3 @@
                 {:label "Português (Europeu)" :value :pt-PT}
                 {:label "Русский" :value :ru}
                 {:label "日本語" :value :ja}])
-
-(defn translate [dicts]
-  (tongue/build-translate dicts))

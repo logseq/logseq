@@ -38,7 +38,9 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.fs.sync :as sync]))
 
 ;; TODO: should we move all events here?
 
@@ -75,10 +77,20 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo]]
+(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
-  (db/persist! repo))
+  (db/persist! repo)
+  (when (state/setups-picker?)
+    (if empty-graph?
+      (route-handler/redirect! {:to :import :query-params {:from "picker"}})
+      (route-handler/redirect-to-home!))))
+
+(defn- file-sync-stop-when-switch-graph []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)
+         ;; trigger rerender file-sync-header
+         (state/set-file-sync-state nil)))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
@@ -91,7 +103,11 @@
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph]))
+  (state/pub-event! [:graph/ready graph])
+
+  (file-sync-stop-when-switch-graph))
+
+
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -105,13 +121,14 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo) 
+  (p/let [current-repo (state/get-current-repo)
           _ (repo-handler/persist-db! current-repo persist-db-noti-m)
           _ (repo-handler/persist-otherwindow-db! graph)
           _ (repo-handler/restore-and-setup-repo! graph)]
     (graph-switch graph)))
 
 (defmethod handle :graph/switch [[_ graph]]
+  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
     (if (util/electron?)
       (graph-switch-on-persisted graph)

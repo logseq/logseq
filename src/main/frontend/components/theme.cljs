@@ -54,9 +54,19 @@
      [nfs-granted? db-restoring? route])
 
     (rum/use-effect!
-     #(when-not db-restoring?
-        (ui-handler/restore-right-sidebar-state!)
-        (set-restored-sidebar? true))
+     (fn []
+       (when-not db-restoring?
+         (let [repos (state/get-repos)]
+           (if-not (or
+                    ;; demo graph only
+                    (and (= 1 (count repos)) (:example? (first repos))
+                         (not (util/mobile?)))
+                    ;; other graphs exists
+                    (seq repos))
+            (route-handler/redirect! {:to :repo-add})
+            (do
+              (ui-handler/restore-right-sidebar-state!)
+              (set-restored-sidebar? true))))))
      [db-restoring?])
 
     (rum/use-effect!

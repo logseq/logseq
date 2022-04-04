@@ -509,7 +509,8 @@
 
 (rum/defc preview-cp
   [block-id]
-  (let [blocks-f (fn [] (db/sub-block-and-children (state/get-current-repo) block-id))]
+  (let [blocks-f (fn [] (db/get-paginated-blocks (state/get-current-repo) block-id
+                                                 {:scoped-block-id block-id}))]
     (view-modal blocks-f {:preview? true} (atom 0))))
 
 (defn preview
@@ -543,15 +544,18 @@
 
 (defn get-srs-cards-total
   []
-  (let [repo (state/get-current-repo)
-        query-string ""
-        blocks (query repo query-string {:use-cache? false
-                                         :disable-reactive? true})]
-    (when (seq blocks)
-      (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
-            count (count result)]
-        (reset! cards-total count)
-        count))))
+  (try
+    (let [repo (state/get-current-repo)
+          query-string ""
+          blocks (query repo query-string {:use-cache?        false
+                                           :disable-reactive? true})]
+      (when (seq blocks)
+        (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
+              count (count result)]
+          (reset! cards-total count)
+          count)))
+    (catch js/Error e
+      (js/console.error e) 0)))
 
 ;;; register cards macro
 (rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
