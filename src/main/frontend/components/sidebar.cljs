@@ -348,8 +348,7 @@
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        logged? (user-handler/logged-in?)]
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div
      (cond
        (and default-home
@@ -457,7 +456,8 @@
         page? (= :page route-name)
         home? (= :home route-name)
         edit? (:editor/editing? @state/state)
-        default-home (get-default-home-if-valid)]
+        default-home (get-default-home-if-valid)
+        logged? (user-handler/logged-in?)]
     (theme/container
      {:t             t
       :theme         theme
@@ -488,7 +488,6 @@
                         :logged?        logged?
                         :page?          page?
                         :route-match    route-match
-                        :me             me
                         :default-home   default-home
                         :new-block-mode new-block-mode})
 
