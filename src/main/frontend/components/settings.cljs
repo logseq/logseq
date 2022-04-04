@@ -27,30 +27,6 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(rum/defcs set-email < (rum/local "" ::email)
-  [state]
-  (let [email (get state ::email)]
-    [:div.p-8.flex.items-center.justify-center
-     [:div.w-full.mx-auto
-      [:div
-       [:div
-        [:h1.title.mb-1
-         "Your email address:"]
-        [:div.mt-2.mb-4.relative.rounded-md.max-w-xs
-         [:input#.form-input.is-small
-          {:autoFocus true
-           :on-change (fn [e]
-                        (reset! email (util/evalue e)))}]]]]
-      (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-email! @email)))
-
-      [:hr]
-
-      [:span.pl-1.opacity-70 "Git commit requires the email address."]]]))
-
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -385,7 +361,8 @@
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
 (defn journal-row [t enable-journals?]
-  [(toggle "enable_journals"
+  [:span
+   (toggle "enable_journals"
            (t :settings-page/enable-journals)
            enable-journals?
            (fn []
@@ -602,7 +579,8 @@
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
      (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
-       (shortcut-tooltip-row t enable-shortcut-tooltip?)
+       (shortcut-tooltip-row t enable-shortcut-tooltip?))
+     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)

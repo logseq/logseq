@@ -2,6 +2,8 @@
   (:refer-clojure :exclude [get set remove])
   (:require [cljs.reader :as reader]
             [datascript.transit :as dt]
+            [frontend.spec.storage :as storage-spec]
+            [cljs.spec.alpha :as s]
             [frontend.util :as util]))
 
 ;; TODO: refactor: separate side effects
@@ -12,6 +14,10 @@
 
 (defn set
   [key value]
+  ;; Prevent invalid data from being saved into storage
+  (s/assert ::storage-spec/local-storage
+            ;; Translate key to keyword for spec as not all keys are keywords
+            {(keyword key) value})
   (when-not util/node-test?
     (.setItem ^js js/localStorage (name key) (pr-str value))))
 

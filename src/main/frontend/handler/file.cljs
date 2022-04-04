@@ -21,7 +21,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.debug :as debug]
             [frontend.mobile.util :as mobile]
             [clojure.set :as set]))
 
@@ -131,7 +130,7 @@
 
                 (and (mobile/native-android?) (not= "/" (first file)))
                 file
-                
+
                 (and (mobile/native-ios?) (not= "/" (first file)))
                 file
 
@@ -244,7 +243,6 @@
                           (-> (p/let [_ (or
                                          (util/electron?)
                                          (nfs/check-directory-permission! repo))]
-                                (debug/set-ack-step! path :write-file)
                                 (fs/write-file! repo (config/get-repo-dir repo) path content
                                                 {:old-content original-content}))
                               (p/catch (fn [error]
@@ -298,12 +296,7 @@
   []
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
-      (let [args (async/<! chan)
-            files (second args)]
-
-        (doseq [path (map first files)]
-          (debug/set-ack-step! path :start-write-file))
-
+      (let [args (async/<! chan)]
         ;; return a channel
         (try
           (<p! (apply alter-files-handler! args))

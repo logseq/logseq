@@ -1,6 +1,6 @@
 import { Page, Locator } from 'playwright'
 import { expect } from '@playwright/test'
-import process from 'process'
+import * as process from 'process'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -28,7 +28,7 @@ export async function createRandomPage(page: Page) {
   // Click text=/.*New page: "new page".*/
   await page.click('text=/.*New page: ".*/')
   // wait for textarea of first block
-  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
   return randomTitle;
 }
@@ -40,7 +40,7 @@ export async function createPage(page: Page, page_name: string) {// Click #searc
   // Click text=/.*New page: "new page".*/
   await page.click('text=/.*New page: ".*/')
   // wait for textarea of first block
-  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
   return page_name;
 }
@@ -59,26 +59,30 @@ export async function searchAndJumpToPage(page: Page, pageTitle: string) {
 * @param page The Playwright Page object.
 * @returns The locator of the last block.
 */
-export async function lastInnerBlock(page: Page): Promise<Locator> {
-  // discard any popups
-  await page.keyboard.press('Escape')
-  // click last block
-  await page.waitForSelector('.page-blocks-inner .ls-block >> nth=-1')
-  await page.click('.page-blocks-inner .ls-block >> nth=-1')
-  // wait for textarea
-  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
-  return page.locator(':nth-match(textarea, 1)')
-}
-
 export async function lastBlock(page: Page): Promise<Locator> {
   // discard any popups
   await page.keyboard.press('Escape')
   // click last block
-  await page.click('.ls-block >> nth=-1')
+  if (await page.locator('text="Click here to edit..."').isVisible()) {
+    await page.click('text="Click here to edit..."')
+  } else {
+    await page.click('.page-blocks-inner .ls-block >> nth=-1')
+  }
   // wait for textarea
-  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
+  await page.waitForTimeout(100)
+  return page.locator('textarea >> nth=0')
+}
 
-  return page.locator(':nth-match(textarea, 1)')
+/**
+ * Press Enter and create the next block.
+ * @param page The Playwright Page object.
+ */
+export async function enterNextBlock(page: Page): Promise<Locator> {
+  let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
+  await page.press('textarea >> nth=0', 'Enter')
+  await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible' })
+  return page.locator('textarea >> nth=0')
 }
 
 /**
@@ -87,17 +91,18 @@ export async function lastBlock(page: Page): Promise<Locator> {
 * @returns The locator of the last block
 */
 export async function newInnerBlock(page: Page): Promise<Locator> {
-  await lastInnerBlock(page)
-  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await lastBlock(page)
+  await page.press('textarea >> nth=0', 'Enter')
 
-  return page.locator(':nth-match(textarea, 1)')
+  return page.locator('textarea >> nth=0')
 }
 
 export async function newBlock(page: Page): Promise<Locator> {
-  await lastBlock(page)
-  await page.press(':nth-match(textarea, 1)', 'Enter')
-
-  return page.locator(':nth-match(textarea, 1)')
+  let blockNumber = await page.locator('.page-blocks-inner .ls-block').count()
+  const prev = await lastBlock(page)
+  await page.press('textarea >> nth=0', 'Enter')
+  await page.waitForSelector(`.page-blocks-inner .ls-block >> nth=${blockNumber} >> textarea`, { state: 'visible' })
+  return page.locator('textarea >> nth=0')
 }
 
 export async function escapeToCodeEditor(page: Page): Promise<void> {
@@ -135,27 +140,41 @@ export async function setMockedOpenDirPath(
   )
 }
 
+export async function openLeftSidebar(page: Page): Promise<void> {
+  let sidebar = page.locator('#left-sidebar')
+
+  // Left sidebar is toggled by `is-open` class
+  if (!/is-open/.test(await sidebar.getAttribute('class'))) {
+    await page.click('#left-menu.button')
+    await page.waitForTimeout(10)
+    await expect(sidebar).toHaveClass(/is-open/)
+  }
+}
+
 export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
   await setMockedOpenDirPath(page, path);
 
-  await page.click('#left-menu.button')
-  const hasOpenButton = await page.$('#head >> .button >> text=Open')
+  const onboardingOpenButton = page.locator('strong:has-text("Choose a folder")')
 
-  if (hasOpenButton) {
-    await page.click('#head >> .button >> text=Open')
+  if (await onboardingOpenButton.isVisible()) {
+    await onboardingOpenButton.click()
   } else {
+    await page.click('#left-menu.button')
     let sidebar = page.locator('#left-sidebar')
     if (!/is-open/.test(await sidebar.getAttribute('class'))) {
       await page.click('#left-menu.button')
-      expect(await sidebar.getAttribute('class')).toMatch(/is-open/)
+      await expect(sidebar).toHaveClass(/is-open/)
     }
 
     await page.click('#left-sidebar #repo-switch');
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('h1:has-text("Open a local directory")', { state: 'visible' })
-    await page.click('h1:has-text("Open a local directory")')
+    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.click('strong:has-text("Choose a folder")')
+
+    const skip = page.locator('a:has-text("Skip")')
+    await skip.click()
   }
 
   setMockedOpenDirPath(page, ''); // reset it
@@ -165,7 +184,12 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     timeout: 1000 * 60 * 5,
   })
 
-  await page.waitForFunction('window.document.title != "Loading"')
+  const title = await page.title()
+  if (title === "Import data into Logseq" || title === "Add another repo") {
+    await page.click('a.button >> text=Skip')
+  }
+
+  await page.waitForFunction('window.document.title === "Logseq"')
 
   console.log('Graph loaded for ' + path)
 }

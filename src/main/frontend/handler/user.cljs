@@ -7,24 +7,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p])
-  (:import [goog.format EmailAddress]))
-
-(defn email? [v]
-  (and v
-       (.isValid (EmailAddress. v))))
-
-(defn set-email!
-  [email]
-  (when (email? email)
-    (util/post (str config/api "email")
-               {:email email}
-               (fn [_result]
-                 (db/transact! [{:me/email email}])
-                 (swap! state/state assoc-in [:me :email] email))
-               (fn [_error]
-                 (notification/show! "Email already exists!"
-                                     :error)))))
+            [promesa.core :as p]))
 
 (defn set-cors!
   [cors-proxy]

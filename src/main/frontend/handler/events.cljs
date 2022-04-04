@@ -75,10 +75,14 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :graph/added [[_ repo]]
+(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
-  (db/persist! repo))
+  (db/persist! repo)
+  (when (state/setups-picker?)
+    (if empty-graph?
+      (route-handler/redirect! {:to :import :query-params {:from "picker"}})
+      (route-handler/redirect-to-home!))))
 
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
@@ -105,7 +109,7 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo) 
+  (p/let [current-repo (state/get-current-repo)
           _ (repo-handler/persist-db! current-repo persist-db-noti-m)
           _ (repo-handler/persist-otherwindow-db! graph)
           _ (repo-handler/restore-and-setup-repo! graph)]

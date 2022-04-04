@@ -112,15 +112,12 @@
      :editor/show-zotero                    false
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
-     ;; This key is not currently used but may be useful later?
-     :editor/last-edit-block-input-id       nil
      :editor/in-composition?                false
      :editor/content                        {}
      :editor/block                          nil
      :editor/block-dom-id                   nil
      :editor/set-timestamp-block            nil
      :editor/last-input-time                nil
-     :editor/pos                            nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
      :editor/on-paste?                      false
@@ -208,8 +205,7 @@
      :srs/mode?                             false
 
      :srs/cards-due-count                   nil
-
-     :reactive/query-dbs                    {}})))
+     })))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -244,6 +240,10 @@
 (defn home?
   []
   (= :home (get-current-route)))
+
+(defn setups-picker?
+  []
+  (= :repo-add (get-current-route)))
 
 (defn get-current-page
   []
@@ -523,16 +523,7 @@
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
      (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value)))
-     ;; followers
-     ;; (when-let [s (util/extract-uuid input-id)]
-     ;;   (let [input (gdom/getElement input-id)
-     ;;         leader-parent (util/rec-get-block-node input)
-     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-     ;;                        (remove #(= leader-parent %)))]
-     ;;     (prn "followers: " (count followers))
-     ;;     ))
-     )))
+                                      (assoc m input-id value))))))
 
 (defn get-edit-input-id
   []
@@ -635,6 +626,19 @@
 (defn set-editor-show-zotero!
   [value]
   (set-state! :editor/show-zotero value))
+
+;; TODO: refactor, use one state
+(defn clear-editor-show-state!
+  []
+  (swap! state (fn [state]
+                 (assoc state
+                        :editor/show-input nil
+                        :editor/show-zotero false
+                        :editor/show-date-picker? false
+                        :editor/show-block-search? false
+                        :editor/show-template-search? false
+                        :editor/show-page-search? false
+                        :editor/show-page-search-hashtag? false))))
 
 (defn set-edit-input-id!
   [input-id]
@@ -825,6 +829,10 @@
   []
   (and @publishing? (:publishing/enable-editing? (get-config))))
 
+(defn enable-editing?
+  []
+  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
+
 (defn set-editing!
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
@@ -845,22 +853,16 @@
                 (-> state
                     (assoc-in [:editor/content edit-input-id] content)
                     (assoc
-                      :editor/block block
-                      :editor/editing? {edit-input-id true}
-                      :editor/last-edit-block-input-id edit-input-id
-                      :editor/last-edit-block block
-                      :editor/last-key-code nil
-                      :cursor-range cursor-range))))
-
+                     :editor/block block
+                     :editor/editing? {edit-input-id true}
+                     :editor/last-edit-block block
+                     :editor/last-key-code nil
+                     :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
          (let [pos (count cursor-range)]
            (when content
-             (util/set-change-value input content)
-             ;; FIXME
-             ;; use set-change-value for now
-             ;; until somebody can figure out why set! value doesn't work here
-             ;; it seems to me textarea autoresize is completely broken
-             #_(set! (.-value input) (string/trim content)))
+             (util/set-change-value input content))
+
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 
@@ -871,7 +873,8 @@
   []
   (swap! state merge {:editor/editing? nil
                       :editor/block    nil
-                      :cursor-range    nil}))
+                      :cursor-range    nil
+                      :editor/last-saved-cursor nil}))
 
 (defn into-code-editor-mode!
   []
@@ -879,9 +882,17 @@
                       :cursor-range      nil
                       :editor/code-mode? true}))
 
-(defn set-last-pos!
+(defn set-editor-last-pos!
   [new-pos]
   (set-state! :editor/last-saved-cursor new-pos))
+
+(defn clear-editor-last-pos!
+  []
+  (set-state! :editor/last-saved-cursor nil))
+
+(defn get-editor-last-pos
+  []
+  (:editor/last-saved-cursor @state))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
@@ -1628,20 +1639,12 @@
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
 
-(defn get-reactive-query-db
-  [ks]
-  (get-in @state [:reactive/query-dbs ks]))
-
-(defn delete-reactive-query-db!
-  [ks]
-  (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
-
-(defn set-reactive-query-db!
-  [ks db-value]
-  (if db-value
-    (set-state! [:reactive/query-dbs ks] db-value)
-    (delete-reactive-query-db! ks)))
-
 (defn get-modal-id
   []
   (:modal/id @state))
+
+(defn edit-in-query-component
+  []
+  (and (editing?)
+       ;; config
+       (:custom-query? (last (get-editor-args)))))

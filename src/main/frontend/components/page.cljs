@@ -44,14 +44,13 @@
 (defn- get-blocks
   [repo page-name block-id]
   (when page-name
-    (if block-id
-      (when-let [root-block (db/pull [:block/uuid block-id])]
-        (let [blocks (-> (db/sub-block-and-children repo block-id)
-                         (model/sort-blocks root-block {}))]
-          (cons root-block blocks)))
-      (when-let [page (db/pull [:block/name (util/safe-page-name-sanity-lc page-name)])]
-        (-> (db/get-page-blocks repo page-name)
-            (model/sort-blocks page {}))))))
+    (let [root (if block-id
+                 (db/pull [:block/uuid block-id])
+                 (model/get-page page-name))
+          opts (if block-id
+                 {:scoped-block-id (:db/id root)}
+                 {})]
+      (db/get-paginated-blocks repo (:db/id root) opts))))
 
 (defn- open-first-block!
   [state]
@@ -118,11 +117,14 @@
       (if (empty? page-blocks)
         (dummy-block page-name)
         (let [document-mode? (state/sub :document/mode?)
+              block-entity (db/entity (if block-id
+                                       [:block/uuid block-id]
+                                       [:block/name page-name]))
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
+                              :db/id (:db/id block-entity)
                               :block? block?
                               :editor-box editor/box
-                              :page page
                               :document/mode? document-mode?}
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
@@ -147,15 +149,13 @@
       (when (seq queries)
         [:div#today-queries.mt-10
          (for [query queries]
-           (ui/catch-error
-            (rum/with-key
+           (rum/with-key
+             (ui/catch-error
               (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (str repo "-custom-query-" (:query query)))
-            (rum/with-key
               (block/custom-query {:attr {:class "mt-10"}
                                    :editor-box editor/box
-                                   :page page} query)
-              (str repo "-custom-query-" (:query query)))))]))))
+                                   :page page} query))
+             (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
   [repo tag]

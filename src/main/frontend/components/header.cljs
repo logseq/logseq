@@ -8,12 +8,10 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.web.nfs :as nfs]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -72,7 +70,7 @@
         {:on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
-      [(when-not (state/publishing-enable-editing?)
+      [(when (state/enable-editing?)
          {:title (t :settings)
           :options {:on-click state/open-settings!}
           :icon (ui/icon "settings")})
@@ -92,7 +90,7 @@
           :options {:on-click #(state/set-modal! export/export)}
           :icon (ui/icon "database-export")})
 
-       (when current-repo
+       (when (and current-repo (state/enable-editing?))
          {:title (t :import)
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
@@ -204,17 +202,16 @@
         (back-and-forward))
 
       (new-block-mode)
-      
+
       (repo/sync-status current-repo)
 
       (when show-open-folder?
-        [:a.text-sm.font-medium.button
-         {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
-         [:div.flex.flex-row.text-center.open-button__inner.items-center
-          (ui/icon "folder-plus")
-          (when-not config/mobile?
-            [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-             (t :open)])]])
+        [:a.text-sm.font-medium.button.add-graph-btn.flex.items-center
+         {:on-click #(route-handler/redirect! {:to :repo-add})}
+         (ui/icon "folder-plus")
+         (when-not config/mobile?
+           [:strong {:style {:margin-top (if electron-mac? 0 2)}}
+            (t :on-boarding/add-graph)])])
 
       (when config/publishing?
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}

@@ -177,7 +177,8 @@
   (into {} (remove (comp nil? second)) nm))
 
 (defn ext-of-image? [s]
-  (some #(string/ends-with? s %)
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
         [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
@@ -1054,12 +1055,6 @@
   [page]
   (or (:block/original-name page)
       (:block/name page)))
-
-(defn lowercase-first
-  [s]
-  (when s
-    (str (string/lower-case (.charAt s 0))
-         (subs s 1))))
 
 #?(:cljs
    (defn add-style!

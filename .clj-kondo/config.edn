@@ -14,6 +14,7 @@
              datascript.transit dt
              datascript.db ddb
              lambdaisland.glogi log
+             medley.core medley
              frontend.db.query-dsl query-dsl
              frontend.db.react react
              frontend.db.query-react query-react}}}
