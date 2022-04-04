@@ -1,0 +1,3 @@
+{
+  "libs/**/*.(j|t)s": "prettier --write"
+}

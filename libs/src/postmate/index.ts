@@ -27,7 +27,7 @@ export const generateNewMessageId = () => ++_messageId
 /**
  * Postmate logging function that enables/disables via config
  */
-export const log = (...args) => Postmate.debug ? console.log(...args) : null
+export const log = (...args) => (Postmate.debug ? console.log(...args) : null)
 
 /**
  * Takes a URL and returns the origin
@@ -38,7 +38,11 @@ export const resolveOrigin = (url) => {
   const a = document.createElement('a')
   a.href = url
   const protocol = a.protocol.length > 4 ? a.protocol : window.location.protocol
-  const host = a.host.length ? ((a.port === '80' || a.port === '443') ? a.hostname : a.host) : window.location.host
+  const host = a.host.length
+    ? a.port === '80' || a.port === '443'
+      ? a.hostname
+      : a.host
+    : window.location.host
   return a.origin || `${protocol}//${host}`
 }
 
@@ -58,15 +62,11 @@ const messageTypes = {
  * @return {Boolean}
  */
 export const sanitize = (message, allowedOrigin) => {
-  if (
-    typeof allowedOrigin === 'string' &&
-    message.origin !== allowedOrigin
-  ) return false
+  if (typeof allowedOrigin === 'string' && message.origin !== allowedOrigin)
+    return false
   if (!message.data) return false
-  if (
-    typeof message.data === 'object' &&
-    !('postmate' in message.data)
-  ) return false
+  if (typeof message.data === 'object' && !('postmate' in message.data))
+    return false
   if (message.data.type !== messageType) return false
   if (!messageTypes[message.data.postmate]) return false
   return true
@@ -80,8 +80,8 @@ export const sanitize = (message, allowedOrigin) => {
  * @return {Promise}
  */
 export const resolveValue = (model, property) => {
-  const unwrappedContext = typeof model[property] === 'function'
-    ? model[property]() : model[property]
+  const unwrappedContext =
+    typeof model[property] === 'function' ? model[property]() : model[property]
   return Promise.resolve(unwrappedContext)
 }
 
@@ -97,7 +97,7 @@ export class ParentAPI {
   public childOrigin: string
   public listener: (e: any) => void
 
-  constructor (info: Postmate) {
+  constructor(info: Postmate) {
     this.parent = info.parent
     this.frame = info.frame
     this.child = info.child
@@ -114,14 +114,14 @@ export class ParentAPI {
       /**
        * the assignments below ensures that e, data, and value are all defined
        */
-      const { data, name } = (((e || {}).data || {}).value || {})
+      const { data, name } = ((e || {}).data || {}).value || {}
 
       if (e.data.postmate === 'emit') {
         if (process.env.NODE_ENV !== 'production') {
           log(`Parent: Received event emission: ${name}`)
         }
         if (name in this.events) {
-          this.events[name].forEach(callback => {
+          this.events[name].forEach((callback) => {
             callback.call(this, data)
           })
         }
@@ -134,7 +134,7 @@ export class ParentAPI {
     }
   }
 
-  get (property) {
+  get(property) {
     return new Promise((resolve) => {
       // Extract data from response and kill listeners
       const uid = generateNewMessageId()
@@ -149,33 +149,39 @@ export class ParentAPI {
       this.parent.addEventListener('message', transact, false)
 
       // Then ask child for information
-      this.child.postMessage({
-        postmate: 'request',
-        type: messageType,
-        property,
-        uid,
-      }, this.childOrigin)
+      this.child.postMessage(
+        {
+          postmate: 'request',
+          type: messageType,
+          property,
+          uid,
+        },
+        this.childOrigin
+      )
     })
   }
 
-  call (property, data) {
+  call(property, data) {
     // Send information to the child
-    this.child.postMessage({
-      postmate: 'call',
-      type: messageType,
-      property,
-      data,
-    }, this.childOrigin)
+    this.child.postMessage(
+      {
+        postmate: 'call',
+        type: messageType,
+        property,
+        data,
+      },
+      this.childOrigin
+    )
   }
 
-  on (eventName, callback) {
+  on(eventName, callback) {
     if (!this.events[eventName]) {
       this.events[eventName] = []
     }
     this.events[eventName].push(callback)
   }
 
-  destroy () {
+  destroy() {
     if (process.env.NODE_ENV !== 'production') {
       log('Parent: Destroying Postmate instance')
     }
@@ -194,7 +200,7 @@ export class ChildAPI {
   private parentOrigin: string
   private child: Window
 
-  constructor (info: Model) {
+  constructor(info: Model) {
     this.model = info.model
     this.parent = info.parent
     this.parentOrigin = info.parentOrigin
@@ -215,38 +221,46 @@ export class ChildAPI {
       const { property, uid, data } = e.data
 
       if (e.data.postmate === 'call') {
-        if (property in this.model && typeof this.model[property] === 'function') {
+        if (
+          property in this.model &&
+          typeof this.model[property] === 'function'
+        ) {
           this.model[property](data)
         }
         return
       }
 
       // Reply to Parent
-      resolveValue(this.model, property)
-        .then(value => {
-          (e.source as WindowProxy).postMessage({
+      resolveValue(this.model, property).then((value) => {
+        ;(e.source as WindowProxy).postMessage(
+          {
             property,
             postmate: 'reply',
             type: messageType,
             uid,
             value,
-          }, e.origin)
-        })
+          },
+          e.origin
+        )
+      })
     })
   }
 
-  emit (name, data) {
+  emit(name, data) {
     if (process.env.NODE_ENV !== 'production') {
       log(`Child: Emitting Event "${name}"`, data)
     }
-    this.parent.postMessage({
-      postmate: 'emit',
-      type: messageType,
-      value: {
-        name,
-        data,
+    this.parent.postMessage(
+      {
+        postmate: 'emit',
+        type: messageType,
+        value: {
+          name,
+          data,
+        },
       },
-    }, this.parentOrigin)
+      this.parentOrigin
+    )
   }
 }
 
@@ -276,14 +290,17 @@ export class Postmate {
   /**
    * @param opts
    */
-  constructor (opts: PostMateOptions) {
+  constructor(opts: PostMateOptions) {
     this.container = opts.container
     this.url = opts.url
     this.parent = window
     this.frame = document.createElement('iframe')
     if (opts.id) this.frame.id = opts.id
     if (opts.name) this.frame.name = opts.name
-    this.frame.classList.add.apply(this.frame.classList, opts.classListArray || [])
+    this.frame.classList.add.apply(
+      this.frame.classList,
+      opts.classListArray || []
+    )
     this.container.appendChild(this.frame)
     this.child = this.frame.contentWindow
     this.model = opts.model || {}
@@ -294,7 +311,7 @@ export class Postmate {
    * @param  {String} url The URL to send a handshake request to
    * @return {Promise}     Promise that resolves when the handshake is complete
    */
-  sendHandshake (url?: string) {
+  sendHandshake(url?: string) {
     url = url || this.url
     const childOrigin = resolveOrigin(url)
     let attempt = 0
@@ -330,11 +347,14 @@ export class Postmate {
         if (process.env.NODE_ENV !== 'production') {
           log(`Parent: Sending handshake attempt ${attempt}`, { childOrigin })
         }
-        this.child.postMessage({
-          postmate: 'handshake',
-          type: messageType,
-          model: this.model,
-        }, childOrigin)
+        this.child.postMessage(
+          {
+            postmate: 'handshake',
+            type: messageType,
+            model: this.model,
+          },
+          childOrigin
+        )
 
         if (attempt === maxHandshakeRequests) {
           clearInterval(responseInterval)
@@ -370,7 +390,7 @@ export class Model {
    * @param {Object} model Hash of values, functions, or promises
    * @return {Promise}       The Promise that resolves when the handshake has been received
    */
-  constructor (model) {
+  constructor(model) {
     this.child = window
     this.model = model
     this.parent = this.child.parent
@@ -380,7 +400,7 @@ export class Model {
    * Responds to a handshake initiated by the Parent
    * @return {Promise} Resolves an object that exposes an API for the Child
    */
-  sendHandshakeReply () {
+  sendHandshakeReply() {
     return new Promise((resolve, reject) => {
       const shake = (e: MessageEvent<any>) => {
         if (!e.data.postmate) {
@@ -394,16 +414,19 @@ export class Model {
           if (process.env.NODE_ENV !== 'production') {
             log('Child: Sending handshake reply to Parent')
           }
-          (e.source as WindowProxy).postMessage({
-            postmate: 'handshake-reply',
-            type: messageType,
-          }, e.origin)
+          ;(e.source as WindowProxy).postMessage(
+            {
+              postmate: 'handshake-reply',
+              type: messageType,
+            },
+            e.origin
+          )
           this.parentOrigin = e.origin
 
           // Extend model with the one provided by the parent
           const defaults = e.data.model
           if (defaults) {
-            Object.keys(defaults).forEach(key => {
+            Object.keys(defaults).forEach((key) => {
               this.model[key] = defaults[key]
             })
             if (process.env.NODE_ENV !== 'production') {

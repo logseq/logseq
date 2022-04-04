@@ -33,14 +33,16 @@ class LSPluginCaller extends EventEmitter {
   private _status?: 'pending' | 'timeout'
   private _userModel: any = {}
 
-  private _call?: (type: string, payload: any, actor?: DeferredActor) => Promise<any>
+  private _call?: (
+    type: string,
+    payload: any,
+    actor?: DeferredActor
+  ) => Promise<any>
   private _callUserModel?: (type: string, payload: any) => Promise<any>
 
   private _debugTag = ''
 
-  constructor (
-    private _pluginLocal: PluginLocal | null
-  ) {
+  constructor(private _pluginLocal: PluginLocal | null) {
     super()
 
     if (_pluginLocal) {
@@ -48,7 +50,7 @@ class LSPluginCaller extends EventEmitter {
     }
   }
 
-  async connectToChild () {
+  async connectToChild() {
     if (this._connected) return
 
     const { shadow } = this._pluginLocal!
@@ -61,7 +63,7 @@ class LSPluginCaller extends EventEmitter {
   }
 
   // run in sandbox
-  async connectToParent (userModel = {}) {
+  async connectToParent(userModel = {}) {
     if (this._connected) return
 
     const caller = this
@@ -75,7 +77,13 @@ class LSPluginCaller extends EventEmitter {
     const model: any = this._extendUserModel({
       [LSPMSG_READY]: async (baseInfo) => {
         // dynamically setup common msg handler
-        model[LSPMSGFn(baseInfo?.pid)] = ({ type, payload }: { type: string, payload: any }) => {
+        model[LSPMSGFn(baseInfo?.pid)] = ({
+          type,
+          payload,
+        }: {
+          type: string
+          payload: any
+        }) => {
           debug(`[call from host (_call)] ${this._debugTag}`, type, payload)
           // host._call without async
           caller.emit(type, payload)
@@ -123,7 +131,7 @@ class LSPluginCaller extends EventEmitter {
         }
       },
 
-      ...userModel
+      ...userModel,
     })
 
     if (isShadowMode) {
@@ -136,73 +144,77 @@ class LSPluginCaller extends EventEmitter {
 
     this._status = 'pending'
 
-    await handshake.then((refParent: ChildAPI) => {
-      this._child = refParent
-      this._connected = true
+    await handshake
+      .then((refParent: ChildAPI) => {
+        this._child = refParent
+        this._connected = true
 
-      this._call = async (type, payload = {}, actor) => {
-        if (actor) {
-          const tag = ++syncTag
-          syncActors.set(tag, actor)
-          payload._sync = tag
+        this._call = async (type, payload = {}, actor) => {
+          if (actor) {
+            const tag = ++syncTag
+            syncActors.set(tag, actor)
+            payload._sync = tag
 
-          actor.setTag(`async call #${tag}`)
-          debug('async call #', tag)
+            actor.setTag(`async call #${tag}`)
+            debug('async call #', tag)
+          }
+
+          refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
+
+          return actor?.promise as Promise<any>
         }
 
-        refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
-
-        return actor?.promise as Promise<any>
-      }
-
-      this._callUserModel = async (type, payload) => {
-        try {
-          model[type](payload)
-        } catch (e) {
-          debug(`[model method] #${type} not existed`)
-        }
-      }
-
-      // actors GC
-      syncGCTimer = setInterval(() => {
-        if (syncActors.size > 100) {
-          for (const [k, v] of syncActors) {
-            if (v.settled) {
-              syncActors.delete(k)
-            }
+        this._callUserModel = async (type, payload) => {
+          try {
+            model[type](payload)
+          } catch (e) {
+            debug(`[model method] #${type} not existed`)
           }
         }
-      }, 1000 * 60 * 30)
-    }).finally(() => {
-      this._status = undefined
-    })
+
+        // actors GC
+        syncGCTimer = setInterval(() => {
+          if (syncActors.size > 100) {
+            for (const [k, v] of syncActors) {
+              if (v.settled) {
+                syncActors.delete(k)
+              }
+            }
+          }
+        }, 1000 * 60 * 30)
+      })
+      .finally(() => {
+        this._status = undefined
+      })
 
     await readyDeferred.promise
 
     return model.baseInfo
   }
 
-  async call (type: any, payload: any = {}) {
+  async call(type: any, payload: any = {}) {
     return this._call?.call(this, type, payload)
   }
 
-  async callAsync (type: any, payload: any = {}) {
+  async callAsync(type: any, payload: any = {}) {
     const actor = deferred(1000 * 10)
     return this._call?.call(this, type, payload, actor)
   }
 
-  async callUserModel (type: string, payload: any = {}) {
+  async callUserModel(type: string, payload: any = {}) {
     return this._callUserModel?.call(this, type, payload)
   }
 
   // run in host
-  async _setupIframeSandbox () {
+  async _setupIframeSandbox() {
     const pl = this._pluginLocal!
     const id = pl.id
     const url = new URL(pl.options.entry!)
 
-    url.searchParams
-      .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
+    url.searchParams.set(
+      `__v__`,
+      IS_DEV ? Date.now().toString() : pl.options.version
+    )
 
     // clear zombie sandbox
     const zb = document.querySelector(`#${id}`)
@@ -219,20 +231,24 @@ class LSPluginCaller extends EventEmitter {
         cnt.dataset.inited_layout = 'true'
         const { width, height, left, top } = mainLayoutInfo
         Object.assign(cnt.style, {
-          width: width + 'px', height: height + 'px',
-          left: left + 'px', top: top + 'px'
+          width: width + 'px',
+          height: height + 'px',
+          left: left + 'px',
+          top: top + 'px',
         })
       }
     } catch (e) {
-      console.error("[Restore Layout Error]", e)
+      console.error('[Restore Layout Error]', e)
     }
 
     document.body.appendChild(cnt)
 
     const pt = new Postmate({
-      id: id + '_iframe', container: cnt, url: url.href,
+      id: id + '_iframe',
+      container: cnt,
+      url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
-      model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) }
+      model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
     })
 
     let handshake = pt.sendHandshake()
@@ -246,52 +262,58 @@ class LSPluginCaller extends EventEmitter {
         reject(new Error(`handshake Timeout`))
       }, 3 * 1000) // 3secs
 
-      handshake.then((refChild: ParentAPI) => {
-        this._parent = refChild
-        this._connected = true
-        this.emit('connected')
+      handshake
+        .then((refChild: ParentAPI) => {
+          this._parent = refChild
+          this._connected = true
+          this.emit('connected')
 
-        refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
-          debug(`[call from plugin] `, type, payload)
+          refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
+            debug(`[call from plugin] `, type, payload)
 
-          this._pluginLocal?.emit(type, payload || {})
-        })
-
-        this._call = async (...args: any) => {
-          // parent all will get message before handshaked
-          await refChild.call(LSPMSGFn(pl.id), {
-            type: args[0], payload: Object.assign(args[1] || {}, {
-              $$pid: pl.id
-            })
+            this._pluginLocal?.emit(type, payload || {})
           })
-        }
 
-        this._callUserModel = async (type, payload: any) => {
-          if (type.startsWith(FLAG_AWAIT)) {
-            // TODO: attach payload with method call
-            return await refChild.get(type.replace(FLAG_AWAIT, ''))
-          } else {
-            refChild.call(type, payload)
+          this._call = async (...args: any) => {
+            // parent all will get message before handshaked
+            await refChild.call(LSPMSGFn(pl.id), {
+              type: args[0],
+              payload: Object.assign(args[1] || {}, {
+                $$pid: pl.id,
+              }),
+            })
           }
-        }
 
-        resolve(null)
-      }).catch(e => {
-        reject(e)
-      }).finally(() => {
-        clearTimeout(timer)
-      })
-    }).catch(e => {
-      debug('[iframe sandbox] error', e)
-      throw e
-    }).finally(() => {
-      this._status = undefined
+          this._callUserModel = async (type, payload: any) => {
+            if (type.startsWith(FLAG_AWAIT)) {
+              // TODO: attach payload with method call
+              return await refChild.get(type.replace(FLAG_AWAIT, ''))
+            } else {
+              refChild.call(type, payload)
+            }
+          }
+
+          resolve(null)
+        })
+        .catch((e) => {
+          reject(e)
+        })
+        .finally(() => {
+          clearTimeout(timer)
+        })
     })
+      .catch((e) => {
+        debug('[iframe sandbox] error', e)
+        throw e
+      })
+      .finally(() => {
+        this._status = undefined
+      })
   }
 
-  async _setupShadowSandbox () {
+  async _setupShadowSandbox() {
     const pl = this._pluginLocal!
-    const shadow = this._shadow = new LSPluginShadowFrame(pl)
+    const shadow = (this._shadow = new LSPluginShadowFrame(pl))
 
     try {
       this._status = 'pending'
@@ -305,9 +327,12 @@ class LSPluginCaller extends EventEmitter {
         actor && (payload.actor = actor)
 
         // @ts-ignore Call in same thread
-        this._pluginLocal?.emit(type, Object.assign(payload, {
-          $$pid: pl.id
-        }))
+        this._pluginLocal?.emit(
+          type,
+          Object.assign(payload, {
+            $$pid: pl.id,
+          })
+        )
 
         return actor?.promise
       }
@@ -334,31 +359,31 @@ class LSPluginCaller extends EventEmitter {
     }
   }
 
-  _extendUserModel (model: any) {
+  _extendUserModel(model: any) {
     return Object.assign(this._userModel, model)
   }
 
-  _getSandboxIframeContainer () {
+  _getSandboxIframeContainer() {
     return this._parent?.frame.parentNode as HTMLDivElement
   }
 
-  _getSandboxShadowContainer () {
+  _getSandboxShadowContainer() {
     return this._shadow?.frame.parentNode as HTMLDivElement
   }
 
-  _getSandboxIframeRoot () {
+  _getSandboxIframeRoot() {
     return this._parent?.frame
   }
 
-  _getSandboxShadowRoot () {
+  _getSandboxShadowRoot() {
     return this._shadow?.frame
   }
 
-  set debugTag (value: string) {
+  set debugTag(value: string) {
     this._debugTag = value
   }
 
-  async destroy () {
+  async destroy() {
     let root: HTMLElement = null
     if (this._parent) {
       root = this._getSandboxIframeContainer()
@@ -374,6 +399,4 @@ class LSPluginCaller extends EventEmitter {
   }
 }
 
-export {
-  LSPluginCaller
-}
+export { LSPluginCaller }

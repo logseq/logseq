@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify'
 import { merge } from 'lodash-es'
 
 interface IObject {
-  [key: string]: any;
+  [key: string]: any
 }
 
 declare global {
@@ -16,7 +16,8 @@ declare global {
   }
 }
 
-export const path = navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
+export const path =
+  navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
 export const IS_DEV = process.env.NODE_ENV === 'development'
 export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
@@ -24,17 +25,18 @@ export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
 let _appPathRoot
 
-export async function getAppPathRoot (): Promise<string> {
+export async function getAppPathRoot(): Promise<string> {
   if (_appPathRoot) {
     return _appPathRoot
   }
 
-  return (_appPathRoot =
-      await invokeHostExportedApi('_callApplication', 'getAppPath')
-  )
+  return (_appPathRoot = await invokeHostExportedApi(
+    '_callApplication',
+    'getAppPath'
+  ))
 }
 
-export async function getSDKPathRoot (): Promise<string> {
+export async function getSDKPathRoot(): Promise<string> {
   if (IS_DEV) {
     // TODO: cache in preference file
     return localStorage.getItem('LSP_DEV_SDK_ROOT') || 'http://localhost:8080'
@@ -45,24 +47,24 @@ export async function getSDKPathRoot (): Promise<string> {
   return safetyPathJoin(appPathRoot, 'js')
 }
 
-export function isObject (item: any) {
-  return (item === Object(item) && !Array.isArray(item))
+export function isObject(item: any) {
+  return item === Object(item) && !Array.isArray(item)
 }
 
 export const deepMerge = merge
 
-export function genID () {
+export function genID() {
   // Math.random should be unique because of its seeding algorithm.
   // Convert it to base 36 (numbers + letters), and grab the first 9 characters
   // after the decimal.
   return '_' + Math.random().toString(36).substr(2, 9)
 }
 
-export function ucFirst (str: string) {
+export function ucFirst(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-export function withFileProtocol (path: string) {
+export function withFileProtocol(path: string) {
   if (!path) return ''
   const reg = /^(http|file|lsp)/
 
@@ -73,7 +75,7 @@ export function withFileProtocol (path: string) {
   return path
 }
 
-export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
+export function safetyPathJoin(basePath: string, ...parts: Array<string>) {
   try {
     const url = new URL(basePath)
     if (!url.origin) throw new Error(null)
@@ -84,7 +86,7 @@ export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
   }
 }
 
-export function safetyPathNormalize (basePath: string) {
+export function safetyPathNormalize(basePath: string) {
   if (!basePath?.match(/^(http?|lsp|assets):/)) {
     basePath = path.normalize(basePath)
   }
@@ -95,7 +97,7 @@ export function safetyPathNormalize (basePath: string) {
  * @param timeout milliseconds
  * @param tag string
  */
-export function deferred<T = any> (timeout?: number, tag?: string) {
+export function deferred<T = any>(timeout?: number, tag?: string) {
   let resolve: any, reject: any
   let settled = false
   const timeFn = (r: Function) => {
@@ -112,33 +114,37 @@ export function deferred<T = any> (timeout?: number, tag?: string) {
 
     if (timeout) {
       // @ts-ignore
-      timeout = setTimeout(() => reject(new Error(`[deferred timeout] ${tag}`)), timeout)
+      timeout = setTimeout(
+        () => reject(new Error(`[deferred timeout] ${tag}`)),
+        timeout
+      )
     }
   })
 
   return {
     created: Date.now(),
-    setTag: (t: string) => tag = t,
-    resolve, reject, promise,
-    get settled () {
+    setTag: (t: string) => (tag = t),
+    resolve,
+    reject,
+    promise,
+    get settled() {
       return settled
-    }
+    },
   }
 }
 
-export function invokeHostExportedApi (
-  method: string,
-  ...args: Array<any>
-) {
-  method = method?.startsWith('_call') ? method :
-    method?.replace(/^[_$]+/, '')
+export function invokeHostExportedApi(method: string, ...args: Array<any>) {
+  method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
   // @ts-ignore
   const logseqHostExportedApi = window.logseq?.api || {}
 
-  const fn = logseqHostExportedApi[method1] || window.apis[method1] ||
-    logseqHostExportedApi[method] || window.apis[method]
+  const fn =
+    logseqHostExportedApi[method1] ||
+    window.apis[method1] ||
+    logseqHostExportedApi[method] ||
+    window.apis[method]
 
   if (!fn) {
     throw new Error(`Not existed method #${method}`)
@@ -146,7 +152,7 @@ export function invokeHostExportedApi (
   return typeof fn !== 'function' ? fn : fn.apply(null, args)
 }
 
-export function setupIframeSandbox (
+export function setupIframeSandbox(
   props: Record<string, any>,
   target: HTMLElement
 ) {
@@ -165,7 +171,7 @@ export function setupIframeSandbox (
   }
 }
 
-export function setupInjectedStyle (
+export function setupInjectedStyle(
   style: StyleString,
   attrs: Record<string, any>
 ) {
@@ -180,9 +186,10 @@ export function setupInjectedStyle (
   el = document.createElement('style')
   el.textContent = style
 
-  attrs && Object.entries(attrs).forEach(([k, v]) => {
-    el.setAttribute(k, v)
-  })
+  attrs &&
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
   document.head.append(el)
 
@@ -193,11 +200,11 @@ export function setupInjectedStyle (
 
 const injectedUIEffects = new Map<string, () => void>()
 
-export function setupInjectedUI (
+export function setupInjectedUI(
   this: PluginLocal,
   ui: UIOptions,
   attrs: Record<string, string>,
-  initialCallback?: (e: { el: HTMLElement, float: boolean }) => void
+  initialCallback?: (e: { el: HTMLElement; float: boolean }) => void
 ) {
   let slot: string = ''
   let selector: string
@@ -217,21 +224,32 @@ export function setupInjectedUI (
   const id = `${ui.key}-${slot}-${pl.id}`
   const key = `${ui.key}--${pl.id}`
 
-  const target = float ? document.body : (selector && document.querySelector(selector))
+  const target = float
+    ? document.body
+    : selector && document.querySelector(selector)
   if (!target) {
-    console.error(`${this.debugTag} can not resolve selector target ${selector}`)
+    console.error(
+      `${this.debugTag} can not resolve selector target ${selector}`
+    )
     return
   }
 
   if (ui.template) {
     // safe template
-    ui.template = DOMPurify.sanitize(
-      ui.template, {
-        ADD_TAGS: ['iframe'],
-        ALLOW_UNKNOWN_PROTOCOLS: true,
-        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling', 'target']
-      })
-  } else { // remove ui
+    ui.template = DOMPurify.sanitize(ui.template, {
+      ADD_TAGS: ['iframe'],
+      ALLOW_UNKNOWN_PROTOCOLS: true,
+      ADD_ATTR: [
+        'allow',
+        'src',
+        'allowfullscreen',
+        'frameborder',
+        'scrolling',
+        'target',
+      ],
+    })
+  } else {
+    // remove ui
     injectedUIEffects.get(id)?.call(null)
     return
   }
@@ -243,20 +261,23 @@ export function setupInjectedUI (
     content.innerHTML = ui.template
 
     // update attributes
-    attrs && Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+    attrs &&
+      Object.entries(attrs).forEach(([k, v]) => {
+        el.setAttribute(k, v)
+      })
 
     let positionDirty = el.dataset.dx != null
-    ui.style && Object.entries(ui.style).forEach(([k, v]) => {
-      if (positionDirty && [
-        'left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-      ) {
-        return
-      }
+    ui.style &&
+      Object.entries(ui.style).forEach(([k, v]) => {
+        if (
+          positionDirty &&
+          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+        ) {
+          return
+        }
 
-      el.style[k] = v
-    })
+        el.style[k] = v
+      })
     return
   }
 
@@ -275,13 +296,15 @@ export function setupInjectedUI (
   // TODO: enhance template
   content.innerHTML = ui.template
 
-  attrs && Object.entries(attrs).forEach(([k, v]) => {
-    el.setAttribute(k, v)
-  })
+  attrs &&
+    Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
-  ui.style && Object.entries(ui.style).forEach(([k, v]) => {
-    el.style[k] = v
-  })
+  ui.style &&
+    Object.entries(ui.style).forEach(([k, v]) => {
+      el.style[k] = v
+    })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -291,33 +314,54 @@ export function setupInjectedUI (
     el.setAttribute('resizable', 'true')
     ui.close && (el.dataset.close = ui.close)
     el.classList.add('lsp-ui-float-container', 'visible')
-    disposeFloat = (
-      pl._setupResizableContainer(el, key),
-        pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
+    disposeFloat =
+      (pl._setupResizableContainer(el, key),
+      pl._setupDraggableContainer(el, {
+        key,
+        close: () => teardownUI(),
+        title: attrs?.title,
+      }))
   }
 
   if (!!slot && ui.reset) {
-    const exists = Array.from(target.querySelectorAll('[data-injected-ui]'))
-      .map((it: HTMLElement) => it.id)
+    const exists = Array.from(
+      target.querySelectorAll('[data-injected-ui]')
+    ).map((it: HTMLElement) => it.id)
 
     exists?.forEach((exist: string) => {
       injectedUIEffects.get(exist)?.call(null)
     })
   }
 
-  target.appendChild(el);
+  target.appendChild(el)
 
   // TODO: How handle events
-  ['click', 'focus', 'focusin', 'focusout', 'blur', 'dblclick',
-    'keyup', 'keypress', 'keydown', 'change', 'input'].forEach((type) => {
-    el.addEventListener(type, (e) => {
-      const target = e.target! as HTMLElement
-      const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
-      if (!trigger) return
+  ;[
+    'click',
+    'focus',
+    'focusin',
+    'focusout',
+    'blur',
+    'dblclick',
+    'keyup',
+    'keypress',
+    'keydown',
+    'change',
+    'input',
+  ].forEach((type) => {
+    el.addEventListener(
+      type,
+      (e) => {
+        const target = e.target! as HTMLElement
+        const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
+        if (!trigger) return
 
-      const msgType = trigger.dataset[`on${ucFirst(type)}`]
-      msgType && pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
-    }, false)
+        const msgType = trigger.dataset[`on${ucFirst(type)}`]
+        msgType &&
+          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+      },
+      false
+    )
   })
 
   // callback
@@ -333,16 +377,14 @@ export function setupInjectedUI (
   return teardownUI
 }
 
-export function transformableEvent (target: HTMLElement, e: Event) {
+export function transformableEvent(target: HTMLElement, e: Event) {
   const obj: any = {}
 
   if (target) {
     const ds = target.dataset
     const FLAG_RECT = 'rect'
 
-    ;['value', 'id', 'className',
-      'dataset', FLAG_RECT
-    ].forEach((k) => {
+    ;['value', 'id', 'className', 'dataset', FLAG_RECT].forEach((k) => {
       let v: any
 
       switch (k) {
@@ -367,7 +409,7 @@ export function transformableEvent (target: HTMLElement, e: Event) {
 
 let injectedThemeEffect: any = null
 
-export function setupInjectedTheme (url?: string) {
+export function setupInjectedTheme(url?: string) {
   injectedThemeEffect?.call()
 
   if (!url) return
@@ -387,9 +429,10 @@ export function setupInjectedTheme (url?: string) {
   })
 }
 
-export function mergeSettingsWithSchema (
+export function mergeSettingsWithSchema(
   settings: Record<string, any>,
-  schema: Array<SettingSchemaDesc>) {
+  schema: Array<SettingSchemaDesc>
+) {
   const defaults = (schema || []).reduce((a, b) => {
     if ('default' in b) {
       a[b.key] = b.default
