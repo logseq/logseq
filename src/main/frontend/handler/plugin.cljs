@@ -6,7 +6,7 @@
             [frontend.handler.notification :as notifications]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
-            [medley.core :as md]
+            [medley.core :as medley]
             [frontend.fs :as fs]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
@@ -234,7 +234,7 @@
 
 (defn unregister-plugin-slash-command
   [pid]
-  (swap! state/state md/dissoc-in [:plugin/installed-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/installed-commands (keyword pid)]))
 
 (def keybinding-mode-handler-map
   {:global      :shortcut.handler/editor-global
@@ -278,7 +278,7 @@
 
 (defn unregister-plugin-simple-command
   [pid]
-  (swap! state/state md/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
 (defn register-plugin-ui-item
   [pid {:keys [type] :as opts}]
@@ -302,7 +302,7 @@
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
     (when-let [theme (first themes)]
       (let [theme-mode (:mode theme)]
-        (and theme-mode (state/set-theme! (if (= theme-mode "light") "white" theme-mode)))
+        (and theme-mode (state/set-theme! theme-mode))
         (js/LSPluginCore.selectTheme (bean/->js theme))))))
 
 (defn update-plugin-settings-state
@@ -498,7 +498,7 @@
                                         ;; effects
                                         (unregister-plugin-themes pid)
                                         ;; plugins
-                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
+                                        (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
                                         (clear-commands! pid))))
 

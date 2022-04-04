@@ -19,11 +19,11 @@
     (rum/use-effect!
      #(let [doc js/document.documentElement
             cls (.-classList doc)]
-        (.setAttribute doc "data-theme" (if (= theme "white") "light" theme))
+        (.setAttribute doc "data-theme" theme)
         (if (= theme "dark") ;; for tailwind dark mode
           (.add cls "dark")
           (.remove cls "dark"))
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode (if (= theme "white") "light" theme)} nil))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
      [theme])
 
     (rum/use-effect!
@@ -54,9 +54,19 @@
      [nfs-granted? db-restoring? route])
 
     (rum/use-effect!
-     #(when-not db-restoring?
-        (ui-handler/restore-right-sidebar-state!)
-        (set-restored-sidebar? true))
+     (fn []
+       (when-not db-restoring?
+         (let [repos (state/get-repos)]
+           (if-not (or
+                    ;; demo graph only
+                    (and (= 1 (count repos)) (:example? (first repos))
+                         (not (util/mobile?)))
+                    ;; other graphs exists
+                    (seq repos))
+            (route-handler/redirect! {:to :repo-add})
+            (do
+              (ui-handler/restore-right-sidebar-state!)
+              (set-restored-sidebar? true))))))
      [db-restoring?])
 
     (rum/use-effect!
@@ -65,13 +75,15 @@
      [system-theme?])
 
     (rum/use-effect!
-      #(state/set-modal!
-         (when settings-open?
-           (fn [] [:div.settings-modal (settings/settings)])))
-      [settings-open?])
+     #(state/set-modal!
+       (when settings-open?
+         (fn [] [:div.settings-modal (settings/settings)])))
+     [settings-open?])
 
     [:div
-     {:class    (str theme "-theme")
+     {:class    (util/classnames
+                 [(str theme "-theme")
+                  {:white-theme (= "light" theme)}]) ; The white-theme is for backward compatibility. See: https://github.com/logseq/logseq/pull/4652.
       :on-click on-click}
      child
 

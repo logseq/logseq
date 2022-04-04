@@ -1,10 +1,7 @@
 (ns frontend.components.journal
   (:require [clojure.string :as string]
-            [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
-            [frontend.components.widgets :as widgets]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -16,10 +13,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.context.i18n :refer [t]]))
+            [rum.core :as rum]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
@@ -34,72 +28,56 @@
         repo (state/sub :git/current-repo)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
-        intro? (and (not (state/logged?))
-                    (not (config/local-db? repo))
-                    (not config/publishing?)
-                    today?)
         page-entity (db/pull [:block/name (util/page-name-sanity-lc title)])
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
-    (if (and (mobile-util/is-native-platform?) intro?)
-      [:div
+    [:div.flex-1.journal.page (cond-> {}
+                                data-page-tags
+                                (assoc :data-page-tags data-page-tags))
+
+     (ui/foldable
+      [:a.initial-color.title.journal-title
+       {:href     (rfe/href :page {:name page})
+        :on-mouse-down (fn [e]
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page page})))
+        :on-click (fn [e]
+                    (when (gobj/get e "shiftKey")
+                      (when-let [page page-entity]
+                        (state/sidebar-add-block!
+                         (state/get-current-repo)
+                         (:db/id page)
+                         :page
+                         {:page     page
+                          :journal? true}))
+                      (.preventDefault e)))}
        [:h1.title
-        (t :new-graph)]
+        (util/capitalize-all title)]]
 
-       (ui/button
-         (t :open-a-directory)
-         :on-click #(page-handler/ls-dir-files! shortcut/refresh!))]
-      [:div.flex-1.journal.page (cond->
-                                  {:class (if intro? "logseq-intro" "")}
-                                  data-page-tags
-                                  (assoc :data-page-tags data-page-tags))
+      (blocks-cp repo page format)
 
-       (ui/foldable
-        [:a.initial-color.title.journal-title
-         {:href     (rfe/href :page {:name page})
-          :on-mouse-down (fn [e]
-                           (when (util/right-click? e)
-                             (state/set-state! :page-title/context {:page page})))
-          :on-click (fn [e]
-                      (when (gobj/get e "shiftKey")
-                        (when-let [page page-entity]
-                          (state/sidebar-add-block!
-                           (state/get-current-repo)
-                           (:db/id page)
-                           :page
-                           {:page     page
-                            :journal? true}))
-                        (.preventDefault e)))}
-         [:h1.title
-          (util/capitalize-all title)]]
+      {})
 
-        (blocks-cp repo page format)
+     (page/today-queries repo today? false)
 
-        {})
-
-       (when intro? (widgets/add-graph))
-
-       (page/today-queries repo today? false)
-
-       (rum/with-key
-         (reference/references title)
-         (str title "-refs"))
-
-       (when intro? (onboarding/intro))])))
+     (rum/with-key
+       (reference/references title)
+       (str title "-refs"))]))
 
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list "main-content-container"
-                     (for [{:block/keys [name format]} latest-journals]
-                       [:div.journal-item.content {:key name}
-                        (journal-cp [name format])])
-                     {:has-more (page-handler/has-more-journals?)
-                      :more-class "text-4xl"
-                      :on-top-reached page-handler/create-today-journal!
-                      :on-load (fn []
-                                 (page-handler/load-more-journals!))})])
+   (ui/infinite-list
+    "main-content-container"
+    (for [{:block/keys [name format]} latest-journals]
+      [:div.journal-item.content {:key name}
+       (journal-cp [name format])])
+    {:has-more (page-handler/has-more-journals?)
+     :more-class "text-4xl"
+     :on-top-reached page-handler/create-today-journal!
+     :on-load (fn []
+                (page-handler/load-more-journals!))})])
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

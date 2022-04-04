@@ -4,6 +4,7 @@
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
@@ -17,6 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -27,6 +29,7 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
+            [frontend.util.persist-var :as persist-var]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -89,12 +92,11 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     ;; `(state/set-db-restoring! true)` already executed before restoring
-                     (-> (p/all (db/restore!
-                                 (assoc me :repos repos)
-                                 old-db-schema
-                                 (fn [repo]
-                                   (file-handler/restore-config! repo false))))
+                     (-> (db/restore!
+                          (assoc me :repos repos)
+                          old-db-schema
+                          (fn [repo]
+                            (file-handler/restore-config! repo false)))
                          (p/then
                           (fn []
                             ;; try to load custom css only for current repo
@@ -166,7 +168,7 @@
                                nil)))))))
 (defn- get-repos
   []
-  (let [logged? (state/logged?)
+  (let [logged? (state/deprecated-logged?)
         me (state/get-me)]
     (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]
@@ -210,6 +212,7 @@
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
+    (i18n/start)
     (instrument/init)
     (set-network-watcher!)
 
@@ -225,10 +228,10 @@
     (events/run!)
 
     (p/let [repos (get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! me repos logged? db-schema)
-      (when (mobile-util/is-native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+           (state/set-repos! repos)
+           (restore-and-setup! me repos logged? db-schema)
+           (when (mobile-util/is-native-platform?)
+             (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
@@ -237,6 +240,8 @@
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
+    (persist-var/load-vars)
+    (user-handler/refresh-tokens-loop)
     (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []

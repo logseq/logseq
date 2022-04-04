@@ -509,7 +509,8 @@
 
 (rum/defc preview-cp
   [block-id]
-  (let [blocks-f (fn [] (db/sub-block-and-children (state/get-current-repo) block-id))]
+  (let [blocks-f (fn [] (db/get-paginated-blocks (state/get-current-repo) block-id
+                                                 {:scoped-block-id block-id}))]
     (view-modal blocks-f {:preview? true} (atom 0))))
 
 (defn preview
@@ -543,15 +544,18 @@
 
 (defn get-srs-cards-total
   []
-  (let [repo (state/get-current-repo)
-        query-string ""
-        blocks (query repo query-string {:use-cache? false
-                                         :disable-reactive? true})]
-    (when (seq blocks)
-      (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
-            count (count result)]
-        (reset! cards-total count)
-        count))))
+  (try
+    (let [repo (state/get-current-repo)
+          query-string ""
+          blocks (query repo query-string {:use-cache?        false
+                                           :disable-reactive? true})]
+      (when (seq blocks)
+        (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
+              count (count result)]
+          (reset! cards-total count)
+          count)))
+    (catch js/Error e
+      (js/console.error e) 0)))
 
 ;;; register cards macro
 (rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
@@ -567,7 +571,6 @@
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
             review-cards result
-            query-string (if (string/blank? query-string) "All" query-string)
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
             modal? (:modal? config)]
@@ -576,7 +579,7 @@
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
            (ui/icon "infinity" {:style {:font-size 20}})
-           [:div.ml-1.text-sm.font-medium query-string]]
+           [:div.ml-1.text-sm.font-medium (if (string/blank? query-string) "All" query-string)]]
 
           [:div.flex.flex-row.items-center
 

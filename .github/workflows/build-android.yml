@@ -93,12 +93,12 @@ jobs:
         run: yarn install && yarn release
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: "${{ github.event_name == 'workflow_call' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}"
+        if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
         run: |
           curl -sL https://sentry.io/get-cli/ | bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
-          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map ./static/js --url-prefix '~/static/js'
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
           sentry-cli releases finalize "${release_name}"
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

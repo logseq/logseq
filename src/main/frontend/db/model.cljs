@@ -19,6 +19,13 @@
             [frontend.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 
+;; lazy loading
+
+(def initial-blocks-length 100)
+
+(def step-loading-blocks 50)
+
+
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
 
@@ -404,102 +411,283 @@
 
 (defn has-children?
   ([block-id]
-   (has-children? (state/get-current-repo) block-id))
+   (has-children? (conn/get-conn) block-id))
+  ([db block-id]
+   (some? (:block/_parent (d/entity db [:block/uuid block-id])))))
+
+(defn- collapsed-and-has-children?
+  [db block]
+  (and (:block/collapsed? block) (has-children? db (:block/uuid block))))
+
+(defn get-by-parent-&-left
+  [db parent-id left-id]
+  (when (and parent-id left-id)
+    (let [lefts (:block/_left (d/entity db left-id))]
+      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
+                                  (not= parent-id (:db/id node)))
+                         node)) lefts))))
+
+(defn- get-next-outdented-block
+  "Get the next outdented block of the block that has the `id`.
+  e.g.
+  - a
+    - b
+      - c
+  - d
+
+  The next outdented block of `c` is `d`."
+  [db id]
+  (when-let [block (d/entity db id)]
+    (let [parent (:block/parent block)]
+      (if-let [parent-sibling (get-by-parent-&-left db
+                                                    (:db/id (:block/parent parent))
+                                                    (:db/id parent))]
+       parent-sibling
+       (get-next-outdented-block db (:db/id parent))))))
+
+(defn get-block-parent
+  ([block-id]
+   (get-block-parent (state/get-current-repo) block-id))
   ([repo block-id]
-   (some? (:block/_parent (db-utils/entity repo [:block/uuid block-id])))))
+   (when-let [conn (conn/get-conn repo)]
+     (when-let [block (d/entity conn [:block/uuid block-id])]
+       (:block/parent block)))))
 
-;; TODO: both zipmap and map lookup are slow in cljs
-;; zipmap 20k blocks takes 30ms on my M1 Air.
-(defn sort-blocks
-  [blocks parent {:keys [limit] :as config}]
-  (let [ids->blocks (zipmap (map
-                              (fn [b]
-                                [(:db/id (:block/parent b))
-                                 (:db/id (:block/left b))])
-                              blocks)
-                            blocks)]
-    (loop [node parent
-           next-siblings '()
-           result []]
-      (if (or (nil? node) (and limit (= (count result) limit)))
-        result
-        (let [id (:db/id node)
-              child-block (get ids->blocks [id id])
-              next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
-              next-siblings (if (and next-sibling child-block)
-                              (cons next-sibling next-siblings)
-                              next-siblings)
-              collapsed? (:block/collapsed? node)]
-          (if-let [node (and
-                         (or (not (and collapsed? (has-children? (:block/uuid node))))
-                             (= (:db/id node) (:db/id parent)))
-                         (or child-block next-sibling))]
-            (recur node next-siblings (conj result node))
-            (if-let [sibling (first next-siblings)]
-              (recur sibling (rest next-siblings) (conj result sibling))
-              result)))))))
+;; non recursive query
+(defn get-block-parents
+  ([repo block-id]
+   (get-block-parents repo block-id 100))
+  ([repo block-id depth]
+   (when-let [conn (conn/get-conn repo)]
+     (loop [block-id block-id
+            parents (list)
+            d 1]
+       (if (> d depth)
+         parents
+         (if-let [parent (get-block-parent repo block-id)]
+           (recur (:block/uuid parent) (conj parents parent) (inc d))
+           parents))))))
 
-(defn get-block-refs-count
-  [block-db-id]
-  (when-let [repo-url (state/get-current-repo)]
-    (when block-db-id
-      (some->
-       (react/q repo-url [:frontend.db.react/block-refs-count block-db-id]
-         {:query-fn (fn [_db _tx-report _result]
-                      (count (:block/_refs (db-utils/entity repo-url block-db-id))))}
-         nil)
-       react))))
+(comment
+  (defn get-immediate-children-v2
+    [repo block-id]
+    (d/pull (conn/get-conn repo)
+            '[:block/_parent]
+            [:block/uuid block-id])))
 
-;; Use datoms index and provide limit support
-(defn get-page-blocks
-  ([page]
-   (get-page-blocks (state/get-current-repo) page nil))
-  ([repo-url page]
-   (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys]
-                   :or {use-cache? true
-                        pull-keys '[*]}}]
-   (when page
-     (let [page-entity (if (integer? page)
-                         (db-utils/entity repo-url page)
-                         (let [page (util/page-name-sanity-lc (string/trim page))]
-                           (db-utils/entity repo-url [:block/name page])))
-           page-id (:db/id page-entity)
-           db (conn/get-conn repo-url)
-           bare-page-map {:db/id page-id
-                          :block/name (:block/name page-entity)
-                          :block/original-name (:block/original-name page-entity)
-                          :block/journal-day (:block/journal-day page-entity)}]
-       (when page-id
-         (some->
-          (react/q repo-url [:frontend.db.react/page-blocks page-id]
-            {:use-cache? use-cache?
-             :query-fn (fn [db tx-report result]
-                         (let [[tx-id->block cached-id->block] (when (and tx-report result)
-                                                                 (let [tx-block-ids (distinct (mapv :e (:tx-data tx-report)))
-                                                                       blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
-                                                                                   (remove nil?))]
-                                                                   [(zipmap (mapv :db/id blocks) blocks)
-                                                                    (zipmap (mapv :db/id @result) @result)]))
-                               datoms (d/datoms db :avet :block/page page-id)
-                               tx-merged-blocks (when (and tx-id->block result)
-                                                  (let [result (reduce (fn [acc datom]
-                                                                         (let [id (:e datom)
-                                                                               block (or (get tx-id->block id)
-                                                                                         (get cached-id->block id))]
-                                                                           (if block
-                                                                             (conj! acc block)
-                                                                             (reduced nil))))
-                                                                       (transient [])
-                                                                       datoms)]
-                                                    (when result (persistent! result))))
-                               blocks (or
-                                       tx-merged-blocks
-                                       (let [block-eids (mapv :e datoms)]
-                                         (db-utils/pull-many repo-url pull-keys block-eids)))]
-                           (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
-            nil)
-          react))))))
+;; Use built-in recursive
+(defn get-block-parents-v2
+  [repo block-id]
+  (d/pull (conn/get-conn repo)
+          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
+          [:block/uuid block-id]))
+
+(defn get-next-open-block
+  ([db block]
+   (get-next-open-block db block nil))
+  ([db block scoped-block-id]
+   (let [block-id (:db/id block)
+         block-parent-id (:db/id (:block/parent block))
+         next-block (or
+                     (if (collapsed-and-has-children? db block) ; skips children
+                       ;; Sibling
+                       (get-by-parent-&-left db block-parent-id block-id)
+                       (or
+                        ;; Child
+                        (get-by-parent-&-left db block-id block-id)
+                        ;; Sibling
+                        (get-by-parent-&-left db block-parent-id block-id)))
+
+                     ;; Next outdented block
+                     (get-next-outdented-block db block-id))]
+     (if (and scoped-block-id next-block)
+       (let [parents (->> (get-block-parents (state/get-current-repo) (:block/uuid next-block))
+                          (map :db/id)
+                          (set))]
+         (when (contains? parents scoped-block-id)
+           next-block))
+       next-block))))
+
+(defn get-paginated-blocks-no-cache
+  "Result should be sorted."
+  [db start-id {:keys [limit include-start? scoped-block-id]}]
+  (when-let [start (d/entity db start-id)]
+    (let [scoped-block-parents (when scoped-block-id
+                                 (let [block (d/entity db scoped-block-id)]
+                                   (->> (get-block-parents (state/get-current-repo) (:block/uuid block))
+                                        (map :db/id)
+                                        (set))))
+          result (loop [block start
+                        result []]
+                   (if (and limit (>= (count result) limit))
+                     result
+                     (let [next-block (get-next-open-block db block)]
+                       (if next-block
+                         (if (and (seq scoped-block-parents)
+                                  (contains? scoped-block-parents (:db/id (:block/parent next-block))))
+                           result
+                           (recur next-block (conj result next-block)))
+                         result))))]
+      (if include-start?
+        (cons start result)
+        result))))
+
+(defn get-block-last-direct-child
+  [db db-id]
+  (when-let [block (d/entity db db-id)]
+    (when-not (collapsed-and-has-children? db block)
+      (let [children (:block/_parent block)
+            all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
+            all-ids (set (map :db/id children))]
+        (first (set/difference all-ids all-left))))))
+
+(defn get-block-last-child
+  [db db-id]
+  (let [last-child (get-block-last-direct-child db db-id)]
+    (loop [prev last-child
+           last-child last-child]
+      (if last-child
+        (recur last-child (get-block-last-direct-child db last-child))
+        prev))))
+
+(defn get-prev-open-block
+  [db id]
+  (let [block (d/entity db id)
+        left (:block/left block)
+        left-id (:db/id left)]
+    (if (= (:db/id left) (:db/id (:block/parent block)))
+      left-id
+      (if (util/collapsed? left)
+        left-id
+        (or (get-block-last-child db (:db/id left)) left-id)))))
+
+(defn recursive-child?
+  [repo child-id parent-id]
+  (loop [node (db-utils/entity repo child-id)]
+    (if node
+      (let [parent (:block/parent node)]
+        (if (= (:db/id parent) parent-id)
+          true
+          (recur parent)))
+      false)))
+
+(defn- get-start-id-for-pagination-query
+  [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
+   result outliner-op page-id block-id tx-block-ids]
+  (let [db-before (or db-before current-db)
+        cached-ids (map :db/id @result)
+        cached-ids-set (set (conj cached-ids page-id))
+        first-changed-id (if (= outliner-op :move-subtree)
+                           (let [{:keys [move-blocks target from-page to-page]} tx-meta]
+                             (cond
+                               (= page-id target) ; move to the first block
+                               nil
+
+                               (and from-page to-page (not= from-page to-page))
+                               (if (= page-id from-page)
+                                 (first move-blocks)
+                                 target)
+
+                               :else
+                               ;; same page, get the most top block before dragging
+                               (let [match-ids (set (conj move-blocks target))]
+                                 (loop [[id & others] cached-ids]
+                                   (if (contains? match-ids id)
+                                     id
+                                     (recur others))))))
+                           (let [insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)]
+                             (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
+                                                   true)
+                                               (recursive-child? repo-url % block-id))
+                                      %) tx-block-ids)))]
+    (when first-changed-id
+      (or (get-prev-open-block db-before first-changed-id)
+          (get-prev-open-block current-db first-changed-id)))))
+
+;; TODO: outliners ops should be merged to :save-nodes, :insert-nodes,
+;; :delete-nodes and :move-nodes
+(defn- build-paginated-blocks-from-cache
+  "Notice: tx-report could be nil."
+  [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
+  (let [{:keys [tx-meta]} tx-report
+        current-db (conn/get-conn repo-url)]
+    (cond
+      (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
+      @result
+
+      (contains? #{:insert-node :insert-nodes :save-and-insert-node
+                   :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
+      (when-let [start-id (get-start-id-for-pagination-query
+                           repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
+        (let [start-page? (:block/name (db-utils/entity start-id))]
+          (when-not start-page?
+            (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
+                  previous-count (count previous-blocks)
+                  limit 25
+                  more (get-paginated-blocks-no-cache current-db start-id {:limit limit
+                                                                           :include-start? true
+                                                                           :scoped-block-id scoped-block-id})]
+              (concat previous-blocks more)))))
+
+      :else
+      nil)))
+
+(defn get-paginated-blocks
+  "Get paginated blocks for a page or a specific block.
+   `scoped-block-id`: if specified, returns its children only."
+  ([repo-url block-id]
+   (get-paginated-blocks repo-url block-id {}))
+  ([repo-url block-id {:keys [pull-keys start-block limit use-cache? scoped-block-id]
+                       :or {pull-keys '[* :block/_refs]
+                            limit initial-blocks-length
+                            use-cache? true
+                            scoped-block-id nil}}]
+   (when block-id
+     (assert (integer? block-id) (str "wrong block-id: " block-id))
+   (let [entity (db-utils/entity repo-url block-id)
+         page? (some? (:block/name entity))
+         page-entity (if page? entity (:block/page entity))
+         page-id (:db/id page-entity)
+         bare-page-map {:db/id page-id
+                        :block/name (:block/name page-entity)
+                        :block/original-name (:block/original-name page-entity)
+                        :block/journal-day (:block/journal-day page-entity)}
+         query-key (if page?
+                     :frontend.db.react/page-blocks
+                     :frontend.db.react/block-and-children)]
+     (some->
+      (react/q repo-url [query-key block-id]
+        {:use-cache? use-cache?
+         :query-fn (fn [db tx-report result]
+                     (let [tx-data (:tx-data tx-report)
+                           refs (some->> (filter #(= :block/refs (:a %)) tx-data)
+                                         (map :v))
+                           tx-block-ids (distinct (->> (map :e tx-data)
+                                                       (concat refs)))
+                           [tx-id->block cached-id->block] (when (and tx-report result)
+                                                             (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
+                                                                               (remove nil?))]
+                                                               [(zipmap (mapv :db/id blocks) blocks)
+                                                                (zipmap (mapv :db/id @result) @result)]))
+                           limit (if (and result @result) (+ (count @result) 5) limit)
+                           outliner-op (get-in tx-report [:tx-meta :outliner-op])
+                           blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
+                           blocks (or blocks
+                                      (get-paginated-blocks-no-cache (conn/get-conn repo-url) block-id {:limit limit
+                                                                                                        :include-start? (not page?)
+                                                                                                        :scoped-block-id scoped-block-id}))
+                           block-eids (map :db/id blocks)
+                           blocks (if (and (seq tx-id->block)
+                                           (not (contains? #{:indent-outdent-nodes :move-subtree} outliner-op)))
+                                    (map (fn [id]
+                                           (or (get tx-id->block id)
+                                               (get cached-id->block id)
+                                               (db-utils/pull repo-url pull-keys id))) block-eids)
+                                    (db-utils/pull-many repo-url pull-keys block-eids))
+                           blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
+                       (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
+        nil)
+      react)))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -529,7 +717,10 @@
                     [:block/name (util/safe-page-name-sanity-lc page-id)]
                     page-id)
           page (d/entity db page-id)]
-      (nil? (:block/_left page)))))
+      ;; NOTE: when page is nil, it means the page does not exist
+      (if page
+        (nil? (first (d/datoms db :avet :block/page (:db/id page))))
+        true))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -539,41 +730,6 @@
      (let [datoms (d/datoms db :avet :block/page page-id)]
        (and (= (count datoms) 1)
             (= "" (:block/content (db-utils/pull (:e (first datoms))))))))))
-
-(defn get-block-parent
-  ([block-id]
-   (get-block-parent (state/get-current-repo) block-id))
-  ([repo block-id]
-   (when-let [conn (conn/get-conn repo)]
-     (when-let [block (d/entity conn [:block/uuid block-id])]
-       (:block/parent block)))))
-
-;; non recursive query
-(defn get-block-parents
-  [repo block-id depth]
-  (when-let [conn (conn/get-conn repo)]
-    (loop [block-id block-id
-           parents (list)
-           d 1]
-      (if (> d depth)
-        parents
-        (if-let [parent (get-block-parent repo block-id)]
-          (recur (:block/uuid parent) (conj parents parent) (inc d))
-          parents)))))
-
-(comment
-  (defn get-immediate-children-v2
-    [repo block-id]
-    (d/pull (conn/get-conn repo)
-            '[:block/_parent]
-            [:block/uuid block-id])))
-
-;; Use built-in recursive
-(defn get-block-parents-v2
-  [repo block-id]
-  (d/pull (conn/get-conn repo)
-          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
-          [:block/uuid block-id]))
 
 (defn parents-collapsed?
   [repo block-id]
@@ -666,22 +822,6 @@
             block-attrs)
           first
           flatten-tree))
-
-(defn sub-block-and-children
-  ([repo block-uuid]
-   (sub-block-and-children repo block-uuid true))
-  ([repo block-uuid use-cache?]
-   (some-> (react/q repo [:frontend.db.react/block-and-children block-uuid]
-             {:use-cache? use-cache?}
-             '[:find [(pull ?block ?block-attrs) ...]
-               :in $ ?id ?block-attrs
-               :where
-               [?block :block/uuid ?id]]
-             block-uuid
-             block-attrs)
-           react
-           first
-           flatten-tree)))
 
 (defn get-file-page
   ([file-path]
@@ -1461,11 +1601,3 @@
                         (remove false?)
                         (remove nil?))]
     orphaned-pages))
-
-(defn get-block-last-direct-child
-  [db-id]
-  (when-let [block (db-utils/entity db-id)]
-    (let [children (:block/_parent block)
-          all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-          all-ids (set (map :db/id children))]
-      (first (set/difference all-ids all-left)))))

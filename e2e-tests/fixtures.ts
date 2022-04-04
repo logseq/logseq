@@ -1,5 +1,5 @@
-import fs from 'fs'
-import path from 'path'
+import * as fs from 'fs'
+import * as path from 'path'
 import { test as base, expect, ConsoleMessage } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { loadLocalGraph, randomString } from './utils';
@@ -17,12 +17,19 @@ if (fs.existsSync(testTmpDir)) {
 
 export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 
-// NOTE: This is a console log watcher for error logs.
+// NOTE: This following is a console log watcher for error logs.
+// Save and print all logs when error happens.
+let logs: string
 const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
-  expect(msg.text()).not.toMatch(/^Failed to/)
-  expect(msg.text()).not.toMatch(/^Error/)
-  expect(msg.text()).not.toMatch(/^Uncaught/)
+  logs += msg.text() + '\n'
+    expect(msg.text(), logs).not.toMatch(/^(Failed to|Uncaught)/)
+
+  // youtube video
+  if (!logs.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+    expect(logs).not.toMatch(/^Error/)
+  }
+
   // NOTE: React warnings will be logged as error.
   // expect(msg.type()).not.toBe('error')
 }
@@ -32,6 +39,7 @@ base.beforeAll(async () => {
     return
   }
 
+  console.log(`Creating test graph directory: ${graphDir}`)
   fs.mkdirSync(graphDir, {
     recursive: true,
   });
@@ -60,15 +68,15 @@ base.beforeAll(async () => {
   // Direct Electron console to watcher
   page.on('console', consoleLogWatcher)
   page.on('crash', () => {
-    expect('page must not crash!').toBe('page crashed')
+    expect(false, "Page must not crash").toBeTruthy()
   })
   page.on('pageerror', (err) => {
     console.log(err)
-    expect('page must not have errors!').toBe('page has some error')
+    expect(false, 'Page must not have errors!').toBeTruthy()
   })
 
   await page.waitForLoadState('domcontentloaded')
-  await page.waitForFunction('window.document.title != "Loading"')
+  // await page.waitForFunction(() => window.document.title != "Loading")
   // NOTE: The following ensures first start.
   // await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
 
@@ -100,7 +108,7 @@ base.afterAll(async () => {
 })
 
 // hijack electron app into the test context
-export const test = base.extend<{ page: Page, context: BrowserContext, app: ElectronApplication }>({
+export const test = base.extend<{ page: Page, context: BrowserContext, app: ElectronApplication, graphDir: string }>({
   page: async ({ }, use) => {
     await use(page);
   },
@@ -109,5 +117,8 @@ export const test = base.extend<{ page: Page, context: BrowserContext, app: Elec
   },
   app: async ({ }, use) => {
     await use(electronApp);
-  }
+  },
+  graphDir: async ({ }, use) => {
+    await use(graphDir);
+  },
 });

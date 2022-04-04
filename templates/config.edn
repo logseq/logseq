@@ -199,4 +199,16 @@
 
  ;; ignore #+keyword: for parsing page references in orgmode
  ;; :ignored-page-references-keywords #{"author" "startup"}
+ 
+ ;; Quick capture templates on mobile for recieving contents from other apps.
+ ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
+ ;; by received contents from other apps. Note: the {} cannot be omitted.
+ ;; - {time}: capture time
+ ;; - {text}: text that users selected before sharing.
+ ;; - {url}: url or assets path for media files stored in Logseq.
+ ;; You can also reorder them, or even only use one or two of them in the template.
+ ;; You can also insert or format any text in the template as shown in the following examples.
+ ;; :quick-capture-templates
+ ;; {:text "[[quick capture]] **{time}**: \n - {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: \n - {url}"}
  }

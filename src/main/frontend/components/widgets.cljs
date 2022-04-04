@@ -1,83 +1,12 @@
 (ns frontend.components.widgets
-  (:require [clojure.string :as string]
-            [frontend.context.i18n :refer [t]]
-            [frontend.handler.notification :as notification]
+  (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]))
-
-(rum/defc choose-preferred-format
-  []
-  [:div
-   [:h1.title {:style {:margin-bottom "0.25rem"}}
-    (t :format/preferred-mode)]
-
-   [:div.mt-4.ml-1
-    (ui/button
-      "Markdown"
-      :on-click
-      #(user-handler/set-preferred-format! :markdown))
-
-    [:span.ml-2.mr-2 "-OR-"]
-
-    (ui/button
-      "Org Mode"
-      :on-click
-      #(user-handler/set-preferred-format! :org))]])
-
-(rum/defcs add-github-repo <
-  (rum/local "" ::repo)
-  (rum/local "" ::branch)
-  [state]
-  (let [repo (get state ::repo)
-        branch (get state ::branch)]
-    [:div.flex.flex-col
-     [:div.w-full.mx-auto
-      [:div
-       [:div
-        [:h1.title
-         (t :git/add-repo-prompt)]
-        [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
-         [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
-          {:autoFocus true
-           :placeholder "https://github.com/username/repo"
-           :on-change (fn [e]
-                        (reset! repo (util/evalue e)))}]]
-        [:label.font-medium "Default Branch (make sure it's matched with your setting on GitHub): "]
-        [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
-         [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
-          {:value @branch
-           :placeholder "e.g. main"
-           :on-change (fn [e]
-                        (reset! branch (util/evalue e)))}]]]]
-
-      (ui/button
-        (t :git/add-repo-prompt-confirm)
-        :on-click
-        (fn []
-          (let [branch (string/trim @branch)]
-            (if (string/blank? branch)
-              (notification/show!
-               [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on GitHub."]
-               :error
-               false)
-              (let [repo (util/lowercase-first @repo)]
-                (if (util/starts-with? repo "https://github.com/")
-                  (let [repo (string/replace repo ".git" "")]
-                    (repo-handler/create-repo! repo branch))
-
-                  (notification/show!
-                   [:p.text-gray-700.dark:text-gray-300 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                   :error
-                   false)))))))]]))
 
 (rum/defc add-local-directory
   []
@@ -157,15 +86,9 @@
 
 (rum/defcs add-graph <
   [state & {:keys [graph-types]
-            :or {graph-types [:local :github]}}]
-  (let [github-authed? (state/github-authed?)
-        generate-f (fn [x]
+            :or {graph-types [:local]}}]
+  (let [generate-f (fn [x]
                      (case x
-                       :github
-                       (when (and github-authed? (not (util/electron?)))
-                         (rum/with-key (add-github-repo)
-                           "add-github-repo"))
-
                        :local
                        [(rum/with-key (android-permission-alert)
                           "android-permission-alert")
@@ -186,20 +109,3 @@
     (ui/admonition
      :warning
      [:p (t :on-boarding/demo-graph)])))
-
-(rum/defc github-integration-soon-deprecated-alert
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (string/starts-with? repo "https://github.com")
-      [:div.github-alert
-       (ui/admonition
-        :warning
-        [:p "We're going to deprecate the GitHub integration when the mobile app is out, you can switch to the latest "
-         [:a {:href "https://github.com/logseq/logseq/releases"
-              :target "_blank"}
-          "desktop app"]
-         [:span ", see more details at "]
-         [:a {:href "https://discord.com/channels/725182569297215569/735735090784632913/861656585578086400"
-              :target "_blank"}
-          "here"]
-         [:span "."]])])))

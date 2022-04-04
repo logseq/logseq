@@ -177,7 +177,8 @@
   (into {} (remove (comp nil? second)) nm))
 
 (defn ext-of-image? [s]
-  (some #(string/ends-with? s %)
+  (some #(-> (string/lower-case s)
+             (string/ends-with? %))
         [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
@@ -262,7 +263,6 @@
      :clj (if (string? x)
             (Integer/parseInt x)
             x)))
-
 
 (defn safe-parse-int
   [x]
@@ -382,7 +382,6 @@
 #?(:cljs
    (defn stop-propagation [e]
      (when e (.stopPropagation e))))
-
 
 #?(:cljs
    (defn cur-doc-top []
@@ -1057,12 +1056,6 @@
   (or (:block/original-name page)
       (:block/name page)))
 
-(defn lowercase-first
-  [s]
-  (when s
-    (str (string/lower-case (.charAt s 0))
-         (subs s 1))))
-
 #?(:cljs
    (defn add-style!
      [style]
@@ -1226,7 +1219,7 @@
 
         :else
         (do (swap! buf conj v)
-          (recur buf t))))))
+            (recur buf t))))))
 
 #?(:cljs
    (defn trace!
@@ -1298,11 +1291,11 @@
   "
   [args]
   (into #{} (mapcat
-              #(if (map? %)
-                 (for [[k v] %]
-                   (when v (name k)))
-                 (name %))
-              args)))
+             #(if (map? %)
+                (for [[k v] %]
+                  (when v (name k)))
+                (name %))
+             args)))
 
 #?(:cljs
    (defn- get-dom-top
@@ -1438,7 +1431,7 @@
 
 #?(:cljs
    (defn onchange-event-is-composing?
-      "Check if onchange event of Input is a composing (IME) event.
+     "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
      [e]
      (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
@@ -1447,7 +1440,7 @@
    (defn open-url
      [url]
      (let [route? (or (string/starts-with? url
-                        (string/replace js/location.href js/location.hash ""))
+                                           (string/replace js/location.href js/location.hash ""))
                       (string/starts-with? url "#"))]
        (if (and (not route?) (electron?))
          (js/window.apis.openExternal url)
@@ -1460,3 +1453,24 @@
 #?(:cljs
    (defn atom? [v]
      (instance? Atom v)))
+
+;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
+#?(:cljs
+   (defn time-ago [time]
+     (let [units [{:name "second" :limit 60 :in-second 1}
+                  {:name "minute" :limit 3600 :in-second 60}
+                  {:name "hour" :limit 86400 :in-second 3600}
+                  {:name "day" :limit 604800 :in-second 86400}
+                  {:name "week" :limit 2629743 :in-second 604800}
+                  {:name "month" :limit 31556926 :in-second 2629743}
+                  {:name "year" :limit js/Number.MAX_SAFE_INTEGER :in-second 31556926}]
+           diff (t/in-seconds (t/interval time (t/now)))]
+       (if (< diff 5)
+         "just now"
+         (let [unit (first (drop-while #(or (>= diff (:limit %))
+                                            (not (:limit %)))
+                                       units))]
+           (-> (/ diff (:in-second unit))
+               Math/floor
+               int
+               (#(str % " " (:name unit) (when (> % 1) "s") " ago"))))))))

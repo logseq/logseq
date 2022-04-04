@@ -1,58 +1,28 @@
 (ns logseq.tasks.lang
   "Tasks related to language translations"
-  (:require [logseq.tasks.rewrite-clj :as rewrite-clj]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
+            [frontend.dicts :as dicts]
+            [frontend.modules.shortcut.dicts :as shortcut-dicts]
             [logseq.tasks.util :as task-util]))
 
 (defn- get-dicts
   []
-  (dissoc (rewrite-clj/metadata-var-sexp "src/main/frontend/dicts.cljs" "dicts")
-          :tongue/fallback))
+  (dissoc dicts/dicts :tongue/fallback))
 
-(defn- get-non-en-shortcuts
+(defn- get-all-dicts
   []
-  (nth (rewrite-clj/metadata-var-sexp "src/main/frontend/modules/shortcut/dict.cljs"
-                                      "dict")
-       3))
-
-;; unnecessary complexity :(
-(defn- decorate-namespace [k]
-  (let [n (name k)
-        ns (namespace k)]
-    (keyword (str "command." ns) n)))
-
-(defn- get-en-shortcut-dicts
-  []
-  (->> (rewrite-clj/metadata-var-sexp
-        "src/main/frontend/modules/shortcut/config.cljs"
-        "all-default-keyboard-shortcuts")
-       (map (fn [[k v]] (vector (decorate-namespace k) (:desc v))))
-       (into {})))
-
-(defn- get-en-categories
-  []
-  (->> (rewrite-clj/metadata-var-sexp
-        "src/main/frontend/modules/shortcut/config.cljs"
-        "category")
-       (map (fn [[k v]] (vector k (:doc (meta v)))))
-       (into {})))
-
-(defn- get-shortcuts
-  []
-  (merge {:en (merge (get-en-categories)
-                     (get-en-shortcut-dicts))}
-         (get-non-en-shortcuts)))
+  (merge-with merge (get-dicts) shortcut-dicts/dicts))
 
 (defn- get-languages
   []
-  (->> (rewrite-clj/var-sexp "src/main/frontend/dicts.cljs" "languages")
+  (->> dicts/languages
        (map (juxt :value :label))
        (into {})))
 
 (defn list-langs
   "List translated langagues with their number of translations"
   []
-  (let [dicts (merge-with merge (get-dicts) (get-shortcuts))
+  (let [dicts (get-all-dicts)
         en-count (count (dicts :en))
         langs (get-languages)]
     (->> dicts
@@ -79,7 +49,7 @@
             (println "Language" lang "does not have an entry in dicts.cljs")
             (System/exit 1))
         all-dicts [[(get-dicts) "frontend/dicts.cljs"]
-                   [(get-shortcuts) "shortcut/dict.cljs"]]
+                   [shortcut-dicts/dicts "shortcut/dicts.cljs"]]
         all-missing (map (fn [[dicts file]]
                            [(select-keys (dicts :en)
                                          (set/difference (set (keys (dicts :en)))
@@ -102,7 +72,7 @@
 (defn invalid-translations
   "Lists translation that don't exist in English"
   []
-  (let [dicts (merge-with merge (get-dicts) (get-shortcuts))
+  (let [dicts (get-all-dicts)
         ;; For now defined as :en but clj-kondo analysis could be more thorough
         valid-keys (set (keys (dicts :en)))
         invalid-dicts
@@ -122,7 +92,7 @@
 (defn list-duplicates
   "Lists translations that are the same as the one in English"
   [& args]
-  (let [dicts (merge-with merge (get-dicts) (get-shortcuts))
+  (let [dicts (get-all-dicts)
         en-dicts (dicts :en)
         lang (or (keyword (first args))
                  (task-util/print-usage "LOCALE"))

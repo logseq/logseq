@@ -92,15 +92,19 @@ html[data-theme='dark'] {
   --color-level-6: #3a7e8e;
 }
 
+/* You should always use .light-theme for light mode, the .white-theme is just for backword compatibility.
+
+See: https://github.com/logseq/logseq/pull/4652. */
 .white-theme,
+.light-theme,
 html[data-theme='light'] {
   --ls-primary-background-color: #ffffff;
   --ls-secondary-background-color: #f7f7f7;
   --ls-tertiary-background-color: #f1eee8;
   --ls-quaternary-background-color: #e8e5de;
   --ls-table-tr-even-background-color: #f7f7f7;
-  --ls-active-primary-color: rgb(4, 85, 145);
-  --ls-active-secondary-color: #003761;
+  --ls-active-primary-color: rgb(0, 105, 182);
+  --ls-active-secondary-color: #00477c;
   --ls-block-properties-background-color: #f7f7f7;
   --ls-page-properties-background-color: #f7f7f7;
   --ls-block-ref-link-text-color: #d8e1e8;

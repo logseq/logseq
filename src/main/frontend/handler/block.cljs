@@ -2,19 +2,18 @@
   (:require [clojure.set :as set]
             [clojure.walk :as walk]
             [frontend.db :as db]
-            [frontend.format.block :as block]))
+            [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
+            [frontend.state :as state]
+            [frontend.format.block :as block]
+            [frontend.util :as util]))
 
-;; lazy loading
-
-(def initial-blocks-length 200)
-
-(def step-loading-blocks 50)
 
 ;;  Fns
 
 (defn long-page?
   [repo page-id]
-  (>= (db/get-page-blocks-count repo page-id) initial-blocks-length))
+  (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
 
 (defn get-block-refs-with-children
   [block]
@@ -95,3 +94,23 @@
 (defn get-deadline-ast
   [block]
   (get-timestamp block "Deadline"))
+
+(defn load-more!
+  [db-id start-id]
+  (let [repo (state/get-current-repo)
+        db (db/get-conn repo)
+        block (db/entity repo db-id)
+        block? (not (:block/name block))
+        k (if block?
+            :frontend.db.react/block-and-children
+            :frontend.db.react/page-blocks)
+        query-k [repo k db-id]
+        option (cond-> {:limit db-model/step-loading-blocks}
+                 block?
+                 (assoc :scoped-block-id db-id))
+        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id option)
+                       (map #(db/pull (:db/id %))))]
+    (react/swap-new-result! query-k
+                            (fn [result]
+                              (->> (concat result more-data)
+                                   (util/distinct-by :db/id))))))

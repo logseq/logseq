@@ -137,7 +137,7 @@
                        (when icon icon)
                        [:div {:style {:margin-right "8px"}} title]])]
           (if hr
-            [:hr.my-1]
+            [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
               (menu-link new-options child)
               title))))
@@ -391,7 +391,7 @@
   (let [list-element-id (first (:rum/args state))
         opts (-> state :rum/args (nth 2))
         node (js/document.getElementById list-element-id)
-        debounced-on-scroll (debounce #(on-scroll node opts) 500)]
+        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
     (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
@@ -834,7 +834,7 @@
                                (log/error :exception e)
                                [:div]))
                            [:div {:key "tippy"} ""])))
-           child)))
+            (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
