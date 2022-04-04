@@ -741,6 +741,7 @@ li p:last-child,
 }
 
 .canceled,
+.cancelled,
 .done {
   text-decoration: line-through;
   opacity: 0.6;
@@ -780,7 +781,8 @@ li p:last-child,
 }
 
 .done,
-.canceled {
+.canceled,
+.cancelled {
   opacity: 0.7;
 }
 
