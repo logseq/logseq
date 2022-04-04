@@ -4,5 +4,4 @@
 
 (rum/defc home
   []
-  (throw (ex-info "OOPS!" {}))
   (sidebar/main-content))
