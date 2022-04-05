@@ -12,6 +12,36 @@
   resolved "https://registry.yarnpkg.com/7zip-bin/-/7zip-bin-5.1.1.tgz#9274ec7460652f9c632c59addf24efb1684ef876"
   integrity sha512-sAP4LldeWNz0lNzmTird3uWfFDWWTeg6V/MsmyyLR9X1idwKBWIgt/ZvinqQldJm3LecKEs1emkbquO6PCiLVQ==
 
+"@andelf/rsapi-darwin-arm64@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-arm64/download/@andelf/rsapi-darwin-arm64-0.0.5.tgz#894724098fcb722088a2971b6e7771b1aaf1a77b"
+  integrity sha512-S+BzDs0a3El4VnULFBRnaWm8oKGlW+oYVTPELop53gbjcDgmoRq+wIYI8MvvkPdtVYRZ6a/e4DfqrtDKDVWOxQ==
+
+"@andelf/rsapi-darwin-x64@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-darwin-x64/download/@andelf/rsapi-darwin-x64-0.0.5.tgz#a520066709b84c3c20b987c0cda2efa1d0fe1468"
+  integrity sha512-4nVKhh48mVbDgI+EYd3o4J1TC1WwzLk/5/pTvt76lwd5+OhzgFDxQnaFeUsxSMkc7UKixWhp5pnBrrwKRhbVRA==
+
+"@andelf/rsapi-linux-x64-gnu@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-linux-x64-gnu/download/@andelf/rsapi-linux-x64-gnu-0.0.5.tgz#e35c976c6cd73cb22c6fd61f0ee943ee475d3774"
+  integrity sha512-ed5FI+8IGgQMho1hVEV2iip7AdvgeRYtgfCPPmHqRi3uAxILJqp+vRltZb1SqFqmPGSm4IJzvIGZCMGNqcLXSg==
+
+"@andelf/rsapi-win32-x64-msvc@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi-win32-x64-msvc/download/@andelf/rsapi-win32-x64-msvc-0.0.5.tgz#8506d864596cf8bf1f8f381ed62653e4731436b8"
+  integrity sha512-8JYGrPGOm00xaYb3KmjMjcIb8T8gkjhNOwduWOS81xkLwGFbwYPeDIKCWEOyXUGy7VCQUvQg2UY9H1t08cR+3w==
+
+"@andelf/rsapi@0.0.5":
+  version "0.0.5"
+  resolved "https://registry.npmmirror.com/@andelf/rsapi/download/@andelf/rsapi-0.0.5.tgz#6d90290c5a8a88d81402aa2a43d30030fceab60a"
+  integrity sha512-kEobsAzceX+8cGKaAYx4hin/Aw7p5ObdbVapBBzRQRfFqdxU3CJADPxo+InpIRCK4+4B9yzfi7cXWSyi/Av0hQ==
+  optionalDependencies:
+    "@andelf/rsapi-darwin-arm64" "0.0.5"
+    "@andelf/rsapi-darwin-x64" "0.0.5"
+    "@andelf/rsapi-linux-x64-gnu" "0.0.5"
+    "@andelf/rsapi-win32-x64-msvc" "0.0.5"
+
 "@develar/schema-utils@~2.1.0":
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/@develar/schema-utils/-/schema-utils-2.1.0.tgz#eceb1695bfbed6f6bb84666d5d3abe5e1fd54e17"

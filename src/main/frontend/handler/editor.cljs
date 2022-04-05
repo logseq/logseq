@@ -1062,10 +1062,9 @@
 
 (defn select-block!
   [block-uuid]
-  (when-let [block (-> (str block-uuid)
-                       (js/document.getElementsByClassName)
-                       first)]
-    (state/exit-editing-and-set-selected-blocks! [block])))
+  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
+    (when (seq blocks)
+      (state/exit-editing-and-set-selected-blocks! blocks))))
 
 (defn- blocks-with-level
   "Should be sorted already."
