@@ -65,6 +65,27 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   )
 })
 
+test('disappeared children #4814', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.type('textarea >> nth=0', 'parent')
+  await enterNextBlock(page)
+  await page.press('textarea >> nth=0', 'Tab')
+
+  for (let i = 0; i < 6; i++) {
+    await page.type('textarea >> nth=0', i.toString())
+    await enterNextBlock(page)
+  }
+
+  // collapse
+  await page.press('textarea >> nth=0', 'Control+ArrowUp')
+
+  // expand
+  await page.press('textarea >> nth=0', 'Control+ArrowDown')
+
+  await page.waitForSelector('.ls-block >> nth=6') // 7 blocks
+})
+
 // FIXME: ClipboardItem is not defined when running with this test
 // test('copy & paste block ref and replace its content', async ({ page }) => {
 //   await createRandomPage(page)

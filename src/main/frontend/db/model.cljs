@@ -671,7 +671,9 @@
                                                                                (remove nil?))]
                                                                [(zipmap (mapv :db/id blocks) blocks)
                                                                 (zipmap (mapv :db/id @result) @result)]))
-                           limit (if (and result @result) (+ (count @result) 5) limit)
+                           limit (if (and result @result)
+                                   (max (+ (count @result) 5) limit)
+                                   limit)
                            outliner-op (get-in tx-report [:tx-meta :outliner-op])
                            blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
                            blocks (or blocks
