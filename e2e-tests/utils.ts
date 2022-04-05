@@ -199,3 +199,7 @@ export async function activateNewPage(page: Page) {
   await page.click('.ls-block >> nth=0')
   await page.waitForTimeout(500)
 }
+
+export async function editFirstBlock(page: Page) {
+  await page.click('.ls-block .block-content >> nth=0')
+}
