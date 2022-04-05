@@ -77,9 +77,6 @@ test('disappeared children #4814', async ({ page }) => {
     await enterNextBlock(page)
   }
 
-  // edit the first block
-  await editFirstBlock(page)
-
   // collapse
   await page.click('.block-control >> nth=0')
 
@@ -87,6 +84,9 @@ test('disappeared children #4814', async ({ page }) => {
   await page.click('.block-control >> nth=0')
 
   await page.waitForSelector('.ls-block >> nth=6') // 7 blocks
+
+  // Ensures there's no active editor
+  await expect(page.locator('.editor-inner')).toHaveCount(0, {timeout: 500})
 })
 
 // FIXME: ClipboardItem is not defined when running with this test
