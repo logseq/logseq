@@ -125,19 +125,6 @@
   .doc-modes {
     .non-editing {
       position: relative;
-
-      &:after {
-        content: " ";
-        width: 90%;
-        height: 2px;
-        background-color: red;
-        position: absolute;
-        left: 0;
-        top: 9px;
-        transform: rotate(45deg);
-        opacity: .7;
-        border-radius: 4px;
-      }
     }
   }
 }

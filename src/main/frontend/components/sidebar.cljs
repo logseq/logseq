@@ -401,7 +401,7 @@
                          [:p.inline-block "to toggle document mode"]]]]}
                [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
                 {:on-click state/toggle-document-mode!}
-                "D"]))
+                (ui/icon "notes")]))
 
    (when (state/sub [:document/reading-mode?])
      (ui/tippy {:html [:div.p-2
@@ -413,7 +413,7 @@
                          [:p.inline-block "to toggle reading mode"]]]]}
                [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2.non-editing
                 {:on-click state/toggle-reading-mode!}
-                "E"]))])
+                (ui/icon "eye")]))])
 
 (rum/defc help-button < rum/reactive
   []
