@@ -340,3 +340,28 @@ html.is-native-ios {
     display: none;
   }
  }
+
+ .text-2xs {
+  font-size: 0.625rem; /* 10px */
+  line-height: 0.875rem; /* 14px */
+ }
+
+ .toned-down {
+   opacity: 0.5;
+  color: var(--ls-secondary-text-color);
+ }
+
+ .highlighted {
+  opacity: 1;
+  color: var(--ls-primary-text-color);
+ }
+
+ .separator-top {
+   border-top: 1px solid var(--ls-quaternary-background-color);
+ }
+
+ .icon-box {
+  display: inline-block;
+  line-height: normal;
+  background-color: var(--ls-quaternary-background-color);
+ }

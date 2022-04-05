@@ -247,7 +247,7 @@
 
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
 
-       (state/logged?)
+       (state/deprecated-logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])]
 
     (markdown-headings)

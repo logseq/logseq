@@ -1453,6 +1453,7 @@
       {:id (str "control-" uuid)
        :on-click (fn [event]
                    (util/stop event)
+                   (state/clear-edit!)
                    (if ref?
                      (state/toggle-collapsed-block! uuid)
                      (if collapsed?

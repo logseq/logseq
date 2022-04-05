@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent send-to-renderer]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -18,8 +18,9 @@
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
-(defonce LSP_SCHEME "lsp")
-(defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
+(defonce LSP_SCHEME "logseq")
+(defonce FILE_LSP_SCHEME "lsp")
+(defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
@@ -38,32 +39,44 @@
                    :logger logger
                    :win    win})))
 
-(defn setup-interceptor! []
-  (.registerFileProtocol
-    protocol "assets"
-    (fn [^js request callback]
-      (let [url (.-url request)
-            path (string/replace url "assets://" "")
-            path (js/decodeURIComponent path)]
-        (callback #js {:path path}))))
+(defn setup-interceptor! [^js app]
+  (.setAsDefaultProtocolClient app LSP_SCHEME)
 
   (.registerFileProtocol
-    protocol LSP_SCHEME
-    (fn [^js request callback]
-      (let [url (.-url request)
-            url' ^js (js/URL. url)
-            [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
-                         [PLUGIN_URL PLUGINS_ROOT]
-                         [STATIC_URL js/__dirname])
+   protocol "assets"
+   (fn [^js request callback]
+     (let [url (.-url request)
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
+       (callback #js {:path path}))))
 
-            path' (.-pathname url')
-            path' (js/decodeURIComponent path')
-            path' (.join path ROOT path')]
+  (.registerFileProtocol
+   protocol FILE_LSP_SCHEME
+   (fn [^js request callback]
+     (let [url (.-url request)
+           url' ^js (js/URL. url)
+           [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
+                      [PLUGIN_URL PLUGINS_ROOT]
+                      [STATIC_URL js/__dirname])
 
-        (callback #js {:path path'}))))
+           path' (.-pathname url')
+           path' (js/decodeURIComponent path')
+           path' (.join path ROOT path')]
+
+       (callback #js {:path path'}))))
+
+  (.on app "open-url"
+       (fn [event url]
+         (.info logger "open-url" (str {:url url
+                                        :event event}))
+
+         (let [parsed-url (js/URL. url)]
+           (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
+                      (= "auth-callback" (.-host parsed-url)))
+             (send-to-renderer "loginCallback" (.get (.-searchParams parsed-url) "code"))))))
 
   #(do
-     (.unregisterProtocol protocol LSP_SCHEME)
+     (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
@@ -170,14 +183,15 @@
     (do
       (search/close!)
       (.quit app))
-    (do
+    (let [privileges {:standard        true
+                      :secure          true
+                      :bypassCSP       true
+                      :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
-       protocol (bean/->js [{:scheme     LSP_SCHEME
-                             :privileges {:standard        true
-                                          :secure          true
-                                          :bypassCSP       true
-                                          :supportFetchAPI true}}]))
-
+        protocol (bean/->js [{:scheme     LSP_SCHEME
+                              :privileges privileges}
+                             {:scheme     FILE_LSP_SCHEME
+                              :privileges privileges}]))
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
@@ -194,7 +208,7 @@
                                      (.quit app)))
       (.on app "ready"
            (fn []
-             (let [t0 (setup-interceptor!)
+             (let [t0 (setup-interceptor! app)
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
