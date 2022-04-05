@@ -662,8 +662,8 @@
                      (let [tx-data (:tx-data tx-report)
                            refs (some->> (filter #(= :block/refs (:a %)) tx-data)
                                          (map :v))
-                           tx-block-ids (distinct (->> (map :e tx-data)
-                                                       (concat refs)))
+                           tx-block-ids (distinct (-> (map :e tx-data)
+                                                      (concat refs)))
                            [tx-id->block cached-id->block] (when (and tx-report result)
                                                              (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                (remove nil?))]
