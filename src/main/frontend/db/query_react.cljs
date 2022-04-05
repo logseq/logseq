@@ -24,11 +24,12 @@
     (= :today input)
     (date->int (t/today))
     (= :yesterday input)
-    (date->int (t/yesterday))
+    (date->int (t/minus (t/today) (t/days 1)))
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
     (= :current-page input)
-    (string/lower-case (state/get-current-page))
+    ;; This sometimes runs when there isn't a current page e.g. :home route
+    (some-> (state/get-current-page) string/lower-case)
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
@@ -112,21 +113,18 @@
          f)) query)))
 
 (defn react-query
-  [repo {:keys [query inputs throw-exception] :as query'} query-opts]
+  [repo {:keys [query inputs rules] :as query'} query-opts]
   (let [pprint (if config/dev? (fn [_] nil) debug/pprint)]
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
-    (try
-      (let [query (resolve-query query)
-            inputs (map resolve-input inputs)
-            repo (or repo (state/get-current-repo))
-            k [:custom query']]
-        (pprint "inputs (post-resolution):" inputs)
-        (pprint "query-opts:" query-opts)
-        (apply react/q repo k query-opts query inputs))
-      (catch js/Error e
-        (when throw-exception
-          (throw (ex-info (.-message e) {})))
-        (pprint "Custom query failed: " {:query query'})
-        (js/console.dir e)))))
+    (let [query (resolve-query query)
+          resolved-inputs (mapv resolve-input inputs)
+          inputs (cond-> resolved-inputs
+                         rules
+                         (conj rules))
+          repo (or repo (state/get-current-repo))
+          k [:custom query']]
+      (pprint "inputs (post-resolution):" resolved-inputs)
+      (pprint "query-opts:" query-opts)
+      (apply react/q repo k query-opts query inputs))))

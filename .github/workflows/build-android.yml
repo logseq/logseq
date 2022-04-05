@@ -7,10 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta")'
+        description: 'Build Target ("nightly"/"beta"/"non-release")'
         type: string
         required: true
         default: "beta"
+      git-ref:
+        description: "Build from Git Ref(master)"
+        required: true
+        default: "master"
   workflow_call:
     inputs:
       build-target:
@@ -20,6 +24,8 @@ on:
       ANDROID_KEYSTORE:
         required: true
       ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      SENTRY_AUTH_TOKEN:
         required: true
 
 env:
@@ -32,6 +38,8 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -83,6 +91,19 @@ jobs:
 
       - name: Compile CLJS
         run: yarn install && yarn release
+
+      - name: Upload Sentry Sourcemaps (beta only)
+        if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          release_name="logseq-android@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
 
       - name: Prepare public Directory
         run: |

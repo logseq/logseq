@@ -2,19 +2,18 @@
   (:require [clojure.set :as set]
             [clojure.walk :as walk]
             [frontend.db :as db]
-            [frontend.format.block :as block]))
+            [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
+            [frontend.state :as state]
+            [frontend.format.block :as block]
+            [frontend.util :as util]))
 
-;; lazy loading
-
-(def initial-blocks-length 200)
-
-(def step-loading-blocks 50)
 
 ;;  Fns
 
 (defn long-page?
   [repo page-id]
-  (>= (db/get-page-blocks-count repo page-id) initial-blocks-length))
+  (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
 
 (defn get-block-refs-with-children
   [block]
@@ -27,14 +26,15 @@
 
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]
-  (let [ref-pages (->> (if group-by-page?
-                         (mapcat last ref-blocks)
-                         ref-blocks)
-                       (mapcat (fn [b] (get-block-refs-with-children b)))
-                       (concat (when group-by-page? (map first ref-blocks)))
-                       (distinct)
-                       (map :db/id)
-                       (db/pull-many repo '[:db/id :block/name]))
+  (let [ref-pages-ids (->> (if group-by-page?
+                             (mapcat last ref-blocks)
+                             ref-blocks)
+                           (mapcat (fn [b] (get-block-refs-with-children b)))
+                           (concat (when group-by-page? (map first ref-blocks)))
+                           (distinct)
+                           (map :db/id)
+                           (remove nil?))
+        ref-pages (db/pull-many repo '[:db/id :block/name] ref-pages-ids)
         ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
         exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
                          (remove nil?)
@@ -94,3 +94,23 @@
 (defn get-deadline-ast
   [block]
   (get-timestamp block "Deadline"))
+
+(defn load-more!
+  [db-id start-id]
+  (let [repo (state/get-current-repo)
+        db (db/get-conn repo)
+        block (db/entity repo db-id)
+        block? (not (:block/name block))
+        k (if block?
+            :frontend.db.react/block-and-children
+            :frontend.db.react/page-blocks)
+        query-k [repo k db-id]
+        option (cond-> {:limit db-model/step-loading-blocks}
+                 block?
+                 (assoc :scoped-block-id db-id))
+        more-data (->> (db-model/get-paginated-blocks-no-cache db start-id option)
+                       (map #(db/pull (:db/id %))))]
+    (react/swap-new-result! query-k
+                            (fn [result]
+                              (->> (concat result more-data)
+                                   (util/distinct-by :db/id))))))

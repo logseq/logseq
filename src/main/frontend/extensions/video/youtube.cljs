@@ -27,15 +27,20 @@
     c))
 
 (defn register-player [state]
-  (let [id (first (:rum/args state))
-        player (js/window.YT.Player.
-                (rum/dom-node state)
-                (clj->js
-                 {:events
-                  {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
-    (state/update-state! [:youtube/players]
-                         (fn [players]
-                           (assoc players id player)))))
+  (try
+    (let [id (first (:rum/args state))
+         node (rum/dom-node state)]
+     (when node
+       (let [player (js/window.YT.Player.
+                     node
+                     (clj->js
+                      {:events
+                       {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
+         (state/update-state! [:youtube/players]
+                              (fn [players]
+                                (assoc players id player))))))
+    (catch :default _e
+      nil)))
 
 (rum/defcs youtube-video <
   rum/reactive

@@ -4,10 +4,11 @@
             [electron.listener :as el]
             [frontend.components.page :as page]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
-            [frontend.db.react :as db-react]
+            [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -17,6 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -27,6 +29,7 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
+            [frontend.util.persist-var :as persist-var]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -89,11 +92,11 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     (-> (p/all (db/restore!
-                                 (assoc me :repos repos)
-                                 old-db-schema
-                                 (fn [repo]
-                                   (file-handler/restore-config! repo false))))
+                     (-> (db/restore!
+                          (assoc me :repos repos)
+                          old-db-schema
+                          (fn [repo]
+                            (file-handler/restore-config! repo false)))
                          (p/then
                           (fn []
                             ;; try to load custom css only for current repo
@@ -109,6 +112,7 @@
                                    ;; Not native local directory
                                    (not (some config/local-db? (map :url repos)))
                                    (not (mobile-util/is-native-platform?)))
+                              ;; will execute `(state/set-db-restoring! false)` inside
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else
@@ -129,11 +133,8 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (when (and (state/get-current-repo)
-                                       (mobile-util/native-ios?))
-                              (mobile-util/icloud-sync!))
-                            (file-handler/watch-for-current-graph-dir!)))
-                         (p/then (state/pub-event! [:graph/ready (state/get-current-repo)]))
+                            (file-handler/watch-for-current-graph-dir!)
+                            (state/pub-event! [:graph/ready (state/get-current-repo)])))
                          (p/catch (fn [error]
                                     (log/error :exception error))))))
         interval-id (js/setInterval inner-fn 50)]
@@ -167,7 +168,7 @@
                                nil)))))))
 (defn- get-repos
   []
-  (let [logged? (state/logged?)
+  (let [logged? (state/deprecated-logged?)
         me (state/get-me)]
     (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]
@@ -192,10 +193,10 @@
               (ipc/ipc "clearCache"))
           _ (idb/clear-local-storage-and-idb!)]
     (js/setTimeout
-      (fn [] (if (util/electron?)
-               (ipc/ipc :reloadWindowPage)
-               (js/window.location.reload)))
-      2000)))
+     (fn [] (if (util/electron?)
+              (ipc/ipc :reloadWindowPage)
+              (js/window.location.reload)))
+     2000)))
 
 (defn- register-components-fns!
   []
@@ -211,6 +212,7 @@
     (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
+    (i18n/start)
     (instrument/init)
     (set-network-watcher!)
 
@@ -221,15 +223,15 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (db-react/run-custom-queries-when-idle!)
+    (react/run-custom-queries-when-idle!)
 
     (events/run!)
 
     (p/let [repos (get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! me repos logged? db-schema)
-      (when (mobile-util/is-native-platform?)
-        (p/do! (mobile-util/hide-splash))))
+           (state/set-repos! repos)
+           (restore-and-setup! me repos logged? db-schema)
+           (when (mobile-util/is-native-platform?)
+             (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
@@ -238,6 +240,8 @@
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
+    (persist-var/load-vars)
+    (user-handler/refresh-tokens-loop)
     (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []

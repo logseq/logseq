@@ -33,8 +33,8 @@
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
   (p/let [
-          ;; save the previous content in a bak file to avoid data overwritten.
-          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content))
+          ;; save the previous content in a versioned bak file to avoid data overwritten.
+          _ (when backup? (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
           _ (file-handler/alter-file repo path content {:re-render-root? true
                                                         :from-disk? true})]
     (set-missing-block-ids! content)

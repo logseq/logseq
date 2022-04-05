@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.core-test
   (:require [cljs.test :refer [deftest is use-fixtures testing] :as test]
-            [frontend.fixtures :as fixtures]
+            [frontend.test.fixtures :as fixtures]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as outliner-ds]
             [frontend.modules.outliner.tree :as tree]

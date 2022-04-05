@@ -169,12 +169,8 @@
 
 (defn toggle-wide-mode!
   []
-  (let [wide? (state/get-wide-mode?)
-        elements (array-seq (js/document.getElementsByClassName "cp__sidebar-main-content"))
-        max-width (if wide? "var(--ls-main-content-max-width)" "var(--ls-main-content-max-width-wide)")]
-    (when-let [element (first elements)]
-      (dom/set-style! element :max-width max-width))
-    (state/toggle-wide-mode!)))
+  (storage/set :ui/wide-mode (not (state/get-wide-mode?)))
+  (state/toggle-wide-mode!))
 
 ;; auto-complete
 (defn auto-complete-prev
@@ -233,13 +229,14 @@
 
 (defn auto-complete-open-link
   [state e]
-  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)
-        current-idx (get state :frontend.ui/current-idx)]
-    (util/stop e)
-    (when (and (seq matched)
-             (> (count matched)
-                @current-idx))
-      (on-chosen-open-link (nth matched @current-idx) false))))
+  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)]
+    (when (and on-chosen-open-link (not (state/editing?)))
+      (let [current-idx (get state :frontend.ui/current-idx)]
+        (util/stop e)
+        (when (and (seq matched)
+                   (> (count matched)
+                      @current-idx))
+          (on-chosen-open-link (nth matched @current-idx) false))))))
 
 ;; date-picker
 ;; TODO: find a better way
@@ -301,5 +298,9 @@
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window!
-  []
-  (ipc/ipc "openNewWindow"))
+  ([_e]
+   (open-new-window! _e nil))
+  ([_e repo]
+   ; TODO: find out a better way to open a new window with a different repo path
+   (when (string? repo) (storage/set :git/current-repo repo))
+   (ipc/ipc "openNewWindow")))

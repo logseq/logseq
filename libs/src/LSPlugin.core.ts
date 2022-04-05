@@ -201,16 +201,19 @@ enum PluginLocalLoadStatus {
 function initUserSettingsHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `settings:${label}`
 
+  // settings:schema
   pluginLocal.on(_('schema'), ({ schema, isSync }: { schema: Array<SettingSchemaDesc>, isSync?: boolean }) => {
     pluginLocal.settingsSchema = schema
     pluginLocal.settings?.setSchema(schema, isSync)
   })
 
+  // settings:update
   pluginLocal.on(_('update'), (attrs) => {
     if (!attrs) return
     pluginLocal.settings?.set(attrs)
   })
 
+  // settings:visible:changed
   pluginLocal.on(_('visible:changed'), (payload) => {
     const visible = payload?.visible
     invokeHostExportedApi('set_focused_settings',
@@ -221,6 +224,7 @@ function initUserSettingsHandlers (pluginLocal: PluginLocal) {
 function initMainUIHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `main-ui:${label}`
 
+  // main-ui:visible
   pluginLocal.on(_('visible'), ({ visible, toggle, cursor, autoFocus }) => {
     const el = pluginLocal.getMainUIContainer()
     el?.classList[toggle ? 'toggle' : (visible ? 'add' : 'remove')]('visible')
@@ -237,6 +241,7 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     }
   })
 
+  // main-ui:attrs
   pluginLocal.on(_('attrs'), (attrs: Partial<UIContainerAttrs>) => {
     const el = pluginLocal.getMainUIContainer()
     Object.entries(attrs).forEach(([k, v]) => {
@@ -258,6 +263,7 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     })
   })
 
+  // main-ui:style
   pluginLocal.on(_('style'), (style: Record<string, any>) => {
     const el = pluginLocal.getMainUIContainer()
     const isInitedLayout = !!el.dataset.inited_layout
@@ -278,6 +284,7 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
   let _ = (label: string): any => `provider:${label}`
   let themed = false
 
+  // provider:theme
   pluginLocal.on(_('theme'), (theme: ThemeOptions) => {
     pluginLocal.themeMgr.registerTheme(
       pluginLocal.id,
@@ -293,6 +300,7 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
     }
   })
 
+  // provider:style
   pluginLocal.on(_('style'), (style: StyleString | StyleOptions) => {
     let key: string | undefined
 
@@ -311,6 +319,7 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
     )
   })
 
+  // provider:ui
   pluginLocal.on(_('ui'), (ui: UIOptions) => {
     pluginLocal._onHostMounted(() => {
 

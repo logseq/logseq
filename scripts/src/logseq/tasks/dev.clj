@@ -6,7 +6,7 @@
 (defn watch
   "Watches environment to reload cljs, css and other assets"
   []
-  (shell "yarn watch"))
+  (shell "yarn electron-watch"))
 
 (defn- file-modified-later-than?
   [file comparison-instant]

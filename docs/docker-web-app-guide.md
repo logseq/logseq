@@ -45,7 +45,7 @@ mkcert 192.168.11.95 # public IP address or hostname of the remote machine
 
 ### Prepare SSL Nginx conf
 
-```
+```nginx
 # ssl.conf
 server {
     listen  443   ssl;

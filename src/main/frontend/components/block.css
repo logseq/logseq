@@ -544,11 +544,11 @@ a[data-ref="card"], .page-reference[data-ref="card"] {
     display: none;
 }
 
-span.cloze {
+a.cloze {
     color: var(--ls-cloze-text-color);
 }
 
-span.cloze-revealed {
+a.cloze-revealed {
     color: var(--ls-cloze-text-color);
     text-decoration: underline;
     text-underline-position: under;

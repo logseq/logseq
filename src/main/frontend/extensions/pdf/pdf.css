@@ -32,12 +32,12 @@ input::-webkit-inner-spin-button {
   &-toolbar {
     position: absolute;
     top: 0;
-    left: 0;
-    width: 100%;
+    right: 20px;
+    width: 90%;
     height: 42px;
     z-index: 5;
-    background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, rgba(255, 255, 255, 1) 100%);
     padding: 8px 20px;
+    padding-right: 0;
 
     > .inner {
       display: flex;
@@ -533,8 +533,6 @@ input::-webkit-inner-spin-button {
     }
 
     .extensions__pdf-toolbar {
-      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
-
       .buttons {
         background-color: #f6efdf;
       }

@@ -1,7 +1,7 @@
 ## Hi, welcome to Logseq!
-- Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ management and collaboration.
+- Logseq is a _privacy-first_, [open-source](https://github.com/logseq/logseq) platform for _knowledge_ management and collaboration.
 - This is a 3 minute tutorial on how to use Logseq. Let's get started!
-- Here are some tips might be useful.
+- Here are some tips that might be useful.
 #+BEGIN_TIP
 Click to edit any block.
 Type `Enter` to create a new block.
@@ -18,9 +18,8 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 - 4. Do you support tasks like todo/doing/done and priorities?
     - Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
     - NOW [#A] A dummy tutorial on "How to take dummy notes?"
-    - LATER [#A] Check out this awesome video by [:a {:href "https://twitter.com/TechWithEd" :target "_blank"} "@TechWithEd"], which shows how to use logseq to open your local directory.
-
-    {{tutorial-video}}
+    - LATER [#A] Check out this awesome video by [:a {:href "https://twitter.com/shuomi3" :target "_blank"} "@shuomi3"] on how to use Logseq to take notes and organize your life!
+    {{youtube https://www.youtube.com/watch?v=BhHfF0P9A80&ab_channel=ShuOmi}}
 
     - DONE Create a page
     - CANCELED [#C] Write a page with more than 1000 blocks

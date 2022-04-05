@@ -36,11 +36,13 @@
         :closure-defines  {goog.debug.LOGGING_ENABLED      true
                            frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
-        :dev      {:asset-path "/static/js"}
+        ;; NOTE: electron, browser/mobile-app use different asset-paths.
+        ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
+        ;;   For electron devs, assets are located in ./js(via relative path).
+        ; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
                    :after-load  frontend.core/start ;; after live-reloading finishes call this function
                    :watch-path  "/static"
-                   :watch-dir   "static"
                    :preloads    [devtools.preload
                                  shadow.remote.runtime.cljs.browser]}}
 
@@ -64,7 +66,7 @@
          :devtools        {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
-         :main            frontend.node-test-runner/main}
+         :main            frontend.test.node-test-runner/main}
 
   :publishing {:target        :browser
                :module-loader true

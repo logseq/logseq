@@ -1,5 +1,5 @@
 {:meta/version 1
- 
+
  ;; Currently, we support either "Markdown" or "Org".
  ;; This can overwrite your global preference so that
  ;; maybe your personal preferred format is Org but you'd
@@ -144,6 +144,13 @@
  :commands
  []
 
+ ;; By default, a block can only be collapsed if it has some children.
+ ;; `:outliner/block-title-collapse-enabled? true` enables a block with a title
+ ;; (multiple lines) can be collapsed too. For example:
+ ;; - block title
+ ;;   block content
+ :outliner/block-title-collapse-enabled? false
+
  ;; Macros replace texts and will make you more productive.
  ;; For example:
  ;; Add this to the macros below:
@@ -189,4 +196,19 @@
 
  ;; Extra CodeMirror options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
+
+ ;; ignore #+keyword: for parsing page references in orgmode
+ ;; :ignored-page-references-keywords #{"author" "startup"}
+ 
+ ;; Quick capture templates on mobile for recieving contents from other apps.
+ ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
+ ;; by received contents from other apps. Note: the {} cannot be omitted.
+ ;; - {time}: capture time
+ ;; - {text}: text that users selected before sharing.
+ ;; - {url}: url or assets path for media files stored in Logseq.
+ ;; You can also reorder them, or even only use one or two of them in the template.
+ ;; You can also insert or format any text in the template as shown in the following examples.
+ ;; :quick-capture-templates
+ ;; {:text "[[quick capture]] **{time}**: \n - {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: \n - {url}"}
  }

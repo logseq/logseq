@@ -298,6 +298,12 @@
   }
 }
 
+.ls-wide-mode {
+ .cp__sidebar-main-content {
+   max-width: var(--ls-main-content-max-width-wide);
+ }
+}
+
 html[data-theme='dark'] {
   #left-sidebar {
     > .shade-mask {

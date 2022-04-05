@@ -11,307 +11,243 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.modules.shortcut.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]
+            [clojure.data :as data]
             [medley.core :as medley]))
 
-;; Note – when you change this file, you will need to do a hard reset.
-;; The commands are registered when the Clojurescript code runs for the first time
-(defonce ^:large-vars/data-var all-default-keyboard-shortcuts
-  {:date-picker/complete         {:desc    "Date picker: Choose selected day"
-                                  :binding "enter"
+;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
+;; `:command.date-picker/complete`. They are namespaced in translation but
+;; almost everywhere else they are not which could cause needless conflicts
+;; with other config keys
+
+;; To add a new entry to this map, first add it here and then
+;; a description for it in frontend.modules.shortcut.dicts/all-default-keyboard-shortcuts.
+;; :inactive key is for commands that are not active for a given platform or feature condition
+(def ^:large-vars/data-var all-default-keyboard-shortcuts
+  {:date-picker/complete         {:binding "enter"
                                   :fn      ui-handler/shortcut-complete}
 
-   :date-picker/prev-day         {:desc    "Date picker: Select previous day"
-                                  :binding "left"
+   :date-picker/prev-day         {:binding "left"
                                   :fn      ui-handler/shortcut-prev-day}
 
-   :date-picker/next-day         {:desc    "Date picker: Select next day"
-                                  :binding "right"
+   :date-picker/next-day         {:binding "right"
                                   :fn      ui-handler/shortcut-next-day}
 
-   :date-picker/prev-week        {:desc    "Date picker: Select previous week"
-                                  :binding "up"
+   :date-picker/prev-week        {:binding "up"
                                   :fn      ui-handler/shortcut-prev-week}
 
-   :date-picker/next-week        {:desc    "Date picker: Select next week"
-                                  :binding "down"
+   :date-picker/next-week        {:binding "down"
                                   :fn      ui-handler/shortcut-next-week}
 
-   :pdf/previous-page            {:desc    "Previous page of current pdf doc"
-                                  :binding "alt+p"
+   :pdf/previous-page            {:binding "alt+p"
                                   :fn      pdf-utils/prev-page}
 
-   :pdf/next-page                {:desc    "Next page of current pdf doc"
-                                  :binding "alt+n"
+   :pdf/next-page                {:binding "alt+n"
                                   :fn      pdf-utils/next-page}
 
-   :auto-complete/complete       {:desc    "Auto-complete: Choose selected item"
-                                  :binding "enter"
+   :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
-   :auto-complete/prev           {:desc    "Auto-complete: Select previous item"
-                                  :binding "up"
+   :auto-complete/prev           {:binding "up"
                                   :fn      ui-handler/auto-complete-prev}
 
-   :auto-complete/next           {:desc    "Auto-complete: Select next item"
-                                  :binding "down"
+   :auto-complete/next           {:binding "down"
                                   :fn      ui-handler/auto-complete-next}
 
-   :auto-complete/shift-complete {:desc    "Auto-complete: Open selected item in sidebar"
-                                  :binding "shift+enter"
+   :auto-complete/shift-complete {:binding "shift+enter"
                                   :fn      ui-handler/auto-complete-shift-complete}
 
-   :auto-complete/open-link      {:desc    "Auto-complete: Open selected item in browser"
-                                  :binding "mod+o"
+   :auto-complete/open-link      {:binding "mod+o"
                                   :fn      ui-handler/auto-complete-open-link}
 
-   :cards/toggle-answers         {:desc    "Cards: show/hide answers/clozes"
-                                  :binding "s"
+   :cards/toggle-answers         {:binding "s"
                                   :fn      srs/toggle-answers}
 
-   :cards/next-card              {:desc    "Cards: next card"
-                                  :binding "n"
+   :cards/next-card              {:binding "n"
                                   :fn      srs/next-card}
 
-   :cards/forgotten              {:desc    "Cards: forgotten"
-                                  :binding "f"
+   :cards/forgotten              {:binding "f"
                                   :fn      srs/forgotten}
 
-   :cards/remembered             {:desc    "Cards: remembered"
-                                  :binding "r"
+   :cards/remembered             {:binding "r"
                                   :fn      srs/remembered}
 
-   :cards/recall                 {:desc    "Cards: take a while to recall"
-                                  :binding "t"
+   :cards/recall                 {:binding "t"
                                   :fn      srs/recall}
 
-   :editor/escape-editing        {:desc    "Escape editing"
-                                  :binding false
+   :editor/escape-editing        {:binding false
                                   :fn      (fn [_ _]
                                              (editor-handler/escape-editing))}
 
-   :editor/backspace             {:desc    "Backspace / Delete backwards"
-                                  :binding "backspace"
+   :editor/backspace             {:binding "backspace"
                                   :fn      editor-handler/editor-backspace}
 
-   :editor/delete                {:desc    "Delete / Delete forwards"
-                                  :binding "delete"
+   :editor/delete                {:binding "delete"
                                   :fn      editor-handler/editor-delete}
 
-   :editor/new-block             {:desc    "Create new block"
-                                  :binding "enter"
+   :editor/new-block             {:binding "enter"
                                   :fn      editor-handler/keydown-new-block-handler}
 
-   :editor/new-line              {:desc    "New line in current block"
-                                  :binding "shift+enter"
+   :editor/new-line              {:binding "shift+enter"
                                   :fn      editor-handler/keydown-new-line-handler}
 
-   :editor/follow-link           {:desc    "Follow link under cursor"
-                                  :binding "mod+o"
+   :editor/follow-link           {:binding "mod+o"
                                   :fn      editor-handler/follow-link-under-cursor!}
 
-   :editor/open-link-in-sidebar  {:desc    "Open link in sidebar"
-                                  :binding "mod+shift+o"
+   :editor/open-link-in-sidebar  {:binding "mod+shift+o"
                                   :fn      editor-handler/open-link-in-sidebar!}
 
-   :editor/bold                  {:desc    "Bold"
-                                  :binding "mod+b"
+   :editor/bold                  {:binding "mod+b"
                                   :fn      editor-handler/bold-format!}
 
-   :editor/italics               {:desc    "Italics"
-                                  :binding "mod+i"
+   :editor/italics               {:binding "mod+i"
                                   :fn      editor-handler/italics-format!}
 
-   :editor/highlight             {:desc    "Highlight"
-                                  :binding "mod+shift+h"
+   :editor/highlight             {:binding "mod+shift+h"
                                   :fn      editor-handler/highlight-format!}
 
-   :editor/strike-through        {:desc    "Strikethrough"
-                                  :binding "mod+shift+s"
+   :editor/strike-through        {:binding "mod+shift+s"
                                   :fn      editor-handler/strike-through-format!}
 
-   :editor/clear-block           {:desc    "Delete entire block content"
-                                  :binding (if mac? "ctrl+l" "alt+l")
+   :editor/clear-block           {:binding (if mac? "ctrl+l" "alt+l")
                                   :fn      editor-handler/clear-block-content!}
 
-   :editor/kill-line-before      {:desc    "Delete line before cursor position"
-                                  :binding (if mac? "ctrl+u" "alt+u")
+   :editor/kill-line-before      {:binding (if mac? "ctrl+u" "alt+u")
                                   :fn      editor-handler/kill-line-before!}
 
-   :editor/kill-line-after       {:desc    "Delete line after cursor position"
-                                  :binding (if mac? false "alt+k")
+   :editor/kill-line-after       {:binding (if mac? false "alt+k")
                                   :fn      editor-handler/kill-line-after!}
 
-   :editor/beginning-of-block    {:desc    "Move cursor to the beginning of a block"
-                                  :binding (if mac? false "alt+a")
+   :editor/beginning-of-block    {:binding (if mac? false "alt+a")
                                   :fn      editor-handler/beginning-of-block}
 
-   :editor/end-of-block          {:desc    "Move cursor to the end of a block"
-                                  :binding (if mac? false "alt+e")
+   :editor/end-of-block          {:binding (if mac? false "alt+e")
                                   :fn      editor-handler/end-of-block}
 
-   :editor/forward-word          {:desc    "Move cursor forward a word"
-                                  :binding (if mac? "ctrl+shift+f" "alt+f")
+   :editor/forward-word          {:binding (if mac? "ctrl+shift+f" "alt+f")
                                   :fn      editor-handler/cursor-forward-word}
 
-   :editor/backward-word         {:desc    "Move cursor backward a word"
-                                  :binding (if mac? "ctrl+shift+b" "alt+b")
+   :editor/backward-word         {:binding (if mac? "ctrl+shift+b" "alt+b")
                                   :fn      editor-handler/cursor-backward-word}
 
-   :editor/forward-kill-word     {:desc    "Delete a word forwards"
-                                  :binding (if mac? "ctrl+w" "alt+d")
+   :editor/forward-kill-word     {:binding (if mac? "ctrl+w" "alt+d")
                                   :fn      editor-handler/forward-kill-word}
 
-   :editor/backward-kill-word    {:desc    "Delete a word backwards"
-                                  :binding (if mac? false "alt+w")
+   :editor/backward-kill-word    {:binding (if mac? false "alt+w")
                                   :fn      editor-handler/backward-kill-word}
 
-   :editor/replace-block-reference-at-point {:desc    "Replace block reference with its content at point"
-                                             :binding "mod+shift+r"
+   :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
 
-   :editor/paste-text-in-one-block-at-point {:desc    "Paste text into one block at point"
-                                             :binding "mod+shift+v"
+   :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
                                              :fn      editor-handler/paste-text-in-one-block-at-point}
 
-   :editor/insert-youtube-timestamp         {:desc    "Insert youtube timestamp"
-                                             :binding "mod+shift+y"
+   :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}
 
-   :editor/cycle-todo              {:desc    "Rotate the TODO state of the current item"
-                                    :binding "mod+enter"
+   :editor/cycle-todo              {:binding "mod+enter"
                                     :fn      editor-handler/cycle-todo!}
 
-   :editor/up                      {:desc    "Move cursor up / Select up"
-                                    :binding "up"
+   :editor/up                      {:binding "up"
                                     :fn      (editor-handler/shortcut-up-down :up)}
 
-   :editor/down                    {:desc    "Move cursor down / Select down"
-                                    :binding "down"
+   :editor/down                    {:binding "down"
                                     :fn      (editor-handler/shortcut-up-down :down)}
 
-   :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
-                                    :binding "left"
+   :editor/left                    {:binding "left"
                                     :fn      (editor-handler/shortcut-left-right :left)}
 
-   :editor/right                   {:desc    "Move cursor right / Open selected block at end"
-                                    :binding "right"
+   :editor/right                   {:binding "right"
                                     :fn      (editor-handler/shortcut-left-right :right)}
 
-   :editor/move-block-up           {:desc    "Move block up"
-                                    :binding (if mac? "mod+shift+up" "alt+shift+up")
+   :editor/move-block-up           {:binding (if mac? "mod+shift+up" "alt+shift+up")
                                     :fn      (editor-handler/move-up-down true)}
 
-   :editor/move-block-down         {:desc    "Move block down"
-                                    :binding (if mac? "mod+shift+down" "alt+shift+down")
+   :editor/move-block-down         {:binding (if mac? "mod+shift+down" "alt+shift+down")
                                     :fn      (editor-handler/move-up-down false)}
 
    ;; FIXME: add open edit in non-selection mode
-   :editor/open-edit               {:desc    "Edit selected block"
-                                    :binding "enter"
+   :editor/open-edit               {:binding "enter"
                                     :fn      (partial editor-handler/open-selected-block! :right)}
 
-   :editor/select-block-up         {:desc    "Select block above"
-                                    :binding "shift+up"
+   :editor/select-block-up         {:binding "shift+up"
                                     :fn      (editor-handler/on-select-block :up)}
 
-   :editor/select-block-down       {:desc    "Select block below"
-                                    :binding "shift+down"
+   :editor/select-block-down       {:binding "shift+down"
                                     :fn      (editor-handler/on-select-block :down)}
 
-   :editor/delete-selection        {:desc    "Delete selected blocks"
-                                    :binding ["backspace" "delete"]
+   :editor/delete-selection        {:binding ["backspace" "delete"]
                                     :fn      editor-handler/delete-selection}
 
-   :editor/expand-block-children   {:desc    "Expand"
-                                    :binding "mod+down"
+   :editor/expand-block-children   {:binding "mod+down"
                                     :fn      editor-handler/expand!}
 
-   :editor/collapse-block-children {:desc    "Collapse"
-                                    :binding "mod+up"
+   :editor/collapse-block-children {:binding "mod+up"
                                     :fn      editor-handler/collapse!}
 
-   :editor/indent                  {:desc    "Indent block"
-                                    :binding "tab"
+   :editor/indent                  {:binding "tab"
                                     :fn      (editor-handler/keydown-tab-handler :right)}
 
-   :editor/outdent                 {:desc    "Outdent block"
-                                    :binding "shift+tab"
+   :editor/outdent                 {:binding "shift+tab"
                                     :fn      (editor-handler/keydown-tab-handler :left)}
 
-   :editor/copy                    {:desc    "Copy (copies either selection, or block reference)"
-                                    :binding "mod+c"
+   :editor/copy                    {:binding "mod+c"
                                     :fn      editor-handler/shortcut-copy}
 
-   :editor/cut                     {:desc    "Cut"
-                                    :binding "mod+x"
+   :editor/cut                     {:binding "mod+x"
                                     :fn      editor-handler/shortcut-cut}
 
-   :editor/undo                    {:desc    "Undo"
-                                    :binding "mod+z"
+   :editor/undo                    {:binding "mod+z"
                                     :fn      history/undo!}
 
-   :editor/redo                    {:desc    "Redo"
-                                    :binding ["shift+mod+z" "mod+y"]
+   :editor/redo                    {:binding ["shift+mod+z" "mod+y"]
                                     :fn      history/redo!}
 
-   :editor/insert-link             {:desc    "HTML Link"
-                                    :binding "mod+l"
+   :editor/insert-link             {:binding "mod+l"
                                     :fn      #(editor-handler/html-link-format!)}
 
-   :editor/select-all-blocks       {:desc    "Select all blocks"
-                                    :binding "mod+shift+a"
+   :editor/select-all-blocks       {:binding "mod+shift+a"
                                     :fn      editor-handler/select-all-blocks!}
 
-   :editor/zoom-in                 {:desc    "Zoom in editing block / Forwards otherwise"
-                                    :binding (if mac? "mod+." "alt+right")
+   :editor/zoom-in                 {:binding (if mac? "mod+." "alt+right")
                                     :fn      editor-handler/zoom-in!}
 
-   :editor/zoom-out                {:desc    "Zoom out editing block / Backwards otherwise"
-                                    :binding (if mac? "mod+," "alt+left")
+   :editor/zoom-out                {:binding (if mac? "mod+," "alt+left")
                                     :fn      editor-handler/zoom-out!}
 
-   :ui/toggle-brackets             {:desc    "Toggle whether to display brackets"
-                                    :binding "mod+c mod+b"
+   :ui/toggle-brackets             {:binding "mod+c mod+b"
                                     :fn      config-handler/toggle-ui-show-brackets!}
 
-   :go/search-in-page              {:desc    "Search in the current page"
-                                    :binding "mod+shift+k"
+   :go/search-in-page              {:binding "mod+shift+k"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (route-handler/go-to-search! :page))}
 
-   :go/search                      {:desc    "Full text search"
-                                    :binding "mod+k"
+   :go/search                      {:binding "mod+k"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (route-handler/go-to-search! :global))}
 
-   :go/journals                    {:desc    "Go to journals"
-                                    :binding "g j"
+   :go/journals                    {:binding "g j"
                                     :fn      route-handler/go-to-journals!}
 
-   :go/backward                    {:desc    "Backwards"
-                                    :binding "mod+open-square-bracket"
+   :go/backward                    {:binding "mod+open-square-bracket"
                                     :fn      (fn [_] (js/window.history.back))}
 
-   :go/forward                     {:desc    "Forwards"
-                                    :binding "mod+close-square-bracket"
+   :go/forward                     {:binding "mod+close-square-bracket"
                                     :fn      (fn [_] (js/window.history.forward))}
 
-   :search/re-index                {:desc    "Rebuild search index"
-                                    :binding "mod+c mod+s"
+   :search/re-index                {:binding "mod+c mod+s"
                                     :fn      (fn [_] (search-handler/rebuild-indices! true))}
 
-   :sidebar/open-today-page        {:desc    "Open today's page in the right sidebar"
-                                    :binding (if mac? "mod+shift+j" "alt+shift+j")
+   :sidebar/open-today-page        {:binding (if mac? "mod+shift+j" "alt+shift+j")
                                     :fn      page-handler/open-today-in-sidebar}
 
-   :sidebar/clear                  {:desc    "Clear all in the right sidebar"
-                                    :binding "mod+c mod+c"
+   :sidebar/clear                  {:binding "mod+c mod+c"
                                     :fn      #(do
                                                 (state/clear-sidebar-blocks!)
                                                 (state/hide-right-sidebar!))}
@@ -319,75 +255,60 @@
    :misc/copy                      {:binding "mod+c"
                                     :fn      (fn [] (js/document.execCommand "copy"))}
 
-   :command-palette/toggle         {:desc    "Toggle command palette"
-                                    :binding "mod+shift+p"
+   :command-palette/toggle         {:binding "mod+shift+p"
                                     :fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/toggle! :ui/command-palette-open?))}
 
-   :graph/open                     {:desc    "Select graph to open"
-                                    :fn      #(do
+   :graph/open                     {:fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/set-state! :ui/open-select :graph-open))
                                     :binding "mod+shift+g"}
 
-   :graph/remove                   {:desc    "Remove a graph"
-                                    :fn      #(do
+   :graph/remove                   {:fn      #(do
                                                 (editor-handler/escape-editing)
                                                 (state/set-state! :ui/open-select :graph-remove))
                                     :binding false}
 
-   :graph/add                      {:desc "Add a graph"
-                                    :fn (fn [] (route-handler/redirect! {:to :repo-add}))
+   :graph/add                      {:fn (fn [] (route-handler/redirect! {:to :repo-add}))
                                     :binding false}
 
-   :graph/save                     {:desc "Save current graph to disk"
-                                    :fn #(state/pub-event! [:graph/save])
+   :graph/save                     {:fn #(state/pub-event! [:graph/save])
                                     :binding false}
 
-   :command/run                    (when (util/electron?)
-                                     {:desc    "Run git command"
-                                      :binding "mod+shift+1"
-                                      :fn      #(state/pub-event! [:command/run])})
+   :command/run                    {:binding "mod+shift+1"
+                                    :inactive (not (util/electron?))
+                                    :fn      #(state/pub-event! [:command/run])}
 
-   :go/home                        {:desc    "Go to home"
-                                    :binding "g h"
+   :go/home                        {:binding "g h"
                                     :fn      route-handler/redirect-to-home!}
 
-   :go/all-pages                   {:desc    "Go to all pages"
-                                    :binding "g a"
+   :go/all-pages                   {:binding "g a"
                                     :fn      route-handler/redirect-to-all-pages!}
 
-   :go/graph-view                  {:desc    "Go to graph view"
-                                    :binding "g g"
+   :go/graph-view                  {:binding "g g"
                                     :fn      route-handler/redirect-to-graph-view!}
 
 
-   :go/keyboard-shortcuts          {:desc    "Go to keyboard shortcuts"
-                                    :binding "g s"
+   :go/keyboard-shortcuts          {:binding "g s"
                                     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
 
-   :go/tomorrow                    {:desc    "Go to tomorrow"
-                                    :binding "g t"
+   :go/tomorrow                    {:binding "g t"
                                     :fn      journal-handler/go-to-tomorrow!}
 
-   :go/next-journal                {:desc    "Go to next journal"
-                                    :binding "g n"
+   :go/next-journal                {:binding "g n"
                                     :fn      journal-handler/go-to-next-journal!}
 
-   :go/prev-journal                {:desc    "Go to previous journal"
-                                    :binding "g p"
+   :go/prev-journal                {:binding "g p"
                                     :fn      journal-handler/go-to-prev-journal!}
 
-   :go/flashcards                  {:desc    "Toggle flashcards"
-                                    :binding "g f"
+   :go/flashcards                  {:binding "g f"
                                     :fn      (fn []
                                                (if (state/modal-opened?)
                                                  (state/close-modal!)
                                                  (state/pub-event! [:modal/show-cards])))}
 
-   :ui/toggle-document-mode        {:desc    "Toggle document mode"
-                                    :binding "t d"
+   :ui/toggle-document-mode        {:binding "t d"
                                     :fn      state/toggle-document-mode!}
 
    :ui/toggle-reading-mode         {:desc    "Toggle reading mode"
@@ -398,79 +319,71 @@
                                      :binding (if mac? "t s" ["t s" "mod+,"])
                                      :fn      ui-handler/toggle-settings-modal!}
 
-   :ui/toggle-right-sidebar         {:desc    "Toggle right sidebar"
-                                     :binding "t r"
+   :ui/toggle-right-sidebar         {:binding "t r"
                                      :fn      ui-handler/toggle-right-sidebar!}
 
-   :ui/toggle-left-sidebar          {:desc    "Toggle left sidebar"
-                                     :binding "t l"
+   :ui/toggle-left-sidebar          {:binding "t l"
                                      :fn      state/toggle-left-sidebar!}
 
-   :ui/toggle-help                  {:desc    "Toggle help"
-                                     :binding "shift+/"
+   :ui/toggle-help                  {:binding "shift+/"
                                      :fn      ui-handler/toggle-help!}
 
-   :ui/toggle-theme                 {:desc    "Toggle between dark/light theme"
-                                     :binding "t t"
+   :ui/toggle-theme                 {:binding "t t"
                                      :fn      state/toggle-theme!}
 
-   :ui/toggle-contents              {:desc    "Toggle Contents in sidebar"
-                                     :binding "mod+shift+c"
+   :ui/toggle-contents              {:binding "mod+shift+c"
                                      :fn      ui-handler/toggle-contents!}
-   :ui/open-new-window              (when (util/electron?)
-                                      {:desc    "Open another window"
-                                       :binding "mod+n"
-                                       :fn      ui-handler/open-new-window!})
 
-   :command/toggle-favorite         {:desc    "Add to/remove from favorites"
-                                     :binding "mod+shift+f"
+   :ui/open-new-window              {:binding "mod+n"
+                                     :inactive (not (util/electron?))
+                                     :fn      #(state/pub-event! [:graph/open-new-window nil])}
+
+   :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app (when (util/electron?)
-                                      {:desc    "Open file in default app"
-                                       :binding false
-                                       :fn      page-handler/open-file-in-default-app})
+   :editor/open-file-in-default-app {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   (when (util/electron?)
-                                      {:desc    "Open file in parent directory"
-                                       :binding false
-                                       :fn      page-handler/open-file-in-directory})
+   :editor/open-file-in-directory   {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/open-file-in-directory}
 
-   :editor/copy-current-file        (when (util/electron?)
-                                      {:desc    "Copy current file"
-                                       :binding false
-                                       :fn      page-handler/copy-current-file})
+   :editor/copy-current-file        {:binding false
+                                     :inactive (not (util/electron?))
+                                     :fn      page-handler/copy-current-file}
 
-   :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
-                                     :binding "t w"
+   :ui/toggle-wide-mode             {:binding "t w"
                                      :fn      ui-handler/toggle-wide-mode!}
 
-   :ui/select-theme-color           {:desc    "Select available theme colors"
-                                     :binding "t i"
+   :ui/select-theme-color           {:binding "t i"
                                      :fn      plugin-handler/show-themes-modal!}
 
-   :ui/goto-plugins                  (when plugin-handler/lsp-enabled?
-                                       {:desc    "Go to plugins dashboard"
-                                        :binding "t p"
-                                        :fn      plugin-handler/goto-plugins-dashboard!})
+   :ui/goto-plugins                 {:binding "t p"
+                                     :inactive (not plugin-handler/lsp-enabled?)
+                                     :fn      plugin-handler/goto-plugins-dashboard!}
 
 
-   :editor/toggle-open-blocks       {:desc    "Toggle open blocks (collapse or expand all blocks)"
-                                     :binding "t o"
+   :editor/toggle-open-blocks       {:binding "t o"
                                      :fn      editor-handler/toggle-open!}
 
-   :ui/toggle-cards                 {:desc    "Toggle cards"
-                                     :binding "t c"
+   :ui/toggle-cards                 {:binding "t c"
                                      :fn      ui-handler/toggle-cards!}
-   ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
 
-   :git/commit                      {:desc    "Git commit message"
-                                     :binding "c"
+   :git/commit                      {:binding "c"
                                      :fn      commit/show-commit-modal!}})
 
-(defn build-category-map [symbols]
-  (reduce into {}
-          (map (fn [sym] {sym (get all-default-keyboard-shortcuts sym)}) symbols)))
+(let [keyboard-shortcuts
+      {::keyboard-shortcuts (set (keys all-default-keyboard-shortcuts))
+       ::dicts/keyboard-shortcuts (set (keys dicts/all-default-keyboard-shortcuts))}]
+  (assert (= (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts))
+          (str "Keys for keyboard shortcuts must be the same "
+               (data/diff (::keyboard-shortcuts keyboard-shortcuts) (::dicts/keyboard-shortcuts keyboard-shortcuts)))))
+
+(defn build-category-map [ks]
+  (->> (select-keys all-default-keyboard-shortcuts ks)
+       (remove (comp :inactive val))
+       (into {})))
 
 (defonce ^:large-vars/data-var config
   (atom
@@ -575,8 +488,7 @@
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy              (:misc/copy              all-default-keyboard-shortcuts)
-     :command-palette/toggle (:command-palette/toggle all-default-keyboard-shortcuts)}
+    {:misc/copy              (:misc/copy              all-default-keyboard-shortcuts)}
 
     :shortcut.handler/global-non-editing-only
     (->
@@ -610,10 +522,11 @@
                           :git/commit])
      (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
-;; Categories for docs purpose
-(def ^:large-vars/data-var category
+;; To add a new entry to this map, first add it here and then
+;; a description for it in frontend.modules.shortcut.dicts/category
+(def ^:large-vars/data-var category*
+  "Full list of categories for docs purpose"
   {:shortcut.category/basics
-   ^{:doc "Basics"}
    [:editor/new-block
     :editor/new-line
     :editor/indent
@@ -627,14 +540,12 @@
     :editor/cut]
 
    :shortcut.category/formatting
-   ^{:doc "Formatting"}
    [:editor/bold
     :editor/insert-link
     :editor/italics
     :editor/highlight]
 
    :shortcut.category/navigating
-   ^{:doc "Navigation"}
    [:editor/up
     :editor/down
     :editor/left
@@ -658,7 +569,6 @@
     :ui/open-new-window]
 
    :shortcut.category/block-editing
-   ^{:doc "Block editing general"}
    [:editor/backspace
     :editor/delete
     :editor/indent
@@ -675,7 +585,6 @@
     :editor/escape-editing]
 
    :shortcut.category/block-command-editing
-   ^{:doc "Block command editing"}
    [:editor/backspace
     :editor/clear-block
     :editor/kill-line-before
@@ -690,7 +599,6 @@
     :editor/paste-text-in-one-block-at-point]
 
    :shortcut.category/block-selection
-   ^{:doc "Block selection (press Esc to quit selection)"}
    [:editor/open-edit
     :editor/select-all-blocks
     :editor/select-block-up
@@ -698,7 +606,6 @@
     :editor/delete-selection]
 
    :shortcut.category/toggle
-   ^{:doc "Toggle"}
    [:ui/toggle-help
     :editor/toggle-open-blocks
     :ui/toggle-wide-mode
@@ -713,9 +620,9 @@
     :ui/toggle-contents]
 
    :shortcut.category/others
-   ^{:doc "Others"}
    [:pdf/previous-page
     :pdf/next-page
+    :command/toggle-favorite
     :command/run
     :command-palette/toggle
     :graph/open
@@ -736,6 +643,18 @@
     :date-picker/prev-week
     :date-picker/next-week
     :date-picker/complete]})
+
+(let [category-maps {::category (set (keys category*))
+                     ::dicts/category (set (keys dicts/category))}]
+  (assert (= (::category category-maps) (::dicts/category category-maps))
+          (str "Keys for category maps must be the same "
+               (data/diff (::category category-maps) (::dicts/category category-maps)))))
+
+(def category
+  "Active list of categories for docs purpose"
+  (medley/map-vals (fn [v]
+                     (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))
+                   category*))
 
 (defn add-shortcut!
   [handler-id id shortcut-map]

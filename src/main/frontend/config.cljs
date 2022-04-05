@@ -17,6 +17,10 @@
 
 (def test? false)
 
+;; TODO: add :closure-defines in shadow-cljs.edn when prod env is ready
+(goog-define LOGIN-URL
+             "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 
@@ -190,6 +194,16 @@
     ["[]()" 1]
     ["" 0]))
 
+(defn link-format
+  [format label link]
+  (if label
+    (case format
+      :org
+      (util/format "[[%s][%s]]" link label)
+      :markdown
+      (util/format "[%s](%s)" label link))
+    link))
+
 (defn with-default-link
   [format link]
   (case format
@@ -205,7 +219,7 @@
   [format label link]
   (case format
     :org
-    [(util/format "[[%s][label]]" link label)
+    [(util/format "[[%s][%s]]" link label)
      (+ 4 (count link) (count label))]
     :markdown
     [(util/format "[%s](%s)" label link)
@@ -312,7 +326,7 @@
       (if (string/starts-with? dir "file:")
         dir
         (str "file:///" (string/replace dir #"^/+" ""))))
-    
+
     :else
     (str "/"
          (->> (take-last 2 (string/split repo-url #"/"))

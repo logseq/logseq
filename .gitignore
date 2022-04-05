@@ -31,6 +31,7 @@ strings.csv
 .calva
 resources/electron.js
 .clj-kondo/.cache
+.clj-kondo/babashka/sci
 .lsp/
 /libs/dist/
 charlie/
@@ -39,3 +40,5 @@ charlie/
 docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
+
+startup.png

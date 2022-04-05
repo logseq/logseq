@@ -1,7 +1,7 @@
 .cp__header {
   @apply shadow z-10;
   -webkit-app-region: drag;
-  
+
   padding-top: var(--ls-headbar-inner-top-padding);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
@@ -32,9 +32,10 @@
   }
 
   /* To prevent header glitch on Safari */
+
   > .l, > .r {
-      -webkit-transform: translate3d(0, 0, 0);
-      transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
   }
 
   .it svg {
@@ -107,6 +108,17 @@
     .ti {
       margin-right: 5px;
       opacity: .9;
+    }
+  }
+
+  .add-graph-btn {
+    border: 1px dashed var(--ls-border-color);
+    padding: 0 8px;
+
+    strong {
+      padding: 0 10px;
+      position: relative;
+      top: 1px;
     }
   }
 
@@ -193,13 +205,19 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
+  user-select: none;
 
   &:hover, &.active {
     opacity: 1;
     background: none;
+
     @screen md {
         background: var(--ls-tertiary-background-color);
     }
+  }
+
+  &:active {
+    opacity: .7;
   }
 }
 
@@ -208,7 +226,7 @@ a.button {
 }
 
 html.is-ios.is-safari {
-    
+
   .cp__header {
     background-color: var(--ls-primary-background-color);
   }
@@ -230,7 +248,7 @@ html.is-native-ipad {
         padding-top: 0px;
         height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
     }
-    
+
     .cp__header > .r {
         display: flex;
     }
@@ -239,11 +257,11 @@ html.is-native-ipad {
 html.is-native-ipad {
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
-    
+
     .cp__header {
       background-color: transparent !important;
       display: flex;
-      
+
       > .l {
         /* background-color: var(--ls-primary-background-color); */
         padding-top: 20px;
@@ -258,7 +276,7 @@ html.is-native-ipad {
         align-items: center;
       }
     }
-    
+
     .left-sidebar-inner  {
         > .wrap {
             padding-top: 20px;
@@ -280,7 +298,7 @@ html.is-native-ipad {
                 width: 12px;
                 height: 40vh;
             }
-            
+
             .resizer:hover {
                 background-color: var(--ls-guideline-color, #ddd);
             }
@@ -300,11 +318,11 @@ html.is-native-iphone {
             padding-bottom: 12px;
         }
     }
-    
+
     .ui__notifications {
         top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
     }
-    
+
     @media (orientation: landscape) {
         --ls-headbar-inner-top-padding: 8px;
         --ls-headbar-height: 2.5rem;
@@ -316,7 +334,7 @@ html.is-native-iphone {
 }
 
 html.is-native-iphone-without-notch {
-    
+
     --ls-headbar-inner-top-padding: 15px;
     --ls-headbar-height: 2.5rem;
 
@@ -324,7 +342,7 @@ html.is-native-iphone-without-notch {
 
         --ls-headbar-inner-top-padding: 0px;
         --ls-headbar-height: 2.5rem;
-     
+
         .cp__header {
             @apply shadow z-10;
         }

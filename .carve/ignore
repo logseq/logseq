@@ -58,6 +58,8 @@ frontend.ui/reset-ios-whole-page-offset!
 frontend.util/d
 ;; Future use?
 frontend.util/safe-search-normalize
+frontend.components.external/import-cp
+frontend.components.repo/add-repo
 ;; For debugging
 frontend.util/trace!
 ;; Repl fn
@@ -65,4 +67,4 @@ frontend.util.pool/terminate-pool!
 ;; Repl fn
 frontend.util.property/add-page-properties
 ;; Used by shadow
-frontend.node-test-runner/main
+frontend.test.node-test-runner/main

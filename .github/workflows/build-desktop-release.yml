@@ -107,6 +107,19 @@ jobs:
         run: ls -al
         working-directory: ./static
 
+      - name: Upload Sentry Sourcemaps (beta only)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          release_name="logseq@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
+
       - name: Cache Static File
         uses: actions/upload-artifact@v2
         with:
@@ -330,8 +343,12 @@ jobs:
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
+      - name: Fetch deps and fix dugit arch for arm64
+        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+        working-directory: ./static
+
       - name: Build/Release Electron App for arm64
-        run: yarn install && yarn electron:make-macos-arm64
+        run: yarn electron:make-macos-arm64
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
@@ -358,6 +375,7 @@ jobs:
     secrets:
       ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+      SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}

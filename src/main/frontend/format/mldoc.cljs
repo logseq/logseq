@@ -8,7 +8,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
-            [linked.core :as linked]))
+            [linked.core :as linked]
+            [frontend.config :as config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -114,10 +115,9 @@
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
-          directive?
-          (fn [[item _]] (= "directive" (string/lower-case (first item))))
+          directive? (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
-          directive-ast (get grouped-ast true)
+          directive-ast (take-while directive? original-ast)
           [properties-ast other-ast] (if (= "Property_Drawer" (ffirst ast))
                                        [(last (first ast))
                                         (rest original-ast)]
@@ -263,6 +263,17 @@
 (defn link?
   [format link]
   (when (string? link)
-    (let [[type link] (first (inline->edn link (default-config format)))]
+    (let [[type link] (first (inline->edn link (default-config format)))
+          [ref-type ref-value] (:url link)]
       (and (= "Link" type)
-           (not (contains? #{"Page_ref" "Block_ref"} (first (:url link))))))))
+           (or
+            ;; 1. url
+            (not (contains? #{"Page_ref" "Block_ref"} ref-type))
+
+            (and (contains? #{"Page_ref"} ref-type)
+                 (or
+                  ;; 2. excalidraw link
+                  (config/draw? ref-value)
+
+                  ;; 3. local asset link
+                  (boolean (config/local-asset? ref-value)))))))))

@@ -101,7 +101,7 @@
   "Embedded page searching popup"
   [id format]
   (when (state/sub :editor/show-page-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)]
       (when input
         (let [current-pos (cursor/pos input)
@@ -191,7 +191,7 @@
                    state)}
   [state id _format]
   (when (state/sub :editor/show-block-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)
           [id format] (:rum/args state)
           current-pos (cursor/pos input)
@@ -208,7 +208,7 @@
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
   (when (state/sub :editor/show-template-search?)
-    (let [pos (:editor/last-saved-cursor @state/state)
+    (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)]
       (when input
         (let [current-pos (cursor/pos input)
@@ -234,24 +234,17 @@
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
-                      (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                       (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
-(rum/defc mobile-bar-command [command-handler icon]
+(rum/defc mobile-bar-command [command-handler icon & [event?]]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
-                      (command-handler))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(rum/defc mobile-bar-command-with-event [command-handler icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (command-handler e))}
+                      (if event?
+                        (command-handler e)
+                        (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc mobile-bar < rum/reactive
@@ -285,8 +278,8 @@
       (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
       (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
       (mobile-bar-command editor-handler/html-link-format! "link")
-      (mobile-bar-command-with-event history/undo! "rotate")
-      (mobile-bar-command-with-event history/redo! "rotate-clockwise")
+      (mobile-bar-command history/undo! "rotate" true)
+      (mobile-bar-command history/redo! "rotate-clockwise" true)
       (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
       (mobile-bar-command editor-handler/bold-format! "bold")
       (mobile-bar-command editor-handler/italics-format! "italic")
@@ -301,7 +294,7 @@
    (fn [state]
      (mixins/on-key-down
       state
-      { ;; enter
+      {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
@@ -325,23 +318,23 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                  {:key           (str "modal-input-" (name id))
-                   :id            (str "modal-input-" (name id))
-                   :type          (or type "text")
-                   :on-change     (fn [e]
-                                    (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                 {:key           (str "modal-input-" (name id))
+                  :id            (str "modal-input-" (name id))
+                  :type          (or type "text")
+                  :on-change     (fn [e]
+                                   (swap! input-value assoc id (util/evalue e)))
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder)
                   autoFocus
                   (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
-             "Submit"
-             :on-click
-             (fn [e]
-               (util/stop e)
-               (on-submit command @input-value pos)))])))))
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
@@ -579,7 +572,8 @@
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
+           (assoc state ::heading-level (:heading-level (first (:rum/args state)))
+                  ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}

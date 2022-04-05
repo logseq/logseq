@@ -825,9 +825,7 @@
         (when-let [total (and viewer (.-numPages (.-pdfDocument viewer)))]
           (let [^js bus (.-eventBus viewer)
                 page-fn (fn [^js evt]
-                          (let [^js input (rum/deref *page-ref)
-                                num (.-pageNumber evt)]
-                            (set! (. input -value) num)
+                          (let [num (.-pageNumber evt)]
                             (set-current-page-num! num)))]
 
             (set-total-page-num! total)
@@ -835,6 +833,12 @@
             (.on bus "pagechanging" page-fn)
             #(.off bus "pagechanging" page-fn))))
       [viewer])
+
+    (rum/use-effect!
+      (fn []
+        (let [^js input (rum/deref *page-ref)]
+          (set! (. input -value) current-page-num)))
+      [current-page-num])
 
     [:div.extensions__pdf-toolbar
      [:div.inner

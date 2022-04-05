@@ -135,6 +135,7 @@
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
+            [frontend.config :as ui-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -150,7 +151,7 @@
   (get (state/get-config)
        :editor/extra-codemirror-options {}))
 
-(defn- save-file-or-block-when-blur-or-esc!
+(defn- save-file-or-block!
   [editor textarea config state]
   (.save editor)
   (let [value (gobj/get textarea "value")
@@ -187,6 +188,11 @@
         :else
         nil))))
 
+(defn- save-file-or-block-when-blur-or-esc!
+  [editor textarea config state]
+  (state/set-block-component-editing-mode! false)
+  (save-file-or-block! editor textarea config state))
+
 (defn- text->cm-mode
   ([text]
    (text->cm-mode text :name))
@@ -206,8 +212,7 @@
 
 (defn render!
   [state]
-  (let [esc-pressed? (atom nil)
-        [config id attr _code theme] (:rum/args state)
+  (let [[config id attr _code theme] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -226,29 +231,27 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :extraKeys #js {"Esc"
-                                        (fn [cm]
-                                          (reset! esc-pressed? true)
-                                          (save-file-or-block-when-blur-or-esc! cm textarea config state)
-                                          (when-let [block-id (:block/uuid config)]
-                                            (let [block (db/pull [:block/uuid block-id])]
-                                              (editor-handler/edit-block! block :max block-id)))
-                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                          (js/setTimeout #(reset! esc-pressed? false) 10))}})
+                           :readOnly (if ui-config/publishing? "nocursor" false)
+                           :extraKeys #js {"Esc" (fn [cm]
+                                                   ;; Avoid reentrancy
+                                                   (gobj/set cm "escPressed" true)
+                                                   (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                                   (when-let [block-id (:block/uuid config)]
+                                                     (let [block (db/pull [:block/uuid block-id])]
+                                                       (editor-handler/edit-block! block :max block-id))))}})
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
-      (let [textarea-ref (rum/ref-node state textarea-ref-name)]
-        (gobj/set textarea-ref codemirror-ref-name editor))
-      (let [element (.getWrapperElement editor)]
+      (let [textarea-ref (rum/ref-node state textarea-ref-name)
+            element (.getWrapperElement editor)]
+        (gobj/set textarea-ref codemirror-ref-name editor)
         (when (= mode "calc")
           (.on editor "change" (fn [_cm _e]
                                  (let [new-code (.getValue editor)]
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
-        (.on editor "blur" (fn [_cm e]
+        (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (state/set-block-component-editing-mode! false)
-                             (when-not @esc-pressed?
+                             (when-not (gobj/get cm "escPressed")
                                (save-file-or-block-when-blur-or-esc! editor textarea config state))))
         (.addEventListener element "mousedown"
                            (fn [e]
@@ -258,9 +261,9 @@
                              (util/stop e)
                              (state/set-block-component-editing-mode! true)))
         (.save editor)
-        (.refresh editor)))
-    (when default-open?
-      (.focus editor))
+        (.refresh editor)
+        (when default-open?
+          (.focus editor))))
     editor))
 
 (defn- load-and-render!
@@ -284,7 +287,7 @@
                         (gobj/set textarea "defaultValue" code)
                         (gobj/set textarea "value" code))))
                   state)
-
+   ;; codemirror need to be re-rendered to get the new pos_meta
    :did-update (fn [state]
                  (load-and-render! state)
                  state)}

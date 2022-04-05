@@ -5,15 +5,22 @@
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             #_:clj-kondo/ignore
             ["@capacitor/status-bar" :refer [^js StatusBar]]
+            [frontend.mobile.intent :as intent]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
-            [frontend.components.repo :as repo]
-            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
-            [promesa.core :as p]
-            [frontend.util :as util]
-            [frontend.config :as config]))
+            [frontend.util :as util]))
+
+(defn- ios-init
+  []
+  (let [path (fs/iOS-ensure-documents!)]
+    (println "iOS container path: " path))
+
+  ;; Keyboard watcher
+  ;; (.addListener Keyboard "keyboardWillShow"
+  ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
+  (.addListener Keyboard "keyboardDidShow"
+                #(state/pub-event! [:mobile/keyboard-did-show])))
 
 (defn init!
   []
@@ -38,29 +45,24 @@
                                (not (string/includes? href "#/")))
                          (.exitApp App)
                          (js/window.history.back))))))
-  (when (mobile-util/native-ios?)
-    (let [path (fs/iOS-ensure-documents!)]
-      (println "iOS container path: " path))
 
-    ;; Keyboard watcher
-    ;; (.addListener Keyboard "keyboardWillShow"
-    ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
-    (.addListener Keyboard "keyboardDidShow"
-                  #(state/pub-event! [:mobile/keyboard-did-show])))
+  (when (mobile-util/native-ios?)
+    (ios-init))
 
   (when (mobile-util/is-native-platform?)
+    (.addListener mobile-util/fs-watcher "watcher"
+                  (fn [event]
+                    (state/pub-event! [:file-watcher/changed event])))
+
     (.addEventListener js/window "statusTap"
                        #(util/scroll-to-top true))
 
     (.addListener App "appStateChange"
                   (fn [^js state]
-                    (when-let [repo (state/get-current-repo)]
-                      (let [is-active? (.-isActive state)
-                            repo-dir (config/get-repo-dir repo)]
-                        (if is-active?
-                          (p/do!
-                           (when (mobile-util/native-ios?)
-                               (mobile-util/sync-icloud-repo repo-dir))
-                           (nfs-handler/refresh! repo repo/refresh-cb)
-                           (notification/show! "Notes updated!" :success true))
+                    (when (state/get-current-repo)
+                      (let [is-active? (.-isActive state)]
+                        (when is-active?
                           (editor-handler/save-current-block!))))))))
+    (.addEventListener js/window "sendIntentReceived"
+                       #(intent/handle-received))
+

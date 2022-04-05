@@ -134,7 +134,7 @@
                         root-handle)
              repo (str config/local-db-prefix dir-name)
              _ (state/set-loading-files! repo true)
-             _ (when-not (state/home?)
+             _ (when-not (or (state/home?) (state/setups-picker?))
                  (route-handler/redirect-to-home! false))]
        (reset! *repo repo)
        (when-not (string/blank? dir-name)
@@ -175,6 +175,7 @@
                            (p/let [_ (repo-handler/load-repo-to-db! repo
                                                                     {:first-clone? true
                                                                      :new-graph?   true
+                                                                     :empty-graph? (nil? (seq markup-files))
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
                              (state/set-loading-files! repo false)

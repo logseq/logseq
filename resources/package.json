@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.6.1",
+  "version": "0.6.5",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -32,7 +32,11 @@
     "semver": "7.3.5",
     "update-electron-app": "2.0.1",
     "extract-zip": "2.0.1",
-    "https-proxy-agent": "5.0.0"
+    "diff-match-patch": "1.0.5",
+    "https-proxy-agent": "5.0.0",
+    "@sentry/electron": "2.5.1",
+    "posthog-js": "1.10.2",
+    "@andelf/rsapi": "0.0.5"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",

@@ -24,7 +24,8 @@
 (when (native-ios?)
   (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
   (defonce ios-file-container (registerPlugin "FileContainer")))
-(when (native-ios?)
+;; NOTE: both iOS and android share the same FsWatcher API
+(when (is-native-platform?)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
 
 (defn sync-icloud-repo [repo-dir]
@@ -77,7 +78,6 @@
     :iPhoneSE4      {:width 320  :height 568  :statusbar 20}
     :iPodtouch5     {:width 320  :height 568  :statusbar 20}}))
 
-
 (defn get-idevice-model
   []
   (when (native-ios?)
@@ -128,10 +128,3 @@
     (if (and model landscape?)
       20
       (:statusbar (model @idevice-info)))))
-
-(defn icloud-sync!
-  []
-  (let [f (fn []
-            (.downloadFilesFromiCloud download-icloud-files))]
-    (f)
-    (js/setInterval f 300000)))

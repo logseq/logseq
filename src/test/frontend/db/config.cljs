@@ -3,16 +3,6 @@
             [frontend.state :as state]
             [frontend.db.persist :as db-persist]))
 
-(defonce test-db "test-db")
-
-(defn start-test-db!
-  []
-  (conn/start! nil test-db))
-
-(defn destroy-test-db!
-  []
-  (conn/destroy-all!))
-
 (defn destroy-db! [] (conn/destroy-all!))
 
 (defn clear-current-repo []

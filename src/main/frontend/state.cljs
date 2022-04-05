@@ -4,6 +4,7 @@
             [cljs-time.format :as tf]
             [cljs.core.async :as async]
             [clojure.string :as string]
+            [cljs.spec.alpha :as s]
             [dommy.core :as dom]
             [medley.core :as medley]
             [electron.ipc :as ipc]
@@ -72,7 +73,7 @@
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
      :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-     :ui/wide-mode?                         false
+     :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
      ;; 1. right sidebar
@@ -112,15 +113,12 @@
      :editor/show-zotero                    false
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
-     ;; This key is not currently used but may be useful later?
-     :editor/last-edit-block-input-id       nil
      :editor/in-composition?                false
      :editor/content                        {}
      :editor/block                          nil
      :editor/block-dom-id                   nil
      :editor/set-timestamp-block            nil
      :editor/last-input-time                nil
-     :editor/pos                            nil
      :editor/document-mode?                 document-mode?
      :editor/args                           nil
      :editor/on-paste?                      false
@@ -210,7 +208,20 @@
 
      :srs/cards-due-count                   nil
 
-     :reactive/query-dbs                    {}})))
+     :reactive/query-dbs                    {}
+
+     ;; login, userinfo, token, ...
+     :auth/refresh-token                    nil
+     :auth/access-token                     nil
+     :auth/id-token                         nil
+
+     ;; file-sync
+     :file-sync/sync-manager                nil
+     :file-sync/sync-state-manager          nil
+     :file-sync/sync-state                  nil
+     :file-sync/sync-uploading-files        nil
+     :file-sync/sync-downloading-files      nil
+     })))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -245,6 +256,10 @@
 (defn home?
   []
   (= :home (get-current-route)))
+
+(defn setups-picker?
+  []
+  (= :repo-add (get-current-route)))
 
 (defn get-current-page
   []
@@ -524,16 +539,7 @@
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
      (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value)))
-     ;; followers
-     ;; (when-let [s (util/extract-uuid input-id)]
-     ;;   (let [input (gdom/getElement input-id)
-     ;;         leader-parent (util/rec-get-block-node input)
-     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-     ;;                        (remove #(= leader-parent %)))]
-     ;;     (prn "followers: " (count followers))
-     ;;     ))
-     )))
+                                      (assoc m input-id value))))))
 
 (defn get-edit-input-id
   []
@@ -636,6 +642,19 @@
 (defn set-editor-show-zotero!
   [value]
   (set-state! :editor/show-zotero value))
+
+;; TODO: refactor, use one state
+(defn clear-editor-show-state!
+  []
+  (swap! state (fn [state]
+                 (assoc state
+                        :editor/show-input nil
+                        :editor/show-zotero false
+                        :editor/show-date-picker? false
+                        :editor/show-block-search? false
+                        :editor/show-template-search? false
+                        :editor/show-page-search? false
+                        :editor/show-page-search-hashtag? false))))
 
 (defn set-edit-input-id!
   [input-id]
@@ -830,6 +849,10 @@
   []
   (and @publishing? (:publishing/enable-editing? (get-config))))
 
+(defn enable-editing?
+  []
+  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
+
 (defn set-editing!
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
@@ -850,22 +873,16 @@
                 (-> state
                     (assoc-in [:editor/content edit-input-id] content)
                     (assoc
-                      :editor/block block
-                      :editor/editing? {edit-input-id true}
-                      :editor/last-edit-block-input-id edit-input-id
-                      :editor/last-edit-block block
-                      :editor/last-key-code nil
-                      :cursor-range cursor-range))))
-
+                     :editor/block block
+                     :editor/editing? {edit-input-id true}
+                     :editor/last-edit-block block
+                     :editor/last-key-code nil
+                     :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
          (let [pos (count cursor-range)]
            (when content
-             (util/set-change-value input content)
-             ;; FIXME
-             ;; use set-change-value for now
-             ;; until somebody can figure out why set! value doesn't work here
-             ;; it seems to me textarea autoresize is completely broken
-             #_(set! (.-value input) (string/trim content)))
+             (util/set-change-value input content))
+
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 
@@ -876,7 +893,8 @@
   []
   (swap! state merge {:editor/editing? nil
                       :editor/block    nil
-                      :cursor-range    nil}))
+                      :cursor-range    nil
+                      :editor/last-saved-cursor nil}))
 
 (defn into-code-editor-mode!
   []
@@ -884,9 +902,17 @@
                       :cursor-range      nil
                       :editor/code-mode? true}))
 
-(defn set-last-pos!
+(defn set-editor-last-pos!
   [new-pos]
   (set-state! :editor/last-saved-cursor new-pos))
+
+(defn clear-editor-last-pos!
+  []
+  (set-state! :editor/last-saved-cursor nil))
+
+(defn get-editor-last-pos
+  []
+  (:editor/last-saved-cursor @state))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
@@ -898,7 +924,7 @@
   [theme]
   (set-state! :ui/theme theme)
   (when (mobile-util/native-ios?)
-    (if (= theme "white")
+    (if (= theme "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
   (storage/set :ui/theme theme))
@@ -906,7 +932,7 @@
 (defn sync-system-theme!
   []
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme! (if system-dark? "dark" "white"))
+    (set-theme! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
@@ -914,7 +940,7 @@
   [theme-mode]
   (if-not (= theme-mode "system")
     (do
-      (set-theme! (if (= theme-mode "light") "white" theme-mode))
+      (set-theme! theme-mode)
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))
     (sync-system-theme!)))
@@ -930,7 +956,7 @@
 (defn toggle-theme!
   []
   (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "white" "dark")]
+        theme' (if (= theme "dark") "light" "dark")]
     (use-theme-mode! theme')))
 
 (defn set-root-component!
@@ -1041,7 +1067,7 @@
   []
   (:name (get-me)))
 
-(defn logged?
+(defn deprecated-logged?
   "Whether the user has logged in."
   []
   (some? (get-name)))
@@ -1524,9 +1550,6 @@
    (set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
 
-(defn add-watch-state [key f]
-  (add-watch state key f))
-
 (defn remove-watch-state [key]
   (remove-watch state key))
 
@@ -1622,6 +1645,7 @@
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
+
 (defn toggle-collapsed-block!
   [block-id]
   (let [current-repo (get-current-repo)]
@@ -1636,20 +1660,41 @@
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
 
-(defn get-reactive-query-db
-  [ks]
-  (get-in @state [:reactive/query-dbs ks]))
-
-(defn delete-reactive-query-db!
-  [ks]
-  (update-state! :reactive/query-dbs (fn [dbs] (dissoc dbs ks))))
-
-(defn set-reactive-query-db!
-  [ks db-value]
-  (if db-value
-    (set-state! [:reactive/query-dbs ks] db-value)
-    (delete-reactive-query-db! ks)))
-
 (defn get-modal-id
   []
   (:modal/id @state))
+
+(defn edit-in-query-component
+  []
+  (and (editing?)
+       ;; config
+       (:custom-query? (last (get-editor-args)))))
+
+(defn set-auth-id-token
+  [id-token]
+  (set-state! :auth/id-token id-token))
+
+(defn set-auth-refresh-token
+  [refresh-token]
+  (set-state! :auth/refresh-token refresh-token))
+
+(defn set-auth-access-token
+  [access-token]
+  (set-state! :auth/access-token access-token))
+
+(defn get-auth-id-token []
+  (:auth/id-token @state))
+
+(defn get-auth-refresh-token []
+  (:auth/refresh-token @state))
+
+(defn set-file-sync-manager [v]
+  (set-state! :file-sync/sync-manager v))
+(defn set-file-sync-state [v]
+  (when v (s/assert :frontend.fs.sync/sync-state v))
+  (set-state! :file-sync/sync-state v))
+
+(defn get-file-sync-manager []
+  (:file-sync/sync-manager @state))
+(defn get-file-sync-state []
+  (:file-sync/sync-state @state))

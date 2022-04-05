@@ -13,7 +13,11 @@
   {:aliases {datascript.core d
              datascript.transit dt
              datascript.db ddb
-             lambdaisland.glogi log}}}
+             lambdaisland.glogi log
+             medley.core medley
+             frontend.db.query-dsl query-dsl
+             frontend.db.react react
+             frontend.db.query-react query-react}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}

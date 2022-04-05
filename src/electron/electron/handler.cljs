@@ -1,11 +1,12 @@
 (ns electron.handler
-  (:require ["electron" :refer [ipcMain dialog app autoUpdater]]
+  (:require ["electron" :refer [ipcMain dialog app autoUpdater shell]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["buffer" :as buffer]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
             ["os" :as os]
+            ["diff-match-patch" :as google-diff]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -16,7 +17,8 @@
             [electron.search :as search]
             [electron.git :as git]
             [electron.plugin :as plugin]
-            [electron.window :as win]))
+            [electron.window :as win]
+            [electron.file-sync-rsapi :as rsapi]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -30,15 +32,15 @@
 (defn- readdir
   [dir]
   (->> (tree-seq
-         (fn [^js f]
-           (.isDirectory (fs/statSync f) ()))
-         (fn [d]
-           (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
-             (->> files
-                  (remove #(.isSymbolicLink ^js %))
-                  (remove #(string/starts-with? (.-name ^js %) "."))
-                  (map #(.join path d (.-name %))))))
-         dir)
+        (fn [^js f]
+          (.isDirectory (fs/statSync f) ()))
+        (fn [d]
+          (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
+            (->> files
+                 (remove #(.isSymbolicLink ^js %))
+                 (remove #(string/starts-with? (.-name ^js %) "."))
+                 (map #(.join path d (.-name %))))))
+        dir)
        (doall)
        (vec)))
 
@@ -49,28 +51,59 @@
   (if (plugin/dotdir-file? path)
     (fs/unlinkSync path)
     (let [file-name   (-> (string/replace path (str repo "/") "")
-                        (string/replace "/" "_")
-                        (string/replace "\\" "_"))
+                          (string/replace "/" "_")
+                          (string/replace "\\" "_"))
           recycle-dir (str repo "/logseq/.recycle")
           _           (fs-extra/ensureDirSync recycle-dir)
           new-path    (str recycle-dir "/" file-name)]
       (fs/renameSync path new-path))))
 
+(defonce Diff (google-diff.))
+(defn string-some-deleted?
+  [old new]
+  (let [result (.diff_main Diff old new)]
+    (some (fn [a] (= -1 (first a))) result)))
+
+(defn- truncate-old-versioned-files!
+  [dir]
+  (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
+        files (map #(.-name %) files)
+        old-versioned-files (drop 3 (reverse (sort files)))]
+    (doseq [file old-versioned-files]
+      (fs-extra/removeSync (path/join dir file)))))
+
+(defn- get-backup-dir
+  [repo path]
+  (let [path (string/replace path repo "")
+        bak-dir (str repo "/logseq/bak")
+        path (str bak-dir path)
+        parsed-path (path/parse path)]
+    (path/join (.-dir parsed-path)
+               (.-name parsed-path))))
+
 (defn backup-file
   [repo path content]
-  (let [file-name (-> (string/replace path (str repo "/") "")
-                      (string/replace "/" "_")
-                      (string/replace "\\" "_"))
-        bak-dir (str repo "/logseq/bak")
-        _ (fs-extra/ensureDirSync bak-dir)
-        new-path (str bak-dir "/" file-name "."
-                      (string/replace (.toISOString (js/Date.)) ":" "_"))]
+  (let [path-dir (get-backup-dir repo path)
+        ext (path/extname path)
+        new-path (path/join path-dir
+                            (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                                 ext))]
+    (fs-extra/ensureDirSync path-dir)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
+    (truncate-old-versioned-files! path-dir)
     new-path))
 
-(defmethod handle :backupDbFile [_window [_ repo path db-content]]
-  (backup-file repo path db-content))
+(defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
+  (when (and (string? db-content)
+             (string? new-content)
+             (string-some-deleted? db-content new-content))
+    (backup-file repo path db-content)))
+
+(defmethod handle :openFileBackupDir [_window [_ repo path]]
+  (when (string? path)
+    (let [dir (get-backup-dir repo path)]
+      (.openPath shell dir))))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -80,7 +113,7 @@
   (assert (string? path))
   (try
     (fs/accessSync path (aget fs "W_OK"))
-    (catch js/Error _e
+    (catch :default _e
       false)))
 
 (defmethod handle :writeFile [_window [_ repo path content]]
@@ -93,10 +126,10 @@
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
-      (catch js/Error e
+      (catch :default e
         (let [backup-path (try
                             (backup-file repo path content)
-                            (catch js/Error e
+                            (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]
           (utils/send-to-renderer "notification" {:type "error"
@@ -115,7 +148,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-         #{:org :markdown :md :edn :json :js :css :excalidraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw})
 
 (defn get-ext
   [p]
@@ -126,16 +159,16 @@
 (defn- get-files
   [path]
   (let [result (->>
-                 (readdir path)
-                 (remove (partial utils/ignored-path? path))
-                 (filter #(contains? allowed-formats (get-ext %)))
-                 (map (fn [path]
-                        (let [stat (fs/statSync path)]
-                          (when-not (.isDirectory stat)
-                            {:path    (utils/fix-win-path! path)
-                             :content (utils/read-file path)
-                             :stat    stat}))))
-                 (remove nil?))]
+                (readdir path)
+                (remove (partial utils/ignored-path? path))
+                (filter #(contains? allowed-formats (get-ext %)))
+                (map (fn [path]
+                       (let [stat (fs/statSync path)]
+                         (when-not (.isDirectory stat)
+                           {:path    (utils/fix-win-path! path)
+                            :content (utils/read-file path)
+                            :stat    stat}))))
+                (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defn open-dir-dialog []
@@ -160,12 +193,12 @@
         (string/replace "/" "++")
         (string/replace ":" "+3A+"))))
 
- (defn- graph-name->path
-   [graph-name]
-   (when graph-name
-     (-> graph-name
-         (string/replace "+3A+" ":")
-         (string/replace "++" "/"))))
+(defn- graph-name->path
+  [graph-name]
+  (when graph-name
+    (-> graph-name
+        (string/replace "+3A+" ":")
+        (string/replace "++" "/"))))
 
 (defn- get-graphs-dir
   []
@@ -215,12 +248,6 @@
       (when (fs/existsSync file-path)
         (fs-extra/removeSync file-path)))))
 
-(defmethod handle :openNewWindow [_window [_]]
-  (let [win (win/create-main-window)]
-    (win/on-close-save! win)
-    (win/setup-window-listeners! win)
-    nil))
-
 (defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)
   true)
@@ -268,11 +295,6 @@
   (clear-cache!)
   (search/ensure-search-dir!))
 
-(defmethod handle :addDirWatcher [window [_ dir]]
-  (watcher/close-watcher!)
-  (when dir
-    (watcher/watch-dir! window dir)))
-
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
@@ -302,8 +324,16 @@
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)})
 
+(defn close-watcher-when-orphaned!
+  "When it's the last window for the directory, close the watcher."
+  [window dir]
+  (when (not (win/graph-has-other-windows? window dir))
+    (watcher/close-watcher! dir)))
+
 (defmethod handle :setCurrentGraph [^js win [_ path]]
-  (let [path (when path (utils/get-graph-dir path))]
+  (let [path (when path (utils/get-graph-dir path))
+        old-path (state/get-window-graph-path win)]
+    (when old-path (close-watcher-when-orphaned! win old-path))
     (swap! state/state assoc :graph/current path)
     (swap! state/state assoc-in [:window/graph win] path)
     nil))
@@ -338,34 +368,93 @@
                               (bean/->clj {:graph graph
                                            :tx-data tx-data})))))
 
-(defn- graph-has-other-windows? [win graph]
-  (let [dir (utils/get-graph-dir graph)
-        windows (win/get-graph-all-windows dir)
-        windows (filter #(.isVisible %) windows)]
-    (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
-
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
-  (graph-has-other-windows? win graph))
+  (let [dir (utils/get-graph-dir graph)]
+    (win/graph-has-other-windows? win dir)))
 
 (defmethod handle :graphHasMultipleWindows [^js _win [_ graph]]
   (let [dir (utils/get-graph-dir graph)
-        windows (win/get-graph-all-windows dir)
-        windows (filter #(.isVisible %) windows)]
+        windows (win/get-graph-all-windows dir)]
+        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
     (> (count windows) 1)))
+
+(defmethod handle :addDirWatcher [^js window [_ dir]]
+  ;; receive dir path (not repo / graph) from frontend
+  ;; Windows on same dir share the same watcher
+  ;; Only close file watcher when:
+  ;;    1. there is no one window on the same dir (TODO: check this on a window is closed)
+  ;;    2. reset file watcher to resend `add` event on window refreshing
+  (when dir
+    ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
+    ;; TODO: handle duplicated adding dir watcher when multiple windows
+    (close-watcher-when-orphaned! window dir)
+    (watcher/watch-dir! window dir)))
+
+(defmethod handle :openNewWindow [_window [_]]
+  (let [win (win/create-main-window)]
+    (win/on-close-actions! win close-watcher-when-orphaned!)
+    (win/setup-window-listeners! win)
+    nil))
 
 (defmethod handle :searchVersionChanged?
   [^js _win [_ graph]]
   (search/version-changed? graph))
 
+
 (defmethod handle :reloadWindowPage [^js win]
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
 
+
 (defmethod handle :setHttpsAgent [^js _win [_ opts]]
   (utils/set-fetch-agent opts))
 
+;;;;;;;;;;;;;;;;;;;;;;;
+;; file-sync-rs-apis ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmethod handle :get-local-files-meta [_ args]
+  (apply rsapi/get-local-files-meta (rest args)))
+
+(defmethod handle :get-local-all-files-meta [_ args]
+  (apply rsapi/get-local-all-files-meta (rest args)))
+
+(defmethod handle :rename-local-file [_ args]
+  (apply rsapi/rename-local-file (rest args)))
+
+(defmethod handle :delete-local-files [_ args]
+  (apply rsapi/delete-local-files (rest args)))
+
+(defmethod handle :update-local-files [_ args]
+  (apply rsapi/update-local-files (rest args)))
+
+(defmethod handle :delete-remote-files [_ args]
+  (apply rsapi/delete-remote-files (rest args)))
+
+(defmethod handle :update-remote-file [_ args]
+  (apply rsapi/update-remote-file (rest args)))
+
+(defmethod handle :update-remote-files [_ args]
+  (apply rsapi/update-remote-files (rest args)))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
+
+(defmethod handle :persistGraph [^js win [_ graph]]
+  ;; call a window holds the specific graph to persist
+  (let [dir (utils/get-graph-dir graph)
+        windows (win/get-graph-all-windows dir)
+        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
+        tar-graph-win (first windows)]
+    (if tar-graph-win
+      (utils/send-to-renderer tar-graph-win "persistGraph" graph)
+      (utils/send-to-renderer win "persistGraphDone" graph)))) ;; if no such graph, skip directly
+
+(defmethod handle :persistGraphDone [^js _win [_ graph]]
+  ;; when graph is persisted, broadcast it to all windows
+  (let [windows (win/get-all-windows)]
+    (doseq [window windows]
+      (utils/send-to-renderer window "persistGraphDone" graph))))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
@@ -378,6 +467,6 @@
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (println "IPC error: " {:event event
                                              :args args-js}
-                             e))
+                              e))
                    e))))
     #(.removeHandler ipcMain main-channel)))

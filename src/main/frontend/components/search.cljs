@@ -1,5 +1,6 @@
 (ns frontend.components.search
   (:require [rum.core :as rum]
+            [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
@@ -210,8 +211,10 @@
              block (model/query-block-by-uuid uuid)
              content (:block/content block)]
          [:span {:data-block-ref uuid}
-          (search-result-item "Block"
-                              (block-search-result-item repo uuid format content search-q search-mode))])
+          (search-result-item "Block"  (if block
+                                         (block-search-result-item repo uuid format content search-q search-mode)
+                                         (do (log/error "search result with non-existing uuid: " data)
+                                             (str "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."))))])
 
        nil)]))
 
@@ -336,6 +339,9 @@
                                 (search-result-item "Page" original-name))
                         nil))}))])
 
+(def default-placeholder
+  (if config/publishing? (t :search/publishing) (t :search)))
+
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
   (mixins/event-mixin
@@ -363,7 +369,7 @@
                          (t :graph-search)
                          :page
                          (t :page-search)
-                         (t :search))
+                         default-placeholder)
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
         :on-change     (fn [e]

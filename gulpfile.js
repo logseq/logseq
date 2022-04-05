@@ -45,12 +45,19 @@ const common = {
     return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
   },
 
-  syncAssetFiles () {
-    return gulp.src([
-        "./node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**",
-        "!**/*/i18n-*.js"
-      ])
-      .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets')))
+  // NOTE: All assets from node_modules are copied to the output directory
+  syncAssetFiles (...params) {
+    return gulp.series(
+      () => gulp.src([
+          "./node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**",
+          "!**/*/i18n-*.js"
+        ])
+        .pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
+      () => gulp.src("node_modules/@tabler/icons/iconfont/tabler-icons.min.css")
+        .pipe(gulp.dest(path.join(outputPath, 'css'))),
+      () => gulp.src("node_modules/@tabler/icons/iconfont/fonts/**")
+        .pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+    )(...params)
   },
 
   keepSyncResourceFile () {

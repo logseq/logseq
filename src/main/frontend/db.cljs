@@ -13,6 +13,7 @@
             [frontend.db.migrate :as db-migrate]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
             [electron.ipc :as ipc]))
@@ -38,14 +39,14 @@
   blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
-  get-all-templates get-block-and-children sub-block-and-children get-block-by-uuid get-block-children sort-by-left
+  get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-children-ids get-block-immediate-children get-block-page
   get-blocks-contents get-custom-css
   get-date-scheduled-or-deadlines get-db-type
   get-file-blocks get-file-contents get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
   get-file-pages get-files get-files-blocks get-files-full get-journals-length
-  get-latest-journals get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-linked-refs-refed-pages
+  get-latest-journals get-matched-blocks get-page get-page-alias get-page-alias-names get-paginated-blocks get-page-linked-refs-refed-pages
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
@@ -123,7 +124,9 @@
                ;; reactive components
                (react/refresh! repo tx-report)
 
-               (when-not (:new-graph? (:tx-meta tx-report)) ; skip initial txs
+               (when (and
+                      (not config/publishing?)
+                      (not (:new-graph? (:tx-meta tx-report)))) ; skip initial txs
                  (if (util/electron?)
                    (when-not (:dbsync? (:tx-meta tx-report))
                      ;; sync with other windows if needed
@@ -143,7 +146,7 @@
                    (when-let [f @*sync-search-indice-f]
                      (f datoms)))))))
 
-(defn- listen-and-persist!
+(defn listen-and-persist!
   [repo]
   (when-let [conn (get-conn repo false)]
     (repo-listen-to-tx! repo conn)))
@@ -156,35 +159,38 @@
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
-;; TODO: only restore the current graph instead of all the graphs to speedup and
+(defn restore-graph!
+  "Restore db from serialized db cache, and swap into the current db status"
+  [repo me]
+  (p/let [db-name (datascript-db repo)
+          db-conn (d/create-conn db-schema/schema)
+          _ (swap! conns assoc db-name db-conn)
+          stored (db-persist/get-serialized-graph db-name)
+          logged? (:name me)
+          _ (if stored
+              (let [stored-db (try (string->db stored)
+                                   (catch js/Error _e
+                                     (js/console.warn "Invalid graph cache")
+                                     (d/empty-db db-schema/schema)))
+                    attached-db (d/db-with stored-db (concat
+                                                      [(me-tx stored-db me)]
+                                                      default-db/built-in-pages)) ;; TODO bug overriding uuids?
+                    db (if (old-schema? attached-db)
+                         (db-migrate/migrate attached-db)
+                         attached-db)]
+                (conn/reset-conn! db-conn db))
+              (when logged?
+                (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+    (d/transact! db-conn [{:schema/version db-schema/version}])))
+
 ;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
-  (let [logged? (:name me)]
-    (doall
-     (for [{:keys [url]} repos]
-       (let [repo url]
-         (p/let [db-name (datascript-db repo)
-                 db-conn (d/create-conn db-schema/schema)
-                 _ (swap! conns assoc db-name db-conn)
-                 stored (db-persist/get-serialized-graph db-name)
-                 _ (if stored
-                     (let [stored-db (try (string->db stored)
-                                          (catch js/Error _e
-                                            (js/console.warn "Invalid graph cache")
-                                            (d/empty-db db-schema/schema)))
-                           attached-db (d/db-with stored-db (concat
-                                                             [(me-tx stored-db me)]
-                                                             default-db/built-in-pages))
-                           db (if (old-schema? attached-db)
-                                (db-migrate/migrate attached-db)
-                                attached-db)]
-                       (conn/reset-conn! db-conn db))
-                     (when logged?
-                       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
-           (d/transact! db-conn [{:schema/version db-schema/version}])
-           (restore-config-handler repo)
-           (listen-and-persist! repo)))))))
+  (let [repo (or (state/get-current-repo) (:url (first repos)))]
+    (when repo
+      (p/let [_ (restore-graph! repo me)]
+        (restore-config-handler repo)
+        (listen-and-persist! repo)))))
 
 (defn run-batch-txs!
   []

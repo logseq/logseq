@@ -12,7 +12,11 @@
             [frontend.util :as util]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
+            [frontend.handler.user :as user-handler]
+            [frontend.handler.file-sync :as file-sync-handler]))
 
 (defn- delete-page!
   [page-name]
@@ -49,7 +53,7 @@
          :on-click close-fn}
         (t :cancel)]]]]))
 
-(defn page-menu
+(defn ^:large-vars/cleanup-todo page-menu
   [page-name]
   (when-let [page-name (or
                         page-name
@@ -65,7 +69,9 @@
           favorites (:favorites (state/sub-graph-config))
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
-          developer-mode? (state/sub [:ui/developer-mode?])]
+          developer-mode? (state/sub [:ui/developer-mode?])
+          file-path (when (util/electron?) (page-handler/get-page-file-path))
+          _ (state/sub :auth/id-token)]
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
@@ -78,19 +84,19 @@
                          (page-handler/favorite-page! page-original-name)))}}
 
           (when-not (mobile-util/is-native-platform?)
-           {:title (t :page/presentation-mode)
-            :options {:on-click (fn []
-                                  (state/sidebar-add-block!
-                                   repo
-                                   (:db/id page)
-                                   :page-presentation
-                                   {:page page}))}})
+            {:title (t :page/presentation-mode)
+             :options {:on-click (fn []
+                                   (state/sidebar-add-block!
+                                    repo
+                                    (:db/id page)
+                                    :page-presentation
+                                    {:page page}))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
           ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+          (when file-path
             [{:title   (t :page/open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
@@ -120,6 +126,16 @@
              :options {:on-click
                        (fn []
                          (shell/get-file-latest-git-log page 100))}})
+          (when (and (user-handler/logged-in?) (not file-sync-handler/hiding-login&file-sync))
+            (when-let [graph-uuid (file-sync-handler/get-current-graph-uuid)]
+              {:title (t :page/file-sync-versions)
+               :options {:on-click #(file-sync-handler/list-file-versions graph-uuid page)}}))
+
+          (when (and (util/electron?) file-path)
+            {:title   (t :page/open-backup-directory)
+             :options {:on-click
+                       (fn []
+                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-path))}})
 
           (when plugin-handler/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]

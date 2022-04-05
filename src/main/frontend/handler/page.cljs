@@ -266,13 +266,14 @@
       (config-handler/set-config! :favorites favorites))))
 
 (defn toggle-favorite! []
-  (let [page-name  (state/get-current-page)
-        favorites  (:favorites (state/sub-graph-config))
-        favorited? (contains? (set (map string/lower-case favorites))
-                              (string/lower-case page-name))]
+  ;; NOTE: in journals or settings, current-page is nil
+  (when-let [page-name (state/get-current-page)]
+   (let [favorites  (:favorites (state/sub-graph-config))
+         favorited? (contains? (set (map string/lower-case favorites))
+                               (string/lower-case page-name))]
     (if favorited?
       (unfavorite-page! page-name)
-      (favorite-page! page-name))))
+      (favorite-page! page-name)))))
 
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
@@ -470,7 +471,7 @@
                                     (outliner-core/block)
                                     (outliner-tree/-get-down)
                                     (outliner-core/get-data))
-          to-last-direct-child-id (model/get-block-last-direct-child to-id)
+          to-last-direct-child-id (model/get-block-last-direct-child (db/get-conn) to-id)
           repo (state/get-current-repo)
           conn (conn/get-conn repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
@@ -576,10 +577,17 @@
                      (util/get-relative-path edit-block-file-path ref-file-path)
                      page)
         (let [journal? (date/valid-journal-title? page)
-              ref-file-path (str (get-directory journal?)
-                                 "/"
-                                 (get-file-name journal? page)
-                                 ".org")]
+              ref-file-path (str
+                             (if (or (util/electron?) (mobile-util/is-native-platform?))
+                               (-> (config/get-repo-dir (state/get-current-repo))
+                                   js/decodeURI
+                                   (string/replace #"/+$" "")
+                                   (str "/"))
+                               "")
+                             (get-directory journal?)
+                             "/"
+                             (get-file-name journal? page)
+                             ".org")]
           (create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
@@ -611,6 +619,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
+                       (config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 

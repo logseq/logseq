@@ -33,7 +33,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- get-page-name
   [state]
@@ -43,14 +44,13 @@
 (defn- get-blocks
   [repo page-name block-id]
   (when page-name
-    (if block-id
-      (when-let [root-block (db/pull [:block/uuid block-id])]
-        (let [blocks (-> (db/sub-block-and-children repo block-id)
-                         (model/sort-blocks root-block {}))]
-          (cons root-block blocks)))
-      (when-let [page (db/pull [:block/name (util/safe-page-name-sanity-lc page-name)])]
-        (-> (db/get-page-blocks repo page-name)
-            (model/sort-blocks page {}))))))
+    (let [root (if block-id
+                 (db/pull [:block/uuid block-id])
+                 (model/get-page page-name))
+          opts (if block-id
+                 {:scoped-block-id (:db/id root)}
+                 {})]
+      (db/get-paginated-blocks repo (:db/id root) opts))))
 
 (defn- open-first-block!
   [state]
@@ -118,8 +118,12 @@
         (dummy-block page-name)
         (let [document-mode? (state/sub :document/mode?)
               reading-mode?  (state/sub :document/reading-mode?)
+              block-entity (db/entity (if block-id
+                                       [:block/uuid block-id]
+                                       [:block/name page-name]))
               hiccup-config (merge
                              {:id (if block? (str block-id) page-name)
+                              :db/id (:db/id block-entity)
                               :block? block?
                               :editor-box editor/box
                               :page page
@@ -149,9 +153,11 @@
         [:div#today-queries.mt-10
          (for [query queries]
            (rum/with-key
-             (block/custom-query {:attr {:class "mt-10"}
-                                  :editor-box editor/box
-                                  :page page} query)
+             (ui/catch-error
+              (ui/component-error "Failed default query:" {:content (pr-str query)})
+              (block/custom-query {:attr {:class "mt-10"}
+                                   :editor-box editor/box
+                                   :page page} query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
@@ -163,7 +169,7 @@
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
          [:ul.mt-2
-          (for [[original-name name] pages]
+          (for [[original-name name] (sort pages)]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
               original-name]])]
@@ -262,8 +268,39 @@
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
+(defn- page-mouse-over
+  [e *control-show? *all-collapsed?]
+  (util/stop e)
+  (reset! *control-show? true)
+  (let [all-collapsed?
+        (->> (editor-handler/all-blocks-with-level {:collapse? true})
+             (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
+             (empty?))]
+    (reset! *all-collapsed? all-collapsed?)))
+
+(defn- page-mouse-leave
+  [e *control-show?]
+  (util/stop e)
+  (reset! *control-show? false))
+
+(rum/defcs page-blocks-collapse-control <
+  [state title *control-show? *all-collapsed?]
+  [:a.page-blocks-collapse-control
+   {:id (str "control-" title)
+    :on-click (fn [event]
+                (util/stop event)
+                (if @*all-collapsed?
+                  (editor-handler/expand-all!)
+                  (editor-handler/collapse-all!))
+                (swap! *all-collapsed? not))}
+   [:span.mt-6 {:class (if @*control-show?
+                         "control-show cursor-pointer" "control-hide")}
+    (ui/rotating-arrow @*all-collapsed?)]])
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
+  (rum/local false ::all-collapsed?)
+  (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
@@ -296,7 +333,9 @@
           icon (or icon "")
           today? (and
                   journal?
-                  (= page-name (util/page-name-sanity-lc (date/journal-name))))]
+                  (= page-name (util/page-name-sanity-lc (date/journal-name))))
+          *control-show? (::control-show? state)
+          *all-collapsed? (::all-collapsed? state)]
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
@@ -307,9 +346,16 @@
                :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
        [:div.relative
-        (when (and (not sidebar?)
-                   (not block?))
+        (when (and (not sidebar?) (not block?))
           [:div.flex.flex-row.space-between
+           (when (or (mobile-util/is-native-platform?) (util/mobile?))
+             [:div.flex.flex-row.pr-2
+              {:style {:margin-left -15}
+               :on-mouse-over (fn [e]
+                                (page-mouse-over e *control-show? *all-collapsed?))
+               :on-mouse-leave (fn [e]
+                                 (page-mouse-leave e *control-show?))}
+              (page-blocks-collapse-control title *control-show? *all-collapsed?)])
            [:div.flex-1.flex-row
             (page-title page-name icon title format fmt-journal?)]
            (when (not config/publishing?)
@@ -339,7 +385,7 @@
        ;; referenced blocks
        [:div {:key "page-references"}
         (rum/with-key
-          (reference/references route-page-name false)
+          (reference/references route-page-name)
           (str route-page-name "-refs"))]
 
        (when-not block?
@@ -429,7 +475,7 @@
               ;;      (set-setting! :layout value))
               ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2
-               [:span (t :right-side-bar/journals)]
+               [:span (t :settings-page/enable-journals)]
                ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?

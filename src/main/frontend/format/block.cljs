@@ -46,35 +46,38 @@
   [block]
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
-               (let [typ (first (:url (second block)))]
+               (let [typ (first (:url (second block)))
+                     value (second (:url (second block)))]
                  ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
                   (and
                    (= typ "Page_ref")
-                   (string? (second (:url (second block))))
-                   (second (:url (second block))))
+                   (and (string? value)
+                        (not (or (config/local-asset? value)
+                                 (config/draw? value))))
+                   value)
 
                   (and
                    (= typ "Search")
-                   (text/page-ref? (second (:url (second block))))
-                   (text/page-ref-un-brackets! (second (:url (second block)))))
+                   (text/page-ref? value)
+                   (text/page-ref-un-brackets! value))
 
                   (and
                    (= typ "Search")
-                   (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
-                   (let [page (second (:url (second block)))
-                         ext (some-> (util/get-file-ext page) keyword)]
-                     (when (and (not (util/starts-with? page "http:"))
-                                (not (util/starts-with? page "https:"))
-                                (not (util/starts-with? page "file:"))
+                   (not (contains? #{\# \* \/ \[} (first value)))
+                   (let [ext (some-> (util/get-file-ext value) keyword)]
+                     (when (and (not (util/starts-with? value "http:"))
+                                (not (util/starts-with? value "https:"))
+                                (not (util/starts-with? value "file:"))
+                                (not (config/local-asset? value))
                                 (or (= ext :excalidraw)
                                     (not (contains? (config/supported-formats) ext))))
-                       page)))
+                       value)))
 
                   (and
                    (= typ "Complex")
-                   (= (:protocol (second (:url (second block)))) "file")
-                   (:link (second (:url (second block)))))
+                   (= (:protocol value) "file")
+                   (:link value))
 
                   (and
                    (= typ "File")
@@ -159,7 +162,8 @@
                                (contains? #{:background-color :background_color} (keyword k))))
                      (map last)
                      (map (fn [v]
-                            (when (string? v)
+                            (when (and (string? v)
+                                       (not (mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
@@ -240,8 +244,8 @@
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
-   with-timestamp?: assign timestampes to the map structure. 
-    Useful when creating new pages from references or namespaces, 
+   with-timestamp?: assign timestampes to the map structure.
+    Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
   ([original-page-name with-id?]
    (page-name->map original-page-name with-id? true))
@@ -470,8 +474,9 @@
                  (cons
                   (merge
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                         id (get-custom-id-or-new-id {:properties @pre-block-properties})
-                         property-refs (->> (get-page-refs-from-properties @pre-block-properties)
+                         {:keys [properties properties-order]} @pre-block-properties
+                         id (get-custom-id-or-new-id {:properties properties})
+                         property-refs (->> (get-page-refs-from-properties properties)
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content
@@ -479,8 +484,8 @@
                                 :meta {:start-pos 0
                                        :end-pos (or first-block-start-pos
                                                     (utf8/length encoded-content))}
-                                :properties @pre-block-properties
-                                :properties-order (keys @pre-block-properties)
+                                :properties properties
+                                :properties-order properties-order
                                 :refs property-refs
                                 :pre-block? true
                                 :unordered true
@@ -491,10 +496,9 @@
                   blocks)
                  blocks)
         blocks (map (fn [block]
-                      (let [delete-keys (if with-body?
-                                          [:block/anchor]
-                                          [:block/anchor :block/body])]
-                        (apply dissoc block delete-keys))) blocks)]
+                      (if with-body?
+                        block
+                        (dissoc block :block/body))) blocks)]
     (with-path-refs blocks)))
 
 (defn ^:large-vars/cleanup-todo extract-blocks
@@ -597,8 +601,7 @@
                          (conj body block))))
               (do
                 (when (seq properties)
-                  (let [properties (:properties properties)]
-                    (reset! pre-block-properties properties)))
+                  (reset! pre-block-properties properties))
                 [(-> (reverse headings)
                      safe-blocks) body])))]
       (extract-blocks* blocks body pre-block-properties encoded-content with-body?))
