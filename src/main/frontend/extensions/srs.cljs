@@ -348,7 +348,7 @@
           review-cards-count (count review-cards)
           score-5-count (count (get review-records 5))
           score-1-count (count (get review-records 1))]
-      (editor-handler/paste-block-tree-after-target
+      (editor-handler/insert-block-tree-after-target
        (:db/id card-query-block) false
        [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
                                review-cards-count review-count (date/today))

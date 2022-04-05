@@ -441,7 +441,7 @@
       (when-let [bb (bean/->clj batch-blocks)]
         (let [bb (if-not (vector? bb) (vector bb) bb)
               {:keys [sibling]} (bean/->clj opts)
-              _ (editor-handler/paste-block-tree-after-target
+              _ (editor-handler/insert-block-tree-after-target
                   (:db/id block) sibling bb (:block/format block))]
           nil)))))
 

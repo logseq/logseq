@@ -4,7 +4,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
-            [clojure.zip :as zip]
             [dommy.core :as dom]
             [frontend.commands :as commands
              :refer [*angle-bracket-caret-pos *show-block-commands
@@ -1091,50 +1090,21 @@
               m' (vec (conj m [(:db/id block) block]))]
           (recur m' (rest blocks)))))))
 
-(defn- blocks-vec->tree
+(defn get-top-level-blocks
   [blocks]
-  (let [loc (reduce (fn [loc {:keys [level] :as block}]
-                      (let [loc*
-                            (loop [loc (zip/vector-zip (zip/root loc))
-                                   level level]
-                              (if (> level 1)
-                                (if-let [down (zip/rightmost (zip/down loc))]
-                                  (let [down-node (zip/node down)]
-                                    (if (or (and (vector? down-node)
-                                                 (>= (:level (first down-node)) (:level block)))
-                                            (>= (:level down-node) (:level block)))
-                                      down
-                                      (recur down (dec level))))
-                                  loc)
-                                loc))
-                            loc**
-                            (if (vector? (zip/node loc*))
-                              (zip/append-child loc* block)
-                              (-> loc*
-                                  zip/up
-                                  (zip/append-child [block])))]
-                        loc**)) (zip/vector-zip []) blocks)]
+  (let [level-blocks (map last (blocks-with-level blocks))]
+    (->> (filter (fn [b] (= 1 (:level b))) level-blocks)
+         (map #(dissoc % :level)))))
 
-    (clojure.walk/postwalk (fn [e] (if (map? e) (dissoc e :level) e)) (zip/root loc))))
-
-(defn- compose-copied-blocks-contents-&-block-tree
+(defn- compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-        blocks* (flatten
-                 (mapv (fn [b] (if (util/collapsed? b)
-                                 (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                                 [b])) blocks))
-        block-ids* (mapv :block/uuid blocks*)
-        level-blocks (blocks-with-level blocks*)
-        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
-        level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
-        tree (blocks-vec->tree level-blocks)
-        top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
-        exported-md-contents (export/export-blocks-as-markdown
-                              repo top-level-block-uuids
-                              (state/get-export-block-text-indent-style)
-                              (into [] (state/get-export-block-text-remove-options)))]
-    [exported-md-contents tree]))
+        top-level-block-uuids (->> (get-top-level-blocks blocks)
+                                   (map :block/uuid))]
+    (export/export-blocks-as-markdown
+     repo top-level-block-uuids
+     (state/get-export-block-text-indent-style)
+     (into [] (state/get-export-block-text-remove-options)))))
 
 (defn copy-selection-blocks
   []
@@ -1143,11 +1113,12 @@
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
-          [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)
-          block (db/pull [:block/uuid (first ids)])]
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
-      (state/set-copied-blocks content tree)
-      (notification/show! "Copied!" :success))))
+          content (compose-copied-blocks-contents repo ids)
+          block (db/entity [:block/uuid (first ids)])]
+      (when block
+        (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+        (state/set-copied-blocks content ids)
+        (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
   []
@@ -1207,22 +1178,10 @@
                          (remove nil?))
           blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
           page-id (:db/id (:block/page (first blocks)))
-          blocks*
-          (->> blocks
-               ;; filter out blocks not belong to page with 'page-id'
-               (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))))
-               ;; expand collapsed blocks
-               (mapv (fn [b] (if (util/collapsed? b)
-                               (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                               [b])))
-               (flatten))
-          block-ids* (mapv :block/uuid blocks*)
-          level-blocks (blocks-with-level blocks*)
-          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
-          level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
-          tree (blocks-vec->tree level-blocks)
-          top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))]
-      top-level-block-uuids)))
+          ;; filter out blocks not belong to page with 'page-id'
+          blocks* (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))) blocks)]
+      (->> (get-top-level-blocks blocks*)
+           (map :block/uuid)))))
 
 (defn cut-selection-blocks
   [copy?]
@@ -1368,7 +1327,7 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          [md-content _tree] (compose-copied-blocks-contents-&-block-tree repo [block-id])]
+          md-content (compose-copied-blocks-contents repo [block-id])]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
       (delete-block-aux! block true))))
 
@@ -2037,182 +1996,76 @@
     (state/set-editor-show-block-search! false)
     (cursor/move-cursor-forward input 2)))
 
-(defn get-block-tree-insert-pos-after-target
-  "return [target-block sibling? delete-editing-block? editing-block]"
-  ([target-block-id sibling?]
-   (get-block-tree-insert-pos-after-target target-block-id sibling? nil))
-  ([target-block-id sibling? editing-block]
-   (when-let [target-block (db/pull target-block-id)]
-     [target-block sibling? false (or editing-block target-block)])))
+(defn- paste-block-cleanup
+  [block page exclude-properties format content-update-fn]
+  (let [new-content
+        (if content-update-fn
+          (content-update-fn (:block/content block))
+          (:block/content block))
+        new-content
+        (->> new-content
+             (property/remove-property format "id")
+             (property/remove-property format "custom_id"))]
+    (merge (dissoc block
+                   :block/pre-block?
+                   :block/meta)
+           {:block/page {:db/id (:db/id page)}
+            :block/format format
+            :block/properties (apply dissoc (:block/properties block)
+                                (concat [:id :custom_id :custom-id]
+                                        exclude-properties))
+            :block/content new-content
+            :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
+                                  (remove nil?))})))
 
-(defn- get-block-tree-insert-pos-at-point
-  "return [target-block sibling? delete-editing-block? editing-block]"
-  []
-  (when-let [editing-block (db/pull (:db/id (state/get-edit-block)))]
-    (let [input (gdom/getElement (state/get-edit-input-id))
-          pos (cursor/pos input)
-          value (:value (get-state))
-          [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
-          parent (:db/id (:block/parent editing-block))
-          parent-block (db/pull parent)
-          left (:db/id (:block/left editing-block))
-          left-block (db/pull left)
-          config (last (state/get-editor-args))
-          block-id (:block/uuid editing-block)
-          block-self? (block-self-alone-when-insert? config block-id)
-          has-children? (db/has-children? (:block/uuid editing-block))
-          collapsed? (util/collapsed? editing-block)]
-      (conj (match (mapv boolean [(seq fst-block-text) (seq snd-block-text)
-                                  block-self? has-children? (= parent left) collapsed?])
-              ;; when zoom at editing-block
-              [_ _ true _ _ _]
-              [editing-block false false]
-
-              ;; insert after editing-block
-              [true _ false true _ false]
-              [editing-block false false]
-              [true _ false true _ true]
-              [editing-block true false]
-              [true _ false false _ _]
-              [editing-block true false]
-              [false false false true _ false]
-              [editing-block false false]
-              [false false false true _ true]
-              [editing-block true false]
-              [false false false false _ _]
-              [editing-block true true]
-
-              ;; insert before editing-block
-              [false true false _ true _]
-              [parent-block false false]
-              [false true false _ false _]
-              [left-block true false])
-            editing-block))))
-
-(defn- paste-block-tree-at-point-edit-aux
-  [uuid page exclude-properties format content-update-fn]
-  (fn [block]
-    (outliner-core/block
-     (let [new-content
-           (if content-update-fn
-             (content-update-fn (:block/content block))
-             (:block/content block))
-           new-content
-           (->> new-content
-                (property/remove-property format "id")
-                (property/remove-property format "custom_id"))
-           m (merge (dissoc block
-                            :block/pre-block?
-                            :block/uuid
-                            :db/id
-                            :block/left
-                            :block/parent)
-                    {:block/uuid uuid
-                     :block/page (select-keys page [:db/id])
-                     :block/format format
-                     :block/properties (apply dissoc (:block/properties block)
-                                              (concat [:id :custom_id :custom-id]
-                                                      exclude-properties))
-                     :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
-                     :block/content new-content
-                     :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
-                                           (remove nil?))})]
-       m))))
-
-(defn paste-block-vec-tree-at-target
-  [tree exclude-properties {:keys [content-update-fn
-                                   get-pos-fn
-                                   page-block]
-                            :as _opts}]
-  (let [page (or page-block
-                 (:block/page (db/entity (:db/id (state/get-edit-block)))))
-        [target-block sibling? delete-editing-block? editing-block]
-        ((or get-pos-fn get-block-tree-insert-pos-at-point))]
+(defn paste-blocks
+  [blocks {:keys [content-update-fn
+                  exclude-properties
+                  target-block
+                  sibling?]
+           :or {exclude-properties []}}]
+  (let [target-block (or target-block (state/get-edit-block))
+        block (db/entity (:db/id target-block))
+        page (if (:block/name block) block
+                 (when target-block (db/entity (:db/id target-block))))
+        sibling? (if (= (:db/id target-block) (:db/id page)) false sibling?)
+        editing-block (state/get-edit-block)
+        target-block (or target-block editing-block)]
+    (when editing-block
+      (let [editing-block (outliner-core/block editing-block)]
+        (outliner-core/save-node editing-block)))
     (when target-block
-      (let [target-block (outliner-core/block target-block)
-            format (or (:block/format target-block) (state/get-preferred-format))
-            new-block-uuids (atom #{})
-            metadata-replaced-blocks
-            (zip/root
-             (loop [loc (zip/vector-zip tree)]
-               (if (zip/end? loc)
-                 loc
-                 (if (vector? (zip/node loc))
-                   (recur (zip/next loc))
-                   (let [uuid (random-uuid)]
-                     (swap! new-block-uuids (fn [acc uuid] (conj acc uuid)) uuid)
-                     (recur (zip/next (zip/edit
-                                       loc
-                                       (paste-block-tree-at-point-edit-aux
-                                        uuid page exclude-properties format content-update-fn)))))))))
-            _ (when editing-block
-                (let [editing-block (outliner-core/block editing-block)]
-                  (outliner-core/save-node editing-block)))
-            _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
-            _ (when (and delete-editing-block? editing-block)
-                (when-let [id (:db/id editing-block)]
-                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))]
-        (last metadata-replaced-blocks)))))
+      (let [format (or (:block/format target-block) (state/get-preferred-format))
+            blocks (map (fn [block]
+                          (paste-block-cleanup block page exclude-properties format content-update-fn))
+                     blocks)]
+        (outliner-core/insert-nodes blocks target-block sibling?)
+        (last blocks)))))
 
-(defn- tree->vec-tree
-  "tree:
-  [
-  {
-    :content 'this is a block',
-    :properties {\"key\" \"value\" \"key2\" \"value2\"},
-    :children [
-      { :content 'this is child block' }
-    ]
-  },
-  {
-    :content 'this is sibling block'
-  }
-  ]"
-  [tree]
-  (into []
-        (mapcat
-         (fn [e]
-           (let [e* (select-keys e [:content :properties])
-                 children (:children e)]
-             (if (seq children)
-               [e* (tree->vec-tree (:children e))]
-               [e*])))
-         tree)))
+(defn- block-tree->blocks
+  [tree-vec format]
+  (->> (mapcat #(tree-seq map? :children %) tree-vec)
+       (map (fn [block]
+              (let [content (:content block)
+                    props (into [] (:properties block))
+                    content* (str (if (= :markdown format) "- " "* ")
+                                  (property/insert-properties format content props))
+                    ast (mldoc/->edn content* (mldoc/default-config format))
+                    blocks (block/extract-blocks ast content* true format)
+                    fst-block (first blocks)]
+                (assert fst-block "fst-block shouldn't be nil")
+                fst-block)))))
 
-(defn- vec-tree->vec-block-tree
-  [tree format]
-  (let [loc (zip/vector-zip tree)]
-    (loop [loc loc]
-      (if (zip/end? loc)
-        (zip/root loc)
-        (let [node (zip/node loc)]
-          (if (vector? node)
-            (recur (zip/next loc))
-            (let [content (:content node)
-                  props (into [] (:properties node))
-                  content* (str (if (= :markdown format) "- " "* ")
-                                (property/insert-properties format content props))
-                  ast (mldoc/->edn content* (mldoc/default-config format))
-                  blocks (block/extract-blocks ast content* true format)
-                  fst-block (first blocks)]
-              (assert fst-block "fst-block shouldn't be nil")
-              (recur (zip/next (zip/replace loc fst-block))))))))))
-
-(defn paste-block-tree-after-target
-  [target-block-id sibling? tree format]
-  (let [vec-tree (tree->vec-tree tree)
-        block-tree (vec-tree->vec-block-tree vec-tree format)
-        target-block (db/pull target-block-id)
-        page-block (if (:block/name target-block) target-block
-                       (db/entity (:db/id (:block/page (db/pull target-block-id)))))
-        ;; sibling? = false, when target-block is a page-block
-        sibling? (if (= target-block-id (:db/id page-block))
-                   false
-                   sibling?)]
-    (paste-block-vec-tree-at-target
-     block-tree []
-     {:get-pos-fn #(get-block-tree-insert-pos-after-target target-block-id sibling?)
-      :page-block page-block})))
+(defn insert-block-tree-after-target
+  "`tree-vec`: a vector of blocks.
+   Block element: {:content :properties :children [block-1, block-2, ...]}"
+  [target-block-id sibling? tree-vec format]
+  (let [blocks (block-tree->blocks tree-vec format)
+        target-block (db/pull target-block-id)]
+    (paste-blocks
+     blocks
+     {:target target-block
+      :sibling? sibling?})))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2226,27 +2079,24 @@
            format (:block/format block)
            block-uuid (:block/uuid block)
            template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-           blocks (if template-including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
+           blocks (db/get-block-and-children repo block-uuid)
            root-block (db/pull db-id)
            blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-           sorted-blocks (->> (blocks-with-level sorted-blocks)
-                              (map second))
-           result-blocks (if template-including-parent?
-                           sorted-blocks
-                           (->> (drop 1 sorted-blocks)
-                                (map (fn [block] (update block :level dec)))))
-           tree (blocks-vec->tree result-blocks)]
+           blocks (if template-including-parent?
+                    sorted-blocks
+                    (drop 1 sorted-blocks))]
        (when element-id
          (insert-command! element-id "" format {}))
        (let [opts (merge
-                   {:content-update-fn (fn [content]
+                   {:exclude-properties [:id :template :template-including-parent]
+                    :content-update-fn (fn [content]
                                          (->> content
                                               (property/remove-property format "template")
                                               (property/remove-property format "template-including-parent")
                                               template/resolve-dynamic-template!))}
                    opts)
-             last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
+             last-block (paste-blocks blocks opts)]
          (clear-when-saved!)
          (let [block (if (tree/satisfied-inode? last-block)
                        (:data last-block)
@@ -3065,25 +2915,14 @@
                  timeout)))
       (edit-box-on-change! e block id))))
 
-(defn blocks->tree-by-level
-  [blocks]
-  (let [min-level (apply min (mapv :block/level blocks))
-        prefix-level (if (> min-level 1) (- min-level 1) 0)]
-    (->> blocks
-         (mapv #(assoc % :level (- (:block/level %) prefix-level)))
-         (blocks-vec->tree))))
-
 (defn- paste-text-parseable
   [format text]
-  (let [tree (->>
-              (block/extract-blocks
-               (mldoc/->edn text (mldoc/default-config format)) text true format))
-        min-level (apply min (mapv :block/level tree))
-        prefix-level (if (> min-level 1) (- min-level 1) 0)
-        tree* (->> tree
-                   (mapv #(assoc % :level (- (:block/level %) prefix-level)))
-                   (blocks-vec->tree))]
-    (paste-block-vec-tree-at-target tree* [] nil)))
+  (when-let [editing-block (state/get-edit-block)]
+    (let [page-id (:db/id (:block/page editing-block))
+          blocks (->> (block/extract-blocks
+                       (mldoc/->edn text (mldoc/default-config format)) text true format)
+                      (block/with-parent-and-left page-id))]
+      (paste-blocks blocks {}))))
 
 (defn- paste-segmented-text
   [format text]
@@ -3100,19 +2939,31 @@
                            paragraphs))]
     (paste-text-parseable format updated-paragraphs)))
 
+(defn- get-all-blocks-by-ids
+  [repo ids]
+  (loop [ids ids
+         result []]
+    (if (seq ids)
+      (let [blocks (db/get-block-and-children repo (first ids))
+            result (vec (concat result blocks))]
+        (recur (remove (set (map :block/uuid result)) ids) result))
+      result)))
+
 (defn- paste-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
-        copied-block-tree (:copy/block-tree copied-blocks)
+        copied-block-ids (:copy/block-ids copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
-      (and
-       (:copy/content copied-blocks)
-       (not (string/blank? text))
-       (= (string/replace (string/trim text) "\r" "")
-          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
-      (paste-block-vec-tree-at-target copied-block-tree [] nil)
+      (and (seq copied-block-ids)
+           (:copy/content copied-blocks)
+           (not (string/blank? text))
+           (= (string/replace (string/trim text) "\r" "")
+              (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+      (let [blocks (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids)]
+        (when (seq blocks)
+          (paste-blocks blocks {})))
 
       (and (util/url? text)
            (not (string/blank? (util/get-selected-text))))

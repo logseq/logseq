@@ -737,9 +737,7 @@
                   (editor-handler/insert-template!
                    nil
                    template
-                   {:get-pos-fn (fn []
-                                  [page false false false])
-                    :page-block page})))
+                   {:target page})))
               (ui-handler/re-render-root!))))))))
 
 (defn open-today-in-sidebar

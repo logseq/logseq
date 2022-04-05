@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.core
   (:require [clojure.set :as set]
-            [clojure.zip :as zip]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db-schema :as db-schema]
@@ -10,8 +9,7 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [datascript.core :as d]))
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 
@@ -277,68 +275,12 @@
        :skip-transact? skip-transact?}
       (insert-node-aux new-node target-node sibling? txs-state blocks-atom)))))
 
-(defn- walk-&-insert-nodes
-  [loc target-node sibling? transact]
-  (let [update-node-fn
-        (fn [_node new-node] new-node)]
-    (if (zip/end? loc)
-      loc
-      (if (vector? (zip/node loc))
-        (recur (zip/next loc) target-node sibling? transact)
-        (let [left1 (zip/left loc)
-              left2 (zip/left (zip/left loc))]
-          (if-let [left (or (and left1 (not (vector? (zip/node left1))) left1)
-                            (and left2 (not (vector? (zip/node left2))) left2))]
-            ;; found left sibling loc
-            (let [new-node
-                  (insert-node-aux (zip/node loc) (zip/node left) true transact)]
-              (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
-            ;; else: need to find parent loc
-            (if-let [parent (-> loc zip/up zip/left)]
-              (let [new-node
-                    (insert-node-aux (zip/node loc) (zip/node parent) false transact)]
-                (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
-              ;; else: not found parent, it should be the root node
-              (let [new-node
-                    (insert-node-aux (zip/node loc) target-node sibling? transact)]
-                (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact)))))))))
-
-
-(defn- get-node-tree-topmost-last-loc
-  [loc]
-  (let [result-loc-or-vec (zip/rightmost (zip/down loc))]
-    (if (vector? (zip/node result-loc-or-vec))
-      (zip/left result-loc-or-vec)
-      result-loc-or-vec)))
-
 (defn insert-nodes
   "Insert nodes as children(or siblings) of target-node.
-  new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
-  [new-nodes-tree target-node sibling?]
-  (ds/auto-transact!
-   [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes}
-   ;; TODO: validate new-nodes-tree structure
-   (let [loc (zip/vector-zip new-nodes-tree)
-         updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
-         loc (zip/vector-zip (zip/root updated-nodes))
-         ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
-         topmost-last-loc (get-node-tree-topmost-last-loc loc)
-         right-node (tree/-get-right target-node)
-         down-node (tree/-get-down target-node)]
-     ;; update node's left&parent after inserted nodes
-     (cond
-       (and (not sibling?) (some? right-node) (nil? down-node))
-       nil            ;ignore
-       (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
-       (let [topmost-last-node (zip/node topmost-last-loc)
-             updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
-         (tree/-save updated-node txs-state))
-       (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
-       (let [topmost-last-node (zip/node topmost-last-loc)
-             updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
-         (tree/-save updated-node txs-state))
-       (and sibling? (some? down-node)) ;; unchanged
-       nil))))
+  `blocks` should be sorted already."
+  [blocks _target-node _sibling?]
+  (prn {:blocks (map (juxt :db/id :block/content :block/left) blocks)})
+  )
 
 (defn move-nodes
   "Move nodes up/down."

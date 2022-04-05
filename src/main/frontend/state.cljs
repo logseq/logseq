@@ -185,7 +185,7 @@
      :graph/syncing?                        false
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-tree nil}
+     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -1466,7 +1466,7 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+  (set-state! :copy/blocks {:copy/content content :copy/block-ids ids}))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
