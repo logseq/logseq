@@ -38,7 +38,9 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.fs.sync :as sync]))
 
 ;; TODO: should we move all events here?
 
@@ -84,6 +86,12 @@
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!))))
 
+(defn- file-sync-stop-when-switch-graph []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)
+         ;; trigger rerender file-sync-header
+         (state/set-file-sync-state nil)))
+
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! graph)
@@ -95,7 +103,11 @@
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph]))
+  (state/pub-event! [:graph/ready graph])
+
+  (file-sync-stop-when-switch-graph))
+
+
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -116,6 +128,7 @@
     (graph-switch graph)))
 
 (defmethod handle :graph/switch [[_ graph]]
+  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
     (if (util/electron?)
       (graph-switch-on-persisted graph)

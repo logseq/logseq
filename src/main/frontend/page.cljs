@@ -34,8 +34,8 @@
       [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
        [:div.cp__sidebar-main-content
         [:div.ls-center
-         [:div (ui/icon "bug" {:style {:font-size ui/icon-size}})]
-         [:div.font-bold
+         [:div.icon-box.p-1.rounded.mb-3 (ui/icon "bug" {:style {:font-size ui/icon-size}})]
+         [:div.text-xl.font-bold
           "Sorry. Something went wrong!"]
          [:div.mt-2.mb-2 "Logseq is having a problem. To try to get it back to a
          working state, please try the following safe steps in order:"]
@@ -43,30 +43,30 @@
           ;; TODO: Enable once multi-window case doesn't result in possible data loss
           #_[:div.flex.flex-row.justify-between.align-items.mb-2
              [:div.flex.flex-col.items-start
-              [:div.text-xs "STEP 1"]
+              [:div.text-2xs.uppercase "STEP 1"]
               [:div [:span.font-bold "Reload"] " the app"]]
              [:div (ui/icon "command") (ui/icon "letter-r")]]
-          [:div.flex.flex-row.justify-between.align-items.mb-2
+          [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-xs "STEP 1"]
-            [:div [:span.font-bold "Rebuild"] " search index"]]
-           [:div
-            (ui/button "Try"
-                           :small? true
-                           :on-click (fn []
-                                       (search-handler/rebuild-indices! true)))]]
-          [:div.flex.flex-row.justify-between.align-items.mb-2
+            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 1"]
+            [:div [:span.highlighted.font-bold "Rebuild"] [:span.toned-down " search index"]]]
+             [:div
+              (ui/button "Try"
+                         :small? true
+                         :on-click (fn []
+                                     (search-handler/rebuild-indices! true)))]]
+          [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.separator-top.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-xs "STEP 2"]
-            [:div [:span.font-bold "Relaunch"] " the app"]
-            [:div.text-xs "Quit the app and then reopen it."]]
+            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 2"]
+            [:div [:span.highlighted.font-bold "Relaunch"][:span.toned-down " the app"]]
+            [:div.text-xs.toned-down "Quit the app and then reopen it."]]
            [:div (ui/icon "command" {:class "rounded-md p-1 mr-2 bg-quaternary"})
             (ui/icon "letter-q" {:class "rounded-md p-1 bg-quaternary"})]]
-          [:div.flex.flex-row.justify-between.align-items.mb-4
+          [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
            [:div.flex.flex-col.items-start
-            [:div.text-xs "STEP 3"]
-            [:div [:span.font-bold "Clear"] " local storage"]
-            [:div.text-xs "This does delete minor preferences like dark/light theme preference."]]
+            [:div.text-2xs.font-bold.uppercase.toned-down "STEP 3"]
+            [:div [:span.highlighted.font-bold "Clear"] [:span.toned-down " local storage"]]
+            [:div.text-xs.toned-down "This does delete minor preferences like dark/light theme preference."]]
            [:div
             (ui/button "Try"
                        :small? true

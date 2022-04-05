@@ -5,12 +5,14 @@
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
+            [frontend.fs.sync :as sync]
             [frontend.db :as db]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.user :as user]))
 
 (defn persist-dbs!
   []
@@ -36,7 +38,8 @@
   (js/window.apis.on "file-watcher"
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)]
-                         (watcher-handler/handle-changed! type payload))))
+                         (watcher-handler/handle-changed! type payload)
+                         (sync/file-watch-handler type payload))))
 
   (js/window.apis.on "notification"
                      (fn [data]
@@ -53,7 +56,6 @@
   (js/window.apis.on "setGitUsernameAndEmail"
                      (fn []
                        (state/pub-event! [:modal/set-git-username-and-email])))
-
 
   (js/window.apis.on "getCurrentGraph"
                      (fn []
@@ -90,7 +92,11 @@
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]
-                         (repo-handler/persist-db! repo handlers)))))
+                         (repo-handler/persist-db! repo handlers))))
+
+  (js/window.apis.on "loginCallback"
+                     (fn [code]
+                       (user/login-callback code))))
 
 (defn listen!
   []

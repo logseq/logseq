@@ -56,7 +56,7 @@
             (ui/button
               (t :open-a-directory)
               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
-         (when (and (state/logged?) (not (util/electron?)))
+         (when (and (state/deprecated-logged?) (not (util/electron?)))
            (ui/button
              "Add another git repo"
              :href (rfe/href :repo-add nil {:graph-types "github"})

@@ -662,8 +662,8 @@
                      (let [tx-data (:tx-data tx-report)
                            refs (some->> (filter #(= :block/refs (:a %)) tx-data)
                                          (map :v))
-                           tx-block-ids (distinct (->> (map :e tx-data)
-                                                       (concat refs)))
+                           tx-block-ids (distinct (-> (map :e tx-data)
+                                                      (concat refs)))
                            [tx-id->block cached-id->block] (when (and tx-report result)
                                                              (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                (remove nil?))]
@@ -717,7 +717,10 @@
                     [:block/name (util/safe-page-name-sanity-lc page-id)]
                     page-id)
           page (d/entity db page-id)]
-      (nil? (first (d/datoms db :avet :block/page (:db/id page)))))))
+      ;; NOTE: when page is nil, it means the page does not exist
+      (if page
+        (nil? (first (d/datoms db :avet :block/page (:db/id page))))
+        true))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
