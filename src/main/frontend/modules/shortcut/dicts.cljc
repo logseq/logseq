@@ -96,6 +96,7 @@
    :go/prev-journal                "Go to previous journal"
    :go/flashcards                  "Toggle flashcards"
    :ui/toggle-document-mode        "Toggle document mode"
+   :ui/toggle-reading-mode         "Toggle reading mode"
    :ui/toggle-settings             "Toggle settings"
    :ui/toggle-right-sidebar        "Toggle right sidebar"
    :ui/toggle-left-sidebar         "Toggle left sidebar"
