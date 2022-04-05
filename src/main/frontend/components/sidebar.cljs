@@ -224,7 +224,7 @@
             :icon             "home"})
           (sidebar-item
            {:class            "journals-nav"
-            :title            (t :right-side-bar/journals)
+            :title            (t :left-side-bar/journals)
             :on-click-handler route-handler/go-to-journals!
             :icon             "calendar"}))
 
