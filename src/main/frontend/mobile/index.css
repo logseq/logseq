@@ -28,4 +28,17 @@ html.is-native-ipad {
     }
 }
 
+html.is-native-iphone {
+    @media (orientation: landscape) {
+        .cp__footer {
+            height: 45px;
+        }
+    }
+}
+
+html.is-native-android {
+    .cp__footer {
+        height: 45px;
+    }
+}
 
