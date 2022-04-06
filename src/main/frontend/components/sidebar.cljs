@@ -503,7 +503,7 @@
                :db-restoring?       db-restoring?
                :main-content        main-content})
 
-        (when (and (mobile-util/native-ios?)
+        (when (and (mobile-util/is-native-platform?)
                    current-repo
                    (not (state/sub :modal/show?)))
           (footer/footer))]
