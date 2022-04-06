@@ -66,7 +66,7 @@
           url (util/format "../assets/%s" basename)
           url (editor-handler/get-asset-file-link format url label true)
           template (get-in (state/get-config)
-                           [:quick-capture-template :media]
+                           [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
     (-> (string/replace template "{time}" time)
         (string/replace "{url}" (or url "")))))
