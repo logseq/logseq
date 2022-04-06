@@ -1,4 +1,9 @@
-import { deepMerge, mergeSettingsWithSchema, safeSnakeCase, safetyPathJoin } from './helpers'
+import {
+  deepMerge,
+  mergeSettingsWithSchema,
+  safeSnakeCase,
+  safetyPathJoin,
+} from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
   IAppProxy,
@@ -22,8 +27,10 @@ import {
   IUserOffHook,
   IGitProxy,
   IUIProxy,
-  UserProxyTags, BlockUUID,
-  BlockEntity, IDatom
+  UserProxyTags,
+  BlockUUID,
+  BlockEntity,
+  IDatom,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -46,14 +53,14 @@ const debug = Debug('LSPlugin:user')
  * @param opts
  * @param action
  */
-function registerSimpleCommand (
+function registerSimpleCommand(
   this: LSPluginUser,
   type: string,
   opts: {
-    key: string,
-    label: string,
-    desc?: string,
-    palette?: boolean,
+    key: string
+    label: string
+    desc?: string
+    palette?: boolean
     keybinding?: SimpleCommandKeybinding
   },
   action: SimpleCommandCallback
@@ -69,27 +76,33 @@ function registerSimpleCommand (
 
   this.caller?.call(`api:call`, {
     method: 'register-plugin-simple-command',
-    args: [this.baseInfo.id, [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]], palette]
+    args: [
+      this.baseInfo.id,
+      [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]],
+      palette,
+    ],
   })
 }
 
 const app: Partial<IAppProxy> = {
   registerCommand: registerSimpleCommand,
 
-  registerCommandPalette (
-    opts: { key: string; label: string, keybinding?: SimpleCommandKeybinding },
-    action: SimpleCommandCallback) {
-
+  registerCommandPalette(
+    opts: { key: string; label: string; keybinding?: SimpleCommandKeybinding },
+    action: SimpleCommandCallback
+  ) {
     const { key, label, keybinding } = opts
     const group = '$palette$'
 
     return registerSimpleCommand.call(
-      this, group,
+      this,
+      group,
       { key, label, palette: true, keybinding },
-      action)
+      action
+    )
   },
 
-  registerCommandShortcut (
+  registerCommandShortcut(
     keybinding: SimpleCommandKeybinding,
     action: SimpleCommandCallback
   ) {
@@ -98,25 +111,27 @@ const app: Partial<IAppProxy> = {
     const key = group + safeSnakeCase(binding)
 
     return registerSimpleCommand.call(
-      this, group,
-      { key, palette: false, keybinding},
-      action)
+      this,
+      group,
+      { key, palette: false, keybinding },
+      action
+    )
   },
 
-  registerUIItem (
+  registerUIItem(
     type: 'toolbar' | 'pagebar',
-    opts: { key: string, template: string }
+    opts: { key: string; template: string }
   ) {
     const pid = this.baseInfo.id
     // opts.key = `${pid}_${opts.key}`
 
     this.caller?.call(`api:call`, {
       method: 'register-plugin-ui-item',
-      args: [pid, type, opts]
+      args: [pid, type, opts],
     })
   },
 
-  registerPageMenuItem (
+  registerPageMenuItem(
     this: LSPluginUser,
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
@@ -129,29 +144,34 @@ const app: Partial<IAppProxy> = {
     const label = tag
     const type = 'page-menu-item'
 
-    registerSimpleCommand.call(this,
-      type, {
-        key, label
-      }, action)
+    registerSimpleCommand.call(
+      this,
+      type,
+      {
+        key,
+        label,
+      },
+      action
+    )
   },
 
-  setFullScreen (flag) {
+  setFullScreen(flag) {
     const sf = (...args) => this._callWin('setFullScreen', ...args)
 
     if (flag === 'toggle') {
-      this._callWin('isFullScreen').then(r => {
+      this._callWin('isFullScreen').then((r) => {
         r ? sf() : sf(true)
       })
     } else {
       flag ? sf(true) : sf()
     }
-  }
+  },
 }
 
 let registeredCmdUid = 0
 
 const editor: Partial<IEditorProxy> = {
-  registerSlashCommand (
+  registerSlashCommand(
     this: LSPluginUser,
     tag: string,
     actions: BlockCommandCallback | Array<SlashCommandAction>
@@ -162,7 +182,7 @@ const editor: Partial<IEditorProxy> = {
       actions = [
         ['editor/clear-current-slash', false],
         ['editor/restore-saved-cursor'],
-        ['editor/hook', actions]
+        ['editor/hook', actions],
       ]
     }
 
@@ -195,11 +215,11 @@ const editor: Partial<IEditorProxy> = {
 
     this.caller?.call(`api:call`, {
       method: 'register-plugin-slash-command',
-      args: [this.baseInfo.id, [tag, actions]]
+      args: [this.baseInfo.id, [tag, actions]],
     })
   },
 
-  registerBlockContextMenuItem (
+  registerBlockContextMenuItem(
     this: LSPluginUser,
     tag: string,
     action: BlockCommandCallback
@@ -212,35 +232,40 @@ const editor: Partial<IEditorProxy> = {
     const label = tag
     const type = 'block-context-menu-item'
 
-    registerSimpleCommand.call(this,
-      type, {
-        key, label
-      }, action)
+    registerSimpleCommand.call(
+      this,
+      type,
+      {
+        key,
+        label,
+      },
+      action
+    )
   },
 
-  scrollToBlockInPage (
+  scrollToBlockInPage(
     this: LSPluginUser,
     pageName: BlockPageName,
     blockId: BlockIdentity
   ) {
     const anchor = `block-content-` + blockId
-    this.App.pushState(
-      'page',
-      { name: pageName },
-      { anchor }
-    )
-  }
+    this.App.pushState('page', { name: pageName }, { anchor })
+  },
 }
 
 const db: Partial<IDBProxy> = {
-  onBlockChanged (
+  onBlockChanged(
     this: LSPluginUser,
     uuid: BlockUUID,
-    callback: (block: BlockEntity, txData: Array<IDatom>, txMeta?: { outlinerOp: string; [p: string]: any }) => void
+    callback: (
+      block: BlockEntity,
+      txData: Array<IDatom>,
+      txMeta?: { outlinerOp: string; [p: string]: any }
+    ) => void
   ): IUserOffHook {
     const pid = this.baseInfo.id
     const hook = `hook:db:${safeSnakeCase(`block:${uuid}`)}`
-    const aBlockChange = ({block, txData, txMeta}) => {
+    const aBlockChange = ({ block, txData, txMeta }) => {
       if (block.uuid !== uuid) {
         return
       }
@@ -255,14 +280,14 @@ const db: Partial<IDBProxy> = {
       this.caller.off(hook, aBlockChange)
       this.App._uninstallPluginHook(pid, hook)
     }
-  }
+  },
 }
 
 const git: Partial<IGitProxy> = {}
 const ui: Partial<IUIProxy> = {}
 
 type uiState = {
-  key?: number,
+  key?: number
   visible: boolean
 }
 
@@ -272,7 +297,10 @@ const KEY_MAIN_UI = 0
  * User plugin instance
  * @public
  */
-export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
+export class LSPluginUser
+  extends EventEmitter<LSPluginUserEvents>
+  implements ILSPluginUser
+{
   // @ts-ignore
   private _version: string = LIB_VERSION
   private _debugTag: string = ''
@@ -298,7 +326,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    * @param _baseInfo
    * @param _caller
    */
-  constructor (
+  constructor(
     private _baseInfo: LSPluginBaseInfo,
     private _caller: LSPluginCaller
   ) {
@@ -321,7 +349,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
       const cb = this._beforeunloadCallback
 
       try {
-        cb && await cb(rest)
+        cb && (await cb(rest))
         actor?.resolve(null)
       } catch (e) {
         console.debug(`${_caller.debugTag} [beforeunload] `, e)
@@ -330,10 +358,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     })
   }
 
-  async ready (
-    model?: any,
-    callback?: any
-  ) {
+  async ready(model?: any, callback?: any) {
     if (this._connected) return
 
     try {
@@ -350,7 +375,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
       if (this._settingsSchema) {
         baseInfo.settings = mergeSettingsWithSchema(
-          baseInfo.settings, this._settingsSchema
+          baseInfo.settings,
+          this._settingsSchema
         )
 
         // TODO: sync host settings schema
@@ -358,11 +384,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
       }
 
       if (baseInfo?.id) {
-        this._debugTag = this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
+        this._debugTag =
+          this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
       await this._execCallableAPIAsync('setSDKMetadata', {
-        version: this._version
+        version: this._version,
       })
 
       callback && callback.call(this, baseInfo)
@@ -371,41 +398,42 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     }
   }
 
-  ensureConnected () {
+  ensureConnected() {
     if (!this._connected) {
       throw new Error('not connected')
     }
   }
 
-  beforeunload (callback: (e: any) => Promise<void>): void {
+  beforeunload(callback: (e: any) => Promise<void>): void {
     if (typeof callback !== 'function') return
     this._beforeunloadCallback = callback
   }
 
-  provideModel (model: Record<string, any>) {
+  provideModel(model: Record<string, any>) {
     this.caller._extendUserModel(model)
     return this
   }
 
-  provideTheme (theme: ThemeOptions) {
+  provideTheme(theme: ThemeOptions) {
     this.caller.call('provider:theme', theme)
     return this
   }
 
-  provideStyle (style: StyleString) {
+  provideStyle(style: StyleString) {
     this.caller.call('provider:style', style)
     return this
   }
 
-  provideUI (ui: UIOptions) {
+  provideUI(ui: UIOptions) {
     this.caller.call('provider:ui', ui)
     return this
   }
 
-  useSettingsSchema (schema: Array<SettingSchemaDesc>) {
+  useSettingsSchema(schema: Array<SettingSchemaDesc>) {
     if (this.connected) {
       this.caller.call('settings:schema', {
-        schema, isSync: true
+        schema,
+        isSync: true,
       })
     }
 
@@ -413,48 +441,56 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     return this
   }
 
-  updateSettings (attrs: Record<string, any>) {
+  updateSettings(attrs: Record<string, any>) {
     this.caller.call('settings:update', attrs)
     // TODO: update associated baseInfo settings
   }
 
-  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook {
+  onSettingsChanged<T = any>(cb: (a: T, b: T) => void): IUserOffHook {
     const type = 'settings:changed'
     this.on(type, cb)
     return () => this.off(type, cb)
   }
 
-  showSettingsUI () {
+  showSettingsUI() {
     this.caller.call('settings:visible:changed', { visible: true })
   }
 
-  hideSettingsUI () {
+  hideSettingsUI() {
     this.caller.call('settings:visible:changed', { visible: false })
   }
 
-  setMainUIAttrs (attrs: Partial<UIContainerAttrs>): void {
+  setMainUIAttrs(attrs: Partial<UIContainerAttrs>): void {
     this.caller.call('main-ui:attrs', attrs)
   }
 
-  setMainUIInlineStyle (style: CSS.Properties): void {
+  setMainUIInlineStyle(style: CSS.Properties): void {
     this.caller.call('main-ui:style', style)
   }
 
-  hideMainUI (opts?: { restoreEditingCursor: boolean }): void {
-    const payload = { key: KEY_MAIN_UI, visible: false, cursor: opts?.restoreEditingCursor }
+  hideMainUI(opts?: { restoreEditingCursor: boolean }): void {
+    const payload = {
+      key: KEY_MAIN_UI,
+      visible: false,
+      cursor: opts?.restoreEditingCursor,
+    }
     this.caller.call('main-ui:visible', payload)
     this.emit('ui:visible:changed', payload)
     this._ui.set(payload.key, payload)
   }
 
-  showMainUI (opts?: { autoFocus: boolean }): void {
-    const payload = { key: KEY_MAIN_UI, visible: true, autoFocus: opts?.autoFocus }
+  showMainUI(opts?: { autoFocus: boolean }): void {
+    const payload = {
+      key: KEY_MAIN_UI,
+      visible: true,
+      autoFocus: opts?.autoFocus,
+    }
     this.caller.call('main-ui:visible', payload)
     this.emit('ui:visible:changed', payload)
     this._ui.set(payload.key, payload)
   }
 
-  toggleMainUI (): void {
+  toggleMainUI(): void {
     const payload = { key: KEY_MAIN_UI, toggle: true }
     const state = this._ui.get(payload.key)
     if (state && state.visible) {
@@ -464,32 +500,32 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     }
   }
 
-  get version (): string {
+  get version(): string {
     return this._version
   }
 
-  get isMainUIVisible (): boolean {
+  get isMainUIVisible(): boolean {
     const state = this._ui.get(KEY_MAIN_UI)
     return Boolean(state && state.visible)
   }
 
-  get connected (): boolean {
+  get connected(): boolean {
     return this._connected
   }
 
-  get baseInfo (): LSPluginBaseInfo {
+  get baseInfo(): LSPluginBaseInfo {
     return this._baseInfo
   }
 
-  get settings () {
+  get settings() {
     return this.baseInfo?.settings
   }
 
-  get caller (): LSPluginCaller {
+  get caller(): LSPluginCaller {
     return this._caller
   }
 
-  resolveResourceFullUrl (filePath: string) {
+  resolveResourceFullUrl(filePath: string) {
     this.ensureConnected()
     if (!filePath) return
     filePath = filePath.replace(/^[.\\/]+/, '')
@@ -499,15 +535,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   /**
    * @internal
    */
-  _makeUserProxy (
-    target: any,
-    tag?: UserProxyTags
-  ) {
+  _makeUserProxy(target: any, tag?: UserProxyTags) {
     const that = this
     const caller = this.caller
 
     return new Proxy(target, {
-      get (target: any, propKey, receiver) {
+      get(target: any, propKey, receiver) {
         const origMethod = target[propKey]
 
         return function (this: any, ...args: any) {
@@ -550,59 +583,63 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
           // Call host
           return caller.callAsync(`api:call`, {
-            tag, method, args: args
+            tag,
+            method,
+            args: args,
           })
         }
-      }
+      },
     })
   }
 
-  _execCallableAPIAsync (method, ...args) {
+  _execCallableAPIAsync(method, ...args) {
     return this._caller.callAsync(`api:call`, {
-      method, args
+      method,
+      args,
     })
   }
 
-  _execCallableAPI (method, ...args) {
+  _execCallableAPI(method, ...args) {
     this._caller.call(`api:call`, {
-      method, args
+      method,
+      args,
     })
   }
 
-  _callWin (...args) {
+  _callWin(...args) {
     return this._execCallableAPIAsync(`_callMainWin`, ...args)
   }
 
   /**
    * The interface methods of {@link IAppProxy}
    */
-  get App (): IAppProxy {
+  get App(): IAppProxy {
     return this._makeUserProxy(app, 'app')
   }
 
-  get Editor (): IEditorProxy {
+  get Editor(): IEditorProxy {
     return this._makeUserProxy(editor, 'editor')
   }
 
-  get DB (): IDBProxy {
+  get DB(): IDBProxy {
     return this._makeUserProxy(db, 'db')
   }
 
-  get Git (): IGitProxy {
+  get Git(): IGitProxy {
     return this._makeUserProxy(git, 'git')
   }
 
-  get UI (): IUIProxy {
+  get UI(): IUIProxy {
     return this._makeUserProxy(ui, 'ui')
   }
 
-  get FileStorage (): LSPluginFileStorage {
+  get FileStorage(): LSPluginFileStorage {
     let m = this._mFileStorage
     if (!m) m = this._mFileStorage = new LSPluginFileStorage(this)
     return m
   }
 
-  get Experiments (): LSPluginExperiments {
+  get Experiments(): LSPluginExperiments {
     let m = this._mExperiments
     if (!m) m = this._mExperiments = new LSPluginExperiments(this)
     return m
@@ -614,7 +651,7 @@ export * from './LSPlugin'
 /**
  * @internal
  */
-export function setupPluginUserInstance (
+export function setupPluginUserInstance(
   pluginBaseInfo: LSPluginBaseInfo,
   pluginCaller: LSPluginCaller
 ) {

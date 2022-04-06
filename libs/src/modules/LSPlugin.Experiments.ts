@@ -6,30 +6,30 @@ import { safeSnakeCase } from '../helpers'
  * Some experiment features
  */
 export class LSPluginExperiments {
-  constructor (
-    private ctx: LSPluginUser
-  ) {}
+  constructor(private ctx: LSPluginUser) {}
 
-  get React (): unknown {
+  get React(): unknown {
     return this.ensureHostScope().React
   }
 
-  get ReactDOM (): unknown {
+  get ReactDOM(): unknown {
     return this.ensureHostScope().ReactDOM
   }
 
-  get pluginLocal (): PluginLocal {
-    return this.ensureHostScope().LSPluginCore.ensurePlugin(this.ctx.baseInfo.id)
+  get pluginLocal(): PluginLocal {
+    return this.ensureHostScope().LSPluginCore.ensurePlugin(
+      this.ctx.baseInfo.id
+    )
   }
 
-  private invokeExperMethod (type: string, ...args: Array<any>) {
+  private invokeExperMethod(type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
     type = safeSnakeCase(type)?.toLowerCase()
     return host.logseq.api['exper_' + type]?.apply(host, args)
   }
 
-  async loadScripts (...scripts: Array<string>) {
-    scripts = scripts.map(it => {
+  async loadScripts(...scripts: Array<string>) {
+    scripts = scripts.map((it) => {
       if (!it?.startsWith('http')) {
         return this.ctx.resolveResourceFullUrl(it)
       }
@@ -41,20 +41,23 @@ export class LSPluginExperiments {
     await this.invokeExperMethod('loadScripts', ...scripts)
   }
 
-  registerFencedCodeRenderer (
+  registerFencedCodeRenderer(
     type: string,
     opts: {
-      edit?: boolean,
-      before?: () => Promise<void>,
-      subs?: Array<string>,
-      render: (props: { content: string }) => any,
-    }) {
+      edit?: boolean
+      before?: () => Promise<void>
+      subs?: Array<string>
+      render: (props: { content: string }) => any
+    }
+  ) {
     return this.ensureHostScope().logseq.api.exper_register_fenced_code_renderer(
-      this.ctx.baseInfo.id, type, opts
+      this.ctx.baseInfo.id,
+      type,
+      opts
     )
   }
 
-  ensureHostScope (): any {
+  ensureHostScope(): any {
     if (window === top) {
       throw new Error('Can not access host scope!')
     }
@@ -62,5 +65,3 @@ export class LSPluginExperiments {
     return top
   }
 }
-
-

@@ -15,7 +15,7 @@ export type ThemeOptions = {
   [key: string]: any
 }
 
-export type StyleString = string;
+export type StyleString = string
 export type StyleOptions = {
   key?: string
   style: StyleString
@@ -77,7 +77,7 @@ export interface LSPluginBaseInfo {
   settings: {
     disabled: boolean
     [key: string]: any
-  },
+  }
 
   [key: string]: any
 }
@@ -87,18 +87,26 @@ export type IHookEvent = {
 }
 
 export type IUserOffHook = () => void
-export type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
-export type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
+export type IUserHook<E = any, R = IUserOffHook> = (
+  callback: (e: IHookEvent & E) => void
+) => IUserOffHook
+export type IUserSlotHook<E = any> = (
+  callback: (e: IHookEvent & UISlotIdentity & E) => void
+) => void
 
 export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
 
-export type IEntityID = { id: EntityID, [key: string]: any }
-export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
+export type IEntityID = { id: EntityID; [key: string]: any }
+export type IBatchBlock = {
+  content: string
+  properties?: Record<string, any>
+  children?: Array<IBatchBlock>
+}
 export type IDatom = [e: number, a: string, v: any, t: number, added: boolean]
 
-export type IGitResult = { stdout: string, stderr: string, exitCode: number }
+export type IGitResult = { stdout: string; stderr: string; exitCode: number }
 
 export interface AppUserInfo {
   [key: string]: any
@@ -151,7 +159,7 @@ export interface BlockEntity {
   container?: string
   file?: IEntityID
   level?: number
-  meta?: { timestamps: any, properties: any, startPos: number, endPos: number }
+  meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
   title?: Array<any>
 
   [key: string]: any
@@ -178,18 +186,26 @@ export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 export type BlockPageName = string
 export type PageIdentity = BlockPageName | BlockIdentity
 export type SlashCommandActionCmd =
-  'editor/input'
+  | 'editor/input'
   | 'editor/hook'
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 export type SimpleCommandCallback = (e: IHookEvent) => void
-export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
-export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
+export type BlockCommandCallback = (
+  e: IHookEvent & { uuid: BlockUUID }
+) => Promise<void>
+export type BlockCursorPosition = {
+  left: number
+  top: number
+  height: number
+  pos: number
+  rect: DOMRect
+}
 
 export type SimpleCommandKeybinding = {
-  mode?: 'global' | 'non-editing' | 'editing',
-  binding: string,
+  mode?: 'global' | 'non-editing' | 'editing'
+  binding: string
   mac?: string // special for Mac OS
 }
 
@@ -205,48 +221,48 @@ export type SettingSchemaDesc = {
 }
 
 export type ExternalCommandType =
-  'logseq.command/run' |
-  'logseq.editor/cycle-todo' |
-  'logseq.editor/down' |
-  'logseq.editor/up' |
-  'logseq.editor/expand-block-children' |
-  'logseq.editor/collapse-block-children' |
-  'logseq.editor/open-file-in-default-app' |
-  'logseq.editor/open-file-in-directory' |
-  'logseq.editor/select-all-blocks' |
-  'logseq.editor/toggle-open-blocks' |
-  'logseq.editor/zoom-in' |
-  'logseq.editor/zoom-out' |
-  'logseq.editor/indent' |
-  'logseq.editor/outdent' |
-  'logseq.editor/copy' |
-  'logseq.editor/cut' |
-  'logseq.go/home' |
-  'logseq.go/journals' |
-  'logseq.go/keyboard-shortcuts' |
-  'logseq.go/next-journal' |
-  'logseq.go/prev-journal' |
-  'logseq.go/search' |
-  'logseq.go/search-in-page' |
-  'logseq.go/tomorrow' |
-  'logseq.go/backward' |
-  'logseq.go/forward' |
-  'logseq.search/re-index' |
-  'logseq.sidebar/clear' |
-  'logseq.sidebar/open-today-page' |
-  'logseq.ui/goto-plugins' |
-  'logseq.ui/select-theme-color' |
-  'logseq.ui/toggle-brackets' |
-  'logseq.ui/toggle-cards' |
-  'logseq.ui/toggle-contents' |
-  'logseq.ui/toggle-document-mode' |
-  'logseq.ui/toggle-help' |
-  'logseq.ui/toggle-left-sidebar' |
-  'logseq.ui/toggle-right-sidebar' |
-  'logseq.ui/toggle-settings' |
-  'logseq.ui/toggle-theme' |
-  'logseq.ui/toggle-wide-mode' |
-  'logseq.command-palette/toggle'
+  | 'logseq.command/run'
+  | 'logseq.editor/cycle-todo'
+  | 'logseq.editor/down'
+  | 'logseq.editor/up'
+  | 'logseq.editor/expand-block-children'
+  | 'logseq.editor/collapse-block-children'
+  | 'logseq.editor/open-file-in-default-app'
+  | 'logseq.editor/open-file-in-directory'
+  | 'logseq.editor/select-all-blocks'
+  | 'logseq.editor/toggle-open-blocks'
+  | 'logseq.editor/zoom-in'
+  | 'logseq.editor/zoom-out'
+  | 'logseq.editor/indent'
+  | 'logseq.editor/outdent'
+  | 'logseq.editor/copy'
+  | 'logseq.editor/cut'
+  | 'logseq.go/home'
+  | 'logseq.go/journals'
+  | 'logseq.go/keyboard-shortcuts'
+  | 'logseq.go/next-journal'
+  | 'logseq.go/prev-journal'
+  | 'logseq.go/search'
+  | 'logseq.go/search-in-page'
+  | 'logseq.go/tomorrow'
+  | 'logseq.go/backward'
+  | 'logseq.go/forward'
+  | 'logseq.search/re-index'
+  | 'logseq.sidebar/clear'
+  | 'logseq.sidebar/open-today-page'
+  | 'logseq.ui/goto-plugins'
+  | 'logseq.ui/select-theme-color'
+  | 'logseq.ui/toggle-brackets'
+  | 'logseq.ui/toggle-cards'
+  | 'logseq.ui/toggle-contents'
+  | 'logseq.ui/toggle-document-mode'
+  | 'logseq.ui/toggle-help'
+  | 'logseq.ui/toggle-left-sidebar'
+  | 'logseq.ui/toggle-right-sidebar'
+  | 'logseq.ui/toggle-settings'
+  | 'logseq.ui/toggle-theme'
+  | 'logseq.ui/toggle-wide-mode'
+  | 'logseq.command-palette/toggle'
 
 export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui'
 
@@ -262,21 +278,23 @@ export interface IAppProxy {
   registerCommand: (
     type: string,
     opts: {
-      key: string,
-      label: string,
-      desc?: string,
-      palette?: boolean,
+      key: string
+      label: string
+      desc?: string
+      palette?: boolean
       keybinding?: SimpleCommandKeybinding
     },
-    action: SimpleCommandCallback) => void
+    action: SimpleCommandCallback
+  ) => void
 
   registerCommandPalette: (
     opts: {
-      key: string,
-      label: string,
+      key: string
+      label: string
       keybinding?: SimpleCommandKeybinding
     },
-    action: SimpleCommandCallback) => void
+    action: SimpleCommandCallback
+  ) => void
 
   registerCommandShortcut: (
     keybinding: SimpleCommandKeybinding,
@@ -285,7 +303,8 @@ export interface IAppProxy {
 
   invokeExternalCommand: (
     type: ExternalCommandType,
-    ...args: Array<any>) => Promise<void>
+    ...args: Array<any>
+  ) => Promise<void>
 
   /**
    * Get state from app store
@@ -298,8 +317,7 @@ export interface IAppProxy {
    * ```
    * @param path
    */
-  getStateFromStore:
-    <T = any>(path: string | Array<string>) => Promise<T>
+  getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
 
   // native
   relaunch: () => Promise<void>
@@ -317,12 +335,23 @@ export interface IAppProxy {
   getCurrentGraph: () => Promise<AppGraphInfo | null>
 
   // router
-  pushState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
-  replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
+  pushState: (
+    k: string,
+    params?: Record<string, any>,
+    query?: Record<string, any>
+  ) => void
+  replaceState: (
+    k: string,
+    params?: Record<string, any>,
+    query?: Record<string, any>
+  ) => void
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
-  showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
+  showMsg: (
+    content: string,
+    status?: 'success' | 'warning' | 'error' | string
+  ) => void
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -330,7 +359,7 @@ export interface IAppProxy {
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
-    opts: { key: string, template: string }
+    opts: { key: string; template: string }
   ) => void
 
   registerPageMenuItem: (
@@ -363,10 +392,12 @@ export interface IAppProxy {
    * })
    * ```
    */
-  onMacroRendererSlotted: IUserSlotHook<{ payload: { arguments: Array<string>, uuid: string, [key: string]: any } }>
+  onMacroRendererSlotted: IUserSlotHook<{
+    payload: { arguments: Array<string>; uuid: string; [key: string]: any }
+  }>
 
   onPageHeadActionsSlotted: IUserSlotHook
-  onRouteChanged: IUserHook<{ path: string, template: string }>
+  onRouteChanged: IUserHook<{ path: string; template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
@@ -458,19 +489,25 @@ export interface IEditorProxy extends Record<string, any> {
    * get all page/block linked references
    * @param srcPage
    */
-  getPageLinkedReferences: (srcPage: PageIdentity) => Promise<Array<[page: PageEntity, blocks: Array<BlockEntity>]> | null>
+  getPageLinkedReferences: (
+    srcPage: PageIdentity
+  ) => Promise<Array<[page: PageEntity, blocks: Array<BlockEntity>]> | null>
 
   /**
    * get flatten pages from top namespace
    * @param namespace
    */
-  getPagesFromNamespace: (namespace: BlockPageName) => Promise<Array<PageEntity> | null>
+  getPagesFromNamespace: (
+    namespace: BlockPageName
+  ) => Promise<Array<PageEntity> | null>
 
   /**
    * construct pages tree from namespace pages
    * @param namespace
    */
-  getPagesTreeFromNamespace: (namespace: BlockPageName) => Promise<Array<PageEntity> | null>
+  getPagesTreeFromNamespace: (
+    namespace: BlockPageName
+  ) => Promise<Array<PageEntity> | null>
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
@@ -482,13 +519,18 @@ export interface IEditorProxy extends Record<string, any> {
   insertBlock: (
     srcBlock: BlockIdentity,
     content: string,
-    opts?: Partial<{ before: boolean; sibling: boolean; isPageBlock: boolean; properties: {} }>
+    opts?: Partial<{
+      before: boolean
+      sibling: boolean
+      isPageBlock: boolean
+      properties: {}
+    }>
   ) => Promise<BlockEntity | null>
 
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
-    opts?: Partial<{ before: boolean, sibling: boolean }>
+    opts?: Partial<{ before: boolean; sibling: boolean }>
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
@@ -497,9 +539,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
-  removeBlock: (
-    srcBlock: BlockIdentity
-  ) => Promise<void>
+  removeBlock: (srcBlock: BlockIdentity) => Promise<void>
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
@@ -519,12 +559,15 @@ export interface IEditorProxy extends Record<string, any> {
   createPage: (
     pageName: BlockPageName,
     properties?: {},
-    opts?: Partial<{ redirect: boolean, createFirstBlock: boolean, format: BlockEntity['format'], journal: boolean }>
+    opts?: Partial<{
+      redirect: boolean
+      createFirstBlock: boolean
+      format: BlockEntity['format']
+      journal: boolean
+    }>
   ) => Promise<PageEntity | null>
 
-  deletePage: (
-    pageName: BlockPageName
-  ) => Promise<void>
+  deletePage: (pageName: BlockPageName) => Promise<void>
 
   renamePage: (oldName: string, newName: string) => Promise<void>
 
@@ -556,17 +599,20 @@ export interface IEditorProxy extends Record<string, any> {
 
   getBlockProperties: (block: BlockIdentity) => Promise<any>
 
-  scrollToBlockInPage: (
-    pageName: BlockPageName,
-    blockId: BlockIdentity
-  ) => void
+  scrollToBlockInPage: (pageName: BlockPageName, blockId: BlockIdentity) => void
 
   openInRightSidebar: (uuid: BlockUUID) => void
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
    */
-  onInputSelectionEnd: IUserHook<{ caret: any, point: { x: number, y: number }, start: number, end: number, text: string }>
+  onInputSelectionEnd: IUserHook<{
+    caret: any
+    point: { x: number; y: number }
+    start: number
+    end: number
+    text: string
+  }>
 }
 
 /**
@@ -589,20 +635,21 @@ export interface IDBProxy {
    * Hook all transaction data of DB
    */
   onChanged: IUserHook<{
-    blocks: Array<BlockEntity>,
-    txData: Array<IDatom>,
-    txMeta?: { outlinerOp: string, [key: string]: any }
+    blocks: Array<BlockEntity>
+    txData: Array<IDatom>
+    txMeta?: { outlinerOp: string; [key: string]: any }
   }>
 
   /**
    * Subscribe a specific block changed event
    */
-  onBlockChanged (
+  onBlockChanged(
     uuid: BlockUUID,
     callback: (
       block: BlockEntity,
       txData: Array<IDatom>,
-      txMeta?: { outlinerOp: string, [key: string]: any }) => void
+      txMeta?: { outlinerOp: string; [key: string]: any }
+    ) => void
   ): IUserOffHook
 }
 
@@ -624,8 +671,8 @@ export interface IGitProxy {
  * UI related APIS
  */
 export type UIMsgOptions = {
-  key: string,
-  timeout: number, // milliseconds. `0` indicate that keep showing
+  key: string
+  timeout: number // milliseconds. `0` indicate that keep showing
 }
 
 export type UIMsgKey = UIMsgOptions['key']
@@ -634,7 +681,8 @@ export interface IUIProxy {
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string,
-    opts?: Partial<UIMsgOptions>) => Promise<UIMsgKey>
+    opts?: Partial<UIMsgOptions>
+  ) => Promise<UIMsgKey>
 
   closeMsg: (key: UIMsgKey) => void
 }
@@ -642,11 +690,11 @@ export interface IUIProxy {
 export interface ILSPluginThemeManager extends EventEmitter {
   themes: Map<PluginLocalIdentity, Array<ThemeOptions>>
 
-  registerTheme (id: PluginLocalIdentity, opt: ThemeOptions): Promise<void>
+  registerTheme(id: PluginLocalIdentity, opt: ThemeOptions): Promise<void>
 
-  unregisterTheme (id: PluginLocalIdentity): Promise<void>
+  unregisterTheme(id: PluginLocalIdentity): Promise<void>
 
-  selectTheme (opt?: ThemeOptions): Promise<void>
+  selectTheme(opt?: ThemeOptions): Promise<void>
 }
 
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
@@ -677,14 +725,14 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *
    * @param model - same as the model in `provideModel`
    */
-  ready (model?: Record<string, any>): Promise<any>
+  ready(model?: Record<string, any>): Promise<any>
 
   /**
    * @param callback - a function to run when the main Logseq app is ready
    */
-  ready (callback?: (e: any) => void | {}): Promise<any>
+  ready(callback?: (e: any) => void | {}): Promise<any>
 
-  ready (
+  ready(
     model?: Record<string, any>,
     callback?: (e: any) => void | {}
   ): Promise<any>
@@ -703,12 +751,12 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideModel (model: Record<string, any>): this
+  provideModel(model: Record<string, any>): this
 
   /**
    * Set the theme for the main Logseq app
    */
-  provideTheme (theme: ThemeOptions): this
+  provideTheme(theme: ThemeOptions): this
 
   /**
    * Inject custom css for the main Logseq app
@@ -721,7 +769,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *  )
    * ```
    */
-  provideStyle (style: StyleString | StyleOptions): this
+  provideStyle(style: StyleString | StyleOptions): this
 
   /**
    * Inject custom UI at specific DOM node.
@@ -741,29 +789,29 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideUI (ui: UIOptions): this
+  provideUI(ui: UIOptions): this
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
    *
    * @param schemas
    */
-  useSettingsSchema (schemas: Array<SettingSchemaDesc>): this
+  useSettingsSchema(schemas: Array<SettingSchemaDesc>): this
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
    *
    * @param attrs
    */
-  updateSettings (attrs: Record<string, any>): void
+  updateSettings(attrs: Record<string, any>): void
 
-  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook
+  onSettingsChanged<T = any>(cb: (a: T, b: T) => void): IUserOffHook
 
-  showSettingsUI (): void
+  showSettingsUI(): void
 
-  hideSettingsUI (): void
+  hideSettingsUI(): void
 
-  setMainUIAttrs (attrs: Record<string, any>): void
+  setMainUIAttrs(attrs: Record<string, any>): void
 
   /**
    * Set the style for the plugin's UI
@@ -777,26 +825,26 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  setMainUIInlineStyle (style: CSS.Properties): void
+  setMainUIInlineStyle(style: CSS.Properties): void
 
   /**
    * show the plugin's UI
    */
-  showMainUI (opts?: { autoFocus: boolean }): void
+  showMainUI(opts?: { autoFocus: boolean }): void
 
   /**
    * hide the plugin's UI
    */
-  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
+  hideMainUI(opts?: { restoreEditingCursor: boolean }): void
 
   /**
    * toggle the plugin's UI
    */
-  toggleMainUI (): void
+  toggleMainUI(): void
 
   isMainUIVisible: boolean
 
-  resolveResourceFullUrl (filePath: string): string
+  resolveResourceFullUrl(filePath: string): string
 
   App: IAppProxy & Record<string, any>
   Editor: IEditorProxy & Record<string, any>
