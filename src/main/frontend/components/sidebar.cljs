@@ -5,7 +5,6 @@
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
             [frontend.components.repo :as repo]
-            [frontend.components.editor :refer [mobile-bar-command]]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
@@ -34,8 +33,8 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
-            [frontend.mobile.record :as record]
-            [frontend.components.onboarding :as onboarding]))
+            [frontend.components.onboarding :as onboarding]
+            [frontend.mobile.footer :as footer]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -292,7 +291,8 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+      
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -419,16 +419,6 @@
   (when-not (gobj/get e "shiftKey")
     (editor-handler/clear-selection!)))
 
-(rum/defc record-bar < rum/reactive
-  []
-  [:div#audio-record-toolbar.bg-base-2
-   [:div.record-commands.flex.flex-cols
-    (mobile-bar-command #(record/stop-recording) "player-stop")
-    (if (= (state/sub :editor/record-status) "PAUSED")
-      (mobile-bar-command #(record/resume-recording) "player-record")
-      (mobile-bar-command #(record/pause-recording) "player-pause"))
-    (mobile-bar-command #(record/cancel-recording) "circle-x")]])
-
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -511,15 +501,17 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})]
+               :main-content        main-content})
+
+        (when (and (mobile-util/native-ios?)
+                   current-repo
+                   (not (state/sub :modal/show?)))
+          (footer/footer))]
+       
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]
 
-      (when (and (mobile-util/is-native-platform?)
-                 (not= (state/sub :editor/record-status) "NONE"))
-        (record-bar))
-      
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
@@ -534,4 +526,4 @@
       (when
           (and (not config/mobile?)
                (not config/publishing?))
-        (help-button))])))
+          (help-button))])))

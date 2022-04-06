@@ -27,7 +27,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.handler.history :as history]
-            [frontend.mobile.record :as record]))
+            [frontend.mobile.record :as record]
+            [frontend.mobile.footer :as footer]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -583,12 +584,18 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id _config]
+  [state {:keys [format block]} id config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-     
-     (when (or (mobile-util/is-native-platform?) config/mobile?)
+
+     (when (= (state/sub :editor/record-status) "RECORDING")
+       [:div#audio-record-toolbar
+        (footer/audio-record-cp)])
+
+     (when (and (or (mobile-util/is-native-platform?)
+                    config/mobile?)
+                (not (:review-cards? config)))
        (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
