@@ -592,9 +592,11 @@
                                ;; same page, get the most top block before dragging
                                (let [match-ids (set (conj move-blocks target))]
                                  (loop [[id & others] cached-ids]
-                                   (if (contains? match-ids id)
-                                     id
-                                     (recur others))))))
+                                   (if id
+                                     (if (contains? match-ids id)
+                                       id
+                                       (recur others))
+                                     nil)))))
                            (let [insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
@@ -669,7 +671,9 @@
                                                                                (remove nil?))]
                                                                [(zipmap (mapv :db/id blocks) blocks)
                                                                 (zipmap (mapv :db/id @result) @result)]))
-                           limit (if (and result @result) (+ (count @result) 5) limit)
+                           limit (if (and result @result)
+                                   (max (+ (count @result) 5) limit)
+                                   limit)
                            outliner-op (get-in tx-report [:tx-meta :outliner-op])
                            blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
                            blocks (or blocks

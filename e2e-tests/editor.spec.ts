@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, IsMac } from './utils'
+import { createRandomPage, enterNextBlock, editFirstBlock, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -63,6 +63,30 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   expect(await page.inputValue('textarea >> nth=0')).toBe(
     '#foo bar [[blah]]'
   )
+})
+
+test('disappeared children #4814', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.type('textarea >> nth=0', 'parent')
+  await enterNextBlock(page)
+  await page.press('textarea >> nth=0', 'Tab')
+
+  for (let i = 0; i < 5; i++) {
+    await page.type('textarea >> nth=0', i.toString())
+    await enterNextBlock(page)
+  }
+
+  // collapse
+  await page.click('.block-control >> nth=0')
+
+  // expand
+  await page.click('.block-control >> nth=0')
+
+  await page.waitForSelector('.ls-block >> nth=6') // 7 blocks
+
+  // Ensures there's no active editor
+  await expect(page.locator('.editor-inner')).toHaveCount(0, {timeout: 500})
 })
 
 // FIXME: ClipboardItem is not defined when running with this test
