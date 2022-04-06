@@ -76,32 +76,3 @@
           (js/console.log "Stop recording...")))))
    (fn [error]
      (js/console.error error))))
-
-(defn pause-recording []
-  (p/catch
-   (p/then (.pauseRecording VoiceRecorder)
-           (fn [^js _result]
-             (set-recording-state)
-             (js/console.log "Pause recording...")))
-   (fn [error]
-     (js/console.error error))))
-
-(defn resume-recording []
-  (p/catch
-   (p/then (.resumeRecording VoiceRecorder)
-           (fn [^js _result]
-             (set-recording-state)
-             (js/console.log "Resume recording...")))
-   (fn [error]
-     (js/console.error error))))
-
-(defn cancel-recording []
-  (p/catch
-   (p/then
-    (.stopRecording VoiceRecorder)
-    (fn [^js _result]
-      (set-recording-state)
-      (js/console.log "Cancel recording...")))
-   (fn [error]
-     (js/console.error error))))
-

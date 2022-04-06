@@ -41,7 +41,7 @@
        (reset! *record-start 0)
        (mobile-bar-command #(record/start-recording) "microphone"))
      [:div.flex.flex-row
-      (mobile-bar-command #(record/stop-recording) "player-pause")
+      (mobile-bar-command #(record/stop-recording) "player-stop")
       [:div.timer.pl-2 (seconds->minutes:seconds @*record-start)]])])
 
 (rum/defc footer < rum/reactive
