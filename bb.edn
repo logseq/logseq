@@ -32,4 +32,7 @@
   logseq.tasks.lang/list-duplicates
 
   lang:invalid-translations
-  logseq.tasks.lang/invalid-translations}}
+  logseq.tasks.lang/invalid-translations
+
+  file-sync:integration-tests
+  logseq.tasks.file-sync/integration-tests}}
