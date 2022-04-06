@@ -234,8 +234,7 @@
 
     (ui/toggle (not disabled?)
                (fn []
-                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
-                 (page-handler/init-commands!))
+                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id))
                true)]])
 
 (rum/defc plugin-item-card < rum/static

@@ -241,6 +241,7 @@
     (when (contains? (:plugin/installed-plugins @state/state) pid)
       (swap! state/state update-in [:plugin/installed-slash-commands pid]
              (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
+      (state/pub-event! [:rebuild-slash-commands-list])
       true)))
 
 (defn unregister-plugin-slash-command

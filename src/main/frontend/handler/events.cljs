@@ -372,6 +372,9 @@
            :path
            js/decodeURI)))
 
+(defmethod handle :rebuild-slash-commands-list [[_]]
+  (commands/rebuild-slash-commands-list!))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]
