@@ -297,7 +297,7 @@
      (when-not (= mode "calc")
        [:div.extensions__code-lang
         (string/lower-case mode)]))
-   [:div.flex.flex-1.flex-row.w-full.mt-6
+   [:div.flex.flex-1.flex-row.w-full.mt-8
     [:textarea (merge {:id id
                        ;; Expose the textarea associated with the CodeMirror instance via
                        ;; ref so that we can autofocus into the CodeMirror instance later.

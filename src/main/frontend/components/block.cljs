@@ -1408,11 +1408,7 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18
-                                                                      (if (or (mobile-util/native-android?)
-                                                                              (mobile-util/native-iphone?))
-                                                                        22
-                                                                        29))}}
+        [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18 29)}}
          [:div.block-children-left-border {:on-click (fn [event] (toggle-block-children event children))}]
          [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
           (for [child children]

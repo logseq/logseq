@@ -29,26 +29,17 @@
 }
 
 #audio-record-toolbar {
-  position: fixed;
-  bottom: 50px;
-  left: 10px;
-  transition: none;
-  display: flex;
-  z-index: 9999;
-  
-  button {
-    padding: 7px 10px;
-  }
-  
-  .record-commands {
-    justify-content: space-between;
-    display: flex;
-    align-items: center;
-    overflow-x: overlay;
-    overflow-y: hidden;
-  }
+    position: fixed;
+    background-color: var(--ls-secondary-background-color);
+    bottom: 45px;
+    width: 88px;
+    justify-content: left;
+    left: 5px;
+    transition: none;
+    z-index: 9999;
+    padding: 5px 5px 0px 5px;
+    border-radius: 5px;
 }
-
 
 .editor-wrapper {
   width: 100%;
