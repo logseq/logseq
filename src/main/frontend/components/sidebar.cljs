@@ -396,7 +396,7 @@
                          [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
                          [:p.inline-block "to create new block"]]
                         [:li
-                         [:p.inline-block.mr-1 "Click `D` or type"]
+                         [:p.inline-block.mr-1 "Click icon or type"]
                          [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
                          [:p.inline-block "to toggle document mode"]]]]}
                [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
@@ -408,7 +408,7 @@
                        [:p.mb-2 [:b "Reading mode"]]
                        [:ul
                         [:li
-                         [:p.inline-block.mr-1 "Click `E` or type"]
+                         [:p.inline-block.mr-1 "Click icon or type"]
                          [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-reading-mode))]
                          [:p.inline-block "to toggle reading mode"]]]]}
                [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2.non-editing
