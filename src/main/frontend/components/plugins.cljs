@@ -745,26 +745,6 @@
    (when (fn? render)
      (js/React.createElement render #js {:content content}))])
 
-;;;; test fenced-code renderer
-(rum/defc mermaid-renderer
-  [content]
-
-  (let [*el (rum/create-ref)]
-
-    ;; update
-    (rum/use-effect!
-      (fn []
-        (let [^js/Element el (rum/deref *el)]
-          (js/setTimeout #(.init js/window.mermaid) 100)
-          (when el (js-delete (.-dataset el) "processed")))
-        #())
-      
-      [content])
-
-    [:div.mermaid
-     {:ref *el}
-     content]))
-
 (rum/defc plugins-page
   []
 
