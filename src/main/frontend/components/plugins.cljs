@@ -13,7 +13,6 @@
             [frontend.components.plugins-settings :as plugins-settings]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.page :as page-handler]
             [clojure.string :as string]))
 
 (rum/defcs installed-themes
@@ -738,7 +737,7 @@
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
-  [_state content {:keys [key render edit] :as _opts}]
+  [_state content {:keys [render edit] :as _opts}]
 
   [:div
    {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
