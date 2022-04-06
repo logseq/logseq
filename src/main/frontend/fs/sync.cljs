@@ -255,7 +255,7 @@
       ([result] (rf result))
       ([result ^FileTxn filetxn]
        (if (and
-            (or (.-updated? filetxn) (.deleted? filetxn))
+            (or (.-updated? filetxn) (.-deleted? filetxn))
             (contains? @seen-update&delete-filetxns filetxn))
          result
          (do (vswap! seen-update&delete-filetxns conj filetxn)
@@ -600,7 +600,7 @@
     (.-updated? (first filetxns))
     (update-local-files rsapi graph-uuid base-path (map relative-path filetxns))
 
-    (.deleted? (first filetxns))
+    (.-deleted? (first filetxns))
     (let [filetxn (first filetxns)]
       (assert (= 1 (count filetxns)))
       (go
