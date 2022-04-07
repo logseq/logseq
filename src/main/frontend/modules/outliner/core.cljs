@@ -371,18 +371,17 @@
   ;;               (tree/-save down-node-right txs-state))))))))
   )
 
-(defn delete-node
-  "Delete node from the tree."
-  [node children?]
-  {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-node}
-    (let [right-node (tree/-get-right node)]
-      (tree/-del node txs-state children?)
-      (when (tree/satisfied-inode? right-node)
-        (let [left-node (tree/-get-left node)
-              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-          (tree/-save new-right-node txs-state))))))
+(defn- delete-block
+  "Delete block from the tree."
+  [txs-state blok children?]
+  (let [node (block blok)
+        right-node (tree/-get-right node)]
+    (tree/-del node txs-state children?)
+    (when (tree/satisfied-inode? right-node)
+      (let [left-node (tree/-get-left node)
+            new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+        (tree/-save new-right-node txs-state)))
+    @txs-state))
 
 (defn- get-left-nodes
   [node limit]
@@ -398,55 +397,53 @@
            result)
          result)))))
 
-(defn delete-nodes
-  "Delete nodes from the tree.
-  Args:
-    start-node: the node at the top of the outliner document.
-    end-node: the node at the bottom of the outliner document
-    block-ids: block ids between the start node and end node, including all the
-  children.
-  "
-  [start-node end-node block-ids]
-  {:pre [(tree/satisfied-inode? start-node)
-         (tree/satisfied-inode? end-node)]}
-  (ds/auto-transact!
-   [txs-state (ds/new-outliner-txs-state)]
-   {:outliner-op :delete-nodes}
-   (let [end-node-parents (->>
-                           (db/get-block-parents
-                            (state/get-current-repo)
-                            (tree/-get-id end-node)
-                            1000)
-                           (map :block/uuid)
-                           (set))
-         self-block? (contains? end-node-parents (tree/-get-id start-node))]
-     (if (or (= start-node end-node)
-             self-block?)
-       (delete-node start-node true)
-       (let [sibling? (= (tree/-get-parent-id start-node)
-                         (tree/-get-parent-id end-node))
-             right-node (tree/-get-right end-node)]
-         (when (tree/satisfied-inode? right-node)
-           (let [left-node-id (if sibling?
-                                (tree/-get-id (tree/-get-left start-node))
-                                (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
-                                      parents (->>
-                                               (db/get-block-parents
-                                                (state/get-current-repo)
-                                                (tree/-get-id start-node)
-                                                1000)
-                                               (map :block/uuid)
-                                               (set))
-                                      result (first (set/intersection (set end-node-left-nodes) parents))]
-                                  (when-not result
-                                    (util/pprint {:parents parents
-                                                  :end-node-left-nodes end-node-left-nodes}))
-                                  result))]
-             (assert left-node-id "Can't find the left-node-id")
-             (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-               (tree/-save new-right-node txs-state))))
-         (let [txs (db-outliner/del-blocks block-ids)]
-           (ds/add-txs txs-state txs)))))))
+(defn delete-blocks
+  "Delete blocks from the tree."
+  [blocks {:keys [children?]
+           :or {children? true}}]
+  (let [txs-state (ds/new-outliner-txs-state)
+        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
+        start-block (first blocks)
+        end-block (last (get-top-level-blocks blocks))
+        start-node (block start-block)
+        end-node (block end-block)
+        end-node-parents (->>
+                          (db/get-block-parents
+                           (state/get-current-repo)
+                           (tree/-get-id end-node)
+                           1000)
+                          (map :block/uuid)
+                          (set))
+        self-block? (contains? end-node-parents (tree/-get-id start-node))]
+    (if (or
+         (= 1 (count blocks))
+         (= start-node end-node) self-block?)
+      (delete-block txs-state start-block children?)
+      (let [sibling? (= (tree/-get-parent-id start-node)
+                        (tree/-get-parent-id end-node))
+            right-node (tree/-get-right end-node)]
+        (when (tree/satisfied-inode? right-node)
+          (let [left-node-id (if sibling?
+                               (tree/-get-id (tree/-get-left start-node))
+                               (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                                     parents (->>
+                                              (db/get-block-parents
+                                               (state/get-current-repo)
+                                               (tree/-get-id start-node)
+                                               1000)
+                                              (map :block/uuid)
+                                              (set))
+                                     result (first (set/intersection (set end-node-left-nodes) parents))]
+                                 (when-not result
+                                   (util/pprint {:parents parents
+                                                 :end-node-left-nodes end-node-left-nodes}))
+                                 result))]
+            (assert left-node-id "Can't find the left-node-id")
+            (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+              (tree/-save new-right-node txs-state))))
+        (let [txs (db-outliner/del-blocks block-ids)]
+          (ds/add-txs txs-state txs))))
+    {:tx-data @txs-state}))
 
 (defn first-child?
   [node]
@@ -620,3 +617,7 @@
 (defn insert-blocks!
   [blocks target-block sibling?]
   (op-transact! #'insert-blocks blocks target-block sibling?))
+
+(defn delete-blocks!
+  [blocks opts]
+  (op-transact! #'delete-blocks blocks opts))

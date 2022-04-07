@@ -614,7 +614,7 @@
   (let [{:keys [tx-meta]} tx-report
         current-db (conn/get-conn repo-url)]
     (cond
-      (contains? #{:save-block :delete-node :delete-nodes} outliner-op)
+      (contains? #{:save-block :delete-blocks} outliner-op)
       @result
 
       (contains? #{:insert-blocks :save-and-insert-node
