@@ -2010,7 +2010,7 @@
         target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
-                 (when target-block (db/entity (:db/id target-block))))
+                 (when target-block (:block/page (db/entity (:db/id target-block)))))
         target-block (or target-block editing-block)
         sibling? (cond
                    (some? sibling?)

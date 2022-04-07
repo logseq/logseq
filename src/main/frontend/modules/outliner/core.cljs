@@ -1,5 +1,6 @@
 (ns frontend.modules.outliner.core
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db-schema :as db-schema]
@@ -302,12 +303,10 @@
 (defn- assign-temp-id
   [blocks]
   (map-indexed (fn [idx block]
-                 (if (:db/id block)
-                   block
-                   (assoc block :db/id (dec (- idx))))) blocks))
+                 (assoc block :db/id (dec (- idx)))) blocks))
 
 (defn- insert-blocks-aux
-  [blocks target-block sibling?]
+  [blocks target-block sibling? replace-empty-target?]
   (let [uuids (zipmap (map :block/uuid blocks)
                       (repeatedly random-uuid))
         id->new-uuid (->> (map (fn [block] (if-let [id (:db/id block)]
@@ -338,7 +337,9 @@
                                                    (:db/id target-block))
                                                  (get-new-id parent))
                                  :block/left (if (zero? idx)
-                                               (:db/id target-block)
+                                               (if replace-empty-target?
+                                                 (:db/id (:block/left target-block))
+                                                 (:db/id target-block))
                                                (get-new-id left))})
                          (dissoc :db/id))))
                  blocks)))
@@ -348,8 +349,14 @@
   `blocks` should be sorted already."
   [blocks target-block sibling?]
   (let [sibling? (if (:block/name target-block) false sibling?)
+        replace-empty-target? (and sibling?
+                                   (string/blank? (:block/content target-block)))
         blocks' (blocks-with-level blocks)
-        tx (insert-blocks-aux blocks' target-block sibling?)
+        delete-target-tx (when replace-empty-target? [[:db.fn/retractEntity (:db/id target-block)]])
+        _ (def blocks blocks)
+        _ (def blocks' blocks')
+        _ (def target-block target-block)
+        tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target?)
         tx (assign-temp-id tx)
         target-node (block target-block)
         next (if sibling?
@@ -357,9 +364,10 @@
                (tree/-get-down target-node))
         next-tx (when next
                   (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                    {:block/uuid (tree/-get-id next)
-                     :block/left (:db/id left)}))]
-    {:tx-data (if next-tx (conj tx next-tx) tx)
+                    [{:block/uuid (tree/-get-id next)
+                      :block/left (:db/id left)}]))
+        full-tx (util/concat-without-nil delete-target-tx tx next-tx)]
+    {:tx-data full-tx
      :blocks tx}))
 
 (defn move-nodes
