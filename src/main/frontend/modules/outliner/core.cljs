@@ -275,12 +275,72 @@
        :skip-transact? skip-transact?}
       (insert-node-aux new-node target-node sibling? txs-state blocks-atom)))))
 
-(defn insert-nodes
-  "Insert nodes as children(or siblings) of target-node.
+(defn- blocks-with-level
+  "Should be sorted already."
+  [blocks]
+  (let [root (assoc (first blocks) :level 1)
+        result (loop [m [[(:db/id root) root]]
+                      blocks (rest blocks)]
+                 (if (empty? blocks)
+                   m
+                   (let [block (first blocks)
+                         parent-id (:db/id (:block/parent block))
+                         parent-level (:level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+                         block (assoc block :level (inc parent-level))
+                         m' (vec (conj m [(:db/id block) block]))]
+                     (recur m' (rest blocks)))))]
+    (map last result)))
+
+(defn get-top-level-blocks
+  [blocks]
+  (let [level-blocks (blocks-with-level blocks)]
+    (->> (filter (fn [b] (= 1 (:level b))) level-blocks)
+         (map #(dissoc % :level)))))
+
+(defn- insert-blocks-aux
+  [blocks target-block sibling?]
+  (let [uuids (zipmap (map :block/uuid blocks)
+                      (repeatedly random-uuid))
+        id->new-uuid (->> (map (fn [b] (if-let [id (:db/id block)]
+                                         [id (get uuids (:block/uuid block))])) blocks)
+                          (into {}))
+        target-page (:db/id (:block/page target-block))
+        get-new-uuid (fn [lookup-or-map]
+                       (if (and (vector? lookup-or-map) (= (first lookup-or-map) :block/uuid))
+                         (get uuids (last lookup-or-map))
+                         (get id->new-uuid (:db/id lookup-or-map))))]
+    (map-indexed (fn [idx {:block/keys [parent left] :as block}]
+                   (let [top-level? (= (:level block) 1)]
+                     (merge block {:block/uuid (get uuids (:block/uuid block))
+                                   :block/page target-page
+                                   :block/parent (if top-level?
+                                                   (if sibling?
+                                                     (:db/id (:block/parent target-block))
+                                                     (:db/id target-block))
+                                                   (get-new-uuid parent))
+                                   :block/left (if (zero? idx)
+                                                 (:db/id target-block)
+                                                 (get-new-uuid left))})))
+                 blocks)))
+
+(defn insert-blocks
+  "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks _target-node _sibling?]
-  (prn {:blocks (map (juxt :db/id :block/content :block/left) blocks)})
-  )
+  [blocks target-block sibling?]
+  (let [blocks (map #(dissoc % :block/children :block/level :block/anchor :block/meta :block/container) blocks)
+        sibling? (if (:block/name target-block) false sibling?)
+        blocks' (blocks-with-level blocks)
+        tx (insert-blocks-aux blocks' target-block sibling?)
+        target-node (block target-block)
+        next (if sibling?
+               (tree/-get-right target-node)
+               (tree/-get-down target-node))
+        next-tx (when next
+                  (let [left (last (get-top-level-blocks blocks'))]
+                    {:block/uuid (tree/-get-id next)
+                     :block/left [:block/uuid (:block/uuid left)]}))]
+    {:tx-data (if next-tx (conj tx next-tx) tx)
+     :blocks tx}))
 
 (defn move-nodes
   "Move nodes up/down."
@@ -592,13 +652,14 @@
   {:pre [(var? fn-var)]}
   (when (nil? *transaction-data*)
     (throw (js/Error. (str (:name (meta fn-var)) " is not used in (save-transactions ...)"))))
-  (let [tx-data (apply @fn-var args)]
-    (apply conj! *transaction-data* tx-data)))
+  (let [result (apply @fn-var args)]
+    (apply conj! *transaction-data* (:tx-data result))
+    result))
 
-(defn save-node!
-  [node]
-  (op-transact! #'save-node node))
+(defn save-block!
+  [block]
+  (op-transact! #'save-node block))
 
-(defn insert-nodes!
-  [nodes target sibling?]
-  (op-transact! #'insert-nodes nodes target sibling?))
+(defn insert-blocks!
+  [blocks target-block sibling?]
+  (op-transact! #'insert-blocks blocks target-block sibling?))

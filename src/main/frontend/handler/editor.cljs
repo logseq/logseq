@@ -32,6 +32,7 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -1075,31 +1076,10 @@
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
 
-(defn- blocks-with-level
-  "Should be sorted already."
-  [blocks]
-  (let [root (assoc (first blocks) :level 1)]
-    (loop [m [[(:db/id root) root]]
-           blocks (rest blocks)]
-      (if (empty? blocks)
-        m
-        (let [block (first blocks)
-              parent-id (:db/id (:block/parent block))
-              parent-level (:level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-              block (assoc block :level (inc parent-level))
-              m' (vec (conj m [(:db/id block) block]))]
-          (recur m' (rest blocks)))))))
-
-(defn get-top-level-blocks
-  [blocks]
-  (let [level-blocks (map last (blocks-with-level blocks))]
-    (->> (filter (fn [b] (= 1 (:level b))) level-blocks)
-         (map #(dissoc % :level)))))
-
 (defn- compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-        top-level-block-uuids (->> (get-top-level-blocks blocks)
+        top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
                                    (map :block/uuid))]
     (export/export-blocks-as-markdown
      repo top-level-block-uuids
@@ -1180,7 +1160,7 @@
           page-id (:db/id (:block/page (first blocks)))
           ;; filter out blocks not belong to page with 'page-id'
           blocks* (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))) blocks)]
-      (->> (get-top-level-blocks blocks*)
+      (->> (outliner-core/get-top-level-blocks blocks*)
            (map :block/uuid)))))
 
 (defn cut-selection-blocks
@@ -2031,16 +2011,18 @@
         sibling? (if (= (:db/id target-block) (:db/id page)) false sibling?)
         editing-block (state/get-edit-block)
         target-block (or target-block editing-block)]
-    (when editing-block
-      (let [editing-block (outliner-core/block editing-block)]
-        (outliner-core/save-node editing-block)))
-    (when target-block
-      (let [format (or (:block/format target-block) (state/get-preferred-format))
-            blocks (map (fn [block]
-                          (paste-block-cleanup block page exclude-properties format content-update-fn))
-                     blocks)]
-        (outliner-core/insert-nodes blocks target-block sibling?)
-        (last blocks)))))
+    (outliner-tx/transact!
+      {:outliner-op :insert-blocks}
+      (when editing-block
+        (let [editing-block (outliner-core/block editing-block)]
+          (outliner-core/save-node editing-block)))
+      (when target-block
+        (let [format (or (:block/format target-block) (state/get-preferred-format))
+              blocks (map (fn [block]
+                            (paste-block-cleanup block page exclude-properties format content-update-fn))
+                       blocks)
+              result (outliner-core/insert-blocks! blocks target-block sibling?)]
+          (last (:blocks result)))))))
 
 (defn- block-tree->blocks
   [tree-vec format]
