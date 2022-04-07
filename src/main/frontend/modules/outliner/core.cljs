@@ -297,7 +297,6 @@
 
 (defn tree-vec-flatten
   "Converts a `tree-vec` to blocks with `:block/level`.
-
   A `tree-vec` example:
   [{:id 1, :children [{:id 2,
                        :children [{:id 3}]}]}
