@@ -1,9 +1,11 @@
 .block-content-wrapper {
   /* 38px is the width of block-control */
-    width: calc(100% - 22px);
-    @screen sm {
-        width: calc(100% - 33px);
-    }
+  width: calc(100% - 22px);
+
+  @screen sm {
+    width: calc(100% - 33px);
+    overflow-x: auto;
+  }
 }
 
 .block-content {
@@ -92,7 +94,7 @@
   }
 
   &-fallback-ui {
-    padding:10px 15px;
+    padding: 10px 15px;
     border-color: var(--ls-secondary-border-color);
   }
 }
@@ -181,14 +183,14 @@
   .control-hide {
     display: none;
   }
- }
+}
 
 html.is-mobile,
 html.is-native-iphone,
 html.is-native-android {
-    .references .block-control {
-        margin-left: -20px;
-    }
+  .references .block-control {
+    margin-left: -20px;
+  }
 }
 
 .block-ref {
@@ -208,19 +210,19 @@ html.is-native-android {
 }
 
 .block-ref-no-title {
-    border-bottom: 0.5px solid;
-    border-bottom-color: var(--ls-block-ref-link-text-color);
-    cursor: alias;
-    padding: 2px 5px;
-    display: block;
+  border-bottom: 0.5px solid;
+  border-bottom-color: var(--ls-block-ref-link-text-color);
+  cursor: alias;
+  padding: 2px 5px;
+  display: block;
 
-    &:hover {
-        color: var(--ls-link-text-hover-color);
-    }
+  &:hover {
+    color: var(--ls-link-text-hover-color);
+  }
 
-    .block-content {
-        cursor: inherit;
-    }
+  .block-content {
+    cursor: inherit;
+  }
 }
 
 .page-ref {
@@ -357,41 +359,46 @@ html.is-native-android {
 }
 
 .block-ref :is(h1, h2, h3, h4, h5, h6) {
-    border-bottom: none;
-    font-size: 1rem;
+  border-bottom: none;
+  font-size: 1rem;
 }
 
 .document-mode .ls-block h1,
 .document-mode .editor-inner .h1 {
   margin: 0.67em 0;
 }
+
 .document-mode .ls-block h2,
 .document-mode .editor-inner .h2 {
   margin: 0.75em 0;
 }
+
 .document-mode .ls-block h3,
 .document-mode .editor-inner .h3 {
   margin: 0.83em 0;
 }
+
 .document-mode .ls-block h4,
 .document-mode .editor-inner .h4 {
   margin: 1.12em 0;
 }
+
 .document-mode .ls-block h5,
 .document-mode .editor-inner .h5 {
   margin: 1.5em 0;
 }
+
 .document-mode .ls-block h6,
 .document-mode .editor-inner .h6 {
   margin: 1.67em 0;
 }
 
 .document-mode .block-children {
-    border-left: 0px solid;
+  border-left: 0px solid;
 }
 
 .document-mode .ls-block {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .color-level {
@@ -468,7 +475,7 @@ a:hover > .bullet-container .bullet {
 }
 
 a:hover > .bullet-container {
-    background-color: var(--ls-block-bullet-border-color, #ced9e0);
+  background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
 .doc-mode {
@@ -519,39 +526,39 @@ a.filter svg {
 }
 
 .table-query-properties svg {
-    display: inline;
+  display: inline;
 }
 
 .query-title {
-    background: var(--ls-page-properties-background-color);
+  background: var(--ls-page-properties-background-color);
 }
 
 .ls-card {
-    height: 100%;
+  height: 100%;
 }
 
 @media (min-width: 1024px) {
-    .ui__modal-panel .ls-card {
-        min-height: 24rem;
-    }
+  .ui__modal-panel .ls-card {
+    min-height: 24rem;
+  }
 }
 
 a[data-ref="card"], .page-reference[data-ref="card"] {
-    opacity: 0.3;
+  opacity: 0.3;
 }
 
 .ls-card a[data-ref="card"], .ls-card .page-reference[data-ref="card"] {
-    display: none;
+  display: none;
 }
 
 a.cloze {
-    color: var(--ls-cloze-text-color);
+  color: var(--ls-cloze-text-color);
 }
 
 a.cloze-revealed {
-    color: var(--ls-cloze-text-color);
-    text-decoration: underline;
-    text-underline-position: under;
+  color: var(--ls-cloze-text-color);
+  text-decoration: underline;
+  text-underline-position: under;
 }
 
 .page-property-key {
