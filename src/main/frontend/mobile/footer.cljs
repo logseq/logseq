@@ -46,7 +46,8 @@
 
 (rum/defc footer < rum/reactive
   []
-  (when-not (state/sub :editor/editing?)
+  (when-not (or (state/sub :editor/editing?)
+                (state/sub :block/component-editing-mode?))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
      (mobile-bar-command

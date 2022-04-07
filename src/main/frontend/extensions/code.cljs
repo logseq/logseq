@@ -138,7 +138,8 @@
             [frontend.config :as ui-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; codemirror
 
@@ -252,8 +253,10 @@
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
                              (when-not (gobj/get cm "escPressed")
-                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
-        (.addEventListener element "mousedown"
+                               (save-file-or-block-when-blur-or-esc! editor textarea config state))
+                             (state/set-block-component-editing-mode! false)))
+        (.addEventListener element
+                           (if (mobile-util/is-native-platform?) "touchstart" "mousedown")
                            (fn [e]
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
