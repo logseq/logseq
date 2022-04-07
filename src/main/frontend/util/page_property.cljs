@@ -3,6 +3,7 @@
             [frontend.db :as db]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
+            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -77,9 +78,10 @@
                                       (str (name key) ":: " value))
                      :block/format format
                      :block/properties {key value}
-                     :block/pre-block? true}]
-          (outliner-core/insert-node (outliner-core/block block)
-                                     (outliner-core/block page)
-                                     false)
-          (db/transact! [(assoc page-id :block/properties {key value})])))
+                     :block/pre-block? true}
+              page-properties-tx [(assoc page-id :block/properties {key value})]]
+          (outliner-tx/transact!
+            {:outliner-op :insert-blocks
+             :additional-tx page-properties-tx}
+            (outliner-core/insert-blocks! block page false))))
       (outliner-file/sync-to-file page-id))))

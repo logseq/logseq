@@ -406,8 +406,9 @@
     (profile
      "Save block: "
      (let [block (wrap-parse-block block)]
-       (-> (outliner-core/block block)
-           (outliner-core/save-node))
+       (outliner-tx/transact!
+         {:outliner-op :save-block}
+         (outliner-core/save-block! block))
 
        ;; sanitized page name changed
        (when-let [title (get-in block [:block/properties :title])]
@@ -455,13 +456,11 @@
       [fst-block-text snd-block-text])))
 
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? txs-state]}]
+  [config current-block new-block {:keys [sibling? additional-tx]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         skip-save-current-block? (:skip-save-current-block? config)
-        [current-node new-node]
-        (mapv outliner-core/block [current-block new-block])
-        has-children? (db/has-children? (tree/-get-id current-node))
+        has-children? (db/has-children? (:block/uuid current-block))
         sibling? (cond
                    ref-top-block?
                    false
@@ -473,19 +472,13 @@
                    true
 
                    :else
-                   (not has-children?))
-        txs-state' (or txs-state (ds/new-outliner-txs-state))]
-    (ds/auto-transact!
-     [txs-state txs-state']
-     {:outliner-op :save-and-insert-node
-      :skip-transact? false}
-     (let [*blocks (atom [current-node])]
-       (when-not skip-save-current-block?
-         (outliner-core/save-node current-node {:txs-state txs-state}))
-       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
-                                                                  :txs-state txs-state})
-       {:blocks @*blocks
-        :sibling? sibling?}))))
+                   (not has-children?))]
+    (outliner-tx/transact!
+      {:outliner-op :insert-blocks
+       :additional-tx additional-tx}
+      (when-not skip-save-current-block?
+        (outliner-core/save-block! current-block))
+      (outliner-core/insert-blocks! [new-block] current-block sibling?))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -517,11 +510,10 @@
         left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
-     (let [txs-state (ds/new-outliner-txs-state)]
-       (outliner-core/save-node (outliner-core/block current-block) {:txs-state txs-state})
-       (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
-         (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                               :txs-state txs-state}))))
+     (let [tx (outliner-core/save-block current-block)
+           sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+       (outliner-insert-block! config left-block prev-block {:sibling? sibling?
+                                                             :additional-tx tx})))
     (ok-handler prev-block)))
 
 (defn insert-new-block-aux!
@@ -976,28 +968,25 @@
   [col]
   #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
-    (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)]
-     {:outliner-op :set-block-properties
-      :skip-transact? false}
-     (doseq [[block-id key value] col]
-       (let [block-id (if (string? block-id) (uuid block-id) block-id)]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [format (:block/format block)
-                 content (:block/content block)
-                 properties (:block/properties block)
-                 properties (if (nil? value)
-                              (dissoc properties key)
-                              (assoc properties key value))
-                 content (if (nil? value)
-                           (property/remove-property format key content)
-                           (property/insert-property format content key value))
-                 content (property/remove-empty-properties content)
-                 block (outliner-core/block {:block/uuid block-id
-                                             :block/properties properties
-                                             :block/content content})
-                 input-pos (or (state/get-edit-pos) :max)]
-             (outliner-core/save-node block {:txs-state txs-state}))))))
+    (outliner-tx/transact!
+      {:outliner-op :save-block}
+      (doseq [[block-id key value] col]
+        (let [block-id (if (string? block-id) (uuid block-id) block-id)]
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (let [format (:block/format block)
+                  content (:block/content block)
+                  properties (:block/properties block)
+                  properties (if (nil? value)
+                               (dissoc properties key)
+                               (assoc properties key value))
+                  content (if (nil? value)
+                            (property/remove-property format key content)
+                            (property/insert-property format content key value))
+                  content (property/remove-empty-properties content)
+                  block {:block/uuid block-id
+                         :block/properties properties
+                         :block/content content}]
+              (outliner-core/save-block! block))))))
 
     (let [block-id (ffirst col)
           block-id (if (string? block-id) (uuid block-id) block-id)
@@ -2024,8 +2013,7 @@
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
       (when editing-block
-        (let [editing-block (outliner-core/block editing-block)]
-          (outliner-core/save-node editing-block)))
+        (outliner-core/save-block! editing-block))
       (when target-block
         (let [format (or (:block/format target-block) (state/get-preferred-format))
               blocks (map (fn [block]
@@ -3302,17 +3290,15 @@
         repo (state/get-current-repo)
         value (boolean value)]
     (when repo
-      (ds/auto-transact!
-       [txs-state (ds/new-outliner-txs-state)]
-       {:outliner-op :collapse-expand-blocks
-        :skip-transact? false}
+      (outliner-tx/transact!
+        {:outliner-op :save-block}
        (doseq [block-id block-ids]
          (when-let [block (db/entity [:block/uuid block-id])]
            (let [current-value (:block/collapsed? block)]
              (when-not (= current-value value)
-               (let [block (outliner-core/block {:block/uuid block-id
-                                                 :block/collapsed? value})]
-                 (outliner-core/save-node block {:txs-state txs-state})))))))
+               (let [block {:block/uuid block-id
+                            :block/collapsed? value}]
+                 (outliner-core/save-block! block)))))))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
         ;; update editing input content

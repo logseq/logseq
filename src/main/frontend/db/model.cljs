@@ -597,7 +597,7 @@
                                        id
                                        (recur others))
                                      nil)))))
-                           (let [insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)]
+                           (let [insert? (contains? #{:insert-blocks :save-and-insert-node} outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
                                                (recursive-child? repo-url % block-id))
@@ -606,18 +606,18 @@
       (or (get-prev-open-block db-before first-changed-id)
           (get-prev-open-block current-db first-changed-id)))))
 
-;; TODO: outliners ops should be merged to :save-nodes, :insert-nodes,
-;; :delete-nodes and :move-nodes
+;; TODO: outliners ops should be merged to :save-blocks, :insert-blocks,
+;; :delete-blocks and :move-blocks
 (defn- build-paginated-blocks-from-cache
   "Notice: tx-report could be nil."
   [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
   (let [{:keys [tx-meta]} tx-report
         current-db (conn/get-conn repo-url)]
     (cond
-      (contains? #{:save-node :delete-node :delete-nodes} outliner-op)
+      (contains? #{:save-block :delete-node :delete-nodes} outliner-op)
       @result
 
-      (contains? #{:insert-node :insert-nodes :save-and-insert-node
+      (contains? #{:insert-blocks :save-and-insert-node
                    :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
       (when-let [start-id (get-start-id-for-pagination-query
                            repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]

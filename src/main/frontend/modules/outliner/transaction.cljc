@@ -17,6 +17,8 @@
      (do ~@body)
      (binding [frontend.modules.outliner.core/*transaction-data* (transient [])]
        ~@body
-       (let [~'r (persistent! frontend.modules.outliner.core/*transaction-data*)]
+       (let [~'r (-> (persistent! frontend.modules.outliner.core/*transaction-data*)
+                     (concat (:additional-tx ~opts)))
+             ~'opts (dissoc ~opts :additional-tx)]
          (when (seq ~'r)
-           (frontend.modules.outliner.datascript/transact! ~'r ~opts))))))
+           (frontend.modules.outliner.datascript/transact! ~'r ~'opts))))))
