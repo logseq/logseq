@@ -22,4 +22,7 @@
              all-tx# (concat tx# (:additional-tx ~opts))
              opts# (merge (dissoc ~opts :additional-tx) tx-meta#)]
          (when (seq all-tx#)
-           (frontend.modules.outliner.datascript/transact! all-tx# opts#))))))
+           (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts#)]
+             {:tx-report result#
+              :tx-data all-tx#
+              :tx-meta tx-meta#}))))))

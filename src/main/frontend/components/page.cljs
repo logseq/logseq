@@ -88,7 +88,7 @@
       [:span.bullet]]]
     [:div.flex.flex-1 {:on-click (fn []
                                    (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
-                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
+                                     (editor-handler/edit-block! block :max (:block/uuid block))))}
      [:span.opacity-50
       "Click here to edit..."]]]])
 
@@ -97,7 +97,7 @@
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
    {:on-click (fn []
                 (when-let [block (editor-handler/api-insert-new-block! "" args)]
-                  (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
+                  (editor-handler/edit-block! block :max (:block/uuid block))))}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
                          :width       20

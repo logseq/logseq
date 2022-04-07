@@ -83,5 +83,5 @@
           (outliner-tx/transact!
             {:outliner-op :insert-blocks
              :additional-tx page-properties-tx}
-            (outliner-core/insert-blocks! block page false))))
+            (outliner-core/insert-blocks! block page {:sibling? false}))))
       (outliner-file/sync-to-file page-id))))

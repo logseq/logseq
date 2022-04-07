@@ -231,9 +231,12 @@
                  (assoc block :db/id (dec (- idx)))) blocks))
 
 (defn- insert-blocks-aux
-  [blocks target-block sibling? replace-empty-target?]
-  (let [uuids (zipmap (map :block/uuid blocks)
-                      (repeatedly random-uuid))
+  [blocks target-block sibling? replace-empty-target? keep-uuid?]
+  (let [block-uuids (map :block/uuid blocks)
+        uuids (zipmap block-uuids
+                      (if keep-uuid?
+                        block-uuids
+                        (repeatedly random-uuid)))
         id->new-uuid (->> (map (fn [block] (if-let [id (:db/id block)]
                                              [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
@@ -274,13 +277,13 @@
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks target-block sibling?]
+  [blocks target-block {:keys [sibling? keep-uuid?]}]
   (let [sibling? (if (:block/name target-block) false sibling?)
         replace-empty-target? (and sibling?
                                    (string/blank? (:block/content target-block)))
         blocks' (blocks-with-level blocks)
         delete-target-tx (when replace-empty-target? [[:db.fn/retractEntity (:db/id target-block)]])
-        tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target?)
+        tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target? keep-uuid?)
         tx (assign-temp-id tx)
         target-node (block target-block)
         next (if sibling?
@@ -654,8 +657,8 @@
   (op-transact! #'save-block block))
 
 (defn insert-blocks!
-  [blocks target-block sibling?]
-  (op-transact! #'insert-blocks blocks target-block sibling?))
+  [blocks target-block opts]
+  (op-transact! #'insert-blocks blocks target-block opts))
 
 (defn delete-blocks!
   [blocks opts]

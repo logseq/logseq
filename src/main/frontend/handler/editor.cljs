@@ -228,32 +228,35 @@
   ([block pos id {:keys [custom-content tail-len move-cursor?]
                   :or {tail-len 0
                        move-cursor? true}}]
-   (when-not config/publishing?
-     (when-let [block-id (:block/uuid block)]
-       (let [block (or (db/pull [:block/uuid block-id]) block)
-             edit-input-id (if (uuid? id)
-                             (get-edit-input-id-with-block-id id)
-                             (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                 (string/replace "ls-block" "edit-block")))
-             content (or custom-content (:block/content block) "")
-             content-length (count content)
-             text-range (cond
-                          (vector? pos)
-                          (text-range-by-lst-fst-line content pos)
+   (js/setTimeout
+    (fn []
+      (when-not config/publishing?
+       (when-let [block-id (:block/uuid block)]
+         (let [block (or (db/pull [:block/uuid block-id]) block)
+               edit-input-id (if (uuid? id)
+                               (get-edit-input-id-with-block-id id)
+                               (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                   (string/replace "ls-block" "edit-block")))
+               content (or custom-content (:block/content block) "")
+               content-length (count content)
+               text-range (cond
+                            (vector? pos)
+                            (text-range-by-lst-fst-line content pos)
 
-                          (and (> tail-len 0) (>= (count content) tail-len))
-                          (subs content 0 (- (count content) tail-len))
+                            (and (> tail-len 0) (>= (count content) tail-len))
+                            (subs content 0 (- (count content) tail-len))
 
-                          (or (= :max pos) (<= content-length pos))
-                          content
+                            (or (= :max pos) (<= content-length pos))
+                            content
 
-                          :else
-                          (subs content 0 pos))
-             content (-> (property/remove-built-in-properties (:block/format block)
-                                                              content)
-                         (drawer/remove-logbook))]
-         (clear-selection!)
-         (state/set-editing! edit-input-id content block text-range move-cursor?))))))
+                            :else
+                            (subs content 0 pos))
+               content (-> (property/remove-built-in-properties (:block/format block)
+                                                                content)
+                           (drawer/remove-logbook))]
+           (clear-selection!)
+           (state/set-editing! edit-input-id content block text-range move-cursor?)))))
+    0)))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -456,7 +459,7 @@
       [fst-block-text snd-block-text])))
 
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? additional-tx]}]
+  [config current-block new-block {:keys [sibling? keep-uuid? additional-tx]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         skip-save-current-block? (:skip-save-current-block? config)
@@ -478,7 +481,8 @@
        :additional-tx additional-tx}
       (when-not skip-save-current-block?
         (outliner-core/save-block! current-block))
-      (outliner-core/insert-blocks! [new-block] current-block sibling?))))
+      (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
+                                                               :keep-uuid? keep-uuid?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -536,7 +540,8 @@
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
-    (outliner-insert-block! config current-block next-block {:sibling? sibling?})
+    (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                             :keep-uuid? true})
     (util/set-change-value input fst-block-text)
     (ok-handler next-block)))
 
@@ -588,12 +593,12 @@
          (insert-fn config block value
                     {:ok-handler
                      (fn [last-block]
-                       (edit-block! last-block 0 id)
-                       (clear-when-saved!))}))))
+                       (clear-when-saved!)
+                       (edit-block! last-block 0 id))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid reuse-last-block?]
+  [content {:keys [page block-uuid sibling? before? properties custom-uuid]
             :or {sibling? false
                  before? false}}]
   (when (or page block-uuid)
@@ -609,60 +614,51 @@
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
                                (db/pull last-block-id))))
-              last-block-content (:block/content last-block)]
-          ;; when last block is blank and `reuse-last-block?' nils,
-          ;; dont't insert content to a new block but last block.
-          (if (and last-block
-                   (string/blank? last-block-content)
-                   reuse-last-block?)
-            (let [new-block (assoc last-block :block/content content)]
-              (-> (outliner-core/block new-block)
-                  (outliner-core/save-node))
-              new-block)
-            (let [format (or
-                          (:block/format block)
-                          (db/get-page-format (:db/id block))
-                          (state/get-preferred-format))
-                  content (if (seq properties)
-                            (property/insert-properties format content properties)
-                            content)
-                  new-block (-> (select-keys block [:block/page :block/journal?
-                                                    :block/journal-day])
-                                (assoc :block/content content
-                                       :block/format format))
-                  new-block (assoc new-block :block/page
-                                   (if page
-                                     (:db/id block)
-                                     (:db/id (:block/page new-block))))
-                  new-block (-> new-block
-                                (wrap-parse-block)
-                                (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-                  [block-m sibling?] (cond
-                                       before?
-                                       (let [first-child? (->> [:block/parent :block/left]
-                                                               (map #(:db/id (get block %)))
-                                                               (apply =))
-                                             block (db/pull (:db/id (:block/left block)))
-                                             sibling? (if (or first-child? ;; insert as first child
-                                                              (:block/name block))
-                                                        false sibling?)]
-                                         [block sibling?])
+              format (or
+                      (:block/format block)
+                      (db/get-page-format (:db/id block))
+                      (state/get-preferred-format))
+              content (if (seq properties)
+                        (property/insert-properties format content properties)
+                        content)
+              new-block (-> (select-keys block [:block/page :block/journal?
+                                                :block/journal-day])
+                            (assoc :block/content content
+                                   :block/format format))
+              new-block (assoc new-block :block/page
+                               (if page
+                                 (:db/id block)
+                                 (:db/id (:block/page new-block))))
+              new-block (-> new-block
+                            (wrap-parse-block)
+                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
+              [block-m sibling?] (cond
+                                   before?
+                                   (let [first-child? (->> [:block/parent :block/left]
+                                                           (map #(:db/id (get block %)))
+                                                           (apply =))
+                                         block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (or first-child? ;; insert as first child
+                                                          (:block/name block))
+                                                    false sibling?)]
+                                     [block sibling?])
 
-                                       sibling?
-                                       [(db/pull (:db/id block)) sibling?]
+                                   sibling?
+                                   [(db/pull (:db/id block)) sibling?]
 
-                                       last-block
-                                       [last-block true]
+                                   last-block
+                                   [last-block true]
 
-                                       block
-                                       [(db/pull (:db/id block)) sibling?]
+                                   block
+                                   [(db/pull (:db/id block)) sibling?]
 
-                                       ;; FIXME: assert
-                                       :else
-                                       nil)]
-              (when block-m
-                (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?})
-                new-block))))))))
+                                   ;; FIXME: assert
+                                   :else
+                                   nil)]
+          (when block-m
+            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?
+                                                                                        :keep-uuid? true})
+            new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-name]
@@ -1265,7 +1261,6 @@
                        (:block/uuid block-parent))]
             (do
               (route-handler/redirect-to-page! id)
-
               (edit-block! {:block/uuid block-id} :max block-id))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
@@ -2019,11 +2014,11 @@
               blocks (map (fn [block]
                             (paste-block-cleanup block page exclude-properties format content-update-fn))
                        blocks)
-              result (outliner-core/insert-blocks! blocks target-block sibling?)]
+              result (outliner-core/insert-blocks! blocks target-block {:sibling? sibling?})]
           (js/setTimeout
            (fn []
              (when-let [last-block (last (:blocks result))]
-              (clear-when-saved!)
+               (clear-when-saved!)
               (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
                 (edit-block! last-block' :max (:block/uuid last-block')))))
            0))))))
