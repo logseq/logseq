@@ -246,7 +246,8 @@
 
 (defn unregister-plugin-slash-command
   [pid]
-  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+  (state/pub-event! [:rebuild-slash-commands-list]))
 
 (def keybinding-mode-handler-map
   {:global      :shortcut.handler/editor-global

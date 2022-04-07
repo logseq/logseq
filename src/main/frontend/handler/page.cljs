@@ -34,7 +34,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [goog.functions :refer [debounce]]))
 
 (defn- get-directory
   [journal?]
@@ -597,6 +598,9 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
+
+(def rebuild-slash-commands-list!
+  (debounce init-commands! 1500))
 
 (defn template-exists?
   [title]

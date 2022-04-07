@@ -373,7 +373,7 @@
            js/decodeURI)))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
-  (commands/rebuild-slash-commands-list!))
+  (page-handler/rebuild-slash-commands-list!))
 
 (defn run!
   []

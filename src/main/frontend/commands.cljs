@@ -17,8 +17,7 @@
             [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [promesa.core :as p]
-            [goog.functions :refer [debounce]]))
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -659,6 +658,3 @@
   (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))
-
-(def rebuild-slash-commands-list!
-  (debounce init-commands! 2000))
