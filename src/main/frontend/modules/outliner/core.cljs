@@ -251,17 +251,6 @@
        (swap! blocks-atom concat result))
      (first result))))
 
-;; TODO: refactor, move to insert-node
-(defn insert-node-as-last-child
-  [txs-state node target-node]
-  []
-  {:pre [(every? tree/satisfied-inode? [node target-node])]}
-  (let [children (tree/-get-children target-node)
-        [target-node sibling?] (if (seq children)
-                                 [(last children) true]
-                                 [target-node false])]
-    (insert-node-aux node target-node sibling? txs-state)))
-
 (defn insert-node
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
@@ -275,70 +264,101 @@
        :skip-transact? skip-transact?}
       (insert-node-aux new-node target-node sibling? txs-state blocks-atom)))))
 
+;; TODO: refactor, move to insert-node
+(defn insert-node-as-last-child
+  [txs-state node target-node]
+  []
+  {:pre [(every? tree/satisfied-inode? [node target-node])]}
+  (let [children (tree/-get-children target-node)
+        [target-node sibling?] (if (seq children)
+                                 [(last children) true]
+                                 [target-node false])]
+    (insert-node-aux node target-node sibling? txs-state)))
+
+
 (defn- blocks-with-level
   "Should be sorted already."
   [blocks]
-  (let [root (assoc (first blocks) :level 1)
-        result (loop [m [[(:db/id root) root]]
-                      blocks (rest blocks)]
-                 (if (empty? blocks)
-                   m
-                   (let [block (first blocks)
-                         parent-id (:db/id (:block/parent block))
-                         parent-level (:level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-                         block (assoc block :level (inc parent-level))
-                         m' (vec (conj m [(:db/id block) block]))]
-                     (recur m' (rest blocks)))))]
-    (map last result)))
+  (if (:block/level (first blocks))
+    blocks
+    (let [root (assoc (first blocks) :block/level 1)
+          result (loop [m [[(:db/id root) root]]
+                        blocks (rest blocks)]
+                   (if (empty? blocks)
+                     m
+                     (let [block (first blocks)
+                           parent-id (:db/id (:block/parent block))
+                           parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+                           block (assoc block :block/level (inc parent-level))
+                           m' (vec (conj m [(:db/id block) block]))]
+                       (recur m' (rest blocks)))))]
+      (map last result))))
 
 (defn get-top-level-blocks
   [blocks]
   (let [level-blocks (blocks-with-level blocks)]
-    (->> (filter (fn [b] (= 1 (:level b))) level-blocks)
-         (map #(dissoc % :level)))))
+    (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
+
+(defn- assign-temp-id
+  [blocks]
+  (map-indexed (fn [idx block]
+                 (if (:db/id block)
+                   block
+                   (assoc block :db/id (dec (- idx))))) blocks))
 
 (defn- insert-blocks-aux
   [blocks target-block sibling?]
   (let [uuids (zipmap (map :block/uuid blocks)
                       (repeatedly random-uuid))
-        id->new-uuid (->> (map (fn [b] (if-let [id (:db/id block)]
-                                         [id (get uuids (:block/uuid block))])) blocks)
+        id->new-uuid (->> (map (fn [block] (if-let [id (:db/id block)]
+                                             [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
         target-page (:db/id (:block/page target-block))
-        get-new-uuid (fn [lookup-or-map]
-                       (if (and (vector? lookup-or-map) (= (first lookup-or-map) :block/uuid))
-                         (get uuids (last lookup-or-map))
-                         (get id->new-uuid (:db/id lookup-or-map))))]
+        get-new-id (fn [lookup]
+                     (cond
+                       (or (map? lookup) (vector? lookup))
+                       (let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
+                                    (get uuids (last lookup))
+                                    (get id->new-uuid (:db/id lookup)))]
+                         [:block/uuid uuid])
+
+                       (integer? lookup)
+                       lookup
+
+                       :else
+                       (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup)))))]
     (map-indexed (fn [idx {:block/keys [parent left] :as block}]
-                   (let [top-level? (= (:level block) 1)]
-                     (merge block {:block/uuid (get uuids (:block/uuid block))
-                                   :block/page target-page
-                                   :block/parent (if top-level?
-                                                   (if sibling?
-                                                     (:db/id (:block/parent target-block))
-                                                     (:db/id target-block))
-                                                   (get-new-uuid parent))
-                                   :block/left (if (zero? idx)
-                                                 (:db/id target-block)
-                                                 (get-new-uuid left))})))
+                   (let [top-level? (= (:block/level block) 1)]
+                     (-> block
+                         (merge {:block/uuid (get uuids (:block/uuid block))
+                                 :block/page target-page
+                                 :block/parent (if top-level?
+                                                 (if sibling?
+                                                   (:db/id (:block/parent target-block))
+                                                   (:db/id target-block))
+                                                 (get-new-id parent))
+                                 :block/left (if (zero? idx)
+                                               (:db/id target-block)
+                                               (get-new-id left))})
+                         (dissoc :db/id))))
                  blocks)))
 
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
   [blocks target-block sibling?]
-  (let [blocks (map #(dissoc % :block/children :block/level :block/anchor :block/meta :block/container) blocks)
-        sibling? (if (:block/name target-block) false sibling?)
+  (let [sibling? (if (:block/name target-block) false sibling?)
         blocks' (blocks-with-level blocks)
         tx (insert-blocks-aux blocks' target-block sibling?)
+        tx (assign-temp-id tx)
         target-node (block target-block)
         next (if sibling?
                (tree/-get-right target-node)
                (tree/-get-down target-node))
         next-tx (when next
-                  (let [left (last (get-top-level-blocks blocks'))]
+                  (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                     {:block/uuid (tree/-get-id next)
-                     :block/left [:block/uuid (:block/uuid left)]}))]
+                     :block/left (:db/id left)}))]
     {:tx-data (if next-tx (conj tx next-tx) tx)
      :blocks tx}))
 
@@ -628,17 +648,6 @@
   [node]
   {:pre [(tree/satisfied-inode? node)]}
   (tree/-get-right node))
-
-(comment
-  (:require '[frontend.modules.outliner.transaction :as outliner-tx])
-
-  (outliner-tx/transact!
-    (frontend.db/get-conn false)
-    {}
-    (save-node! 1)
-    (save-node! 2))
-
-  )
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 

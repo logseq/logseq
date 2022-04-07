@@ -51,7 +51,7 @@
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
-                                      :block/children :block/meta :block/top? :block/bottom?
+                                      :block/children :block/meta :block/top? :block/bottom? :block/anchor
                                       :block/title :block/body :block/level :block/container :level)
                               m)) txs)]
        ;; (util/pprint txs)

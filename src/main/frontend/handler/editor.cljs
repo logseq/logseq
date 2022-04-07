@@ -2004,13 +2004,23 @@
                   target-block
                   sibling?]
            :or {exclude-properties []}}]
-  (let [target-block (or target-block (state/get-edit-block))
+  (let [editing-block (when-let [editing-block (state/get-edit-block)]
+                        (some-> (db/pull (:db/id editing-block))
+                                (assoc :block/content (state/get-edit-content))))
+        target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (db/entity (:db/id target-block))))
-        sibling? (if (= (:db/id target-block) (:db/id page)) false sibling?)
-        editing-block (state/get-edit-block)
-        target-block (or target-block editing-block)]
+        target-block (or target-block editing-block)
+        sibling? (cond
+                   (some? sibling?)
+                   sibling?
+
+                   (db/has-children? (:block/uuid target-block))
+                   false
+
+                   :else
+                   true)]
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
       (when editing-block
@@ -2080,10 +2090,7 @@
                    opts)
              last-block (paste-blocks blocks opts)]
          (clear-when-saved!)
-         (let [block (if (tree/satisfied-inode? last-block)
-                       (:data last-block)
-                       (:data (last (flatten last-block))))]
-           (edit-block! block :max (:block/uuid block))))))))
+         (when last-block (edit-block! block :max (:block/uuid block))))))))
 
 (defn template-on-chosen-handler
   [element-id]
@@ -2901,10 +2908,10 @@
   [format text]
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
-          blocks (->> (block/extract-blocks
-                       (mldoc/->edn text (mldoc/default-config format)) text true format)
-                      (block/with-parent-and-left page-id))]
-      (paste-blocks blocks {}))))
+          blocks (block/extract-blocks
+                  (mldoc/->edn text (mldoc/default-config format)) text true format)
+          blocks' (block/with-parent-and-left page-id blocks)]
+      (paste-blocks blocks' {}))))
 
 (defn- paste-segmented-text
   [format text]
