@@ -2032,7 +2032,13 @@
                             (paste-block-cleanup block page exclude-properties format content-update-fn))
                        blocks)
               result (outliner-core/insert-blocks! blocks target-block sibling?)]
-          (last (:blocks result)))))))
+          (js/setTimeout
+           (fn []
+             (when-let [last-block (last (:blocks result))]
+              (clear-when-saved!)
+              (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
+                (edit-block! last-block' :max (:block/uuid last-block')))))
+           0))))))
 
 (defn- block-tree->blocks
   [tree-vec format]
@@ -2087,10 +2093,8 @@
                                               (property/remove-property format "template")
                                               (property/remove-property format "template-including-parent")
                                               template/resolve-dynamic-template!))}
-                   opts)
-             last-block (paste-blocks blocks opts)]
-         (clear-when-saved!)
-         (when last-block (edit-block! block :max (:block/uuid block))))))))
+                   opts)]
+         (paste-blocks blocks opts))))))
 
 (defn template-on-chosen-handler
   [element-id]
