@@ -557,3 +557,9 @@ a.cloze-revealed {
 .block-parents a:hover {
   opacity: 1;
 }
+
+html.is-native-ios {
+    audio {
+        width: 300px;
+    }
+}
