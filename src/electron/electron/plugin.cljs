@@ -29,7 +29,8 @@
 (defn fetch-latest-release-asset
   [{:keys [repo theme]}]
   (p/catch
-    (p/let [api #(str "https://api.github.com/repos/" repo "/" %)
+    (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+            api #(str "https://api.github.com/repos/" repo "/" %)
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
