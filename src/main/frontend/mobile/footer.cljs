@@ -55,7 +55,7 @@
              block (editor-handler/api-insert-new-block!
                     ""
                     {:page page
-                     :append-last-block? true})]
+                     :reuse-last-block? true})]
          (js/setTimeout
           (fn [] (editor-handler/edit-block!
                   block

@@ -59,8 +59,8 @@
           file-link (editor-handler/get-asset-file-link format url filename true)]
     (if edit-block
       (state/append-current-edit-content! file-link)
-      (do (prn :called :file-link file-link)
-          (editor-handler/api-insert-new-block! file-link {:page page})))))
+      (editor-handler/api-insert-new-block! file-link {:page page
+                                                       :reuse-last-block? true}))))
 
 (defn stop-recording []
   (p/catch

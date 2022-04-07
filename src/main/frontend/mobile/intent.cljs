@@ -52,7 +52,8 @@
                    (string/replace "{url}" (or url "")))]
     (if (state/get-edit-block)
       (state/append-current-edit-content! values)
-      (editor-handler/api-insert-new-block! values {:page page}))))
+      (editor-handler/api-insert-new-block! values {:page page
+                                                    :reuse-last-block? true}))))
 
 (defn- embed-asset-file [url format]
   (p/let [basename (path/basename url)
@@ -97,7 +98,8 @@
           content (embed-asset-file url format)]
     (if (state/get-edit-block)
       (state/append-current-edit-content! content)
-      (editor-handler/api-insert-new-block! content {:page page}))))
+      (editor-handler/api-insert-new-block! content {:page page
+                                                     :reuse-last-block? true}))))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [title url type]} result
@@ -121,7 +123,8 @@
                      :warning false))]
     (if (state/get-edit-block)
       (state/append-current-edit-content! content)
-      (editor-handler/api-insert-new-block! content {:page page}))))
+      (editor-handler/api-insert-new-block! content {:page page
+                                                     :reuse-last-block? true}))))
 
 (defn decode-received-result [m]
   (into {} (for [[k v] m]
