@@ -729,7 +729,7 @@
    [:div.flex.justify-between.items-center.px-1
     [:h5.text-red-600.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
-     {:href "https://github.com/logseq/logseq/issues"
+     {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
    (when content [:pre.m-0.text-sm content])])
 
