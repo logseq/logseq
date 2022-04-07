@@ -3,6 +3,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -78,22 +79,24 @@
            (movable? current-block target-block move-to))
       (let [[current-node target-node]
             (mapv outliner-core/block [current-block target-block])]
-        (cond
-          top?
-          (let [first-child?
-                (= (tree/-get-parent-id target-node)
-                   (tree/-get-left-id target-node))]
-            (if first-child?
-              (let [parent (tree/-get-parent target-node)]
-                (outliner-core/move-subtree current-node parent false))
-              (let [before-node (tree/-get-left target-node)]
-                (outliner-core/move-subtree current-node before-node true))))
+        (outliner-tx/transact!
+          {:outliner-op :move-blocks}
+          (cond
+            top?
+            (let [first-child?
+                  (= (tree/-get-parent-id target-node)
+                     (tree/-get-left-id target-node))]
+              (if first-child?
+                (let [parent (tree/-get-parent target-node)]
+                  (outliner-core/move-blocks! [current-block] (:data parent) false))
+                (let [before-node (tree/-get-left target-node)]
+                  (outliner-core/move-blocks! [current-block] (:data before-node) true))))
 
-          nested?
-          (outliner-core/move-subtree current-node target-node false)
+            nested?
+            (outliner-core/move-blocks! [current-block] target-block false)
 
-          :else ;; :sibling
-          (outliner-core/move-subtree current-node target-node true)))
+            :else ;; :sibling
+            (outliner-core/move-blocks! [current-block] target-block true))))
 
       :else
       nil)))

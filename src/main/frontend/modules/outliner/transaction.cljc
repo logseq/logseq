@@ -15,8 +15,11 @@
      (do ~@body)
      (binding [frontend.modules.outliner.core/*transaction-data* (transient [])]
        ~@body
-       (let [~'r (-> (persistent! frontend.modules.outliner.core/*transaction-data*)
-                     (concat (:additional-tx ~opts)))
-             ~'opts (dissoc ~opts :additional-tx)]
-         (when (seq ~'r)
-           (frontend.modules.outliner.datascript/transact! ~'r ~'opts))))))
+       (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
+             tx# (mapcat :tx-data r#)
+             ;; FIXME: should we merge all the tx-meta?
+             tx-meta# (first (map :tx-meta r#))
+             all-tx# (concat tx# (:additional-tx ~opts))
+             opts# (merge (dissoc ~opts :additional-tx) tx-meta#)]
+         (when (seq all-tx#)
+           (frontend.modules.outliner.datascript/transact! all-tx# opts#))))))

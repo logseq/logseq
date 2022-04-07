@@ -577,7 +577,7 @@
   (let [db-before (or db-before current-db)
         cached-ids (map :db/id @result)
         cached-ids-set (set (conj cached-ids page-id))
-        first-changed-id (if (= outliner-op :move-subtree)
+        first-changed-id (if (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
                              (cond
                                (= page-id target) ; move to the first block
@@ -597,7 +597,7 @@
                                        id
                                        (recur others))
                                      nil)))))
-                           (let [insert? (contains? #{:insert-blocks :save-and-insert-node} outliner-op)]
+                           (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
                                                (recursive-child? repo-url % block-id))
@@ -617,8 +617,7 @@
       (contains? #{:save-block :delete-blocks} outliner-op)
       @result
 
-      (contains? #{:insert-blocks :save-and-insert-node
-                   :collapse-expand-blocks :indent-outdent-nodes :move-subtree} outliner-op)
+      (contains? #{:insert-blocks :collapse-expand-blocks :move-blocks} outliner-op)
       (when-let [start-id (get-start-id-for-pagination-query
                            repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
         (let [start-page? (:block/name (db-utils/entity start-id))]
@@ -682,7 +681,7 @@
                                                                                                         :scoped-block-id scoped-block-id}))
                            block-eids (map :db/id blocks)
                            blocks (if (and (seq tx-id->block)
-                                           (not (contains? #{:indent-outdent-nodes :move-subtree} outliner-op)))
+                                           (not (contains? #{:move-blocks} outliner-op)))
                                     (map (fn [id]
                                            (or (get tx-id->block id)
                                                (get cached-id->block id)

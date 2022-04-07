@@ -79,20 +79,3 @@
           (catch js/Error e
             (log/error :exception e)
             (throw e)))))))
-
-#?(:clj
-   (defmacro auto-transact!
-     "Copy from with-open.
-     Automatically transact! after executing the body."
-     [bindings opts & body]
-     (#'core/assert-args
-       (vector? bindings) "a vector for its binding"
-       (even? (count bindings)) "an even number of forms in binding vector")
-     (cond
-       (= (count bindings) 0) `(do ~@body)
-       (symbol? (bindings 0)) `(let ~(subvec bindings 0 2)
-                                 (try
-                                   (auto-transact! ~(subvec bindings 2) ~opts ~@body)
-                                   (transact! (deref ~(bindings 0)) ~opts)))
-       :else (throw (IllegalArgumentException.
-                      "with-db only allows Symbols in bindings")))))

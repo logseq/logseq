@@ -1752,11 +1752,12 @@
     (util/stop event)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (let [nodes (mapv outliner-core/block blocks)]
-                         (outliner-core/move-nodes nodes up?)
-                         (rehighlight-selected-nodes)
-                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
+                       (outliner-tx/transact!
+                         {:outliner-op :move-blocks}
+                         (outliner-core/move-blocks-up-down! blocks up?))
+                       (rehighlight-selected-nodes)
+                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                         (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
         (when-let [block (db/pull [:block/uuid edit-block-id])]
           (let [blocks [block]]
@@ -1792,10 +1793,11 @@
     (when (seq blocks)
       (let [end-node (get-top-level-end-node blocks)
             end-node-parent (tree/-get-parent end-node)
-            top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                             (get-in % [:block/parent :db/id])) blocks)
-                                 (map outliner-core/block))]
-        (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+            top-level-blocks (filter #(= (get-in end-node-parent [:data :db/id])
+                                         (get-in % [:block/parent :db/id])) blocks)]
+        (outliner-tx/transact!
+          {:outliner-op :move-blocks}
+          (outliner-core/indent-outdent-blocks! top-level-blocks (= direction :right)))
         (rehighlight-selected-nodes)))))
 
 (defn- get-link [format link label]
@@ -2096,7 +2098,9 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
-      (outliner-core/move-subtree node parent-node true))))
+      (outliner-tx/transact!
+        {:outliner-op :move-blocks}
+        (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2634,8 +2638,9 @@
         {:keys [block]} (get-state)]
     (when block
       (state/set-editor-last-pos! pos)
-      (let [current-node (outliner-core/block block)]
-        (outliner-core/indent-outdent-nodes [current-node] indent?)))
+      (outliner-tx/transact!
+        {:outliner-op :move-blocks}
+        (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -3289,14 +3294,14 @@
         value (boolean value)]
     (when repo
       (outliner-tx/transact!
-        {:outliner-op :save-block}
-       (doseq [block-id block-ids]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [current-value (:block/collapsed? block)]
-             (when-not (= current-value value)
-               (let [block {:block/uuid block-id
-                            :block/collapsed? value}]
-                 (outliner-core/save-block! block)))))))
+        {:outliner-op :collapse-expand-blocks}
+        (doseq [block-id block-ids]
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (let [current-value (:block/collapsed? block)]
+              (when-not (= current-value value)
+                (let [block {:block/uuid block-id
+                             :block/collapsed? value}]
+                  (outliner-core/save-block! block)))))))
       (let [block-id (first block-ids)
             input-pos (or (state/get-edit-pos) :max)]
         ;; update editing input content
