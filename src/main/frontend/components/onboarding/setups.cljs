@@ -114,7 +114,7 @@
                ["PAGES" "/pages" "file-text"]
                []
                ["APP Internal" "/logseq" "tool"]
-               ["Configs File" "/logseq/config.edn"]]]
+               ["Config File" "/logseq/config.edn"]]]
           (if-not title
             [:li.hr]
             [:li
