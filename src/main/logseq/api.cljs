@@ -697,6 +697,12 @@
   (when (string? key)
     (notification/clear! (keyword key)) nil))
 
+;; assets
+(defn ^:export assets_list_files_of_current_graph
+  [^js exts]
+  (p/let [files (ipc/ipc :getAssetsFiles {:exts exts})]
+         (bean/->js files)))
+
 ;; experiments
 (defn ^:export exper_load_scripts
   [pid & scripts]

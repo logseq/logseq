@@ -30,7 +30,7 @@ import {
   UserProxyTags,
   BlockUUID,
   BlockEntity,
-  IDatom,
+  IDatom, IAssetsProxy,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -285,6 +285,7 @@ const db: Partial<IDBProxy> = {
 
 const git: Partial<IGitProxy> = {}
 const ui: Partial<IUIProxy> = {}
+const assets: Partial<IAssetsProxy> = {}
 
 type uiState = {
   key?: number
@@ -299,8 +300,7 @@ const KEY_MAIN_UI = 0
  */
 export class LSPluginUser
   extends EventEmitter<LSPluginUserEvents>
-  implements ILSPluginUser
-{
+  implements ILSPluginUser {
   // @ts-ignore
   private _version: string = LIB_VERSION
   private _debugTag: string = ''
@@ -577,7 +577,7 @@ export class LSPluginUser
 
           let method = propKey as string
 
-          if (['git', 'ui'].includes(tag)) {
+          if ((['git', 'ui', 'assets'] as UserProxyTags[]).includes(tag)) {
             method = tag + '_' + method
           }
 
@@ -631,6 +631,10 @@ export class LSPluginUser
 
   get UI(): IUIProxy {
     return this._makeUserProxy(ui, 'ui')
+  }
+
+  get Assets(): IAssetsProxy {
+    return this._makeUserProxy(assets, 'assets')
   }
 
   get FileStorage(): LSPluginFileStorage {

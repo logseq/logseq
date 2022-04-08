@@ -7,6 +7,7 @@
             ["path" :as path]
             ["os" :as os]
             ["diff-match-patch" :as google-diff]
+            ["/electron/utils" :as js-utils]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -323,6 +324,11 @@
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)})
+
+(defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
+  (when-let [graph-path (state/get-window-graph-path win)]
+    (p/let [^js files (js-utils/getAllFiles (.join path graph-path "assets") (clj->js exts))]
+           files)))
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."

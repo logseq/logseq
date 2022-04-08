@@ -264,7 +264,7 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-wide-mode'
   | 'logseq.command-palette/toggle'
 
-export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui'
+export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
 
 /**
  * App level APIs
@@ -668,7 +668,7 @@ export interface IGitProxy {
 }
 
 /**
- * UI related APIS
+ * UI related APIs
  */
 export type UIMsgOptions = {
   key: string
@@ -685,6 +685,13 @@ export interface IUIProxy {
   ) => Promise<UIMsgKey>
 
   closeMsg: (key: UIMsgKey) => void
+}
+
+/**
+ * Assets related APIs
+ */
+export interface IAssetsProxy {
+  listFilesOfCurrentGraph(exts: string | string[]): Promise<{ path: string, size: number, accessTime: number, modifiedTime: number, changeTime: number, birthTime: number }>
 }
 
 export interface ILSPluginThemeManager extends EventEmitter {
