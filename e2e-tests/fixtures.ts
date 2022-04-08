@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { test as base, expect, ConsoleMessage } from '@playwright/test';
+import { test as base, expect, ConsoleMessage, Locator } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { loadLocalGraph, randomString } from './utils';
 
@@ -12,7 +12,7 @@ let repoName = randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
-    fs.rmdirSync(testTmpDir, { recursive: true })
+  fs.rmdirSync(testTmpDir, { recursive: true })
 }
 
 export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
@@ -23,7 +23,7 @@ let logs: string
 const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
   logs += msg.text() + '\n'
-    expect(msg.text(), logs).not.toMatch(/^(Failed to|Uncaught)/)
+  expect(msg.text(), logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
   if (!logs.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
@@ -107,11 +107,96 @@ base.afterAll(async () => {
   //}
 })
 
+/**
+ * Block provides helper functions for Logseq's block testing.
+ */
+interface Block {
+  /** Must fill some text into a block, use `textarea >> nth=0` as selector. */
+  mustFill(value: string): Promise<void>;
+  /**
+   * Must type input some text into an **empty** block.
+   * **DO NOT USE** this if there's auto-complete
+   */
+  mustType(value: string, options?: { delay?: number }): Promise<void>;
+  /**
+   * Press Enter and go to next block, require cursor to be in current block(editing mode).
+   * When cursor is not at the end of block, trailing text will be moved to the next block.
+   */
+  enterNext(): Promise<Locator>;
+  /** Click `.add-button-link-wrap` and create the next block. */
+  clickNext(): Promise<Locator>;
+  /** Indent block, return whether it's success. */
+  indent(): Promise<boolean>;
+  /** Unindent block, return whether it's success. */
+  unindent(): Promise<boolean>;
+  /** Await for a certain number of blocks, with default timeout. */
+  waitForBlocks(total: number): Promise<void>;
+  /** Await for a certain number of selected blocks, with default timeout. */
+  waitForSelectedBlocks(total: number): Promise<void>;
+}
+
 // hijack electron app into the test context
-export const test = base.extend<{ page: Page, context: BrowserContext, app: ElectronApplication, graphDir: string }>({
+// FIXME: add type to `block`
+export const test = base.extend<{ page: Page, block: Block, context: BrowserContext, app: ElectronApplication, graphDir: string }>({
   page: async ({ }, use) => {
     await use(page);
   },
+
+  // Timeout is used to avoid global timeout, local timeout will have a meaningful error report.
+  // 1s timeout is enough for most of the test cases.
+  // Timeout won't introduce additional sleeps.
+  block: async ({ page }, use) => {
+    const block = {
+      mustFill: async (value: string) => {
+        const locator: Locator = page.locator('textarea >> nth=0')
+        await locator.waitFor({ timeout: 1000 })
+        await locator.fill(value)
+        await expect(locator).toHaveText(value, { timeout: 1000 })
+      },
+      mustType: async (value: string, options?: { delay?: number }) => {
+        const locator: Locator = page.locator('textarea >> nth=0')
+        await locator.waitFor({ timeout: 1000 })
+        const { delay = 100 } = options || {};
+        await locator.type(value, { delay })
+        await expect(locator).toHaveText(value, { timeout: 1000 })
+      },
+      enterNext: async (): Promise<Locator> => {
+        let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
+        await page.press('textarea >> nth=0', 'Enter')
+        await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible', timeout: 1000 })
+        return page.locator('textarea >> nth=0')
+      },
+      clickNext: async (): Promise<Locator> => {
+        let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
+        // the next element after all blocks.
+        await page.click('.add-button-link-wrap')
+        await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible', timeout: 1000 })
+        return page.locator('textarea >> nth=0')
+      },
+      indent: async (): Promise<boolean> => {
+        const locator = page.locator('textarea >> nth=0')
+        const before = await locator.boundingBox()
+        await locator.press('Tab', { delay: 100 })
+        return (await locator.boundingBox()).x > before.x
+      },
+      unindent: async (): Promise<boolean> => {
+        const locator = page.locator('textarea >> nth=0')
+        const before = await locator.boundingBox()
+        await locator.press('Shift+Tab', { delay: 100 })
+        return (await locator.boundingBox()).x < before.x
+      },
+      waitForBlocks: async (total: number): Promise<void> => {
+        // NOTE: `nth=` counts from 0.
+        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { timeout: 1000 })
+      },
+      waitForSelectedBlocks: async (total: number): Promise<void> => {
+        // NOTE: `nth=` counts from 0.
+        await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
+      },
+    }
+    use(block)
+  },
+
   context: async ({ }, use) => {
     await use(context);
   },
