@@ -75,16 +75,6 @@
 
        (callback #js {:path path'}))))
 
-  (.on app "browser-window-created"
-       (fn [event window]
-         (prn "browser-window-created")
-         (js/console.dir event)))
-
-  (.on app "web-contents-created"
-       (fn [event web-content]
-         (prn "web-contents-created")
-         (js/console.dir event)))
-
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
