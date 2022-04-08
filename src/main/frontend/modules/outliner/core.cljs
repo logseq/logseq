@@ -280,7 +280,8 @@
   [blocks target-block {:keys [sibling? keep-uuid?]}]
   (let [sibling? (if (:block/name target-block) false sibling?)
         replace-empty-target? (and sibling?
-                                   (string/blank? (:block/content target-block)))
+                                   (string/blank? (:block/content target-block))
+                                   (> (count blocks) 1))
         blocks' (blocks-with-level blocks)
         delete-target-tx (when replace-empty-target? [[:db.fn/retractEntity (:db/id target-block)]])
         tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target? keep-uuid?)

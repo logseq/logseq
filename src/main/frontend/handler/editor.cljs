@@ -228,35 +228,32 @@
   ([block pos id {:keys [custom-content tail-len move-cursor?]
                   :or {tail-len 0
                        move-cursor? true}}]
-   (js/setTimeout
-    (fn []
-      (when-not config/publishing?
-       (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/pull [:block/uuid block-id]) block)
-               edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id)
-                               (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                   (string/replace "ls-block" "edit-block")))
-               content (or custom-content (:block/content block) "")
-               content-length (count content)
-               text-range (cond
-                            (vector? pos)
-                            (text-range-by-lst-fst-line content pos)
+   (when-not config/publishing?
+     (when-let [block-id (:block/uuid block)]
+       (let [block (or (db/pull [:block/uuid block-id]) block)
+             edit-input-id (if (uuid? id)
+                             (get-edit-input-id-with-block-id id)
+                             (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                 (string/replace "ls-block" "edit-block")))
+             content (or custom-content (:block/content block) "")
+             content-length (count content)
+             text-range (cond
+                          (vector? pos)
+                          (text-range-by-lst-fst-line content pos)
 
-                            (and (> tail-len 0) (>= (count content) tail-len))
-                            (subs content 0 (- (count content) tail-len))
+                          (and (> tail-len 0) (>= (count content) tail-len))
+                          (subs content 0 (- (count content) tail-len))
 
-                            (or (= :max pos) (<= content-length pos))
-                            content
+                          (or (= :max pos) (<= content-length pos))
+                          content
 
-                            :else
-                            (subs content 0 pos))
-               content (-> (property/remove-built-in-properties (:block/format block)
-                                                                content)
-                           (drawer/remove-logbook))]
-           (clear-selection!)
-           (state/set-editing! edit-input-id content block text-range move-cursor?)))))
-    0)))
+                          :else
+                          (subs content 0 pos))
+             content (-> (property/remove-built-in-properties (:block/format block)
+                                                              content)
+                         (drawer/remove-logbook))]
+         (clear-selection!)
+         (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -1243,7 +1240,7 @@
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (edit-block! {:block/uuid id} pos id)))
+        (js/setTimeout #(edit-block! {:block/uuid id} pos id) 0)))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1261,14 +1258,14 @@
                        (:block/uuid block-parent))]
             (do
               (route-handler/redirect-to-page! id)
-              (edit-block! {:block/uuid block-id} :max block-id))
+              (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 0))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
                                   :db/id)]
 
               (when-let [page-name (:block/name (db/entity page-id))]
                 (route-handler/redirect-to-page! page-name)
-                (edit-block! {:block/uuid block-id} :max block-id)))))))
+                (js/setTimeout #(edit-block! {:block/uuid block-id} :max block-id) 0)))))))
     (js/window.history.back)))
 
 (defn cut-block!
