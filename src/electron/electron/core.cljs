@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent send-to-renderer]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent send-to-renderer]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -11,6 +11,7 @@
             ["path" :as path]
             ["os" :as os]
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron-deeplink" :refer [Deeplink]]
             [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
@@ -39,6 +40,15 @@
                    :logger logger
                    :win    win})))
 
+(defn open-url-handler
+  [url]
+  (.info logger "open-url" (str {:url url}))
+
+  (let [parsed-url (js/URL. url)]
+    (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
+               (= "auth-callback" (.-host parsed-url)))
+      (send-to-renderer "loginCallback" (.get (.-searchParams parsed-url) "code")))))
+
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
 
@@ -65,15 +75,15 @@
 
        (callback #js {:path path'}))))
 
-  (.on app "open-url"
-       (fn [event url]
-         (.info logger "open-url" (str {:url url
-                                        :event event}))
+  (.on app "browser-window-created"
+       (fn [event window]
+         (prn "browser-window-created")
+         (js/console.dir event)))
 
-         (let [parsed-url (js/URL. url)]
-           (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-                      (= "auth-callback" (.-host parsed-url)))
-             (send-to-renderer "loginCallback" (.get (.-searchParams parsed-url) "code"))))))
+  (.on app "web-contents-created"
+       (fn [event web-content]
+         (prn "web-contents-created")
+         (js/console.dir event)))
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
@@ -213,6 +223,15 @@
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
+               (let [deeplink (Deeplink. #js
+                                         {:app app
+                                          :mainWindow win
+                                          :protocol LSP_SCHEME
+                                          :isDev dev?})]
+                 (.on deeplink "received"
+                      (fn [link]
+                        (open-url-handler link))))
+
                (restore-user-fetch-agent)
 
                (utils/disableXFrameOptions win)
@@ -263,7 +282,6 @@
                                                 (do (.once win "leave-full-screen" #(.hide win))
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
-
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 
