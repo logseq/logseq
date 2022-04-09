@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import fs from 'fs/promises'
 import path from 'path'
 import { test } from './fixtures'
-import { randomString, createRandomPage, enterNextBlock } from './utils'
+import { randomString, createRandomPage } from './utils'
 
 test('render app', async ({ page }) => {
   // NOTE: part of app startup tests is moved to `fixtures.ts`.
@@ -280,5 +280,6 @@ test('invalid page props #3944', async ({ page, block }) => {
 
   await block.mustFill('public:: true\nsize:: 65535')
   await page.press('textarea >> nth=0', 'Enter')
+  // Force rendering property block
   await block.clickNext()
 })
