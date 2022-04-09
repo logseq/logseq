@@ -22,12 +22,13 @@ export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
 let logs: string
 const consoleLogWatcher = (msg: ConsoleMessage) => {
   // console.log(msg.text())
-  logs += msg.text() + '\n'
-  expect(msg.text(), logs).not.toMatch(/^(Failed to|Uncaught)/)
+  const text = msg.text()
+  logs += text + '\n'
+  expect(text, logs).not.toMatch(/^(Failed to|Uncaught)/)
 
   // youtube video
-  if (!logs.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
-    expect(logs).not.toMatch(/^Error/)
+  if (!text.match(/^Error with Permissions-Policy header: Unrecognized feature/)) {
+    expect(text, logs).not.toMatch(/^Error/)
   }
 
   // NOTE: React warnings will be logged as error.
@@ -133,6 +134,8 @@ interface Block {
   waitForBlocks(total: number): Promise<void>;
   /** Await for a certain number of selected blocks, with default timeout. */
   waitForSelectedBlocks(total: number): Promise<void>;
+  /** Escape editing mode, modal popup and selection. */
+  escapeEditing(): Promise<void>;
 }
 
 // hijack electron app into the test context
@@ -193,6 +196,10 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
         // NOTE: `nth=` counts from 0.
         await page.waitForSelector(`.ls-block.selected >> nth=${total - 1}`, { timeout: 1000 })
       },
+      escapeEditing: async (): Promise<void> => {
+        await page.keyboard.press('Escape')
+        await page.keyboard.press('Escape')
+      }
     }
     use(block)
   },
