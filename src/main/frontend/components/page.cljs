@@ -214,6 +214,7 @@
                     (when (util/wrapped-by-quotes? @*title-value)
                       (swap! *title-value util/unquote-string)
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
+                    (state/set-state! :editor/editing-page-title? false)
                     (cond
                       (= old-name @*title-value)
                       (reset! *edit? false)
@@ -248,6 +249,7 @@
                               (reset! *title-value old-name)
                               (reset! *edit? false)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
+                                         (state/set-state! :editor/editing-page-title? true)
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
                         :on-click (fn [e]

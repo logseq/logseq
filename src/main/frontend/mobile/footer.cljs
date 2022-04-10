@@ -47,7 +47,8 @@
 (rum/defc footer < rum/reactive
   []
   (when-not (or (state/sub :editor/editing?)
-                (state/sub :block/component-editing-mode?))
+                (state/sub :block/component-editing-mode?)
+                (state/sub :editor/editing-page-title?))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
      (mobile-bar-command #(state/toggle-document-mode!) "notes")
