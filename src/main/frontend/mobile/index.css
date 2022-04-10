@@ -15,6 +15,11 @@
         color: var(--ls-primary-text-color);
         opacity: 0.5;
     }
+
+    .timer {
+        position: absolute;
+        left: 40px;
+    }
 }
 
 html.is-native-ipad {
