@@ -3050,7 +3050,7 @@
       (when (<  vw-height (+ cursor-y mobile-toolbar-height))
         (let [main-node (gdom/getElement "main-content-container")
               scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top (/ vw-height 2))))))))
+          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]

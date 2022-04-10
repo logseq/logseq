@@ -251,19 +251,9 @@
 
 (rum/defc mobile-bar < rum/reactive
   [_parent-state parent-id]
-  (let [vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)
-        ;; TODO: should we add this focus step to `simple-insert!`?
-        viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/make-el-cursor-position-into-center-viewport input)
+  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
                              (.focus input)))]
     [:div#mobile-editor-toolbar.bg-base-2
-     {:style {:bottom (if vw-state
-                        (- (.-clientHeight js/document.documentElement)
-                           (:height vw-state)
-                           (:offset-top vw-state))
-                        0)}
-      :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
      [:div.toolbar-commands
       (mobile-bar-indent-outdent true "arrow-bar-right")
       (mobile-bar-indent-outdent false "arrow-bar-left")

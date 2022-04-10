@@ -19,7 +19,7 @@
 
 html.is-native-ipad {
     .cp__footer {
-        height: 45px;
+        height: 55px;
         /* width: calc(100vw - var(--ls-left-sidebar-width)); */
         right: 0;
         box-shadow: none;

@@ -255,14 +255,15 @@
                              (when-not (gobj/get cm "escPressed")
                                (save-file-or-block-when-blur-or-esc! editor textarea config state))
                              (state/set-block-component-editing-mode! false)))
-        (.addEventListener element
-                           (if (mobile-util/is-native-platform?) "touchstart" "mousedown")
+        (.on editor "focus" (fn [e]
+                              (when e (util/stop e))
+                              (state/set-block-component-editing-mode! true)))
+        (.addEventListener element "mousedown"
                            (fn [e]
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil false))
-                             (util/stop e)
-                             (state/set-block-component-editing-mode! true)))
+                             (util/stop e)))
         (.save editor)
         (.refresh editor)
         (when default-open?
