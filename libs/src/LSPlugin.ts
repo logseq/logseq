@@ -573,6 +573,10 @@ export interface IEditorProxy extends Record<string, any> {
 
   getAllPages: (repo?: string) => Promise<any>
 
+  prependBlockInPage: (page: PageIdentity, content: string, opts?: Partial<{ properties: {} }>) => Promise<BlockEntity | null>
+
+  appendBlockInPage: (page: PageIdentity, content: string, opts?: Partial<{ properties: {} }>) => Promise<BlockEntity | null>
+
   getPreviousSiblingBlock: (
     srcBlock: BlockIdentity
   ) => Promise<BlockEntity | null>

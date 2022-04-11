@@ -608,6 +608,54 @@
     (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
       (bean/->js (normalize-keyword-for-json pages)))))
 
+(defn first-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (first (db-model/sort-by-left children block))))
+
+(defn second-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (second (db-model/sort-by-left children block))))
+
+(defn last-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (last (db-model/sort-by-left children block))))
+
+(defn ^:export prepend_block_in_page
+  [uuid-or-page-name content ^js opts]
+  (let [page? (not (util/uuid-string? uuid-or-page-name))
+        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+        _ (and page-not-exist? (page-handler/create! uuid-or-page-name
+                                 {:redirect? false
+                                  :create-first-block? true
+                                  :format (state/get-preferred-format)}))]
+    (when-let [block (db-model/get-page uuid-or-page-name)]
+      (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
+            sibling? (and page? (not (nil? block')))
+            opts     (bean/->clj opts)
+            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling? :before sibling?})
+            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
+        (insert_block src content (bean/->js opts))))))
+
+(defn ^:export append_block_in_page
+  [uuid-or-page-name content ^js opts]
+  (let [page? (not (util/uuid-string? uuid-or-page-name))
+        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+        _ (and page-not-exist? (page-handler/create! uuid-or-page-name
+                                 {:redirect? false
+                                  :create-first-block? true
+                                  :format (state/get-preferred-format)}))]
+    (when-let [block (db-model/get-page uuid-or-page-name)]
+      (let [block'   (last-child-of-block block)
+            sibling? (not (nil? block'))
+            opts     (bean/->clj opts)
+            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling?}
+                       (when sibling? {:before false}))
+            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
+        (insert_block src content (bean/->js opts))))))
+
 ;; plugins
 (def ^:export __install_plugin
   (fn [^js manifest]
