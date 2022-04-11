@@ -89,7 +89,7 @@
                                    (mapv
                                     (fn [{:keys [uri] :as file-result}]
                                       (p/chain
-                                       (read-file-utf8 path)
+                                       (read-file-utf8 uri)
                                        #(js->clj % :keywordize-keys true)
                                        :data
                                        #(assoc file-result :content %))))))]
