@@ -149,7 +149,7 @@
 
 (defn- request-once [api-name body token]
   (go
-    (let [resp (http/post (str "https://api.logseq.com/file-sync/" api-name)
+    (let [resp (http/post (str "https://" config/API-DOMAIN "/file-sync/" api-name)
                           {:oauth-token token
                            :body (js/JSON.stringify (clj->js body))})]
       {:resp (<! resp)
@@ -369,6 +369,7 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
+  (set-env [this prod?] "set environment")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -425,6 +426,7 @@
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
   IRSAPI
+  (set-env [_ prod?] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev"))))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -1197,6 +1199,9 @@
                          (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
                          txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                          local-changes-chan)]
+    ;; set-env
+    (set-env rsapi config/FILE-SYNC-PROD?)
+
     ;; drain `local-changes-chan`
     (->> (repeatedly #(poll! local-changes-chan))
          (take-while identity))
