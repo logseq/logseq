@@ -56,8 +56,6 @@ test('switch code editing mode', async ({ page }) => {
   await page.press('.CodeMirror textarea', 'Escape')
   await page.waitForSelector('.CodeMirror pre', { state: 'hidden' })
   expect(await page.inputValue('.block-editor textarea')).toBe('```clojure\n;; comment\n\n  \n(+ 1 1)\n```')
-
-  await page.waitForTimeout(500)
 })
 
 

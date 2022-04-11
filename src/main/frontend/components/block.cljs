@@ -2200,7 +2200,7 @@
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
                  config)
-        heading? (and (= type :heading) heading-level (<= heading-level 6))
+        heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
         ref? (:ref? config)
         db-collapsed? (util/collapsed? block)

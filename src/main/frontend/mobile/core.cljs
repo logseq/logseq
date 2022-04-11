@@ -63,6 +63,6 @@
                       (let [is-active? (.-isActive state)]
                         (when is-active?
                           (editor-handler/save-current-block!))))))))
-    (.addEventListener js/window "sendIntentReceived"
-                       #(intent/handle-received))
 
+(.addEventListener js/window "sendIntentReceived"
+                   #(intent/handle-received))
