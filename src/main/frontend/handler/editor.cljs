@@ -1758,8 +1758,7 @@
             (when-let [input (gdom/getElement input-id)]
               (.focus input))))
         (let [blocks (-> (state/get-selection-blocks)
-                         reorder-selected-blocks)
-              blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
+                         reorder-selected-blocks)]
           (when (seq blocks)
             (move-nodes blocks)))))))
 
