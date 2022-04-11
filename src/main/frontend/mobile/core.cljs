@@ -67,4 +67,3 @@
 
     (.addEventListener js/window "sendIntentReceived"
                        #(intent/handle-received))))
-
