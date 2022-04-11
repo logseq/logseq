@@ -413,6 +413,9 @@
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmethod handle :set-env [_ args]
+  (apply rsapi/set-env (rest args)))
+
 (defmethod handle :get-local-files-meta [_ args]
   (apply rsapi/get-local-files-meta (rest args)))
 
