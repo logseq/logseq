@@ -206,20 +206,18 @@
 (defn- blocks-with-level
   "Should be sorted already."
   [blocks]
-  (if (:block/level (first blocks))
-    blocks
-    (let [root (assoc (first blocks) :block/level 1)
-          result (loop [m [[(:db/id root) root]]
-                        blocks (rest blocks)]
-                   (if (empty? blocks)
-                     m
-                     (let [block (first blocks)
-                           parent-id (:db/id (:block/parent block))
-                           parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-                           block (assoc block :block/level (inc parent-level))
-                           m' (vec (conj m [(:db/id block) block]))]
-                       (recur m' (rest blocks)))))]
-      (map last result))))
+  (let [root (assoc (first blocks) :block/level 1)
+        result (loop [m [[(:db/id root) root]]
+                      blocks (rest blocks)]
+                 (if (empty? blocks)
+                   m
+                   (let [block (first blocks)
+                         parent-id (:db/id (:block/parent block))
+                         parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+                         block (assoc block :block/level (inc parent-level))
+                         m' (vec (conj m [(:db/id block) block]))]
+                     (recur m' (rest blocks)))))]
+    (map last result)))
 
 (defn get-top-level-blocks
   [blocks]
@@ -235,7 +233,7 @@
                    (assoc block :db/id db-id))) blocks))
 
 (defn- insert-blocks-aux
-  [blocks target-block sibling? replace-empty-target? keep-uuid?]
+  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move?]}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (if keep-uuid?
@@ -265,36 +263,44 @@
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup)))))]
     (map-indexed (fn [idx {:block/keys [parent left] :as block}]
                    (let [top-level? (= (:block/level block) 1)]
-                     (-> block
-                         (merge {:block/uuid (get uuids (:block/uuid block))
-                                 :block/page target-page
-                                 :block/parent (if top-level?
-                                                 (if sibling?
-                                                   (:db/id (:block/parent target-block))
-                                                   (:db/id target-block))
-                                                 (get-new-id parent))
-                                 :block/left (if (zero? idx)
-                                               (if replace-empty-target?
-                                                 (:db/id (:block/left target-block))
-                                                 (:db/id target-block))
-                                               (get-new-id left))})
-                         (dissoc :db/id))))
+                     (cond->
+                       (merge block {:block/uuid (get uuids (:block/uuid block))
+                                     :block/page target-page
+                                     :block/parent (if top-level?
+                                                     (if sibling?
+                                                       (:db/id (:block/parent target-block))
+                                                       (:db/id target-block))
+                                                     (get-new-id parent))
+                                     :block/left (if (zero? idx)
+                                                   (if replace-empty-target?
+                                                     (:db/id (:block/left target-block))
+                                                     (:db/id target-block))
+                                                   (get-new-id left))})
+                       (not move?)
+                       (dissoc :db/id))))
                  blocks)))
 
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks target-block {:keys [sibling? keep-uuid?]}]
+  [blocks target-block {:keys [sibling? keep-uuid? move?]}]
   (let [sibling? (if (:block/name target-block) false sibling?)
+        keep-uuid? (if move? true keep-uuid?)
         replace-empty-target? (and sibling?
                                    (string/blank? (:block/content target-block))
-                                   (> (count blocks) 1))
+                                   (> (count blocks) 1)
+                                   (not move?))
         blocks' (blocks-with-level blocks)
-        tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target? keep-uuid?)
+        tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
+                                                    :replace-empty-target? replace-empty-target?
+                                                    :keep-uuid? keep-uuid?
+                                                    :move? move?})
         uuids-tx (->> (map :block/uuid tx)
                       (remove nil?)
                       (map (fn [uuid] {:block/uuid uuid})))
-        tx (assign-temp-id tx replace-empty-target? target-block)
+        tx (if move?
+             tx
+             (assign-temp-id tx replace-empty-target? target-block))
         target-node (block target-block)
         next (if sibling?
                (tree/-get-right target-node)
@@ -587,61 +593,39 @@
                             (tree/-save txs-state))))))))))
     {:tx-data @txs-state}))
 
-(defn- set-nodes-page-aux
-  [node page page-format txs-state]
-  (let [new-node (update node :data assoc
-                         :block/page page
-                         :block/format page-format)]
-    (tree/-save new-node txs-state)
-    (doseq [n (tree/-get-children new-node)]
-      (set-nodes-page-aux n page page-format txs-state))))
-
-(defn- set-nodes-page
-  [node target-node txs-state]
-  (let [page (or (get-in target-node [:data :block/page])
-                 {:db/id (get-in target-node [:data :db/id])}) ; or page block
-
-        page-format (:block/format (db/entity (or (:db/id page) page)))]
-    (set-nodes-page-aux node page page-format txs-state)))
+(defn- build-drag-blocks-next-tx
+  [blocks target-block]
+  (let [top-level-blocks (get-top-level-blocks blocks)
+        top-level-blocks-ids (set (map :db/id top-level-blocks))
+        right-block (:data (tree/-get-right (block (last top-level-blocks))))]
+    (when (and right-block
+               (not (contains? top-level-blocks-ids (:db/id right-block))))
+      {:db/id (:db/id right-block)
+       :block/left (loop [block right-block]
+                     (if (contains? top-level-blocks-ids (:db/id (:block/left block)))
+                       (recur (:block/left block))
+                       (:db/id (:block/left (db/entity (:db/id block))))))})))
 
 (defn move-blocks
   [blocks target-block sibling?]
   ;; target is not included in `blocks`
   (when-not (contains? (set (map :db/id blocks)) target-block)
     (let [blocks (if (coll? blocks) blocks [blocks])
-          root (block (first blocks))
-          target-node (block target-block)]
-      (if-let [target-node-id (tree/-get-id target-node)]
-        (when-not (and
-                   (or (and sibling?
-                            (= (tree/-get-left-id root) target-node-id)
-                            (not= (tree/-get-parent-id root) target-node-id))
-                       (and (not sibling?)
-                            (= (tree/-get-left-id root) target-node-id)
-                            (= (tree/-get-parent-id root) target-node-id)))
-                   (= target-node-id (tree/-get-id root)))
-          (let [root-page (:db/id (:block/page (:data root)))
-                target-page (:db/id (:block/page (:data target-node)))
-                not-same-page? (not= root-page target-page)
-                opts (cond-> {:move-blocks [(:db/id (get-data root))]
-                              :target (:db/id (get-data target-node))}
-                       not-same-page?
-                       (assoc :from-page root-page
-                              :target-page target-page))
-                txs-state (ds/new-outliner-txs-state)
-                left-node-id (tree/-get-left-id root)
-                right-node (tree/-get-right root)]
-            (when (tree/satisfied-inode? right-node)
-              (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-                (tree/-save new-right-node txs-state)))
-            (let [new-root (first (if sibling?
-                                    (insert-node-as-sibling txs-state root target-node)
-                                    (insert-node-as-first-child txs-state root target-node)))]
-              (when (not= root-page target-page)
-                (set-nodes-page new-root target-node txs-state)))
-            {:tx-data @txs-state
-             :tx-meta opts}))
-        (js/console.trace)))))
+          first-block (first blocks)
+          {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
+                                                                :move? true})
+          first-block-page (:db/id (:block/page first-block))
+          target-page (:db/id (:block/page target-block))
+          not-same-page? (not= first-block-page target-page)
+          drag-blocks-next-tx [(build-drag-blocks-next-tx blocks target-block)]
+          full-tx (util/concat-without-nil tx-data drag-blocks-next-tx)
+          tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                           :target (:db/id target-block)}
+                    not-same-page?
+                    (assoc :from-page first-block-page
+                           :target-page target-page))]
+      {:tx-data full-tx
+       :tx-meta tx-meta})))
 
 (defn get-right-node
   [node]

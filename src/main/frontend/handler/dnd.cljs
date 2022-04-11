@@ -35,7 +35,9 @@
       (and (= move-to :sibling)
            ;; current block is already the next sibling of target-block
            (= (:db/id (:block/left current-block))
-              (:db/id target-block)))))))
+              (:db/id target-block))
+           (not= (:db/id (:block/parent current-block))
+                 (:db/id target-block)))))))
 
 (defn move-block
   "There can be two possible situations:
