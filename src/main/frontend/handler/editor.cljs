@@ -30,7 +30,6 @@
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.search :as search]
@@ -1761,19 +1760,6 @@
                          reorder-selected-blocks)]
           (when (seq blocks)
             (move-nodes blocks)))))))
-
-(defn- get-end-block-parent
-  [end-block blocks]
-  (if-let [parent (let [id (:db/id (:block/parent end-block))]
-                    (some (fn [block] (when (= (:db/id block) id) block)) blocks))]
-    (recur parent blocks)
-    end-block))
-
-(defn- get-top-level-end-node
-  [blocks]
-  (let [end-block (last blocks)
-        end-block-parent (get-end-block-parent end-block blocks)]
-    (outliner-core/block end-block-parent)))
 
 ;; selections
 (defn on-tab

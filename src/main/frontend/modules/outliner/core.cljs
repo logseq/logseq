@@ -10,8 +10,7 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [lambdaisland.glogi :as log]))
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 
@@ -336,7 +335,7 @@
         next (if sibling?
                (tree/-get-right target-node)
                (tree/-get-down target-node))
-        next-tx (when next
+        next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
                   (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                     [{:block/uuid (tree/-get-id next)
                       :block/left (:db/id left)}]))
@@ -430,7 +429,7 @@
            rest))))
 
 (defn- build-drag-blocks-next-tx
-  [blocks target-block]
+  [blocks]
   (let [id->blocks (zipmap (map :db/id blocks) blocks)
         top-level-blocks (get-top-level-blocks blocks)
         top-level-blocks-ids (set (map :db/id top-level-blocks))
@@ -447,7 +446,7 @@
   [blocks target-block sibling?]
   ;; target is not included in `blocks`
   (when target-block
-    (when-not (contains? (set (map :db/id blocks)) target-block)
+    (when-not (contains? (set (map :db/id blocks)) (:db/id target-block))
       (let [blocks (if (coll? blocks) blocks [blocks])
             first-block (first blocks)
             {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
@@ -455,7 +454,7 @@
             first-block-page (:db/id (:block/page first-block))
             target-page (:db/id (:block/page target-block))
             not-same-page? (not= first-block-page target-page)
-            drag-blocks-next-tx [(build-drag-blocks-next-tx blocks target-block)]
+            drag-blocks-next-tx [(build-drag-blocks-next-tx blocks)]
             full-tx (util/concat-without-nil tx-data drag-blocks-next-tx)
             tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                              :target (:db/id target-block)}
@@ -505,27 +504,45 @@
       :else
       nil)))
 
+(defn page-first-child?
+  [block]
+  (= (:block/left block)
+     (:block/page block)))
+
 (defn indent-outdent-blocks
   [blocks indent?]
   (let [first-block (first blocks)
         left (db/entity (:db/id (:block/left first-block)))
-        parent (:block/parent first-block)]
+        parent (:block/parent first-block)
+        db (db/get-conn)
+        top-level-blocks (->> (get-top-level-blocks blocks)
+                              (map (fn [b]
+                                     (db/entity (:db/id b)))))]
     (if indent?
-      (when left (move-blocks blocks left false))
+      (when (and left (not (page-first-child? first-block)))
+        (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left))]
+          (if (and last-direct-child-id
+                   (not (contains? (set (map :db/id blocks)) last-direct-child-id)))
+            (move-blocks blocks (db/entity last-direct-child-id) true)
+            (when-not (every? (fn [b] (= (:db/id (:block/parent b))
+                                         (:db/id left)))
+                              top-level-blocks)
+             (move-blocks blocks left false)))))
       (when (and parent (not (:block/name (db/entity (:db/id parent)))))
         (let [result (move-blocks blocks parent true)]
-          ;; direct outdenting (default behavior)
-          (when-not (state/logical-outdenting?))
-          (let [top-level-blocks (get-top-level-blocks blocks)
-                last-top-block (last top-level-blocks)
-                right-siblings (->> (get-right-siblings (block last-top-block))
-                                    (map :data))]
-            (when (seq right-siblings)
-              (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child (db/get-conn) (:db/id last-top-block))]
-                              (move-blocks right-siblings (db/entity last-direct-child-id) true)
-                              (move-blocks right-siblings last-top-block false))]
-                {:tx-data (util/concat-without-nil (:tx-data result) (:tx-data result2))
-                 :tx-meta (:tx-meta result)}))))))))
+          (if (state/logical-outdenting?)
+            result
+            ;; direct outdenting (default behavior)
+            (let [last-top-block (db/pull (:db/id (last top-level-blocks)))
+                  right-siblings (->> (get-right-siblings (block last-top-block))
+                                      (map :data))]
+              (if (seq right-siblings)
+                (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id last-top-block))]
+                                (move-blocks right-siblings (db/entity last-direct-child-id) true)
+                                (move-blocks right-siblings last-top-block false))]
+                  {:tx-data (util/concat-without-nil (:tx-data result) (:tx-data result2))
+                   :tx-meta (:tx-meta result)})
+                result))))))))
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 

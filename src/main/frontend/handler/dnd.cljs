@@ -79,12 +79,10 @@
       ;; movable
       (and (every? map? [current-block target-block])
            (movable? current-block target-block move-to))
-      (let [[current-node target-node]
-            (mapv outliner-core/block [current-block target-block])]
+      (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
           {:outliner-op :move-blocks}
-          (cond
-            top?
+          (if top?
             (let [first-child?
                   (= (tree/-get-parent-id target-node)
                      (tree/-get-left-id target-node))]
@@ -93,12 +91,7 @@
                   (outliner-core/move-blocks! [current-block] (:data parent) false))
                 (let [before-node (tree/-get-left target-node)]
                   (outliner-core/move-blocks! [current-block] (:data before-node) true))))
-
-            nested?
-            (outliner-core/move-blocks! [current-block] target-block false)
-
-            :else ;; :sibling
-            (outliner-core/move-blocks! [current-block] target-block true))))
+            (outliner-core/move-blocks! [current-block] target-block (not nested?)))))
 
       :else
       nil)))
