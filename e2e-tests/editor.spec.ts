@@ -65,16 +65,16 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   )
 })
 
-test('disappeared children #4814', async ({ page }) => {
+test('disappeared children #4814', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.type('textarea >> nth=0', 'parent')
-  await enterNextBlock(page)
-  await page.press('textarea >> nth=0', 'Tab')
+  await block.mustType('parent')
+  await block.enterNext()
+  expect(await block.indent()).toBe(true)
 
   for (let i = 0; i < 5; i++) {
-    await page.type('textarea >> nth=0', i.toString())
-    await enterNextBlock(page)
+    await block.mustType(i.toString())
+    await block.enterNext()
   }
 
   // collapse
@@ -83,7 +83,7 @@ test('disappeared children #4814', async ({ page }) => {
   // expand
   await page.click('.block-control >> nth=0')
 
-  await page.waitForSelector('.ls-block >> nth=6') // 7 blocks
+  await block.waitForBlocks(7) // 1 + 5 + 1 empty
 
   // Ensures there's no active editor
   await expect(page.locator('.editor-inner')).toHaveCount(0, {timeout: 500})

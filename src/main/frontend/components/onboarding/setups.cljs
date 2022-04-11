@@ -30,7 +30,7 @@
 
       [:h2
        (if picker?
-         "First you need to choose a folder where logseq will store your thoughts, ideas, notes."
+         "First you need to choose a folder where Logseq will store your thoughts, ideas, notes."
          "You can also do this later in the app.")]
 
       content])])
@@ -99,8 +99,8 @@
        [:p.flex
         [:i.as-flex-center (ui/icon "zoom-question" {:style {:fontSize "22px"}})]
         [:span.flex-1.flex.flex-col
-         [:strong "How logseq saves your work"]
-         [:small.opacity-60 "Inside the directory you choose, logseq will create 4 folders."]]]
+         [:strong "How Logseq saves your work"]
+         [:small.opacity-60 "Inside the directory you choose, Logseq will create 4 folders."]]]
 
        [:p.text-sm.pt-5.tracking-wide
         [:span (str "Each page is a file stored only on your " DEVICE ".")]
@@ -114,7 +114,7 @@
                ["PAGES" "/pages" "file-text"]
                []
                ["APP Internal" "/logseq" "tool"]
-               ["Configs File" "/logseq/config.edn"]]]
+               ["Config File" "/logseq/config.edn"]]]
           (if-not title
             [:li.hr]
             [:li
@@ -143,7 +143,7 @@
      [:article.flex.flex-col.items-center.importer
       [:section.c.text-center
        [:h1 "Do you already have notes that you want to import?"]
-       [:h2 "If they are in a JSON or Markdown format logseq can work with them."]]
+       [:h2 "If they are in a JSON or Markdown format Logseq can work with them."]]
       [:section.d.md:flex
        [:label.action-input.flex.items-center
         {:disabled (or roam-importing? opml-importing?)}

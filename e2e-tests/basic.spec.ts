@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import fs from 'fs/promises'
 import path from 'path'
 import { test } from './fixtures'
-import { randomString, createRandomPage, newBlock, enterNextBlock } from './utils'
+import { randomString, createRandomPage } from './utils'
 
 test('render app', async ({ page }) => {
   // NOTE: part of app startup tests is moved to `fixtures.ts`.
@@ -45,54 +45,49 @@ test('search', async ({ page }) => {
   expect(results.length).toBeGreaterThanOrEqual(1)
 })
 
-test('create page and blocks, save to disk', async ({ page, graphDir }) => {
+test('create page and blocks, save to disk', async ({ page, block, graphDir }) => {
   const pageTitle = await createRandomPage(page)
 
   // do editing
-  await page.fill('textarea >> nth=0', 'this is my first bullet')
-  await enterNextBlock(page)
+  await block.mustFill('this is my first bullet')
+  await block.enterNext()
 
-  // wait first block
-  await page.waitForSelector('.ls-block >> nth=0')
+  await block.waitForBlocks(1)
 
-  await page.fill('textarea >> nth=0', 'this is my second bullet')
-  await enterNextBlock(page)
+  await block.mustFill('this is my second bullet')
+  await block.clickNext()
 
-  await page.fill('textarea >> nth=0', 'this is my third bullet')
-  await page.press('textarea >> nth=0', 'Tab')
-  await enterNextBlock(page)
+  await block.mustFill('this is my third bullet')
+  await block.indent()
+  await block.enterNext()
 
   await page.keyboard.type('continue editing test')
   await page.keyboard.press('Shift+Enter')
   await page.keyboard.type('continue')
 
-  await enterNextBlock(page)
-  await page.keyboard.press('Shift+Tab')
-  await page.keyboard.press('Shift+Tab')
-  await page.keyboard.type('test ok')
+  await block.enterNext()
+  expect(await block.unindent()).toBe(true)
+  expect(await block.unindent()).toBe(false)
+  await block.mustFill('test ok')
   await page.keyboard.press('Escape')
 
-  // NOTE: nth= counts from 0, so here're 5 blocks
-  await page.waitForSelector('.ls-block >> nth=4')
+  await block.waitForBlocks(5)
 
-  // active edit
-  await page.click('.ls-block >> nth=-1')
-  await enterNextBlock(page)
+  // active edit, and create next block
+  await block.clickNext()
   await page.fill('textarea >> nth=0', 'test')
   for (let i = 0; i < 5; i++) {
-    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Backspace', { delay: 100 })
   }
 
   await page.keyboard.press('Escape')
-  await page.waitForSelector('.ls-block >> nth=4') // 5 blocks
+  await block.waitForBlocks(5)
 
   await page.waitForTimeout(2000) // wait for saving to disk
-
   const contentOnDisk = await fs.readFile(
     path.join(graphDir, `pages/${pageTitle}.md`),
     'utf8'
   )
-
   expect(contentOnDisk.trim()).toEqual(`
 - this is my first bullet
 - this is my second bullet
@@ -103,11 +98,10 @@ test('create page and blocks, save to disk', async ({ page, graphDir }) => {
 })
 
 
-test('delete and backspace', async ({ page }) => {
+test('delete and backspace', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', 'test')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('test')
+  await block.mustFill('test')
 
   // backspace
   await page.keyboard.press('Backspace')
@@ -115,38 +109,38 @@ test('delete and backspace', async ({ page }) => {
   expect(await page.inputValue('textarea >> nth=0')).toBe('te')
 
   // refill
-  await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'test')
-  await page.keyboard.press('ArrowLeft')
-  await page.keyboard.press('ArrowLeft')
+  await block.enterNext()
+  await page.type('textarea >> nth=0', 'test', { delay: 50 })
+  await page.keyboard.press('ArrowLeft', { delay: 50 })
+  await page.keyboard.press('ArrowLeft', { delay: 50 })
 
   // delete
-  await page.keyboard.press('Delete')
+  await page.keyboard.press('Delete', { delay: 50 })
   expect(await page.inputValue('textarea >> nth=0')).toBe('tet')
-  await page.keyboard.press('Delete')
+  await page.keyboard.press('Delete', { delay: 50 })
   expect(await page.inputValue('textarea >> nth=0')).toBe('te')
-  await page.keyboard.press('Delete')
+  await page.keyboard.press('Delete', { delay: 50 })
   expect(await page.inputValue('textarea >> nth=0')).toBe('te')
 
   // TODO: test delete & backspace across blocks
 })
 
 
-test('selection', async ({ page }) => {
+test('selection', async ({ page, block }) => {
   await createRandomPage(page)
 
   // add 5 blocks
-  await page.fill('textarea >> nth=0', 'line 1')
-  await enterNextBlock(page)
-  await page.fill('textarea >> nth=0', 'line 2')
-  await enterNextBlock(page)
-  await page.press('textarea >> nth=0', 'Tab')
-  await page.fill('textarea >> nth=0', 'line 3')
-  await enterNextBlock(page)
-  await page.fill('textarea >> nth=0', 'line 4')
-  await page.press('textarea >> nth=0', 'Tab')
-  await enterNextBlock(page)
-  await page.fill('textarea >> nth=0', 'line 5')
+  await block.mustFill('line 1')
+  await block.enterNext()
+  await block.mustFill('line 2')
+  await block.enterNext()
+  expect(await block.indent()).toBe(true)
+  await block.mustFill('line 3')
+  await block.enterNext()
+  await block.mustFill('line 4')
+  expect(await block.indent()).toBe(true)
+  await block.enterNext()
+  await block.mustFill('line 5')
 
   // shift+up select 3 blocks
   await page.keyboard.down('Shift')
@@ -155,61 +149,59 @@ test('selection', async ({ page }) => {
   await page.keyboard.press('ArrowUp')
   await page.keyboard.up('Shift')
 
-  await page.waitForSelector('.ls-block.selected >> nth=2') // 3 selected
+  await block.waitForSelectedBlocks(3)
   await page.keyboard.press('Backspace')
 
-  await page.waitForSelector('.ls-block >> nth=1') // 2 blocks
+  await block.waitForBlocks(2)
 })
 
-test('template', async ({ page }) => {
+test('template', async ({ page, block }) => {
   const randomTemplate = randomString(10)
 
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', 'template')
-  await page.press('textarea >> nth=0', 'Shift+Enter')
-  await page.type('textarea >> nth=0', 'template:: ' + randomTemplate)
+  await block.mustFill('template test\ntemplate:: ' + randomTemplate)
+  await block.clickNext()
 
-  // Enter twice to exit from property block
-  await page.press('textarea >> nth=0', 'Enter')
-  await enterNextBlock(page)
+  expect(await block.indent()).toBe(true)
 
-  await page.press('textarea >> nth=0', 'Tab')
-  await page.fill('textarea >> nth=0', 'line1')
-  await enterNextBlock(page)
-  await page.fill('textarea >> nth=0', 'line2')
-  await enterNextBlock(page)
-  await page.press('textarea >> nth=0', 'Tab')
-  await page.fill('textarea >> nth=0', 'line3')
+  await block.mustFill('line1')
+  await block.enterNext()
+  await block.mustFill('line2')
+  await block.enterNext()
 
-  await enterNextBlock(page)
-  await page.press('textarea >> nth=0', 'Shift+Tab')
-  await page.press('textarea >> nth=0', 'Shift+Tab')
-  await page.press('textarea >> nth=0', 'Shift+Tab')
+  expect(await block.indent()).toBe(true)
+  await block.mustFill('line3')
+  await block.enterNext()
 
-  await page.waitForSelector('.ls-block >> nth=3') // total 4 blocks
+  expect(await block.unindent()).toBe(true)
+  expect(await block.unindent()).toBe(true)
+  expect(await block.unindent()).toBe(false) // already at the first level
+
+  await block.waitForBlocks(4)
 
   // NOTE: use delay to type slower, to trigger auto-completion UI.
-  await page.type('textarea >> nth=0', '/template', { delay: 100 })
+  await block.mustType('/template')
 
   await page.click('[title="Insert a created template here"]')
   // type to search template name
   await page.keyboard.type(randomTemplate.substring(0, 3), { delay: 100 })
-  await page.waitForTimeout(500) // wait for template search
-  await page.click('.absolute >> text=' + randomTemplate)
 
+  const popupMenuItem = page.locator('.absolute >> text=' + randomTemplate)
+  await popupMenuItem.waitFor({ timeout: 2000 }) // wait for template search
+  await popupMenuItem.click()
 
-  await page.waitForSelector('.ls-block >> nth=7') // 8 blocks
+  await block.waitForBlocks(8)
 })
 
 test('auto completion square brackets', async ({ page }) => {
   await createRandomPage(page)
 
+  // In this test, `type` is unsed instead of `fill`, to allow for auto-completion.
+
   // [[]]
   await page.type('textarea >> nth=0', 'This is a [')
-  await page.inputValue('textarea >> nth=0').then(text => {
-    expect(text).toBe('This is a []')
-  })
+  await expect(page.locator('textarea >> nth=0')).toHaveText('This is a []')
   await page.waitForTimeout(100)
   await page.type('textarea >> nth=0', '[')
   // wait for search popup
@@ -237,18 +229,18 @@ test('auto completion square brackets', async ({ page }) => {
   expect(await page.inputValue('textarea >> nth=0')).toBe('This is a [[]]]')
 })
 
-test('auto completion and auto pair', async ({ page }) => {
+test('auto completion and auto pair', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', 'Auto-completion test')
-  await enterNextBlock(page)
+  await block.mustFill('Auto-completion test')
+  await block.enterNext()
 
   // {{
   await page.type('textarea >> nth=0', 'type {{')
   expect(await page.inputValue('textarea >> nth=0')).toBe('type {{}}')
 
   // ((
-  await newBlock(page)
+  await block.clickNext()
 
   await page.type('textarea >> nth=0', 'type (')
   expect(await page.inputValue('textarea >> nth=0')).toBe('type ()')
@@ -257,7 +249,7 @@ test('auto completion and auto pair', async ({ page }) => {
 
   // 99  #3444
   // TODO: Test under different keyboard layout when Playwright supports it
-  // await newBlock(page)
+  // await block.clickNext()
 
   // await page.type('textarea >> nth=0', 'type 9')
   // expect(await page.inputValue('textarea >> nth=0')).toBe('type 9')
@@ -265,15 +257,16 @@ test('auto completion and auto pair', async ({ page }) => {
   // expect(await page.inputValue('textarea >> nth=0')).toBe('type 99')
 
   // [[  #3251
-  await newBlock(page)
+  await block.clickNext()
 
   await page.type('textarea >> nth=0', 'type [')
   expect(await page.inputValue('textarea >> nth=0')).toBe('type []')
   await page.type('textarea >> nth=0', '[')
   expect(await page.inputValue('textarea >> nth=0')).toBe('type [[]]')
+  await page.press('textarea >> nth=0', 'Escape') // escape any popup from `[[]]`
 
   // ``
-  await newBlock(page)
+  await block.clickNext()
 
   await page.type('textarea >> nth=0', 'type `')
   expect(await page.inputValue('textarea >> nth=0')).toBe('type ``')
@@ -282,10 +275,11 @@ test('auto completion and auto pair', async ({ page }) => {
   expect(await page.inputValue('textarea >> nth=0')).toBe('type `code here`')
 })
 
-test('invalid page props #3944', async ({ page }) => {
+test('invalid page props #3944', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', 'public:: true\nsize:: 65535')
+  await block.mustFill('public:: true\nsize:: 65535')
   await page.press('textarea >> nth=0', 'Enter')
-  await enterNextBlock(page)
+  // Force rendering property block
+  await block.clickNext()
 })

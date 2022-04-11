@@ -164,7 +164,7 @@
             (notification/show!
              [:div
               "Parsing current shared content are not supported. Please report the following codes on "
-              [:a {:href "https://github.com/logseq/logseq/issues"
+              [:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
                    :target "_blank"} "Github"]
               ". We will look into it soon."
               [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))))
