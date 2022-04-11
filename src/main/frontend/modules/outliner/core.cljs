@@ -595,16 +595,17 @@
 
 (defn- build-drag-blocks-next-tx
   [blocks target-block]
-  (let [top-level-blocks (get-top-level-blocks blocks)
+  (let [id->blocks (zipmap (map :db/id blocks) blocks)
+        top-level-blocks (get-top-level-blocks blocks)
         top-level-blocks-ids (set (map :db/id top-level-blocks))
         right-block (:data (tree/-get-right (block (last top-level-blocks))))]
     (when (and right-block
                (not (contains? top-level-blocks-ids (:db/id right-block))))
       {:db/id (:db/id right-block)
-       :block/left (loop [block right-block]
-                     (if (contains? top-level-blocks-ids (:db/id (:block/left block)))
-                       (recur (:block/left block))
-                       (:db/id (:block/left (db/entity (:db/id block))))))})))
+       :block/left (loop [block (:block/left right-block)]
+                     (if (contains? top-level-blocks-ids (:db/id block))
+                       (recur (:block/left (get id->blocks (:db/id block))))
+                       (:db/id block)))})))
 
 (defn move-blocks
   [blocks target-block sibling?]
