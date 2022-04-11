@@ -222,24 +222,27 @@
 (defn- blocks-with-level
   "Should be sorted already."
   [blocks]
-  (let [root (assoc (first blocks) :block/level 1)
-        result (loop [m [[(:db/id root) root]]
-                      blocks (rest blocks)
-                      last-top-level-block root]
-                 (if (empty? blocks)
-                   m
-                   (let [block (first blocks)
-                         parent-id (:db/id (:block/parent block))
-                         parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-                         block (assoc block :block/level (inc parent-level))
-                         top-level? (= 1 (:block/level block))
-                         block' (if top-level?
-                                  (assoc block :block/left [:block/uuid (:block/uuid last-top-level-block)])
-                                  block)
-                         m' (vec (conj m [(:db/id block') block']))
-                         last-top-level-block' (if top-level? block' last-top-level-block)]
-                     (recur m' (rest blocks) last-top-level-block'))))]
-    (map last result)))
+  (let [first-block (first blocks)]
+    (if (and (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
+      blocks
+      (let [root (assoc (first blocks) :block/level 1)
+            result (loop [m [[(:db/id root) root]]
+                          blocks (rest blocks)
+                          last-top-level-block root]
+                     (if (empty? blocks)
+                       m
+                       (let [block (first blocks)
+                             parent-id (:db/id (:block/parent block))
+                             parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+                             block (assoc block :block/level (inc parent-level))
+                             top-level? (= 1 (:block/level block))
+                             block' (if top-level?
+                                      (assoc block :block/left [:block/uuid (:block/uuid last-top-level-block)])
+                                      block)
+                             m' (vec (conj m [(:db/id block') block']))
+                             last-top-level-block' (if top-level? block' last-top-level-block)]
+                         (recur m' (rest blocks) last-top-level-block'))))]
+        (map last result)))))
 
 (defn get-top-level-blocks
   [blocks]
@@ -306,8 +309,7 @@
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
   [blocks target-block {:keys [sibling? keep-uuid? move?]}]
-  (let [target-block (if (map? target-block) target-block
-                         (db/pull (:db/id target-block)))
+  (let [target-block (db/pull (:db/id target-block))
         sibling? (if (:block/name target-block) false sibling?)
         keep-uuid? (if move? true keep-uuid?)
         replace-empty-target? (and sibling?

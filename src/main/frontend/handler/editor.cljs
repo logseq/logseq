@@ -2976,13 +2976,13 @@
           (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (paste-segmented-text format text)
+          (paste-segmented-text format (string/trim text))
 
           [:markdown true _ true]
           (reset! *stop-event? false)
 
           [:org _ true false]
-          (paste-segmented-text format text)
+          (paste-segmented-text format (string/trim text))
 
           [:org _ true true]
           (reset! *stop-event? false))))
