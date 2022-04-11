@@ -39,31 +39,33 @@
            (not= (:db/id (:block/parent current-block))
                  (:db/id target-block)))))))
 
-(defn move-block
+(defn move-blocks
   "There can be two possible situations:
-  1. Move a block in the same file (either top-to-bottom or bottom-to-top).
-  2. Move a block between two different files.
+  1. Move blocks in the same file (either top-to-bottom or bottom-to-top).
+  2. Move blocks between two different files.
 
   move-to: :sibling :nested :top nil
 
   Notes:
   Sometimes we might need to move a parent block to it's own child.
   "
-  [^js event current-block target-block move-to]
-  (let [top? (= move-to :top)
+  [^js event blocks target-block move-to]
+  (let [blocks' (map #(dissoc % :block/level :block/children) blocks)
+        first-block (first blocks')
+        top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        current-format (:block/format current-block)
+        current-format (:block/format first-block)
         target-format (:block/format target-block)]
     (cond
       ;; alt pressed, make a block-ref
-      alt-key?
+      (and alt-key? (= (count blocks) 1))
       (do
-        (editor-handler/set-block-property! (:block/uuid current-block)
+        (editor-handler/set-block-property! (:block/uuid first-block)
                                             :id
-                                            (str (:block/uuid current-block)))
+                                            (str (:block/uuid first-block)))
         (editor-handler/api-insert-new-block!
-         (util/format "((%s))" (str (:block/uuid current-block)))
+         (util/format "((%s))" (str (:block/uuid first-block)))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
           :before? top?}))
@@ -77,8 +79,8 @@
 
 
       ;; movable
-      (and (every? map? [current-block target-block])
-           (movable? current-block target-block move-to))
+      (and (every? map? [first-block target-block])
+           (movable? first-block target-block move-to))
       (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
           {:outliner-op :move-blocks}
@@ -88,10 +90,10 @@
                      (tree/-get-left-id target-node))]
               (if first-child?
                 (let [parent (tree/-get-parent target-node)]
-                  (outliner-core/move-blocks! [current-block] (:data parent) false))
+                  (outliner-core/move-blocks! blocks (:data parent) false))
                 (let [before-node (tree/-get-left target-node)]
-                  (outliner-core/move-blocks! [current-block] (:data before-node) true))))
-            (outliner-core/move-blocks! [current-block] target-block (not nested?)))))
+                  (outliner-core/move-blocks! blocks (:data before-node) true))))
+            (outliner-core/move-blocks! blocks target-block (not nested?)))))
 
       :else
       nil)))

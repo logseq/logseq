@@ -1376,7 +1376,6 @@
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
-  (state/clear-selection!)
   (reset! *dragging? true)
   (reset! *dragging-block block))
 
@@ -2114,12 +2113,12 @@
   (reset! *move-to nil))
 
 (defn- block-drop
-  [event uuid block *move-to]
+  [event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (dnd/move-block event @*dragging-block
-                    block
-                    @*move-to))
+    (let [selected (editor-handler/get-selected-blocks)
+          blocks (if (seq selected) selected [@*dragging-block])]
+      (dnd/move-blocks event blocks target-block @*move-to)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
   (reset! *drag-to-block nil)

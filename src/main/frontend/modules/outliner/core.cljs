@@ -226,6 +226,7 @@
 (defn- blocks-with-level
   "Should be sorted already."
   [blocks]
+  (def debug-blocks blocks)
   (let [first-block (first blocks)]
     (if (and (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
       blocks

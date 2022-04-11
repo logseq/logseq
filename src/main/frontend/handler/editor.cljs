@@ -1761,12 +1761,16 @@
           (when (seq blocks)
             (move-nodes blocks)))))))
 
+(defn get-selected-blocks
+  []
+  (let [blocks-dom-nodes (state/get-selection-blocks)]
+    (seq (reorder-selected-blocks blocks-dom-nodes))))
+
 ;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
-  (let [blocks-dom-nodes (state/get-selection-blocks)
-        blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
+  (let [blocks (get-selected-blocks)]
     (when (seq blocks)
       (outliner-tx/transact!
         {:outliner-op :move-blocks}
