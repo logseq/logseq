@@ -27,31 +27,33 @@
 
   ILoad
   (-load [_]
-    (let [repo (state/get-current-repo)]
-      (p/let [content (p/catch
-                          (fs/read-file
-                           (config/get-repo-dir (state/get-current-repo))
-                           (load-path location))
-                          (constantly nil))]
-        (when-let [content (and (some? content)
-                                (try (cljs.reader/read-string content)
-                                     (catch js/Error e
-                                       (println (util/format "load persist-var failed: %s"  (load-path location)))
-                                       (js/console.dir e))))]
-          (swap! *value (fn [o]
-                          (-> o
-                              (assoc-in [repo :loaded?] true)
-                              (assoc-in [repo :value] content))))))))
+    (when-not (config/demo-graph?)
+      (let [repo (state/get-current-repo)]
+        (p/let [content (p/catch
+                         (fs/read-file
+                          (config/get-repo-dir (state/get-current-repo))
+                          (load-path location))
+                         (constantly nil))]
+          (when-let [content (and (some? content)
+                                  (try (cljs.reader/read-string content)
+                                       (catch js/Error e
+                                         (println (util/format "load persist-var failed: %s"  (load-path location)))
+                                         (js/console.dir e))))]
+            (swap! *value (fn [o]
+                            (-> o
+                                (assoc-in [repo :loaded?] true)
+                                (assoc-in [repo :value] content)))))))))
   (-loaded? [_]
     (get-in @*value [(state/get-current-repo) :loaded?]))
 
   ISave
   (-save [_]
-    (let [path (load-path location)
-          repo (state/get-current-repo)
-          content (str (get-in @*value [repo :value]))
-          dir (config/get-repo-dir repo)]
-      (fs/write-file! repo dir path content nil)))
+    (when-not (config/demo-graph?)
+      (let [path (load-path location)
+            repo (state/get-current-repo)
+            content (str (get-in @*value [repo :value]))
+            dir (config/get-repo-dir repo)]
+        (fs/write-file! repo dir path content nil))))
 
   IDeref
   (-deref [_this]
