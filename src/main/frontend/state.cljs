@@ -1466,7 +1466,13 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content :copy/block-ids ids}))
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/block-ids ids
+                            :copy/full-blocks nil}))
+
+(defn set-copied-full-blocks!
+  [blocks]
+  (set-state! [:copy/blocks :copy/full-blocks] blocks))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))

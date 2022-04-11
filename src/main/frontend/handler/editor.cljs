@@ -2937,8 +2937,11 @@
            (not (string/blank? text))
            (= (string/replace (string/trim text) "\r" "")
               (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
-      (let [blocks (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids)]
+      (let [blocks (or
+                    (:copy/full-blocks copied-blocks)
+                    (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
         (when (seq blocks)
+          (state/set-copied-full-blocks! blocks)
           (paste-blocks blocks {})))
 
       (and (util/url? text)

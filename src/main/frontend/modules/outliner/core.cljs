@@ -10,7 +10,8 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]))
 
 (defrecord Block [data])
 
@@ -237,7 +238,7 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly random-uuid)))
-        id->new-uuid (->> (map (fn [block] (if-let [id (:db/id block)]
+        id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
                                              [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
         target-page (or (:db/id (:block/page target-block))
@@ -285,6 +286,9 @@
         blocks' (blocks-with-level blocks)
         delete-target-tx (when replace-empty-target? [[:db.fn/retractEntity (:db/id target-block)]])
         tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target? keep-uuid?)
+        uuids-tx (->> (map :block/uuid tx)
+                      (remove nil?)
+                      (map (fn [uuid] {:block/uuid uuid})))
         tx (assign-temp-id tx)
         target-node (block target-block)
         next (if sibling?
@@ -294,7 +298,7 @@
                   (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                     [{:block/uuid (tree/-get-id next)
                       :block/left (:db/id left)}]))
-        full-tx (util/concat-without-nil delete-target-tx tx next-tx)]
+        full-tx (util/concat-without-nil delete-target-tx uuids-tx tx next-tx)]
     {:tx-data full-tx
      :blocks tx}))
 
