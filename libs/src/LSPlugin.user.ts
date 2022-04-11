@@ -30,7 +30,8 @@ import {
   UserProxyTags,
   BlockUUID,
   BlockEntity,
-  IDatom, IAssetsProxy,
+  IDatom,
+  IAssetsProxy,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -246,10 +247,15 @@ const editor: Partial<IEditorProxy> = {
   scrollToBlockInPage(
     this: LSPluginUser,
     pageName: BlockPageName,
-    blockId: BlockIdentity
+    blockId: BlockIdentity,
+    opts?: { replaceState: boolean }
   ) {
     const anchor = `block-content-` + blockId
-    this.App.pushState('page', { name: pageName }, { anchor })
+    if (opts?.replaceState) {
+      this.App.replaceState('page', { name: pageName }, { anchor })
+    } else {
+      this.App.pushState('page', { name: pageName }, { anchor })
+    }
   },
 }
 

@@ -599,7 +599,11 @@ export interface IEditorProxy extends Record<string, any> {
 
   getBlockProperties: (block: BlockIdentity) => Promise<any>
 
-  scrollToBlockInPage: (pageName: BlockPageName, blockId: BlockIdentity) => void
+  scrollToBlockInPage: (
+    pageName: BlockPageName,
+    blockId: BlockIdentity,
+    opts?: { replaceState: boolean }
+  ) => void
 
   openInRightSidebar: (uuid: BlockUUID) => void
 
@@ -691,7 +695,16 @@ export interface IUIProxy {
  * Assets related APIs
  */
 export interface IAssetsProxy {
-  listFilesOfCurrentGraph(exts: string | string[]): Promise<{ path: string, size: number, accessTime: number, modifiedTime: number, changeTime: number, birthTime: number }>
+  listFilesOfCurrentGraph(
+    exts: string | string[]
+  ): Promise<{
+    path: string
+    size: number
+    accessTime: number
+    modifiedTime: number
+    changeTime: number
+    birthTime: number
+  }>
 }
 
 export interface ILSPluginThemeManager extends EventEmitter {
