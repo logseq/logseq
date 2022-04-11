@@ -1782,14 +1782,10 @@
   (let [blocks-dom-nodes (state/get-selection-blocks)
         blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
     (when (seq blocks)
-      (let [end-node (get-top-level-end-node blocks)
-            end-node-parent (tree/-get-parent end-node)
-            top-level-blocks (filter #(= (get-in end-node-parent [:data :db/id])
-                                         (get-in % [:block/parent :db/id])) blocks)]
-        (outliner-tx/transact!
-          {:outliner-op :move-blocks}
-          (outliner-core/indent-outdent-blocks! top-level-blocks (= direction :right)))
-        (rehighlight-selected-nodes)))))
+      (outliner-tx/transact!
+        {:outliner-op :move-blocks}
+        (outliner-core/indent-outdent-blocks! blocks (= direction :right)))
+      (rehighlight-selected-nodes))))
 
 (defn- get-link [format link label]
   (let [link (or link "")

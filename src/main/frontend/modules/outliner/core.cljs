@@ -193,6 +193,11 @@
           children (db-model/get-block-immediate-children (state/get-current-repo) parent-id)]
       (map block children))))
 
+(defn get-right-node
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (tree/-get-right node))
+
 (defn get-left-sibling
   [db-id]
   (when db-id
@@ -415,17 +420,6 @@
           (ds/add-txs txs-state txs))))
     {:tx-data @txs-state}))
 
-(defn first-child?
-  [node]
-  (=
-   (tree/-get-left-id node)
-   (tree/-get-parent-id node)))
-
-(defn- first-level?
-  "Can't be outdented."
-  [node]
-  (nil? (tree/-get-parent (tree/-get-parent node))))
-
 (defn get-right-siblings
   [node]
   {:pre [(tree/satisfied-inode? node)]}
@@ -434,70 +428,6 @@
       (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
            last
            rest))))
-
-(defn- logical-outdenting
-  [txs-state parent nodes first-node last-node last-node-right parent-parent-id parent-right]
-  (some-> last-node-right
-          (tree/-set-left-id (tree/-get-left-id first-node))
-          (tree/-save txs-state))
-  (let [first-node (tree/-set-left-id first-node (tree/-get-id parent))]
-    (doseq [node (cons first-node (rest nodes))]
-      (-> (tree/-set-parent-id node parent-parent-id)
-          (tree/-save txs-state))))
-  (some-> parent-right
-          (tree/-set-left-id (tree/-get-id last-node))
-          (tree/-save txs-state)))
-
-(defn indent-outdent-blocks
-  [blocks indent?]
-  (let [nodes (map block blocks)
-        txs-state (ds/new-outliner-txs-state)
-        first-node (first nodes)
-        last-node (last nodes)]
-    (if indent?
-      (when-not (first-child? first-node)
-        (let [first-node-left-id (tree/-get-left-id first-node)
-              last-node-right (tree/-get-right last-node)
-              parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
-                                                                               first-node-left-id)
-                                              last
-                                              :block/uuid)
-                                          first-node-left-id)
-              first-node (tree/-set-left-id first-node parent-or-last-child-id)]
-          (doseq [node (cons first-node (rest nodes))]
-            (-> (tree/-set-parent-id node first-node-left-id)
-                (tree/-save txs-state)))
-          (some-> last-node-right
-                  (tree/-set-left-id first-node-left-id)
-                  (tree/-save txs-state))
-          (when-let [parent (get-block-by-id first-node-left-id)]
-            (when (db-model/block-collapsed? first-node-left-id)
-              (set-block-collapsed! txs-state (:db/id (get-data parent)) false)))))
-      (when-not (first-level? first-node)
-        (let [parent (tree/-get-parent first-node)
-              parent-parent-id (tree/-get-parent-id parent)
-              parent-right (tree/-get-right parent)
-              last-node-right (tree/-get-right last-node)
-              last-node-id (tree/-get-id last-node)]
-          (logical-outdenting txs-state parent nodes first-node last-node last-node-right parent-parent-id parent-right)
-          (when-not (state/logical-outdenting?)
-            ;; direct outdenting (the old behavior)
-            (let [right-siblings (get-right-siblings last-node)
-                  right-siblings (doall
-                                  (map (fn [sibling]
-                                         (some->
-                                          (tree/-set-parent-id sibling last-node-id)
-                                          (tree/-save txs-state)))
-                                    right-siblings))]
-              (when-let [last-node-right (first right-siblings)]
-                (let [last-node-children (tree/-get-children last-node)
-                      left-id (if (seq last-node-children)
-                                (tree/-get-id (last last-node-children))
-                                last-node-id)]
-                  (when left-id
-                    (some-> (tree/-set-left-id last-node-right left-id)
-                            (tree/-save txs-state))))))))))
-    {:tx-data @txs-state}))
 
 (defn- build-drag-blocks-next-tx
   [blocks target-block]
@@ -575,10 +505,27 @@
       :else
       nil)))
 
-(defn get-right-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (tree/-get-right node))
+(defn indent-outdent-blocks
+  [blocks indent?]
+  (let [first-block (first blocks)
+        left (db/entity (:db/id (:block/left first-block)))
+        parent (:block/parent first-block)]
+    (if indent?
+      (when left (move-blocks blocks left false))
+      (when (and parent (not (:block/name (db/entity (:db/id parent)))))
+        (let [result (move-blocks blocks parent true)]
+          ;; direct outdenting (default behavior)
+          (when-not (state/logical-outdenting?))
+          (let [top-level-blocks (get-top-level-blocks blocks)
+                last-top-block (last top-level-blocks)
+                right-siblings (->> (get-right-siblings (block last-top-block))
+                                    (map :data))]
+            (when (seq right-siblings)
+              (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child (db/get-conn) (:db/id last-top-block))]
+                              (move-blocks right-siblings (db/entity last-direct-child-id) true)
+                              (move-blocks right-siblings last-top-block false))]
+                {:tx-data (util/concat-without-nil (:tx-data result) (:tx-data result2))
+                 :tx-meta (:tx-meta result)}))))))))
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
