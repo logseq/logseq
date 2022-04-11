@@ -227,9 +227,12 @@
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
 (defn- assign-temp-id
-  [blocks]
+  [blocks replace-empty-target? target-block]
   (map-indexed (fn [idx block]
-                 (assoc block :db/id (dec (- idx)))) blocks))
+                 (let [db-id (if (and replace-empty-target? (zero? idx))
+                               (:db/id target-block)
+                               (dec (- idx)))]
+                   (assoc block :db/id db-id))) blocks))
 
 (defn- insert-blocks-aux
   [blocks target-block sibling? replace-empty-target? keep-uuid?]
@@ -238,6 +241,9 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly random-uuid)))
+        uuids (if replace-empty-target?
+                (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
+                uuids)
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
                                              [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
@@ -284,12 +290,11 @@
                                    (string/blank? (:block/content target-block))
                                    (> (count blocks) 1))
         blocks' (blocks-with-level blocks)
-        delete-target-tx (when replace-empty-target? [[:db.fn/retractEntity (:db/id target-block)]])
         tx (insert-blocks-aux blocks' target-block sibling? replace-empty-target? keep-uuid?)
         uuids-tx (->> (map :block/uuid tx)
                       (remove nil?)
                       (map (fn [uuid] {:block/uuid uuid})))
-        tx (assign-temp-id tx)
+        tx (assign-temp-id tx replace-empty-target? target-block)
         target-node (block target-block)
         next (if sibling?
                (tree/-get-right target-node)
@@ -298,7 +303,9 @@
                   (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                     [{:block/uuid (tree/-get-id next)
                       :block/left (:db/id left)}]))
-        full-tx (util/concat-without-nil delete-target-tx uuids-tx tx next-tx)]
+        full-tx (util/concat-without-nil uuids-tx tx next-tx)]
+    (when (and replace-empty-target? (state/editing?))
+      (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
     {:tx-data full-tx
      :blocks tx}))
 
