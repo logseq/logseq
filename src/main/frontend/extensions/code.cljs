@@ -138,8 +138,7 @@
             [frontend.config :as ui-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [rum.core :as rum]))
 
 ;; codemirror
 
@@ -255,8 +254,7 @@
                              (when-not (gobj/get cm "escPressed")
                                (save-file-or-block-when-blur-or-esc! editor textarea config state))
                              (state/set-block-component-editing-mode! false)))
-        (.on editor "focus" (fn [e]
-                              (when e (util/stop e))
+        (.on editor "focus" (fn [_e]
                               (state/set-block-component-editing-mode! true)))
         (.addEventListener element "mousedown"
                            (fn [e]
