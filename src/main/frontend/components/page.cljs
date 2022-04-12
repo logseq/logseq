@@ -87,8 +87,8 @@
      [:span.bullet-container.cursor
       [:span.bullet]]]
     [:div.flex.flex-1 {:on-click (fn []
-                                   (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:check-empty-page? false})]
-                                     (editor-handler/edit-block! block :max (:block/uuid block))))}
+                                   (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name :check-empty-page? false)]
+                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))}
      [:span.opacity-50
       "Click here to edit..."]]]])
 
