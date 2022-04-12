@@ -214,7 +214,8 @@
 (defn- blocks-with-level
   "Should be sorted already."
   [blocks move?]
-  (let [first-block (first blocks)]
+  (let [blocks (if (sequential? blocks) blocks [blocks])
+        first-block (first blocks)]
     (if (and (not move?) (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
       blocks
       (let [root (assoc (first blocks) :block/level 1)
@@ -338,7 +339,8 @@
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
   [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op]}]
-  (let [target-block (db/pull (:db/id target-block))
+  (let [blocks (if (sequential? blocks) blocks [blocks])
+        target-block (db/pull (:db/id target-block))
         sibling? (if (:block/name target-block) false sibling?)
         keep-uuid? (if move? true keep-uuid?)
         replace-empty-target? (and sibling?
@@ -476,33 +478,33 @@
 (defn move-blocks
   [blocks target-block {:keys [sibling? outliner-op]}]
   ;; target is not included in `blocks`
-  (when (and
-         target-block
-         (not (contains? (set (map :db/id blocks)) (:db/id target-block))))
-    (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block))
-                       (map :db/id)
-                       (set))
-          move-parents-to-child? (some parents (map :db/id blocks))]
-      (when-not move-parents-to-child?
-        (let [blocks (if (coll? blocks) blocks [blocks])
-              blocks (get-top-level-blocks blocks)
-              first-block (first blocks)
-              {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
-                                                                    :outliner-op outliner-op
-                                                                    :move? true})]
-          (when (seq tx-data)
-            (let [first-block-page (:db/id (:block/page first-block))
-                  target-page (:db/id (:block/page target-block))
-                  not-same-page? (not= first-block-page target-page)
-                  move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
-                  full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
-                  tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
-                                   :target (:db/id target-block)}
-                            not-same-page?
-                            (assoc :from-page first-block-page
-                                   :target-page target-page))]
-              {:tx-data full-tx
-               :tx-meta tx-meta})))))))
+  (let [blocks (if (sequential? blocks) blocks [blocks])]
+    (when (and
+           target-block
+           (not (contains? (set (map :db/id blocks)) (:db/id target-block))))
+      (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block))
+                         (map :db/id)
+                         (set))
+            move-parents-to-child? (some parents (map :db/id blocks))]
+        (when-not move-parents-to-child?
+          (let [blocks (get-top-level-blocks blocks)
+                first-block (first blocks)
+                {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
+                                                                      :outliner-op outliner-op
+                                                                      :move? true})]
+            (when (seq tx-data)
+              (let [first-block-page (:db/id (:block/page first-block))
+                    target-page (:db/id (:block/page target-block))
+                    not-same-page? (not= first-block-page target-page)
+                    move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
+                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
+                    tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                                     :target (:db/id target-block)}
+                              not-same-page?
+                              (assoc :from-page first-block-page
+                                     :target-page target-page))]
+                {:tx-data full-tx
+                 :tx-meta tx-meta}))))))))
 
 (defn move-blocks-up-down
   "Move blocks up/down."
