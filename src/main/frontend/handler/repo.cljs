@@ -677,3 +677,8 @@
   [graph]
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
+
+(defn graph-ready!
+  "Call electron that the graph is loaded."
+  [graph]
+  (ipc/ipc "graphReady" graph))

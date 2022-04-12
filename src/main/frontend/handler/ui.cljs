@@ -305,5 +305,6 @@
   ([_e repo]
    ;; TODO: find out a better way to open a new window with a different repo path. Using local storage for now
    ;; TODO: also write local storage with the current repo state, to make behavior consistent
+   ;; then we can remove the `openNewWindowOfGraph` ipcMain call
    (when (string? repo) (storage/set :git/current-repo repo))
    (ipc/ipc "openNewWindow")))

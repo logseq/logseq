@@ -265,10 +265,9 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-;; TODO: when "only restore the current graph instead of all the graphs" is done,
-;; remove invoke of :graph/ready in graph/switch and restore-and-setup!
 (defmethod handle :graph/ready [[_ repo]]
-  (search-handler/rebuild-indices-when-stale! repo))
+  (search-handler/rebuild-indices-when-stale! repo)
+  (repo-handler/graph-ready! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
