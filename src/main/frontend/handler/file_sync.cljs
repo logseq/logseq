@@ -32,8 +32,8 @@
           (persist-var/persist-save sync/graphs-txid)
           (swap! refresh-file-sync-component not))
         (if (= 404 (get-in (ex-data r) [:err :status]))
-          (notification/show! (str "create graph failed: already existed graph: " name) :warning)
-          (notification/show! (str "create graph failed: " r) :warning))))))
+          (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
+          (notification/show! (str "Create graph failed: " r) :warning))))))
 
 (defn delete-graph
   [graph-uuid]
@@ -41,8 +41,8 @@
   (go
     (let [r (<! (sync/delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
-        (notification/show! (str "delete graph failed: " graph-uuid) :warning)
-        (notification/show! (str "graph deleted") :success)))))
+        (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
+        (notification/show! (str "Graph deleted") :success)))))
 
 (defn list-graphs
   []
