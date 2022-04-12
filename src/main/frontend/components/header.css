@@ -224,9 +224,19 @@ html.is-native-ipad {
         padding-top: 0px;
     }
 
-    #main-content-container {
-        padding-top: 0px;
-        height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
+     #main-content-container {
+         padding-left: 22px;
+         padding-right: 14px;
+         padding-top: 0px;
+         height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
+
+         @screen sm {
+             padding-left: 2rem;
+         }
+
+         .page {
+             margin-top: 24px;
+         }
     }
     
     .cp__header > .r {

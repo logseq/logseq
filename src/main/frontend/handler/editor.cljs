@@ -54,7 +54,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]))
+            [frontend.util.keycode :as keycode]
+            ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1524,6 +1525,13 @@
     (p/then
      (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
      (fn [] [repo-dir assets-dir]))))
+
+(defn get-asset-path [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))
+          path (path/join repo-dir assets-dir filename)]
+    (if (mobile-util/native-android?)
+      path
+      (js/encodeURI (js/decodeURI path)))))
 
 (defn save-assets!
   ([_ repo files]
@@ -3042,7 +3050,7 @@
       (when (<  vw-height (+ cursor-y mobile-toolbar-height))
         (let [main-node (gdom/getElement "main-content-container")
               scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top (/ vw-height 2))))))))
+          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]

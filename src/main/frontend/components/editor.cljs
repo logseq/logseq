@@ -27,6 +27,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.handler.history :as history]
+            [frontend.mobile.footer :as footer]
             [frontend.handler.config :as config-handler]))
 
 (rum/defc commands < rum/reactive
@@ -294,23 +295,17 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  (let [vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)
-        commands (mobile-bar-commands parent-state parent-id)
+  (let [commands (mobile-bar-commands parent-state parent-id)
         sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2
-     {:style {:bottom (if vw-state
-                        (- (.-clientHeight js/document.documentElement)
-                           (:height vw-state)
-                           (:offset-top vw-state))
-                        0)}
-      :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
      [:div.toolbar-commands
       (mobile-bar-indent-outdent true "arrow-bar-right")
       (mobile-bar-indent-outdent false "arrow-bar-left")
       (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
       (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
-      (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")
+      (mobile-bar-command #(if (state/sub :document/mode?)
+                             (editor-handler/insert-new-block! nil)
+                             (commands/simple-insert! parent-id "\n" {})) "arrow-back")
       (for [command sorted-commands]
         ((first command) commands))]
      [:div.toolbar-hide-keyboard
@@ -608,12 +603,20 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id _config]
+  [state {:keys [format block]} id config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-     (when (or (mobile-util/is-native-platform?) config/mobile?)
+
+     (when (= (state/sub :editor/record-status) "RECORDING")
+       [:div#audio-record-toolbar
+        (footer/audio-record-cp)])
+
+     (when (and (or (mobile-util/is-native-platform?)
+                    config/mobile?)
+                (not (:review-cards? config)))
        (mobile-bar state id))
+     
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)

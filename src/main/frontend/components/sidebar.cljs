@@ -33,7 +33,8 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
-            [frontend.components.onboarding :as onboarding]))
+            [frontend.components.onboarding :as onboarding]
+            [frontend.mobile.footer :as footer]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -290,7 +291,8 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+      
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -499,7 +501,13 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})]
+               :main-content        main-content})
+
+        (when (and (mobile-util/is-native-platform?)
+                   current-repo
+                   (not (state/sub :modal/show?)))
+          (footer/footer))]
+       
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]
@@ -518,4 +526,4 @@
       (when
           (and (not config/mobile?)
                (not config/publishing?))
-        (help-button))])))
+          (help-button))])))

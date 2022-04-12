@@ -274,6 +274,17 @@
   }
 }
 
+html.is-native-android,
+html.is-native-ipad,
+html.is-native-iphone,
+html.is-native-iphone-without-notch {
+    
+    .ls-page-title {
+        margin: 0px 0px 24px -15px;
+        padding: 0px;
+    }
+}
+
 /* Change to another cursor style if Shift key is active */
 [data-active-keystroke*="Shift" i]
 :is(.journal-title, .page-title,
@@ -325,6 +336,14 @@ html.is-native-ios {
         justify-content: flex-end;
       }
     }
+  }
+
+  .block-content-wrapper {
+      /* 38px is the width of block-control */
+      width: calc(100% - 35px);
+      @screen sm {
+          width: calc(100% - 33px);
+      }
   }
 }
 

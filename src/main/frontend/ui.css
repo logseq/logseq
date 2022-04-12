@@ -146,22 +146,50 @@
           }
       }
   }
+
+  &[label="flashcards__cp"] {
+      .panel-content {
+          padding: 2rem 0rem;
+          
+          @screen sm {
+              padding: 2rem 2rem;
+          }
+      }
+  }
 }
 
 html.is-native-andorid,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
-    .references .foldable-title {
-        margin-left: 0px
-    }
-
-    .cards-review .block-control {
-        margin-left: -24px;
+    .references  {
+        .blocks-container {
+            transform: translateX(-8px);
+            width: 104%;
+        }
     }
 
     .ls-card {
-        min-height: 75vh;
+        min-height: 65vh;
+    }
+
+    .ui__modal {
+        &[label="flashcards__cp"] {
+            .panel-content {
+                padding: 2rem 1rem 1rem;
+                width: 90vw;
+
+                .cards-review {
+                    padding-left: 0px;
+                    padding-right: 0px;
+                }
+
+                .blocks-container {
+                    transform: translateX(-7px);
+                    width: 103%;
+                }
+            }
+        }
     }
 }
 

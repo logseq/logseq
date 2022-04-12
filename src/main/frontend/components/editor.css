@@ -28,6 +28,19 @@
   }
 }
 
+#audio-record-toolbar {
+    position: fixed;
+    background-color: var(--ls-secondary-background-color);
+    bottom: 45px;
+    width: 88px;
+    justify-content: left;
+    left: 5px;
+    transition: none;
+    z-index: 9999;
+    padding: 5px 5px 0px 5px;
+    border-radius: 5px;
+}
+
 .editor-wrapper {
   width: 100%;
   margin: 0 auto;

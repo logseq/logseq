@@ -65,6 +65,8 @@
 	<string></string>
 	<key>NSFileProviderPresenceUsageDescription</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We will access your microphone to record audio notes</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We will access your album when you save a photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

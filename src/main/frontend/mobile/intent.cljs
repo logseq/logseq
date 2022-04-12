@@ -14,7 +14,8 @@
             ["path" :as path]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.notification :as notification]
-            [clojure.pprint :as pprint]))
+            [clojure.pprint :as pprint]
+            [clojure.set :as set]))
 
 (defn- handle-received-text [result]
   (let [{:keys [title url]} result
@@ -51,64 +52,79 @@
                    (string/replace "{url}" (or url "")))]
     (if (state/get-edit-block)
       (state/append-current-edit-content! values)
-      (editor-handler/api-insert-new-block! values {:page page}))))
+      (editor-handler/api-insert-new-block! values {:page page
+                                                    :reuse-last-block? true}))))
 
-(defn get-asset-path
-  [filename]
-  (p/let [[repo-dir assets-dir]
-          (editor-handler/ensure-assets-dir! (state/get-current-repo))
-          path (path/join repo-dir assets-dir filename)]
-    (if (mobile-util/native-android?)
-      path
-      (js/encodeURI (js/decodeURI path)))))
-
-(defn- handle-received-media [result]
-  (p/let [{:keys [title url]} result
-          page (or (state/get-current-page)
-                   (string/lower-case (date/journal-name)))
-          format (db/get-page-format page)
-          time (date/get-current-time)
-          basename (path/basename url)
+(defn- embed-asset-file [url format]
+  (p/let [basename (path/basename url)
           label (-> basename util/node-path.name)
-          path (get-asset-path (or (path/basename url) title))
-          _ (p/catch
-                (.copy Filesystem (clj->js {:from url :to path}))
-                (fn [error]
-                  (log/error :copy-file-error {:error error})))
+          time (date/get-current-time)
+          path (editor-handler/get-asset-path basename)
+          _file (p/catch
+                    (.copy Filesystem (clj->js {:from url :to path}))
+                    (fn [error]
+                      (log/error :copy-file-error {:error error})))
           url (util/format "../assets/%s" basename)
           url (editor-handler/get-asset-file-link format url label true)
           template (get-in (state/get-config)
-                           [:quick-capture-template :image]
-                           "**{time}** [[quick capture]]: {url}")
-          values (-> (string/replace template "{time}" time)
-                     (string/replace "{url}" (or url "")))]
-    (if (state/get-edit-block)
-      (state/append-current-edit-content! values)
-      (editor-handler/api-insert-new-block! values {:page page}))))
+                           [:quick-capture-templates :media]
+                           "**{time}** [[quick capture]]: {url}")]
+    (-> (string/replace template "{time}" time)
+        (string/replace "{url}" (or url "")))))
 
-(defn- handle-received-application [result]
-  (p/let [{:keys [title url]} result
-          page (or (state/get-current-page) (string/lower-case (date/journal-name)))
-          time (date/get-current-time)
+(defn- embed-text-file [url title]
+  (p/let [time (date/get-current-time)
           title (some-> (or title (path/basename url))
                         js/decodeURIComponent
                         util/node-path.name)
-          path (and url (path/join (config/get-repo-dir (state/get-current-repo))
-                                   (config/get-pages-directory)
-                                   (path/basename url)))
+          path (path/join (config/get-repo-dir (state/get-current-repo))
+                          (config/get-pages-directory)
+                          (path/basename url))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]
                   (log/error :copy-file-error {:error error})))
           url (util/format "[[%s]]" title)
           template (get-in (state/get-config)
-                           [:quick-capture-template :image]
-                           "**{time}** [[quick capture]]: {url}")
-          values (-> (string/replace template "{time}" time)
-                     (string/replace "{url}" (or url "")))]
+                           [:quick-capture-template :text]
+                           "**{time}** [[quick capture]]: {url}")]
+    (-> (string/replace template "{time}" time)
+        (string/replace "{url}" (or url "")))))
+
+(defn- handle-received-media [result]
+  (p/let [{:keys [url]} result
+          page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          format (db/get-page-format page)
+          content (embed-asset-file url format)]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! values)
-      (editor-handler/api-insert-new-block! values {:page page}))))
+      (state/append-current-edit-content! content)
+      (editor-handler/api-insert-new-block! content {:page page
+                                                     :reuse-last-block? true}))))
+
+(defn- handle-received-application [result]
+  (p/let [{:keys [title url type]} result
+          page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          format (db/get-page-format page)
+          application-type (last (string/split type "/"))
+          content (cond
+                    (config/mldoc-support? application-type)
+                    (embed-text-file url title)
+
+                    (contains? (set/union #{:pdf} config/media-formats) (keyword application-type))
+                    (embed-asset-file url format)
+
+                    :else
+                    (notification/show!
+                     [:div
+                      (str "Import " application-type " file has not been supported. You can report it on ")
+                      [:a {:href "https://github.com/logseq/logseq/issues"
+                           :target "_blank"} "Github"]
+                      ". We will look into it soon."]
+                     :warning false))]
+    (if (state/get-edit-block)
+      (state/append-current-edit-content! content)
+      (editor-handler/api-insert-new-block! content {:page page
+                                                     :reuse-last-block? true}))))
 
 (defn decode-received-result [m]
   (into {} (for [[k v] m]
