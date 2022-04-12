@@ -347,26 +347,32 @@
         tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
                                                     :replace-empty-target? replace-empty-target?
                                                     :keep-uuid? keep-uuid?
-                                                    :move? move?})
-        uuids-tx (->> (map :block/uuid tx)
-                      (remove nil?)
-                      (map (fn [uuid] {:block/uuid uuid})))
-        tx (if move?
-             tx
-             (assign-temp-id tx replace-empty-target? target-block))
-        target-node (block target-block)
-        next (if sibling?
-               (tree/-get-right target-node)
-               (tree/-get-down target-node))
-        next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
-                  (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                    [{:block/uuid (tree/-get-id next)
-                      :block/left (:db/id left)}]))
-        full-tx (util/concat-without-nil uuids-tx tx next-tx)]
-    (when (and replace-empty-target? (state/editing?))
-      (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
-    {:tx-data full-tx
-     :blocks tx}))
+                                                    :move? move?})]
+    (if (some (fn [b] (or (= (:block/parent b) [:block/uuid nil])
+                          (= (:block/level b) [:block/uuid nil]))) tx)
+      (do
+        (state/pub-event! [:instrument {:type :outliner/invalid-structure
+                                        :payload {:data (mapv #(dissoc % :block/content) tx)}}])
+        (throw (js/Error. "Invalid outliner data")))
+      (let [uuids-tx (->> (map :block/uuid tx)
+                          (remove nil?)
+                          (map (fn [uuid] {:block/uuid uuid})))
+            tx (if move?
+                 tx
+                 (assign-temp-id tx replace-empty-target? target-block))
+            target-node (block target-block)
+            next (if sibling?
+                   (tree/-get-right target-node)
+                   (tree/-get-down target-node))
+            next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
+                      (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
+                        [{:block/uuid (tree/-get-id next)
+                          :block/left (:db/id left)}]))
+            full-tx (util/concat-without-nil uuids-tx tx next-tx)]
+        (when (and replace-empty-target? (state/editing?))
+          (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
+        {:tx-data full-tx
+         :blocks tx}))))
 
 (defn- delete-block
   "Delete block from the tree."
