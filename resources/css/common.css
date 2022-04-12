@@ -904,6 +904,7 @@ button.menu:focus {
 .menu-link {
   background-color: var(--ls-primary-background-color, #fff);
   color: var(--ls-primary-text-color);
+  user-select: none;
 }
 
 .menu-link:first-of-type {
