@@ -474,3 +474,7 @@ html[data-theme='dark'] {
 .favorites li.dragging-target {
   border-left: 5px solid green;
 }
+
+.recent-item {
+  user-select: none;
+}
