@@ -2497,7 +2497,9 @@
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
         block (state/get-edit-block)
-        repo (state/get-current-repo)]
+        repo (state/get-current-repo)
+        top-block? (= (:block/left block) (:block/page block))
+        root-block? (= (:block/container block) (str (:block/uuid block)))]
     (mark-last-input-time! repo)
     (cond
       (not= selected-start selected-end)
@@ -2510,8 +2512,8 @@
       (zero? current-pos)
       (do
         (util/stop e)
-        ;; not the top block in a page or journal
-        (when-not (= (:block/left block) (:block/page block))
+        (when (and (if top-block? (string/blank? value) true)
+                   (not root-block?))
           (delete-block! repo false)))
 
       (and (> current-pos 1)
