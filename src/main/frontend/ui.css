@@ -162,11 +162,6 @@ html.is-native-andorid,
 html.is-native-iphone,
 html.is-native-iphone-without-notch
 {
-    
-    .embed-page {
-        max-width: 75%;
-    }
-    
     .references  {
         .blocks-container {
             transform: translateX(-8px);
