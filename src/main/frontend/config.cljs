@@ -17,9 +17,18 @@
 
 (def test? false)
 
-;; TODO: add :closure-defines in shadow-cljs.edn when prod env is ready
+;; prod env
+;; (goog-define FILE-SYNC-PROD? true)
+;; (goog-define LOGIN-URL
+;;              "https://logseq.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+;; (goog-define API-DOMAIN "api-prod.logseq.com")
+
+;; dev env
+(goog-define FILE-SYNC-PROD? false)
 (goog-define LOGIN-URL
              "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+(goog-define API-DOMAIN "api.logseq.com")
+
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
