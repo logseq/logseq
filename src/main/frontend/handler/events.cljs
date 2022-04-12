@@ -126,7 +126,7 @@
      (when (util/electron?)
        (p/do!
         (repo-handler/persist-db! current-repo persist-db-noti-m)
-        (repo-handler/persist-otherwindow-db! graph)))
+        (repo-handler/broadcast-persist-db! graph)))
      (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph))))
 
@@ -138,13 +138,13 @@
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
 
-(defmethod handle :graph/open-new-window [[_ repo]]
+(defmethod handle :graph/open-new-window [[ev repo]]
   (p/let [current-repo (state/get-current-repo)
           target-repo (or repo current-repo)
-          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m) ;; FIXME: redundant when opening non-current-graph window
           _ (when-not (= current-repo target-repo)
-              (repo-handler/persist-otherwindow-db! repo))]
-    (ui-handler/open-new-window! _ repo)))
+              (repo-handler/broadcast-persist-db! repo))]
+    (ui-handler/open-new-window! ev repo)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
