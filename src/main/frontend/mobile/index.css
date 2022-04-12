@@ -41,6 +41,7 @@ html.is-native-iphone {
     }
 }
 
+html.is-native-iphone-without-notch,
 html.is-native-android {
     .cp__footer {
         height: 45px;
