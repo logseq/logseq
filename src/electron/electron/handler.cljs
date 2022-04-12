@@ -222,9 +222,10 @@
    E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
    Returns `nil` if no such graph exists."
   [graph]
-  ;; FIXME: path-normalize for electron?
   (->> (get-graphs)
-       (some #(when (string/ends-with? % (str "/" graph)) %))))
+       (some #(when (string/ends-with? (utils/normalize-lc %)
+                                       (str "/" (utils/normalize-lc graph)))
+                %))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
@@ -413,6 +414,11 @@
 (defmethod handle :openNewWindow [_window [_]]
   (open-new-window!)
   nil)
+
+(defmethod handle :graphReady [window [_ graph-name]]
+  (when-let [f (:window/once-graph-ready @state/state)]
+    (f window graph-name)
+    (state/set-state! :window/once-graph-ready nil)))
 
 (defmethod handle :searchVersionChanged?
   [^js _win [_ graph]]

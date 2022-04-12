@@ -133,3 +133,12 @@
            (when-let [value (.get params key)]
              (js/decodeURI value)))
          keys)))
+
+;; Keep update with the normalization in main
+(defn normalize
+  [s]
+  (.normalize s "NFC"))
+
+(defn normalize-lc
+  [s]
+  (normalize (string/lower-case s)))

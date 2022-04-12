@@ -2,11 +2,13 @@
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.fs.sync :as sync]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
@@ -68,6 +70,22 @@
                              payload (update payload :to keyword)]
                          (route-handler/redirect! payload))))
 
+  (js/window.apis.on "redirectWhenExists"
+                     ;; either page-name or block-id is required
+                     (fn [data]
+                       (let [{:keys [page-name block-id]} (bean/->clj data)]
+                         ;; TODO Junyi
+                         (cond
+                           page-name
+                           (let [page-name (db-model/get-redirect-page-name page-name)]
+                             (editor-handler/insert-first-page-block-if-not-exists! page-name)
+                             (route-handler/redirect-to-page! page-name))
+
+                           block-id
+                           (if (db-model/get-block-by-uuid block-id)
+                             (route-handler/redirect-to-page! block-id)
+                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))))))
+
   (js/window.apis.on "dbsync"
                      (fn [data]
                        (let [{:keys [graph tx-data]} (bean/->clj data)
@@ -98,7 +116,7 @@
   (js/window.apis.on "loginCallback"
                      (fn [code]
                        (user/login-callback code)))
-  
+
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                      ;; No db cache persisting ensured. Should be handled by the caller
