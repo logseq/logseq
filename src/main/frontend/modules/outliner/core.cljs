@@ -476,27 +476,33 @@
 (defn move-blocks
   [blocks target-block {:keys [sibling? outliner-op]}]
   ;; target is not included in `blocks`
-  (when target-block
-    (when (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
-      (let [blocks (if (coll? blocks) blocks [blocks])
-            blocks (get-top-level-blocks blocks)
-            first-block (first blocks)
-            {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
-                                                                  :outliner-op outliner-op
-                                                                  :move? true})]
-        (when (seq tx-data)
-          (let [first-block-page (:db/id (:block/page first-block))
-                target-page (:db/id (:block/page target-block))
-                not-same-page? (not= first-block-page target-page)
-                move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
-                full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
-                tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
-                                 :target (:db/id target-block)}
-                          not-same-page?
-                          (assoc :from-page first-block-page
-                                 :target-page target-page))]
-            {:tx-data full-tx
-             :tx-meta tx-meta}))))))
+  (when (and
+         target-block
+         (not (contains? (set (map :db/id blocks)) (:db/id target-block))))
+    (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block))
+                       (map :db/id)
+                       (set))
+          move-parents-to-child? (some parents (map :db/id blocks))]
+      (when-not move-parents-to-child?
+        (let [blocks (if (coll? blocks) blocks [blocks])
+              blocks (get-top-level-blocks blocks)
+              first-block (first blocks)
+              {:keys [tx-data]} (insert-blocks blocks target-block {:sibling? sibling?
+                                                                    :outliner-op outliner-op
+                                                                    :move? true})]
+          (when (seq tx-data)
+            (let [first-block-page (:db/id (:block/page first-block))
+                  target-page (:db/id (:block/page target-block))
+                  not-same-page? (not= first-block-page target-page)
+                  move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
+                  full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
+                  tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                                   :target (:db/id target-block)}
+                            not-same-page?
+                            (assoc :from-page first-block-page
+                                   :target-page target-page))]
+              {:tx-data full-tx
+               :tx-meta tx-meta})))))))
 
 (defn move-blocks-up-down
   "Move blocks up/down."
