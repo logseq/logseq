@@ -533,13 +533,18 @@
         result))))
 
 (defn get-block-last-direct-child
-  [db db-id]
-  (when-let [block (d/entity db db-id)]
-    (when-not (collapsed-and-has-children? db block)
-      (let [children (:block/_parent block)
-            all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-            all-ids (set (map :db/id children))]
-        (first (set/difference all-ids all-left))))))
+  "Notice: if `not-collapsed?` is true, will skip searching for any collapsed block."
+  ([db db-id]
+   (get-block-last-direct-child db db-id true))
+  ([db db-id not-collapsed?]
+   (when-let [block (d/entity db db-id)]
+     (when (if not-collapsed?
+             (not (collapsed-and-has-children? db block))
+             true)
+       (let [children (:block/_parent block)
+             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
+             all-ids (set (map :db/id children))]
+         (first (set/difference all-ids all-left)))))))
 
 (defn get-block-last-child
   [db db-id]

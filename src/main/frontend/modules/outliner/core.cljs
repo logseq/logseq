@@ -197,14 +197,6 @@
   {:pre [(tree/satisfied-inode? node)]}
   (tree/-get-right node))
 
-(defn get-left-sibling
-  [db-id]
-  (when db-id
-    (let [block (db/entity db-id)
-          left-id (:db/id (:block/left block))]
-      (when (and left-id (not= left-id (:db/id (:block/parent block))))
-        (db/entity left-id)))))
-
 (defn get-right-sibling
   [db-id]
   (when db-id
@@ -212,10 +204,6 @@
      (db-model/get-by-parent-&-left (conn/get-conn)
                                     (:db/id (:block/parent block))
                                     db-id))))
-
-(defn set-block-collapsed! [txs-state id collapsed?]
-  (swap! txs-state concat [{:db/id id
-                            :block/collapsed? collapsed?}]))
 
 (defn save-block
   [blok]
@@ -519,18 +507,27 @@
         left (db/entity (:db/id (:block/left first-block)))
         parent (:block/parent first-block)
         db (db/get-conn)
-        top-level-blocks (get-top-level-blocks blocks)]
+        top-level-blocks (get-top-level-blocks blocks)
+        concat-tx-fn (fn [& results]
+                       {:tx-data (->> (map :tx-data results)
+                                      (apply util/concat-without-nil))
+                        :tx-meta (:tx-meta (first results))})]
     (if indent?
       (when (and left (not (page-first-child? first-block)))
-        (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left))
+        (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left) false)
               blocks' (drop-while (fn [b]
                                     (= (:db/id (:block/parent b))
                                        (:db/id left)))
                                   top-level-blocks)]
           (if (and last-direct-child-id
                    (not (contains? (set (map :db/id top-level-blocks)) last-direct-child-id)))
-            (let [last-direct-child (db/entity last-direct-child-id)]
-              (move-blocks blocks' last-direct-child true))
+            (let [last-direct-child (db/entity last-direct-child-id)
+                  result (move-blocks blocks' last-direct-child true)
+                  ;; expand `left` if it's collapsed
+                  collapsed-tx (when (:block/collapsed? left)
+                                 {:tx-data [{:db/id (:db/id left)
+                                             :block/collapsed? false}]})]
+              (concat-tx-fn result collapsed-tx))
             (move-blocks blocks' left false))))
       (when (and parent (not (:block/name (db/entity (:db/id parent)))))
         (let [blocks' (take-while (fn [b]
@@ -545,11 +542,10 @@
                   right-siblings (->> (get-right-siblings (block last-top-block))
                                       (map :data))]
               (if (seq right-siblings)
-                (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id last-top-block))]
+                (let [result2 (if-let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id last-top-block) false)]
                                 (move-blocks right-siblings (db/entity last-direct-child-id) true)
                                 (move-blocks right-siblings last-top-block false))]
-                  {:tx-data (util/concat-without-nil (:tx-data result) (:tx-data result2))
-                   :tx-meta (:tx-meta result)})
+                  (concat-tx-fn result result2))
                 result))))))))
 
 ;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
