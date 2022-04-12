@@ -17,28 +17,6 @@
         (recur parent))
       false)))
 
-(defn- movable?
-  [current-block target-block move-to]
-  (let [current-block-uuid (:block/uuid current-block)]
-    (not
-     (or
-      (= current-block-uuid (:block/uuid target-block)) ; same block
-
-      (ancestor? current-block-uuid target-block)
-
-      (and (= move-to :nested)
-           ;; current block is already the first child of target-block
-           (= (:db/id (:block/left current-block))
-              (:db/id (:block/parent current-block))
-              (:db/id target-block)))
-
-      (and (= move-to :sibling)
-           ;; current block is already the next sibling of target-block
-           (= (:db/id (:block/left current-block))
-              (:db/id target-block))
-           (not= (:db/id (:block/parent current-block))
-                 (:db/id target-block)))))))
-
 (defn move-blocks
   "There can be two possible situations:
   1. Move blocks in the same file (either top-to-bottom or bottom-to-top).
@@ -78,9 +56,7 @@
                           :clear? true}])
 
 
-      ;; movable
-      (and (every? map? [first-block target-block])
-           (movable? first-block target-block move-to))
+      (every? map? (conj blocks target-block))
       (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
           {:outliner-op :move-blocks}

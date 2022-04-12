@@ -2116,7 +2116,9 @@
   [event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (let [selected (editor-handler/get-selected-blocks)
+    (let [block-uuids (state/get-selection-block-ids)
+          lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+          selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
           blocks (if (seq selected) selected [@*dragging-block])]
       (dnd/move-blocks event blocks target-block @*move-to)))
   (reset! *dragging? false)
