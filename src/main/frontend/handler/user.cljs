@@ -12,22 +12,6 @@
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go go-loop <! timeout]]))
 
-;; (defn- email? [v]
-;;   (and v
-;;        (.isValid (EmailAddress. v))))
-
-;; (defn deprecated-set-email!
-;;   [email]
-;;   (when (email? email)
-;;     (util/post (str config/api "email")
-;;                {:email email}
-;;                (fn [_result]
-;;                  (db/transact! [{:me/email email}])
-;;                  (swap! state/state assoc-in [:me :email] email))
-;;                (fn [_error]
-;;                  (notification/show! "Email already exists!"
-;;                                      :error)))))
-
 (defn set-cors!
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
@@ -65,31 +49,6 @@
     ;;                (notification/show! "Workflow set successfully!" :success))
     ;;              (fn [_e])))
     ))
-
-;; (defn deprecated-sign-out!
-;;   ([]
-;;    (deprecated-sign-out! true))
-;;   ([confirm?]
-;;    (when (or (not confirm?)
-;;              (js/confirm "Your local notes will be completely removed after signing out. Continue?"))
-;;      (->
-;;       (idb/clear-local-storage-and-idb!)
-;;       (p/catch (fn [e]
-;;                  (println "sign out error: ")
-;;                  (js/console.dir e)))
-;;       (p/finally (fn []
-;;                    (set! (.-href js/window.location) "/logout")))))))
-
-;; (defn deprecated-delete-account!
-;;   []
-;;   (p/let [_ (idb/clear-local-storage-and-idb!)]
-;;     (util/delete (str config/api "account")
-;;                  (fn []
-;;                    (deprecated-sign-out! false))
-;;                  (fn [error]
-;;                    (log/error :user/delete-account-failed error)))))
-
-
 
 ;;; userinfo, token, login/logout, ...
 

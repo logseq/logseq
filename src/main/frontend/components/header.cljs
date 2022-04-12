@@ -50,7 +50,6 @@
   (let [*remote-graphs (::remote-graphs state)
         refresh-list-fn #(a/go (reset! *remote-graphs (a/<! (file-sync-handler/list-graphs))))]
     (when (nil? @*remote-graphs)
-      ;; (println "call list-graphs api")
       (refresh-list-fn))
     [:div
      [:div.flex
@@ -174,6 +173,7 @@
                   :title (t :discord-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
+       ;; TODO: Enable when logout is ready
        ;; (when logged?
        ;;   {:title (t :sign-out)
        ;;    :options {:on-click user-handler/sign-out!}
