@@ -723,10 +723,7 @@
                     [:block/name (util/safe-page-name-sanity-lc page-id)]
                     page-id)
           page (d/entity db page-id)]
-      ;; NOTE: when page is nil, it means the page does not exist
-      (if page
-        (nil? (first (d/datoms db :avet :block/page (:db/id page))))
-        true))))
+      (nil? (:block/_left page)))))
 
 (defn page-empty-or-dummy?
   [repo page-id]

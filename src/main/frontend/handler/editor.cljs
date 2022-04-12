@@ -657,10 +657,13 @@
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  [page-name]
+  [page-name & {:keys [check-empty-page?]
+                :or {check-empty-page? true}}]
   (when (string? page-name)
     (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (when (db/page-empty? (state/get-current-repo) (:db/id page))
+      (when (or
+             (and check-empty-page? (db/page-empty? (state/get-current-repo) (:db/id page)))
+             (false? check-empty-page?))
         (api-insert-new-block! "" {:page page-name})))))
 
 (defn properties-block
