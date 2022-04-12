@@ -1,0 +1,3 @@
+.is-win32.is-electron {
+  --ls-win32-title-bar-height: 30px;
+}
