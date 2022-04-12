@@ -183,7 +183,6 @@
                 (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
-;; reduce memory usage. pub event :graph/ready when a graph is restored, and finish the TODOs in :graph/ready
 (defn restore!
   [{:keys [repos] :as me} _old-db-schema restore-config-handler]
   (let [repo (or (state/get-current-repo) (:url (first repos)))]
