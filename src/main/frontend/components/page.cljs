@@ -82,7 +82,7 @@
 (rum/defc dummy-block
   [page-name]
   (let [handler-fn (fn []
-                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
+                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:check-empty-page? false})]
                        (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))]
     [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
      [:div.flex.flex-row
