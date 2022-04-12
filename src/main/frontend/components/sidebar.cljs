@@ -2,6 +2,7 @@
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.components.command-palette :as command-palette]
+            [frontend.components.win32-title-bar :as win32-title-bar]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
             [frontend.components.repo :as repo]
@@ -482,6 +483,7 @@
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+        (win32-title-bar/container)
         (header/header {:open-fn        open-fn
                         :light?         light?
                         :current-repo   current-repo
