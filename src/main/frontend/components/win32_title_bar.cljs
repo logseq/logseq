@@ -16,4 +16,6 @@
         "Logseq"]]
     [:div.right-side
       {}
-      []]])
+      [:div.minimize]
+      [:div.max-restore]
+      [:div.close]]])
