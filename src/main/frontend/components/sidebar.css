@@ -68,6 +68,7 @@
   > .wrap {
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 40px;
+    padding-top: var(--ls-win32-title-bar-height);
     padding-bottom: 60px;
     overflow-y: auto;
   }

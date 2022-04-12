@@ -14,6 +14,7 @@
   --ls-left-sidebar-width: 240px;
   --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
+  --ls-win32-title-bar-height: 0px;
 }
 
 @media (prefers-color-scheme: dark) {

@@ -25,7 +25,7 @@
          win-opts (cond->
                     {:width                (.-width win-state)
                      :height               (.-height win-state)
-                     :frame                true
+                     :frame                (not win32?)
                      :titleBarStyle        "hiddenInset"
                      :trafficLightPosition {:x 16 :y 16}
                      :autoHideMenuBar      (not mac?)

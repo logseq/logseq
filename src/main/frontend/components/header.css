@@ -2,8 +2,8 @@
   @apply shadow z-10;
   -webkit-app-region: drag;
   
-  padding-top: var(--ls-headbar-inner-top-padding);
-  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
+  padding-top: calc(var(--ls-headbar-inner-top-padding) + var(--ls-win32-title-bar-height));
+  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) + var(--ls-win32-title-bar-height));
   display: flex;
   align-items: center;
   justify-content: space-between;
