@@ -41,13 +41,13 @@
                    :win    win})))
 
 (defn open-url-handler
-  [url]
+  [win url]
   (.info logger "open-url" (str {:url url}))
 
   (let [parsed-url (js/URL. url)]
     (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
                (= "auth-callback" (.-host parsed-url)))
-      (send-to-renderer "loginCallback" (.get (.-searchParams parsed-url) "code")))))
+      (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code")))))
 
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
@@ -74,10 +74,6 @@
            path' (.join path ROOT path')]
 
        (callback #js {:path path'}))))
-
-  (.on app "open-url"
-       (fn [_event url]
-         (open-url-handler url)))
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
@@ -243,6 +239,10 @@
                             (vreset! *teardown-fn
                                      #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
+
+               (.on app "open-url"
+                    (fn [_event url]
+                      (open-url-handler win url)))
 
                ;; setup effects
                (@*setup-fn)
