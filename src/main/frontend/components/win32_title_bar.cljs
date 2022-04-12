@@ -1,8 +1,11 @@
 (ns frontend.components.win32-title-bar
-  (:require [rum.core :as rum]))
+  (:require [rum.core :as rum]
+            [frontend.components.svg :as svg]))
 
 (rum/defc container
   []
-  [:p
+  [:div.cp__win32-title-bar#win32-title-bar
     {}
-    ["Hello, World!"]])
+    [:div.logo
+      {}
+      (svg/logo)]])
