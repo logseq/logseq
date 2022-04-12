@@ -670,17 +670,10 @@
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
-     step 1. [In HERE]  a window         --persistGraph----->   electron
-     step 2.            electron         --persistGraph----->   window holds the graph
-     step 3.            window w/ graph  --persistGraphDone->   electron
-     step 4. [In HERE]  electron         --persistGraphDone->   all windows"
+     step 1. [In HERE]  a window         ---broadcastPersistGraph---->   electron
+     step 2.            electron         ---------persistGraph------->   window holds the graph
+     step 3.            window w/ graph  --broadcastPersistGraphDone->   electron
+     step 4. [In HERE]  a window         <---broadcastPersistGraph----   electron"
   [graph]
-  (p/create (fn [resolve _]
-              (js/window.apis.on "persistGraphDone"
-                                 #(let [repo (bean/->clj %)]
-                                    (prn "received persistGraphDone" repo)
-                                    (when (= graph repo)
-                                       ;; js/window.apis.once doesn't work
-                                      (js/window.apis.removeAllListeners "persistGraphDone")
-                                      (resolve repo))))
-              (ipc/ipc "persistGraph" graph))))
+  (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
+    nil))

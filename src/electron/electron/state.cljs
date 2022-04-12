@@ -14,7 +14,10 @@
          :graph/current nil
 
          ;; window -> current graph
-         :window/graph {}}))
+         :window/graph {}
+         
+         ;; job to do when persistGraph is done on renderer
+         :window/once-persist-done nil}))
 
 (defn set-state!
   [path value]
