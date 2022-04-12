@@ -44,10 +44,22 @@
   [win url]
   (.info logger "open-url" (str {:url url}))
 
-  (let [parsed-url (js/URL. url)]
-    (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-               (= "auth-callback" (.-host parsed-url)))
-      (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code")))))
+  (let [parsed-url (js/URL. url)
+        url-protocol (.-protocol parsed-url)
+        url-host (.-host parsed-url)]
+    (when (= (str LSP_SCHEME ":") url-protocol)
+      (cond
+        (= "auth-callback" url-host)
+        (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
+
+        (= "local" url-host)
+        (let [[graph page block-id] (utils/get-URL-decoded-params parsed-url ["graph" "page" "block-id"])
+              graph-name (handler/get-graph-name graph)]
+          (if graph-name
+            (utils/send-to-renderer win "openNewWindowOfGraph" graph-name)
+            (utils/send-to-renderer "notification" {:type "error"
+                                                    :payload (str "Cannot match graph name " graph
+                                                                  " to any linked graph.")})))))))
 
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
