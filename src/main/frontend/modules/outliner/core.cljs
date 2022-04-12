@@ -225,8 +225,7 @@
 
 (defn- blocks-with-level
   "Should be sorted already."
-  [blocks]
-  (def debug-blocks blocks)
+  [blocks move?]
   (let [first-block (first blocks)]
     (if (and (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
       blocks
@@ -241,7 +240,7 @@
                              parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
                              block (assoc block :block/level (inc parent-level))
                              top-level? (= 1 (:block/level block))
-                             block' (if top-level?
+                             block' (if (and top-level? (not move?))
                                       (assoc block :block/left [:block/uuid (:block/uuid last-top-level-block)])
                                       block)
                              m' (vec (conj m [(:db/id block') block']))
@@ -251,7 +250,7 @@
 
 (defn get-top-level-blocks
   [blocks]
-  (let [level-blocks (blocks-with-level blocks)]
+  (let [level-blocks (blocks-with-level blocks true)]
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
 (defn- assign-temp-id
@@ -292,22 +291,23 @@
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup)))))]
     (map-indexed (fn [idx {:block/keys [parent left] :as block}]
-                   (let [top-level? (= (:block/level block) 1)]
-                     (cond->
-                       (merge block {:block/uuid (get uuids (:block/uuid block))
-                                     :block/page target-page
-                                     :block/parent (if top-level?
-                                                     (if sibling?
-                                                       (:db/id (:block/parent target-block))
+                   (when-let [uuid (get uuids (:block/uuid block))]
+                     (let [top-level? (= (:block/level block) 1)]
+                       (cond->
+                         (merge block {:block/uuid uuid
+                                       :block/page target-page
+                                       :block/parent (if top-level?
+                                                       (if sibling?
+                                                         (:db/id (:block/parent target-block))
+                                                         (:db/id target-block))
+                                                       (get-new-id parent))
+                                       :block/left (if (zero? idx)
+                                                     (if replace-empty-target?
+                                                       (:db/id (:block/left target-block))
                                                        (:db/id target-block))
-                                                     (get-new-id parent))
-                                     :block/left (if (zero? idx)
-                                                   (if replace-empty-target?
-                                                     (:db/id (:block/left target-block))
-                                                     (:db/id target-block))
-                                                   (get-new-id left))})
-                       (not move?)
-                       (dissoc :db/id))))
+                                                     (get-new-id left))})
+                         (not move?)
+                         (dissoc :db/id)))))
                  blocks)))
 
 (defn insert-blocks
@@ -321,7 +321,7 @@
                                    (string/blank? (:block/content target-block))
                                    (> (count blocks) 1)
                                    (not move?))
-        blocks' (blocks-with-level blocks)
+        blocks' (blocks-with-level blocks move?)
         tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
                                                     :replace-empty-target? replace-empty-target?
                                                     :keep-uuid? keep-uuid?
@@ -429,7 +429,7 @@
            last
            rest))))
 
-(defn- build-drag-blocks-next-tx
+(defn- build-move-blocks-next-tx
   [blocks]
   (let [id->blocks (zipmap (map :db/id blocks) blocks)
         top-level-blocks (get-top-level-blocks blocks)
@@ -455,8 +455,8 @@
             first-block-page (:db/id (:block/page first-block))
             target-page (:db/id (:block/page target-block))
             not-same-page? (not= first-block-page target-page)
-            drag-blocks-next-tx [(build-drag-blocks-next-tx blocks)]
-            full-tx (util/concat-without-nil tx-data drag-blocks-next-tx)
+            move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
+            full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
             tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                              :target (:db/id target-block)}
                       not-same-page?
@@ -512,29 +512,35 @@
 
 (defn indent-outdent-blocks
   [blocks indent?]
-  (let [first-block (first blocks)
+  (let [first-block (db/entity (:db/id (first blocks)))
         left (db/entity (:db/id (:block/left first-block)))
         parent (:block/parent first-block)
         db (db/get-conn)
-        top-level-blocks (->> (get-top-level-blocks blocks)
-                              (map (fn [b]
-                                     (db/entity (:db/id b)))))]
+        top-level-blocks (get-top-level-blocks blocks)]
     (if indent?
       (when (and left (not (page-first-child? first-block)))
-        (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left))]
+        (let [last-direct-child-id (db-model/get-block-last-direct-child db (:db/id left))
+              blocks' (drop-while (fn [b]
+                                    (= (:db/id (:block/parent b))
+                                       (:db/id left)))
+                                  top-level-blocks)]
           (if (and last-direct-child-id
-                   (not (contains? (set (map :db/id blocks)) last-direct-child-id)))
-            (move-blocks blocks (db/entity last-direct-child-id) true)
-            (when-not (every? (fn [b] (= (:db/id (:block/parent b))
-                                         (:db/id left)))
-                              top-level-blocks)
-             (move-blocks blocks left false)))))
+                   (not (contains? (set (map :db/id top-level-blocks)) last-direct-child-id)))
+            (let [last-direct-child (db/entity last-direct-child-id)]
+              (move-blocks blocks' last-direct-child true))
+            (move-blocks blocks' left false))))
       (when (and parent (not (:block/name (db/entity (:db/id parent)))))
-        (let [result (move-blocks blocks parent true)]
+        (let [blocks' (take-while (fn [b]
+                                    (not= (:db/id (:block/parent b))
+                                          (:db/id (:block/parent parent))))
+                                  top-level-blocks)
+              result (move-blocks blocks' parent true)]
           (if (state/logical-outdenting?)
             result
             ;; direct outdenting (default behavior)
-            (let [last-top-block (db/pull (:db/id (last top-level-blocks)))
+            (let [last-top-block (db/pull (:db/id (last blocks')))
+                  last-top-block-already-outdented? (= (:db/id (:block/parent last-top-block))
+                                                       (:db/id (:block/parent parent)))
                   right-siblings (->> (get-right-siblings (block last-top-block))
                                       (map :data))]
               (if (seq right-siblings)
