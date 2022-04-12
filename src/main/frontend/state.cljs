@@ -126,13 +126,14 @@
 
      ;; for audio record
      :editor/record-status                  "NONE"
-     
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
      :cursor-range                          nil
 
      :selection/mode                        false
+     ;; Warning: blocks order is determined when setting this attribute
      :selection/blocks                      []
      :selection/start-block                 nil
      ;; either :up or :down, defaults to down
@@ -682,10 +683,11 @@
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (swap! state assoc
-            :selection/mode true
-            :selection/blocks blocks
-            :selection/direction direction))))
+     (let [blocks (util/sort-by-height blocks)]
+       (swap! state assoc
+             :selection/mode true
+             :selection/blocks blocks
+             :selection/direction direction)))))
 
 (defn into-selection-mode!
   []
@@ -700,7 +702,15 @@
 
 (defn get-selection-blocks
   []
-  (util/sort-by-height (:selection/blocks @state)))
+  (:selection/blocks @state))
+
+(defn get-selection-block-ids
+  []
+  (->> (sub :selection/blocks)
+       (map #(when-let [id (dom/attr % "blockid")]
+               (medley/uuid id)))
+       (remove nil?)
+       (distinct)))
 
 (defn in-selection-mode?
   []
@@ -716,7 +726,8 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (conj (vec (:selection/blocks @state)) block)
+         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+                               (util/sort-by-height))
          :selection/direction direction))
 
 (defn drop-last-selection-block!
@@ -1538,11 +1549,8 @@
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
   ([blocks direction]
-   (util/select-unhighlight! (dom/by-class "selected"))
-   (clear-selection!)
    (clear-edit!)
-   (set-selection-blocks! blocks direction)
-   (util/select-highlight! blocks)))
+   (set-selection-blocks! blocks direction)))
 
 (defn remove-watch-state [key]
   (remove-watch state key))

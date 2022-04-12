@@ -359,7 +359,7 @@
 (def ^:export get_selected_blocks
   (fn []
     (when-let [blocks (and (state/in-selection-mode?)
-                           (seq (:selection/blocks @state/state)))]
+                           (seq (state/get-selection-blocks)))]
       (let [blocks (->> blocks
                         (map (fn [^js el] (some-> (.getAttribute el "blockid")
                                                   (db-model/query-block-by-uuid)))))]
@@ -501,7 +501,7 @@
 (def ^:export get_current_block
   (fn [^js opts]
     (let [block (state/get-edit-block)
-          block (or block (some-> (first (:selection/blocks @state/state))
+          block (or block (some-> (first (state/get-selection-blocks))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))
           block (or block (state/get-last-edit-block))]

@@ -324,19 +324,6 @@
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
-     (mixins/listen state js/window "mouseup"
-                    (fn [_e]
-                      (when-not (state/in-selection-mode?)
-                        (when-let [blocks (seq (util/get-selected-nodes "ls-block"))]
-                          (let [blocks (remove nil? blocks)
-                                blocks (remove #(d/has-class? % "dummy") blocks)]
-                            (when (seq blocks)
-                              (util/select-highlight! blocks)
-                              ;; TODO: We delay this so the following "click" event won't clear the selections.
-                              ;; Needs more thinking.
-                              (js/setTimeout #(state/set-selection-blocks! blocks)
-                                             200)))))))
-
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")

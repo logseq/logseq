@@ -771,28 +771,9 @@
       (state/set-edit-content! input-id new-content)
       (save-block-if-changed! block new-content))))
 
-(defn- rehighlight-selected-nodes
-  ([]
-   (rehighlight-selected-nodes (state/get-selection-blocks)))
-  ([blocks]
-   (let [blocks (doall
-                 (map
-                  (fn [block]
-                    (when-let [id (gobj/get block "id")]
-                      (when-let [block (gdom/getElement id)]
-                        (dom/add-class! block "selected noselect")
-                        block)))
-                  blocks))]
-     (state/set-selection-blocks! blocks))))
-
-(defn- get-selected-blocks-with-children
+(defn- get-selected-blocks
   []
-  (when-let [blocks (seq (state/get-selection-blocks))]
-    (->> (mapcat (fn [block]
-                   (cons block
-                         (array-seq (dom/by-class block "ls-block"))))
-                 blocks)
-         distinct)))
+  (distinct (seq (state/get-selection-blocks))))
 
 (defn set-marker
   "The set-marker will set a new marker on the selected block.
@@ -805,19 +786,18 @@
 
 (defn cycle-todos!
   []
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
+  (when-let [blocks (seq (get-selected-blocks))]
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
       (doseq [id ids]
         (let [block (db/pull [:block/uuid id])]
-          (set-marker block)))
-      (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
+          (set-marker block))))))
 
 (defn cycle-todo!
   []
   #_:clj-kondo/ignore
-  (if-let [blocks (seq (get-selected-blocks-with-children))]
+  (if-let [blocks (seq (get-selected-blocks))]
     (cycle-todos!)
     (when (state/get-edit-block)
       (let [edit-input-id (state/get-edit-input-id)
@@ -904,22 +884,6 @@
                    (move-to-prev-block repo sibling-block format id value)))))))))
    (state/set-editor-op! nil)))
 
-(defn- reorder-blocks
-  [blocks]
-  (if (<= (count blocks) 1)
-    blocks
-    (let [[f s & _others] blocks]
-      (if (or (= (:block/left s) {:db/id (:db/id f)})
-              (and
-               (let [parents (db/get-block-parents (state/get-current-repo)
-                                                   (:block/uuid f)
-                                                   100)]
-                 (some #(= (:block/left s) {:db/id (:db/id %)})
-                       parents))
-               (not= (:block/left f) {:db/id (:db/id s)})))
-        blocks
-        (reverse blocks)))))
-
 (defn delete-blocks!
   [repo dom-blocks]
   (let [block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))]
@@ -927,7 +891,6 @@
       (let [uuid->dom-block (zipmap block-uuids dom-blocks)
             lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
             blocks (db/pull-many repo '[*] lookup-refs)
-            blocks (reorder-blocks blocks)
             block (first blocks)
             block-parent (get uuid->dom-block (:block/uuid block))
             sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
@@ -1054,7 +1017,7 @@
 
 (defn copy-selection-blocks
   []
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
+  (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
@@ -1068,7 +1031,7 @@
 
 (defn copy-block-refs
   []
-  (when-let [selected-blocks (seq (get-selected-blocks-with-children))]
+  (when-let [selected-blocks (seq (get-selected-blocks))]
     (let [blocks (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                         (let [level (dom/attr % "level")]
                                           {:id (uuid id)
@@ -1105,7 +1068,7 @@
 
 (defn copy-block-embeds
   []
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
+  (when-let [blocks (seq (get-selected-blocks))]
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
@@ -1117,7 +1080,7 @@
 
 (defn get-selected-toplevel-block-uuids
   []
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
+  (when-let [blocks (seq (get-selected-blocks))]
     (let [repo (state/get-current-repo)
           block-ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                            (uuid id)) blocks))
@@ -1132,7 +1095,7 @@
 (defn cut-selection-blocks
   [copy?]
   (when copy? (copy-selection-blocks))
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
+  (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [blocks (remove (fn [block]
                            (or (= "true" (dom/attr block "data-transclude"))
@@ -1728,15 +1691,6 @@
                  (>= pos 1))
         (util/nth-safe value pos)))))
 
-(defn- reorder-selected-blocks
-  [blocks]
-  (let [repo (state/get-current-repo)
-        lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                            [:block/uuid (medley/uuid id)])) blocks)
-                         (remove nil?))
-        blocks (db/pull-many repo '[*] lookup-refs)]
-    (reorder-blocks blocks)))
-
 (defn move-up-down
   [up?]
   (fn [event]
@@ -1746,7 +1700,6 @@
                        (outliner-tx/transact!
                          {:outliner-op :move-blocks}
                          (outliner-core/move-blocks-up-down! blocks up?))
-                       (rehighlight-selected-nodes)
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
       (if edit-block-id
@@ -1756,26 +1709,29 @@
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
               (.focus input))))
-        (let [blocks (-> (state/get-selection-blocks)
-                         reorder-selected-blocks)]
-          (when (seq blocks)
-            (move-nodes blocks)))))))
+        (let [ids (state/get-selection-block-ids)]
+          (when (seq ids)
+            (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
+                  blocks (db/pull-many (state/get-current-repo) '[*] lookup-refs)]
+              (move-nodes blocks))))))))
 
-(defn get-selected-blocks
+(defn get-selected-ordered-blocks
   []
-  (let [blocks-dom-nodes (state/get-selection-blocks)]
-    (seq (reorder-selected-blocks blocks-dom-nodes))))
+  (let [repo (state/get-current-repo)
+        ids (state/get-selection-block-ids)
+        lookup-refs (->> (map (fn [id] [:block/uuid id]) ids)
+                         (remove nil?))]
+    (db/pull-many repo '[*] lookup-refs)))
 
 ;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
-  (let [blocks (get-selected-blocks)]
+  (let [blocks (get-selected-ordered-blocks)]
     (when (seq blocks)
       (outliner-tx/transact!
         {:outliner-op :move-blocks}
-        (outliner-core/indent-outdent-blocks! blocks (= direction :right)))
-      (rehighlight-selected-nodes))))
+        (outliner-core/indent-outdent-blocks! blocks (= direction :right))))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -3313,7 +3269,7 @@
 
      (state/selection?)
      (do
-       (->> (get-selected-blocks-with-children)
+       (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
                        medley/uuid
@@ -3346,7 +3302,7 @@
 
      (state/selection?)
      (do
-       (->> (get-selected-blocks-with-children)
+       (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
                        medley/uuid

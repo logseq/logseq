@@ -259,7 +259,7 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-    
+
     (when @src
       (let [ext (util/get-file-ext @src)]
         (if (contains? (set (map name config/audio-formats)) ext)
@@ -1310,7 +1310,7 @@
          (when (not html-export?)
            [:span {:dangerouslySetInnerHTML
                    {:__html s}}])
-         
+
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
@@ -2215,7 +2215,7 @@
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2272,7 +2272,8 @@
         :data-collapsed (and collapsed? has-child?)
         :class (str uuid
                     (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl"))
+                    (when (and card? (not review-cards?)) " shadow-xl")
+                    (when (:ui/selected? block) " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
 
@@ -2914,6 +2915,11 @@
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
+        selected-blocks (set (state/get-selection-block-ids))
+        flat-blocks (if (seq selected-blocks)
+                      (map (fn [b]
+                             (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
+                      flat-blocks)
         blocks (blocks->vec-tree flat-blocks)]
     (if-not db-id
       (block-list config blocks)
