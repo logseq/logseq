@@ -75,6 +75,10 @@
 
        (callback #js {:path path'}))))
 
+  (.on app "open-url"
+       (fn [_event url]
+         (open-url-handler url)))
+
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
@@ -213,14 +217,11 @@
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-               (let [deeplink (Deeplink. #js
-                                         {:app app
-                                          :mainWindow win
-                                          :protocol LSP_SCHEME
-                                          :isDev dev?})]
-                 (.on deeplink "received"
-                      (fn [link]
-                        (open-url-handler link))))
+               (Deeplink. #js
+                          {:app app
+                           :mainWindow win
+                           :protocol LSP_SCHEME
+                           :isDev dev?})
 
                (restore-user-fetch-agent)
 
