@@ -30,6 +30,14 @@
   (when (string? uri)
     (util/url-decode uri)))
 
+(defn- read-file-utf8
+  [path]
+  (when-not (string/blank? path)
+    (.readFile Filesystem
+               (clj->js
+                {:path path
+                 :encoding (.-UTF8 Encoding)}))))
+
 (defn readdir
   "readdir recursively"
   [path]
@@ -81,10 +89,7 @@
                                    (mapv
                                     (fn [{:keys [uri] :as file-result}]
                                       (p/chain
-                                       (.readFile Filesystem
-                                                  (clj->js
-                                                   {:path uri
-                                                    :encoding (.-UTF8 Encoding)}))
+                                       (read-file-utf8 uri)
                                        #(js->clj % :keywordize-keys true)
                                        :data
                                        #(assoc file-result :content %))))))]
@@ -116,8 +121,7 @@
          (error-handler error)
          (log/error :write-file-failed error))))
 
-    (p/let [disk-content (-> (p/chain (.readFile Filesystem (clj->js {:path path
-                                                                      :encoding (.-UTF8 Encoding)}))
+    (p/let [disk-content (-> (p/chain (read-file-utf8 path)
                                       #(js->clj % :keywordize-keys true)
                                       :data)
                              (p/catch (fn [error]
@@ -202,11 +206,7 @@
   (read-file [_this dir path _options]
     (let [path (get-file-path dir path)]
       (->
-       (p/let [content (.readFile Filesystem
-                                  (clj->js
-                                   {:path path
-                                    ;; :directory (.-ExternalStorage Directory)
-                                    :encoding (.-UTF8 Encoding)}))
+       (p/let [content (read-file-utf8 path)
                content (-> (js->clj content :keywordize-keys true)
                            :data
                            clj->js)]
