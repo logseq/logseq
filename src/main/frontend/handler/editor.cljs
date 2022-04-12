@@ -771,7 +771,7 @@
       (state/set-edit-content! input-id new-content)
       (save-block-if-changed! block new-content))))
 
-(defn- get-selected-blocks
+(defn get-selected-blocks
   []
   (distinct (seq (state/get-selection-blocks))))
 
@@ -1723,9 +1723,8 @@
                          (remove nil?))]
     (db/pull-many repo '[*] lookup-refs)))
 
-;; selections
 (defn on-tab
-  "direction = :left|:right, only indent or outdent when blocks are siblings"
+  "`direction` = :left | :right."
   [direction]
   (let [blocks (get-selected-ordered-blocks)]
     (when (seq blocks)
