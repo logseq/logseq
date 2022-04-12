@@ -6,13 +6,24 @@
   top: 0;
   height: var(--ls-win32-title-bar-height);
   display: flex;
+  justify-content: space-between;
+  user-select: none;
 
-  > .logo {
-    width: 50px;
-    height: var(--ls-win32-title-bar-height);
+  > .left-side {
     display: flex;
     align-items: flex-end;
-    justify-content: center;
+
+    > .logo {
+      width: 50px;
+      height: var(--ls-win32-title-bar-height);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    > .title {
+      font-size: 12px;
+    }
   }
 }
 
