@@ -6,6 +6,14 @@
   []
   [:div.cp__win32-title-bar#win32-title-bar
     {}
-    [:div.logo
+    [:div.left-side
       {}
-      (svg/logo)]])
+      [:div.logo
+        {}
+        (svg/logo)]
+      [:div.title
+        {}
+        "Logseq"]]
+    [:div.right-side
+      {}
+      []]])
