@@ -238,7 +238,10 @@
                        (let [block (first blocks)
                              parent-id (:db/id (:block/parent block))
                              parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-                             block (assoc block :block/level (inc parent-level))
+                             level (if (= (:block/level block) :top)
+                                     1
+                                     (inc parent-level))
+                             block (assoc block :block/level level)
                              top-level? (= 1 (:block/level block))
                              block' (if (and top-level? (not move?))
                                       (assoc block :block/left [:block/uuid (:block/uuid last-top-level-block)])
@@ -277,7 +280,7 @@
         target-page (or (:db/id (:block/page target-block))
                         ;; target block is a page itself
                         (:db/id target-block))
-        get-new-id (fn [lookup]
+        get-new-id (fn [block lookup]
                      (cond
                        (or (map? lookup) (vector? lookup))
                        (let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
@@ -289,7 +292,7 @@
                        lookup
 
                        :else
-                       (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup)))))]
+                       (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))]
     (map-indexed (fn [idx {:block/keys [parent left] :as block}]
                    (when-let [uuid (get uuids (:block/uuid block))]
                      (let [top-level? (= (:block/level block) 1)]
@@ -300,12 +303,12 @@
                                                        (if sibling?
                                                          (:db/id (:block/parent target-block))
                                                          (:db/id target-block))
-                                                       (get-new-id parent))
+                                                       (get-new-id block parent))
                                        :block/left (if (zero? idx)
                                                      (if replace-empty-target?
                                                        (:db/id (:block/left target-block))
                                                        (:db/id target-block))
-                                                     (get-new-id left))})
+                                                     (get-new-id block left))})
                          (not move?)
                          (dissoc :db/id)))))
                  blocks)))
@@ -539,8 +542,6 @@
             result
             ;; direct outdenting (default behavior)
             (let [last-top-block (db/pull (:db/id (last blocks')))
-                  last-top-block-already-outdented? (= (:db/id (:block/parent last-top-block))
-                                                       (:db/id (:block/parent parent)))
                   right-siblings (->> (get-right-siblings (block last-top-block))
                                       (map :data))]
               (if (seq right-siblings)
