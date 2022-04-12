@@ -8,6 +8,7 @@
   display: flex;
   justify-content: space-between;
   user-select: none;
+  -webkit-app-region: drag;
 
   > .left-side {
     display: flex;
@@ -15,7 +16,6 @@
 
     > .logo {
       width: 50px;
-      height: var(--ls-win32-title-bar-height);
       display: flex;
       align-items: flex-end;
       justify-content: center;
@@ -23,6 +23,34 @@
 
     > .title {
       font-size: 12px;
+    }
+  }
+
+  > .right-side {
+    display: flex;
+    width: 138px;
+    -webkit-app-region: no-drag;
+
+    > * {
+      width: 100%;
+
+      &:hover {
+        background: var(--ls-tertiary-background-color);
+      }
+
+      &:active {
+        background: var(--ls-secondary-background-color);
+      }
+    }
+
+    > .close {
+      &:hover {
+        background: #c42b1c;
+      }
+
+      &:active {
+        background: #b3271c;
+      }
     }
   }
 }
