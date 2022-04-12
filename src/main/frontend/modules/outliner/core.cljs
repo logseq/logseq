@@ -227,7 +227,7 @@
   "Should be sorted already."
   [blocks move?]
   (let [first-block (first blocks)]
-    (if (and (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
+    (if (and (not move?) (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
       blocks
       (let [root (assoc (first blocks) :block/level 1)
             result (loop [m [[(:db/id root) root]]

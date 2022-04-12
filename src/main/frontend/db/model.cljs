@@ -606,8 +606,6 @@
       (or (get-prev-open-block db-before first-changed-id)
           (get-prev-open-block current-db first-changed-id)))))
 
-;; TODO: outliners ops should be merged to :save-blocks, :insert-blocks,
-;; :delete-blocks and :move-blocks
 (defn- build-paginated-blocks-from-cache
   "Notice: tx-report could be nil."
   [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
