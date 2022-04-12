@@ -285,9 +285,11 @@
                                          (nil? next-sched)
                                          (nil? next-sched*)
                                          (t/before? next-sched* time))))
-                                 blocks)]
+                                 blocks),
+        sort-by-next-shedule   (sort-by (fn [b]
+                                (get (get b :block/properties) card-next-schedule-property)) filtered-result)]
     {:total (count blocks)
-     :result filtered-result}))
+     :result sort-by-next-shedule}))
 
 
 ;;; ================================================================
