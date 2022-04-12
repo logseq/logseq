@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent send-to-renderer]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent send-to-renderer get-URL-decoded-params]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -40,26 +40,45 @@
                    :logger logger
                    :win    win})))
 
+(defn local-url-handler
+  [^js win parsed-url url-path]
+  (cond
+    (= "open" url-path)
+    (let [[graph page block-id] (get-URL-decoded-params parsed-url ["graph" "page" "block-id"])
+          graph-name (handler/get-graph-name graph)]
+      (if graph-name
+        (send-to-renderer win "openNewWindowOfGraph" graph-name)
+        (if graph
+          (send-to-renderer "notification" {:type "error"
+                                          :payload (str "Open link failed. Cannot match graph name `" graph
+                                                        "` to any linked graph for action `open`.")})
+          (send-to-renderer "notification" {:type "error"
+                                            :payload (str "Open link failed. Missing required parameter `graph=<graph name>` for action `open`. Typo?")}))))
+    :else
+    (send-to-renderer "notification" {:type "error"
+                                      :payload (str "Open link failed. Cannot match `" url-path
+                                                    "` to any action.")})))
+
 (defn open-url-handler
   [win url]
   (.info logger "open-url" (str {:url url}))
 
   (let [parsed-url (js/URL. url)
         url-protocol (.-protocol parsed-url)
-        url-host (.-host parsed-url)]
+        url-host (.-host parsed-url)
+        url-path (string/replace (.-pathname parsed-url) "/" "")]
     (when (= (str LSP_SCHEME ":") url-protocol)
       (cond
         (= "auth-callback" url-host)
         (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
 
         (= "local" url-host)
-        (let [[graph page block-id] (utils/get-URL-decoded-params parsed-url ["graph" "page" "block-id"])
-              graph-name (handler/get-graph-name graph)]
-          (if graph-name
-            (utils/send-to-renderer win "openNewWindowOfGraph" graph-name)
-            (utils/send-to-renderer "notification" {:type "error"
-                                                    :payload (str "Cannot match graph name " graph
-                                                                  " to any linked graph.")})))))))
+        (local-url-handler win parsed-url url-path)
+
+        :else
+        (send-to-renderer "notification" {:type "error"
+                                          :payload (str "Open link failed. Cannot match `" url-host
+                                                        "` to any target.")})))))
 
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
@@ -226,10 +245,10 @@
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
                (Deeplink. #js
-                          {:app app
-                           :mainWindow win
-                           :protocol LSP_SCHEME
-                           :isDev dev?})
+                           {:app app
+                            :mainWindow win
+                            :protocol LSP_SCHEME
+                            :isDev dev?})
 
                (restore-user-fetch-agent)
 
