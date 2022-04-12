@@ -209,12 +209,22 @@
     dir))
 
 (defn- get-graphs
+  "Returns all graph names in the cache directory (strating with `logseq_local_`)"
   []
   (let [dir (get-graphs-dir)]
     (->> (readdir dir)
          (remove #{dir})
          (map #(path/basename % ".transit"))
          (map graph-name->path))))
+
+(defn get-graph-name
+  "Given a graph's name, returns the graph's fullname.
+   E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
+   Returns `nil` if no such graph exists."
+  [graph]
+  ;; FIXME: path-normalize for electron?
+  (->> (get-graphs)
+       (some #(when (string/ends-with? % (str "/" graph)) %))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
@@ -326,17 +336,21 @@
 
 (defn close-watcher-when-orphaned!
   "When it's the last window for the directory, close the watcher."
-  [window dir]
-  (when (not (win/graph-has-other-windows? window dir))
-    (watcher/close-watcher! dir)))
+  [window graph-path]
+  (when (not (win/graph-has-other-windows? window graph-path))
+    (watcher/close-watcher! graph-path)))
 
-(defmethod handle :setCurrentGraph [^js win [_ path]]
-  (let [path (when path (utils/get-graph-dir path))
-        old-path (state/get-window-graph-path win)]
-    (when old-path (close-watcher-when-orphaned! win old-path))
-    (swap! state/state assoc :graph/current path)
-    (swap! state/state assoc-in [:window/graph win] path)
+(defn set-current-graph!
+  [window graph-path]
+  (let [old-path (state/get-window-graph-path window)]
+    (when old-path (close-watcher-when-orphaned! window old-path))
+    (swap! state/state assoc :graph/current graph-path)
+    (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
+
+(defmethod handle :setCurrentGraph [^js window [_ graph-name]]
+  (when graph-name
+    (set-current-graph! window (utils/get-graph-dir graph-name))))
 
 (defmethod handle :runGit [_ [_ args]]
   (when (seq args)
@@ -375,26 +389,30 @@
 (defmethod handle :graphHasMultipleWindows [^js _win [_ graph]]
   (let [dir (utils/get-graph-dir graph)
         windows (win/get-graph-all-windows dir)]
-        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
     (> (count windows) 1)))
 
 (defmethod handle :addDirWatcher [^js window [_ dir]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
-  ;;    1. there is no one window on the same dir (TODO: check this on a window is closed)
+  ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
     ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
-    ;; TODO: handle duplicated adding dir watcher when multiple windows
+    ;; maintain only one file watcher when multiple windows on the same dir
     (close-watcher-when-orphaned! window dir)
     (watcher/watch-dir! window dir)))
 
-(defmethod handle :openNewWindow [_window [_]]
+(defn open-new-window!
+  []
   (let [win (win/create-main-window)]
     (win/on-close-actions! win close-watcher-when-orphaned!)
     (win/setup-window-listeners! win)
-    nil))
+    win))
+
+(defmethod handle :openNewWindow [_window [_]]
+  (open-new-window!)
+  nil)
 
 (defmethod handle :searchVersionChanged?
   [^js _win [_ graph]]
@@ -443,21 +461,28 @@
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
-(defmethod handle :persistGraph [^js win [_ graph]]
-  ;; call a window holds the specific graph to persist
-  (let [dir (utils/get-graph-dir graph)
-        windows (win/get-graph-all-windows dir)
-        ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
-        tar-graph-win (first windows)]
-    (if tar-graph-win
-      (utils/send-to-renderer tar-graph-win "persistGraph" graph)
-      (utils/send-to-renderer win "persistGraphDone" graph)))) ;; if no such graph, skip directly
+(defn broadcast-persist-graph!
+  "Sends persist graph event to the renderer contains the target graph.
+   Returns a promise."
+  [graph-name]
+  (p/create (fn [resolve _reject]
+              (let [graph-path (utils/get-graph-dir graph-name)
+                    windows (win/get-graph-all-windows graph-path)
+                    tar-graph-win (first windows)]
+                (if tar-graph-win
+                  ;; if no such graph, skip directly
+                  (do (state/set-state! :window/once-persist-done #(resolve nil))
+                      (utils/send-to-renderer tar-graph-win "persistGraph" graph-name))
+                  (resolve nil))))))
 
-(defmethod handle :persistGraphDone [^js _win [_ graph]]
-  ;; when graph is persisted, broadcast it to all windows
-  (let [windows (win/get-all-windows)]
-    (doseq [window windows]
-      (utils/send-to-renderer window "persistGraphDone" graph))))
+(defmethod handle :broadcastPersistGraph [^js _win [_ graph-name]]
+  (broadcast-persist-graph! graph-name))
+
+(defmethod handle :broadcastPersistGraphDone [^js _win [_]]
+  ;; main process -> renderer doesn't support promise, so we use a global var to store the callback
+  (when-let [f (:window/once-persist-done @state/state)]
+    (f)
+    (state/set-state! :window/once-persist-done nil)))
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

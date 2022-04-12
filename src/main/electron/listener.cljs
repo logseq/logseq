@@ -78,12 +78,13 @@
 
   (js/window.apis.on "persistGraph"
                      ;; electron is requesting window for persisting a graph in it's db
+                     ;; fire back "broadcastPersistGraphDone" on done
                      (fn [data]
                        (let [repo (bean/->clj data)
                              before-f #(notification/show!
                                         (ui/loading (t :graph/persist))
                                         :warning)
-                             after-f #(ipc/ipc "persistGraphDone" repo)
+                             after-f #(ipc/ipc "broadcastPersistGraphDone")
                              error-f (fn []
                                        (after-f)
                                        (notification/show!
@@ -96,7 +97,12 @@
 
   (js/window.apis.on "loginCallback"
                      (fn [code]
-                       (user/login-callback code))))
+                       (user/login-callback code)))
+  
+  (js/window.apis.on "openNewWindowOfGraph"
+                     ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
+                     (fn [repo]
+                       (ui-handler/open-new-window! nil repo))))
 
 (defn listen!
   []

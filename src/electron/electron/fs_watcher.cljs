@@ -36,6 +36,7 @@
                                  :stat (fs/statSync path)}))
 
 (defn watch-dir!
+  "Watch a directory if no such file watcher exists"
   [_win dir]
   (when (and (fs/existsSync dir)
              (not (get @*file-watcher dir)))
