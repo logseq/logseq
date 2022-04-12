@@ -27,7 +27,6 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.handler.history :as history]
-            [frontend.mobile.record :as record]
             [frontend.mobile.footer :as footer]
             [frontend.handler.config :as config-handler]))
 
@@ -617,6 +616,7 @@
                     config/mobile?)
                 (not (:review-cards? config)))
        (mobile-bar state id))
+     
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
