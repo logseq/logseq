@@ -1,3 +1,21 @@
+.cp__win32-title-bar {
+  z-index: 100;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--ls-win32-title-bar-height);
+  display: flex;
+
+  > .logo {
+    width: 50px;
+    height: var(--ls-win32-title-bar-height);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+}
+
 .is-win32.is-electron {
-  --ls-win32-title-bar-height: 30px;
+  --ls-win32-title-bar-height: 36px;
 }
