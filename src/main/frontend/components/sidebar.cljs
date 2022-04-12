@@ -161,7 +161,7 @@
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-          [:li.recent-item
+          [:li.recent-item.select-none
            {:key name
             :data-ref name}
            (page-name name (get-page-icon entity))]))])))
