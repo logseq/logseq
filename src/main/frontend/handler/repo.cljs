@@ -666,7 +666,7 @@
                (when on-error
                  (on-error)))))))
 
-(defn persist-otherwindow-db!
+(defn broadcast-persist-db!
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
