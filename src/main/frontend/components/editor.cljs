@@ -26,7 +26,9 @@
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.history :as history]))
+            [frontend.handler.history :as history]
+            [frontend.mobile.footer :as footer]
+            [frontend.handler.config :as config-handler]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -237,54 +239,75 @@
                       (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
-(rum/defc mobile-bar-command [command-handler icon & [event?]]
+(def ^:private mobile-bar-icons-keywords
+  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
+   :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
+
+(def ^:private mobile-bar-commands-stats
+  (atom (or (:mobile/toolbar-stats (state/get-config))
+            (into {} (mapv (fn [name] [name {:counts 0}])
+                           mobile-bar-icons-keywords)))))
+
+(defn set-command-stats [icon]
+  (let [key (keyword icon)
+        counts (get-in @mobile-bar-commands-stats [key :counts])]
+    (swap! mobile-bar-commands-stats
+           assoc-in [key :counts] (inc counts))
+    (config-handler/set-config!
+     :mobile/toolbar-stats @mobile-bar-commands-stats)))
+
+(rum/defc mobile-bar-command
+  [command-handler icon & [count? event?]]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
+                      (when count?
+                        (set-command-stats icon))
                       (if event?
                         (command-handler e)
                         (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
-(rum/defc mobile-bar < rum/reactive
+(defn mobile-bar-commands
   [_parent-state parent-id]
-  (let [vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)
-        ;; TODO: should we add this focus step to `simple-insert!`?
-        viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
+  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
                              (util/make-el-cursor-position-into-center-viewport input)
                              (.focus input)))]
+    (zipmap mobile-bar-icons-keywords
+     [(mobile-bar-command editor-handler/cycle-todo! "checkbox" true)
+      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets" true)
+      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses" true)
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
+      (mobile-bar-command editor-handler/cycle-priority! "a-b" true)
+      (mobile-bar-command editor-handler/toggle-list! "list" true)
+      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera" true)
+      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube" true)
+      (mobile-bar-command editor-handler/html-link-format! "link" true)
+      (mobile-bar-command history/undo! "rotate" true true)
+      (mobile-bar-command history/redo! "rotate-clockwise" true true)
+      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code" true)
+      (mobile-bar-command editor-handler/bold-format! "bold" true)
+      (mobile-bar-command editor-handler/italics-format! "italic" true)
+      (mobile-bar-command editor-handler/strike-through-format! "strikethrough" true)
+      (mobile-bar-command editor-handler/highlight-format! "paint" true)])))
+
+(rum/defc mobile-bar < rum/reactive
+  [parent-state parent-id]
+  (let [commands (mobile-bar-commands parent-state parent-id)
+        sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2
-     {:style {:bottom (if vw-state
-                        (- (.-clientHeight js/document.documentElement)
-                           (:height vw-state)
-                           (:offset-top vw-state))
-                        0)}
-      :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
      [:div.toolbar-commands
       (mobile-bar-indent-outdent true "arrow-bar-right")
       (mobile-bar-indent-outdent false "arrow-bar-left")
       (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
       (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
-      (mobile-bar-command #(commands/simple-insert! parent-id "\n" {}) "arrow-back")
-      (mobile-bar-command editor-handler/cycle-todo! "checkbox")
-      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets")
-      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses")
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command")
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag")
-      (mobile-bar-command editor-handler/cycle-priority! "a-b")
-      (mobile-bar-command editor-handler/toggle-list! "list")
-      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera")
-      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube")
-      (mobile-bar-command editor-handler/html-link-format! "link")
-      (mobile-bar-command history/undo! "rotate" true)
-      (mobile-bar-command history/redo! "rotate-clockwise" true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code")
-      (mobile-bar-command editor-handler/bold-format! "bold")
-      (mobile-bar-command editor-handler/italics-format! "italic")
-      (mobile-bar-command editor-handler/strike-through-format! "strikethrough")
-      (mobile-bar-command editor-handler/highlight-format! "paint")]
+      (mobile-bar-command #(if (state/sub :document/mode?)
+                             (editor-handler/insert-new-block! nil)
+                             (commands/simple-insert! parent-id "\n" {})) "arrow-back")
+      (for [command sorted-commands]
+        ((first command) commands))]
      [:div.toolbar-hide-keyboard
       (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
 
@@ -580,12 +603,20 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id _config]
+  [state {:keys [format block]} id config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-     (when (or (mobile-util/is-native-platform?) config/mobile?)
+
+     (when (= (state/sub :editor/record-status) "RECORDING")
+       [:div#audio-record-toolbar
+        (footer/audio-record-cp)])
+
+     (when (and (or (mobile-util/is-native-platform?)
+                    config/mobile?)
+                (not (:review-cards? config)))
        (mobile-bar state id))
+     
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)

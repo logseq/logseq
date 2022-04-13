@@ -462,6 +462,13 @@
       (gobj/get node "tagName"))))
 
 #?(:cljs
+   (defn audio?
+     [node]
+     (contains?
+      #{"AUDIO"}
+      (gobj/get node "tagName"))))
+
+#?(:cljs
    (defn sup?
      [node]
      (contains?

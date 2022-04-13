@@ -67,11 +67,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Fetch yarn deps
-        run: yarn install
-
-      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
-      - name: Ensure yarn.lock is up to date
-        run: git diff --exit-code yarn.lock
+        run: yarn install --frozen-lockfile
 
       - name: Run ClojureScript test
         run: |

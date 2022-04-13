@@ -15,6 +15,7 @@ dependencies {
     implementation project(':capacitor-keyboard')
     implementation project(':capacitor-splash-screen')
     implementation project(':capacitor-status-bar')
+    implementation project(':capacitor-voice-recorder')
     implementation project(':send-intent')
 
 }

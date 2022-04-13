@@ -121,18 +121,19 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo)
-          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
-          _ (repo-handler/persist-otherwindow-db! graph)
-          _ (repo-handler/restore-and-setup-repo! graph)]
-    (graph-switch graph)))
+  (let [current-repo (state/get-current-repo)]
+    (p/do!
+     (when (util/electron?)
+       (p/do!
+        (repo-handler/persist-db! current-repo persist-db-noti-m)
+        (repo-handler/persist-otherwindow-db! graph)))
+     (repo-handler/restore-and-setup-repo! graph)
+     (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph]]
   (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
-    (if (util/electron?)
-      (graph-switch-on-persisted graph)
-      (graph-switch graph))
+    (graph-switch-on-persisted graph)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
@@ -229,7 +230,8 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards {:id :srs}))
+  (state/set-modal! srs/global-cards {:id :srs
+                                      :label "flashcards__cp"}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))

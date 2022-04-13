@@ -2,7 +2,7 @@
   (:require [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
-            ["@capacitor/keyboard" :refer [^js Keyboard]]
+            ;; ["@capacitor/keyboard" :refer [^js Keyboard]]
             #_:clj-kondo/ignore
             ["@capacitor/status-bar" :refer [^js StatusBar]]
             [frontend.mobile.intent :as intent]
@@ -19,8 +19,9 @@
   ;; Keyboard watcher
   ;; (.addListener Keyboard "keyboardWillShow"
   ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
-  (.addListener Keyboard "keyboardDidShow"
-                #(state/pub-event! [:mobile/keyboard-did-show])))
+  ;; (.addListener Keyboard "keyboardDidShow"
+  ;;               #(state/pub-event! [:mobile/keyboard-did-show]))
+  )
 
 (defn init!
   []
@@ -62,7 +63,7 @@
                     (when (state/get-current-repo)
                       (let [is-active? (.-isActive state)]
                         (when is-active?
-                          (editor-handler/save-current-block!))))))))
+                          (editor-handler/save-current-block!))))))
 
-(.addEventListener js/window "sendIntentReceived"
-                   #(intent/handle-received))
+    (.addEventListener js/window "sendIntentReceived"
+                       #(intent/handle-received))))

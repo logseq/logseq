@@ -1,0 +1,50 @@
+.cp__footer {
+    position: absolute;
+    bottom: 0px;
+    padding: 10px 20px;
+    background-color: var(--ls-primary-background-color);
+    z-index: 1000;
+    display: flex;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    height: 80px;
+    /* border-top: 1.5px solid var(--ls-tertiary-border-color); */
+    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.10);
+    
+    .ti, .timer {
+        color: var(--ls-primary-text-color);
+        opacity: 0.5;
+    }
+
+    .timer {
+        position: absolute;
+        left: 40px;
+    }
+}
+
+html.is-native-ipad {
+    .cp__footer {
+        height: 55px;
+        /* width: calc(100vw - var(--ls-left-sidebar-width)); */
+        right: 0;
+        box-shadow: none;
+        flex: 1;
+        index: 0;
+    }
+}
+
+html.is-native-iphone {
+    @media (orientation: landscape) {
+        .cp__footer {
+            height: 45px;
+        }
+    }
+}
+
+html.is-native-iphone-without-notch,
+html.is-native-android {
+    .cp__footer {
+        height: 45px;
+    }
+}
+

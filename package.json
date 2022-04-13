@@ -24,7 +24,7 @@
         "shadow-cljs": "2.17.5",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
-        "tailwindcss": "2.2.4",
+        "tailwindcss": "2.2.16",
         "typescript": "^4.4.3"
     },
     "scripts": {
@@ -79,6 +79,7 @@
         "@sentry/tracing": "^6.18.2",
         "@tabler/icons": "1.54.0",
         "@tippyjs/react": "4.2.5",
+        "capacitor-voice-recorder": "2.1.0",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
         "codemirror": "5.58.1",

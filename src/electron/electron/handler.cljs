@@ -117,7 +117,7 @@
     (catch :default _e
       false)))
 
-(defmethod handle :writeFile [_window [_ repo path content]]
+(defmethod handle :writeFile [window [_ repo path content]]
   (let [^js Buf (.-Buffer buffer)
         ^js content (if (instance? js/ArrayBuffer content)
                       (.from Buf content)
@@ -133,14 +133,14 @@
                             (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]
-          (utils/send-to-renderer "notification" {:type "error"
-                                                  :payload (str "Write to the file " path
-                                                                " failed, "
-                                                                e
-                                                                (when backup-path
-                                                                  (str ". A backup file was saved to "
-                                                                       backup-path
-                                                                       ".")))}))))))
+          (utils/send-to-renderer window "notification" {:type "error"
+                                                         :payload (str "Write to the file " path
+                                                                       " failed, "
+                                                                       e
+                                                                       (when backup-path
+                                                                         (str ". A backup file was saved to "
+                                                                              backup-path
+                                                                              ".")))}))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
@@ -278,7 +278,7 @@
   (search/delete-db! repo))
 
 (defn clear-cache!
-  []
+  [window]
   (let [graphs-dir (get-graphs-dir)]
     (fs-extra/removeSync graphs-dir))
 
@@ -289,11 +289,11 @@
           (fs-extra/removeSync path)
           (catch js/Error e
             (js/console.error e)))))
-    (utils/send-to-renderer "redirect" {:payload {:to :home}})))
+    (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
 
-(defmethod handle :clearCache [_window _]
+(defmethod handle :clearCache [window _]
   (search/close!)
-  (clear-cache!)
+  (clear-cache! window)
   (search/ensure-search-dir!))
 
 (defmethod handle :openDialog [^js _window _messages]

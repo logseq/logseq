@@ -275,7 +275,8 @@
                 (mobile-util/native-ios?))
         (back-and-forward))
 
-      (new-block-mode)
+      (when-not (mobile-util/is-native-platform?)
+        (new-block-mode))
 
       (repo/sync-status current-repo)
 

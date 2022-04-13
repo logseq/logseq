@@ -578,3 +578,9 @@ a.cloze-revealed {
     cursor: default;
   }
 }
+
+html.is-native-ios {
+    audio {
+        width: 300px;
+    }
+}
