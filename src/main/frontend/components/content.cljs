@@ -6,6 +6,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
+            [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -21,6 +22,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -211,6 +213,19 @@
             :on-click (fn [_e]
                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
            "Copy block embed")
+          
+          ;; TODO Logseq protocol mobile support
+          (when (util/electron?)
+            (ui/menu-link
+             {:key      "Copy block URL"
+              :on-click (fn [_e]
+                          (let [current-repo (state/get-current-repo)
+                                repo-path (repo/get-repo-name current-repo)
+                                short-repo-name (repo/get-short-repo-name repo-path)
+                                tap-f (fn [block-id]
+                                        (url-util/get-local-logseq-url-by-uuid short-repo-name block-id))]
+                            (editor-handler/copy-block-ref! block-id tap-f)))}
+             "Copy block URL"))
 
           (block-template block-id)
 
