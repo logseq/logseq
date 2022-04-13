@@ -278,6 +278,10 @@
      :whiteboard/last-persisted-at          {}
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
+
+     ;; win32 title bar
+     ;; TODO: get window info from ipc
+     :win32-title-bar/window-is-maximized?  false
      ;; db tx-id -> editor cursor
      :history/tx->editor-cursor             {}})))
 
