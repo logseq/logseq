@@ -126,7 +126,6 @@
             ["codemirror/mode/yaml-frontmatter/yaml-frontmatter"]
             ["codemirror/mode/yaml/yaml"]
             ["codemirror/mode/z80/z80"]
-            [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
@@ -258,10 +257,10 @@
                               (state/set-block-component-editing-mode! true)))
         (.addEventListener element "mousedown"
                            (fn [e]
+                             (util/stop e)
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
-                               (state/set-editing! id (.getValue editor) block nil false))
-                             (util/stop e)))
+                               (state/set-editing! id (.getValue editor) block nil false))))
         (.save editor)
         (.refresh editor)
         (when default-open?
@@ -318,13 +317,13 @@
   ;; you're trying to focus doesn't yet exist. Adding the requestAnimationFrame
   ;; ensures that the React component re-renders before the :codemirror/focus
   ;; command is run. It's not elegant... open to suggestions for how to fix it!
-  (js/window.requestAnimationFrame
-   (fn []
-     (let [block (state/get-edit-block)
-           block-uuid (:block/uuid block)
-           block-node (util/get-first-block-by-id block-uuid)]
-       (editor-handler/select-block! (:block/uuid block))
-       (let [textarea-ref (.querySelector block-node "textarea")]
-         (.focus (gobj/get textarea-ref codemirror-ref-name)))
-       (util/select-unhighlight! (dom/by-class "selected"))
-       (state/clear-selection!)))))
+  (let [block (state/get-edit-block)
+        block-uuid (:block/uuid block)]
+    (state/clear-edit!)
+    (js/setTimeout
+     (fn []
+       (let [block-node (util/get-first-block-by-id block-uuid)
+             textarea-ref (.querySelector block-node "textarea")]
+         (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
+           (.focus codemirror-ref))))
+     0)))

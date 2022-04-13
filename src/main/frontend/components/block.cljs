@@ -1988,7 +1988,8 @@
                      :on-hide (fn [value event]
                                 (when (= event :esc)
                                   (editor-handler/save-block! (editor-handler/get-state) value)
-                                  (editor-handler/escape-editing)))}
+                                  (let [select? (not (string/includes? value "```"))]
+                                    (editor-handler/escape-editing select?))))}
                     edit-input-id
                     config))]
       [:div.flex.flex-row.block-content-wrapper

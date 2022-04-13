@@ -97,7 +97,7 @@
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
    {:on-click (fn []
                 (when-let [block (editor-handler/api-insert-new-block! "" args)]
-                  (editor-handler/edit-block! block :max (:block/uuid block))))}
+                  (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
                          :width       20
