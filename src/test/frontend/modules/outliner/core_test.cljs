@@ -274,5 +274,40 @@
                                 (mapv #(-> % :data :block/uuid)))]
         (is (= [19 20] children-of-18))))))
 
+(deftest test-batch-transact
+  (testing "
+  add [18 [19 20] 21] after 6
+
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+ "
+    (let [node-tree (build-node-tree [1 [[2] [3]]])]
+      (build-db-records node-tree)
+      (let [new-blocks [(:data (build-block 4)) (:data (build-block 5 4 4))]
+            target-block (get-block 2)]
+        (outliner-tx/transact!
+          {}
+          (outliner-core/insert-blocks! new-blocks target-block {:sibling? false
+                                                                 :keep-uuid? true})
+          (outliner-core/delete-blocks! [(get-block 3)] {}))
+        (let [children-of-2 (->> (build-block 2)
+                                 (tree/-get-children)
+                                 (mapv #(-> % :data :block/uuid)))]
+          (is (= [4] children-of-2)))
+
+        (let [children-of-4 (->> (build-block 4)
+                                 (tree/-get-children)
+                                 (mapv #(-> % :data :block/uuid)))]
+          (is (= [5] children-of-4)))
+
+        (is (nil? (get-block 3)))))))
+
 (comment
   (cljs.test/run-tests))

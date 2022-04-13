@@ -338,7 +338,7 @@
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op]}]
+  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op] :as opts}]
   (let [blocks (if (sequential? blocks) blocks [blocks])
         target-block (db/pull (:db/id target-block))
         sibling? (if (:block/name target-block) false sibling?)
@@ -357,7 +357,9 @@
       (do
         (state/pub-event! [:instrument {:type :outliner/invalid-structure
                                         :payload {:data (mapv #(dissoc % :block/content) tx)}}])
-        (throw (js/Error. "Invalid outliner data")))
+        (throw (ex-info "Invalid outliner data"
+                        {:opts opts
+                         :tx tx})))
       (let [uuids-tx (->> (map :block/uuid tx)
                           (remove nil?)
                           (map (fn [uuid] {:block/uuid uuid})))
