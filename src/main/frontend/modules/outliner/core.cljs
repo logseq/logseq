@@ -499,7 +499,11 @@
                     target-page (:db/id (:block/page target-block))
                     not-same-page? (not= first-block-page target-page)
                     move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
-                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx)
+                    children-page-tx (when not-same-page?
+                                       (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
+                                         (map (fn [uuid] {:block/uuid uuid
+                                                          :block/page target-page}) children-ids)))
+                    full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                                      :target (:db/id target-block)}
                               not-same-page?
