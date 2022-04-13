@@ -119,6 +119,9 @@
               (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
         (debug/pprint "login-callback" resp)))))
 
+(defn logout []
+  (clear-tokens))
+
 (defn refresh-id-token&access-token
   "refresh id-token and access-token, if refresh_token expired, clear all tokens
    return true if success, else false"
