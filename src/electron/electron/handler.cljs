@@ -218,7 +218,7 @@
          (map graph-name->path))))
 
 (defn get-graph-name
-  "Given a graph's name, returns the graph's fullname.
+  "Given a graph's name of string, returns the graph's fullname.
    E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
    Returns `nil` if no such graph exists."
   [graph]
