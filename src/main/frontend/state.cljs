@@ -219,6 +219,10 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     ;; win32 title bar
+     ;; TODO: get window info from ipc
+     :win32-title-bar/window-is-maximized?  false
      })))
 
 ;; block uuid -> {content(String) -> ast}

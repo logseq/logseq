@@ -1,5 +1,5 @@
 .cp__win32-title-bar {
-  z-index: 100;
+  z-index: var(--ls-z-index-level-5);
   position: fixed;
   left: 0;
   right: 0;
@@ -32,6 +32,7 @@
     -webkit-app-region: no-drag;
 
     > * {
+      color: var(--ls-link-text-color);
       width: 100%;
       display: flex;
       justify-content: center;
