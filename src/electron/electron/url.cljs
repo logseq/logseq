@@ -21,7 +21,7 @@
   (cond
     (= "open" url-path)
     (let [[graph page-name block-id] (get-URL-decoded-params parsed-url ["graph" "page" "block-id"])
-          graph-name (handler/get-graph-name graph)]
+          graph-name (when graph (handler/get-graph-name graph))]
       (if graph-name
         (p/let [_ (handler/broadcast-persist-graph! graph-name)]
           ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
