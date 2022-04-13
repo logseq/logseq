@@ -700,7 +700,7 @@
       [:tbody
        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
          [:tr {:key name}
-          [:td.n.w-10 [:span.opacity-70 (str (inc n) ". ")]]
+          [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
           [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
                      (block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]
