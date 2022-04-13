@@ -131,7 +131,7 @@
   (let [params (.-searchParams parsed-url)]
     (map (fn [key]
            (when-let [value (.get params key)]
-             (js/decodeURI value)))
+             (js/decodeURIComponent value)))
          keys)))
 
 ;; Keep update with the normalization in main
