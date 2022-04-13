@@ -16,6 +16,12 @@
         "Logseq"]]
     [:div.right-side
       {}
-      [:div.minimize]
-      [:div.max-restore]
-      [:div.close]]])
+      [:div.minimize
+        {}
+        (svg/chrome-minimize)]
+      [:div.max-restore
+        {}
+        (svg/chrome-maximize)]
+      [:div.close
+        {}
+        (svg/chrome-close)]]])

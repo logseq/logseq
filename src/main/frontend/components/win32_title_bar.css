@@ -33,6 +33,9 @@
 
     > * {
       width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
 
       &:hover {
         background: var(--ls-tertiary-background-color);
@@ -45,10 +48,12 @@
 
     > .close {
       &:hover {
+        color: #fff;
         background: #c42b1c;
       }
 
       &:active {
+        color: #fff;
         background: #b3271c;
       }
     }
