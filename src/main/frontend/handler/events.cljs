@@ -326,9 +326,12 @@
 
     (when-let [coming (and (not downloading?)
                            (get-in @state/state [:plugin/updates-coming id]))]
-      (notification/show!
-       (str "Checked: " (:title coming))
-       :success))
+      (let [error-code (:error-code coming)
+            error-code (if (= error-code (str :no-new-version)) nil error-code)]
+        (when (or pending? (not error-code))
+          (notification/show!
+            (str "[Checked]<" (:title coming) "> " error-code)
+            (if error-code :error :success)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item

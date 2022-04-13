@@ -95,7 +95,7 @@
     (p/create
       (fn [resolve]
         (state/set-state! :plugin/installing mft)
-        (ipc/ipc "installMarketPlugin" mft)
+        (ipc/ipc :installMarketPlugin mft)
         (resolve id)))))
 
 (defn check-or-update-marketplace-plugin
@@ -111,13 +111,14 @@
                 (state/reset-all-updates-state)
                 (throw e))))
         (fn [mfts]
-          (if-let [mft (some #(when (= (:id %) id) %) mfts)]
-            (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft))
-            (throw (js/Error. (str ":not-found-in-marketplace" id))))
+
+          (let [mft (some #(when (= (:id %) id) %) mfts)]
+            ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+            (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
           true))
 
       (fn [^js e]
-        (error-handler "Update Error: remote error")
+        (error-handler e)
         (state/set-state! :plugin/installing nil)
         (js/console.error e)))))
 
@@ -186,7 +187,7 @@
                                  (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
-                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:]+" ""))
+                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
                              [msg type] (case error-code
 
                                           :no-new-version
@@ -206,7 +207,8 @@
                              ;; notify human tips
                              (notifications/show!
                                (str
-                                 (if (= :error type) "[Install Error]" "")
+                                 (if (= :error type) "[Error]" "")
+                                 (str "<" (:id payload) "> ")
                                  msg) type)))
 
                          (js/console.error payload))
