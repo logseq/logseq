@@ -30,7 +30,7 @@
 
  [frontend.db.utils
   date->int db->json db->edn-str db->string get-max-tx-id get-tx-id
-  group-by-page seq-flatten sort-by-pos
+  group-by-page seq-flatten
   string->db
 
   entity pull pull-many transact! get-key-value]

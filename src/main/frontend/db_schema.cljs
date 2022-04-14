@@ -60,12 +60,6 @@
    ;; "A", "B", "C"
    :block/priority {}
 
-   ;; TODO: remove
-   ;; 1, 2, 3, etc.
-   :block/level {}
-   ;; TODO: remove
-   :block/meta {}
-
    ;; block key value properties
    :block/properties {}
    ;; vector

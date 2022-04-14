@@ -29,12 +29,6 @@
 (defn seq-flatten [col]
   (flatten (seq col)))
 
-(defn sort-by-pos
-  [blocks]
-  (sort-by
-   #(get-in % [:block/meta :start-pos])
-   blocks))
-
 (defn group-by-page
   [blocks]
   (if (:block/page (first blocks))
