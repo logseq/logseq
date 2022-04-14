@@ -124,16 +124,6 @@
   [graph-name]
   (string/replace graph-name "logseq_local_" ""))
 
-(defn get-URL-decoded-params
-  "Get decoded URL parameters from parsed js/URL.
-   `nil` for non-existing keys."
-  [^js parsed-url keys]
-  (let [params (.-searchParams parsed-url)]
-    (map (fn [key]
-           (when-let [value (.get params key)]
-             (js/decodeURIComponent value)))
-         keys)))
-
 ;; Keep update with the normalization in main
 (defn normalize
   [s]

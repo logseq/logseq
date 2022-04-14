@@ -183,32 +183,11 @@
     (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
       (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
-;; TODO move to else where?
-(defn get-repo-name [repo]
-  (cond
-    (mobile-util/is-native-platform?)
-    (text/get-graph-name-from-path repo)
-
-    (config/local-db? repo)
-    (config/get-local-dir repo)
-
-    :else
-    (db/get-repo-path repo)))
-
-;; TODO move to else where?
-(defn get-short-repo-name
-  "repo-path: output of `get-repo-name`"
-  [repo-path]
-  (if (or (util/electron?)
-          (mobile-util/is-native-platform?))
-    (text/get-file-basename repo-path)
-    repo-path))
-
 (defn- repos-dropdown-links [repos current-repo *multiple-windows?]
   (let [switch-repos (remove (fn [repo] (= current-repo (:url repo))) repos) ; exclude current repo
         repo-links (mapv
                     (fn [{:keys [url]}]
-                      (let [repo-path (get-repo-name url)
+                      (let [repo-path (db/get-repo-name url)
                             short-repo-name (text/get-graph-name-from-path repo-path)]
                         {:title short-repo-name
                          :hover-detail repo-path ;; show full path on hover
@@ -283,8 +262,8 @@
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [repo-path (get-repo-name current-repo)
-                                   short-repo-name (get-short-repo-name repo-path)]
+                             (let [repo-path (db/get-repo-name current-repo)
+                                   short-repo-name (db/get-short-repo-name repo-path)]
                                [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
                                              (check-multiple-windows? state)

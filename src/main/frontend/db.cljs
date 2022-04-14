@@ -23,6 +23,8 @@
   ;; TODO: remove later
   conns
   get-repo-path
+  get-repo-name
+  get-short-repo-name
   datascript-db
   get-db
   me-tx

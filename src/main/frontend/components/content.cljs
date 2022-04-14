@@ -6,7 +6,6 @@
             [frontend.components.editor :as editor]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
-            [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -220,10 +219,8 @@
              {:key      "Copy block URL"
               :on-click (fn [_e]
                           (let [current-repo (state/get-current-repo)
-                                repo-path (repo/get-repo-name current-repo)
-                                short-repo-name (repo/get-short-repo-name repo-path)
                                 tap-f (fn [block-id]
-                                        (url-util/get-local-logseq-url-by-uuid short-repo-name block-id))]
+                                        (url-util/get-local-logseq-entity-url-by-uuid current-repo block-id))]
                             (editor-handler/copy-block-ref! block-id tap-f)))}
              "Copy block URL"))
 

@@ -20,6 +20,7 @@
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
+;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
