@@ -44,7 +44,7 @@
            [:a.button
               {:on-click toggle-fn}
             [:span.text-sm.font-medium (user-handler/email)]])
-         [{:title "Logout"
+         [{:title (t :logout)
            :options {:on-click user-handler/logout}}]
          {})
         [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
