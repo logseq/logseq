@@ -217,14 +217,15 @@
          (map #(path/basename % ".transit"))
          (map graph-name->path))))
 
+;; TODO support alias mechanism
 (defn get-graph-name
   "Given a graph's name of string, returns the graph's fullname.
    E.g., given `cat`, returns `logseq_local_<path_to_directory>/cat`
    Returns `nil` if no such graph exists."
-  [graph]
+  [graph-identifier]
   (->> (get-graphs)
        (some #(when (string/ends-with? (utils/normalize-lc %)
-                                       (str "/" (utils/normalize-lc graph)))
+                                       (str "/" (utils/normalize-lc graph-identifier)))
                 %))))
 
 (defmethod handle :getGraphs [_window [_]]
