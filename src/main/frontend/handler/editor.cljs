@@ -492,25 +492,16 @@
     (= uuid (and block-id (medley/uuid block-id)))))
 
 (defn insert-new-block-before-block-aux!
-  [config block value
-   {:keys [ok-handler]
-    :as _opts}]
-  (let [input (gdom/getElement (state/get-edit-input-id))
-        pos (cursor/pos input)
-        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
-        current-block (assoc block :block/content snd-block-text)
-        current-block (apply dissoc current-block db-schema/retract-attributes)
-        current-block (wrap-parse-block current-block)
-        new-m {:block/uuid (db/new-block-id)
-               :block/content fst-block-text}
+  [config block _value {:keys [ok-handler]}]
+  (let [new-m {:block/uuid (db/new-block-id)
+               :block/content ""}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
-     (let [tx (:tx-data (outliner-core/save-block current-block))
-           sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
+     (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
                                                              :keep-uuid? true})))
     (ok-handler prev-block)))
@@ -581,10 +572,15 @@
              input (gdom/getElement (state/get-edit-input-id))
              pos (cursor/pos input)
              [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
-             insert-fn (match (mapv boolean [block-self? (seq fst-block-text) (seq snd-block-text)])
-                         [true _ _] insert-new-block-aux!
-                         [_ false true] insert-new-block-before-block-aux!
-                         [_ _ _] insert-new-block-aux!)]
+             insert-fn (cond
+                         block-self?
+                         insert-new-block-aux!
+
+                         (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+                         insert-new-block-before-block-aux!
+
+                         :else
+                         insert-new-block-aux!)]
          (insert-fn config block value
                     {:ok-handler
                      (fn [last-block]
