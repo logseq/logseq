@@ -47,6 +47,7 @@
     :block/properties
     :block/pre-block?
     :block/scheduled
+    :block/show-at
     :block/deadline
     :block/repeated?
     :block/created-at

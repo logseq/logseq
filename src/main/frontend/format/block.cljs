@@ -212,10 +212,10 @@
    (into {})))
 
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
-(defn timestamps->scheduled-and-deadline
+(defn raw-timestamps->block-timestamps
   [timestamps]
   (let [timestamps (medley/map-keys (comp keyword string/lower-case) timestamps)
-        m (some->> (select-keys timestamps [:scheduled :deadline])
+        m (some->> (select-keys timestamps [:scheduled :deadline :date])
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
                                 {:keys [year month day]} date
@@ -225,7 +225,9 @@
                                :scheduled
                                {:scheduled day}
                                :deadline
-                               {:deadline day})
+                               {:deadline day}
+                               :date
+                               {:show-at day})
                               repetition
                               (assoc :repeated? true))))))]
     (apply merge m)))
@@ -581,7 +583,7 @@
                                      (assoc block
                                             :content (get-block-content encoded-content block format (and block-content (string/join "\n" (reverse (conj block-all-content block-content)))))))))
                         block (if (seq timestamps)
-                                (merge block (timestamps->scheduled-and-deadline timestamps))
+                                (merge block (raw-timestamps->block-timestamps timestamps))
                                 block)
                         block (assoc block :body body)
                         block (with-page-block-refs block with-id?)

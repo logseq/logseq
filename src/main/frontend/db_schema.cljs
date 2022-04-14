@@ -80,6 +80,9 @@
    ;; scheduled day
    :block/scheduled {}
 
+   ;; day on which the task should be shown
+   :block/show-at {}
+
    ;; deadline day
    :block/deadline {}
 
