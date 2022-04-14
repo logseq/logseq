@@ -32,7 +32,7 @@
     -webkit-app-region: no-drag;
 
     > * {
-      color: var(--ls-link-text-color);
+      color: var(--ls-primary-text-color);
       width: 100%;
       display: flex;
       justify-content: center;
