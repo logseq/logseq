@@ -58,7 +58,8 @@
        (when (and (seq txs)
                  (not (:skip-transact? opts)))
         (try
-          (let [conn (conn/get-db false)
+          (let [repo (get opts :repo (state/get-current-repo))
+                conn (conn/get-db repo false)
                 editor-cursor (state/get-current-edit-block-and-position)
                 meta (merge opts {:editor-cursor editor-cursor})
                 rs (d/transact! conn txs meta)]

@@ -377,48 +377,50 @@
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
   [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op replace-empty-target?] :as opts}]
-  (let [blocks (if (sequential? blocks) blocks [blocks])
-        target-block (db/pull (:db/id target-block))
-        sibling? (if (:block/name target-block) false sibling?)
-        keep-uuid? (if move? true keep-uuid?)
-        replace-empty-target? (if (some? replace-empty-target?)
-                                replace-empty-target?
-                                (and sibling?
-                                     (string/blank? (:block/content target-block))
-                                     (> (count blocks) 1)
-                                     (not move?)))
-        blocks' (blocks-with-level blocks)
-        tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
-                                                    :replace-empty-target? replace-empty-target?
-                                                    :keep-uuid? keep-uuid?
-                                                    :move? move?
-                                                    :outliner-op outliner-op})]
-    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
-      (do
-        (state/pub-event! [:instrument {:type :outliner/invalid-structure
-                                        :payload {:data (mapv #(dissoc % :block/content) tx)}}])
-        (throw (ex-info "Invalid outliner data"
-                        {:opts opts
-                         :tx tx})))
-      (let [uuids-tx (->> (map :block/uuid tx)
-                          (remove nil?)
-                          (map (fn [uuid] {:block/uuid uuid})))
-            tx (if move?
-                 tx
-                 (assign-temp-id tx replace-empty-target? target-block))
-            target-node (block target-block)
-            next (if sibling?
-                   (tree/-get-right target-node)
-                   (tree/-get-down target-node))
-            next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
-                      (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                        [{:block/uuid (tree/-get-id next)
-                          :block/left (:db/id left)}]))
-            full-tx (util/concat-without-nil uuids-tx tx next-tx)]
-        (when (and replace-empty-target? (state/editing?))
-          (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
-        {:tx-data full-tx
-         :blocks tx}))))
+  (when-not (empty? blocks)
+    (let [blocks (if (sequential? blocks) blocks [blocks])
+          target-block (db/pull (:db/id target-block))
+          sibling? (if (:block/name target-block) false sibling?)
+          keep-uuid? (if move? true keep-uuid?)
+          replace-empty-target? (if (some? replace-empty-target?)
+                                  replace-empty-target?
+                                  (and sibling?
+                                       (string/blank? (:block/content target-block))
+                                       (> (count blocks) 1)
+                                       (not move?)))
+          blocks' (blocks-with-level blocks)
+          tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
+                                                      :replace-empty-target? replace-empty-target?
+                                                      :keep-uuid? keep-uuid?
+                                                      :move? move?
+                                                      :outliner-op outliner-op})]
+      (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
+        (do
+          (state/pub-event! [:instrument {:type :outliner/invalid-structure
+                                          :payload {:data (mapv #(dissoc % :block/content) tx)}}])
+          (throw (ex-info "Invalid outliner data"
+                          {:opts opts
+                           :tx tx
+                           :blocks blocks})))
+        (let [uuids-tx (->> (map :block/uuid tx)
+                            (remove nil?)
+                            (map (fn [uuid] {:block/uuid uuid})))
+              tx (if move?
+                   tx
+                   (assign-temp-id tx replace-empty-target? target-block))
+              target-node (block target-block)
+              next (if sibling?
+                     (tree/-get-right target-node)
+                     (tree/-get-down target-node))
+              next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
+                        (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
+                          [{:block/uuid (tree/-get-id next)
+                            :block/left (:db/id left)}]))
+              full-tx (util/concat-without-nil uuids-tx tx next-tx)]
+          (when (and replace-empty-target? (state/editing?))
+            (state/set-edit-content! (state/get-edit-input-id) (:block/content (first blocks))))
+          {:tx-data full-tx
+           :blocks tx})))))
 
 (defn- delete-block
   "Delete block from the tree."
@@ -450,49 +452,52 @@
   "Delete blocks from the tree."
   [blocks {:keys [children?]
            :or {children? true}}]
-  (let [txs-state (ds/new-outliner-txs-state)
-        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
-        start-block (first blocks)
-        end-block (last (get-top-level-blocks blocks))
-        start-node (block start-block)
-        end-node (block end-block)
-        end-node-parents (->>
-                          (db/get-block-parents
-                           (state/get-current-repo)
-                           (tree/-get-id end-node)
-                           1000)
-                          (map :block/uuid)
-                          (set))
-        self-block? (contains? end-node-parents (tree/-get-id start-node))]
-    (if (or
-         (= 1 (count blocks))
-         (= start-node end-node) self-block?)
-      (delete-block txs-state start-block children?)
-      (let [sibling? (= (tree/-get-parent-id start-node)
-                        (tree/-get-parent-id end-node))
-            right-node (tree/-get-right end-node)]
-        (when (tree/satisfied-inode? right-node)
-          (let [left-node-id (if sibling?
-                               (tree/-get-id (tree/-get-left start-node))
-                               (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
-                                     parents (->>
-                                              (db/get-block-parents
-                                               (state/get-current-repo)
-                                               (tree/-get-id start-node)
-                                               1000)
-                                              (map :block/uuid)
-                                              (set))
-                                     result (first (set/intersection (set end-node-left-nodes) parents))]
-                                 (when-not result
-                                   (util/pprint {:parents parents
-                                                 :end-node-left-nodes end-node-left-nodes}))
-                                 result))]
-            (assert left-node-id "Can't find the left-node-id")
-            (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-              (tree/-save new-right-node txs-state))))
-        (let [txs (db-outliner/del-blocks block-ids)]
-          (ds/add-txs txs-state txs))))
-    {:tx-data @txs-state}))
+  (when (seq blocks)
+    (let [txs-state (ds/new-outliner-txs-state)
+          block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
+          start-block (first blocks)
+          end-block (last (get-top-level-blocks blocks))
+          start-node (block start-block)
+          end-node (block end-block)
+          end-node-parents (->>
+                            (db/get-block-parents
+                             (state/get-current-repo)
+                             (tree/-get-id end-node)
+                             1000)
+                            (map :block/uuid)
+                            (set))
+          self-block? (contains? end-node-parents (tree/-get-id start-node))]
+      (if (or
+           (= 1 (count blocks))
+           (= start-node end-node)
+           self-block?)
+        (delete-block txs-state start-block children?)
+        (let [sibling? (= (tree/-get-parent-id start-node)
+                          (tree/-get-parent-id end-node))
+              right-node (tree/-get-right end-node)]
+          (when (tree/satisfied-inode? right-node)
+            (let [left-node-id (if sibling?
+                                 (tree/-get-id (tree/-get-left start-node))
+                                 (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                                       parents (->>
+                                                (db/get-block-parents
+                                                 (state/get-current-repo)
+                                                 (tree/-get-id start-node)
+                                                 1000)
+                                                (map :block/uuid)
+                                                (set))
+                                       result (first (set/intersection (set end-node-left-nodes) parents))]
+                                   (when-not result
+                                     (util/pprint {:parents parents
+                                                   :end-node-left-nodes end-node-left-nodes}))
+                                   result))]
+              (assert left-node-id "Can't find the left-node-id")
+              (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+                (tree/-save new-right-node txs-state))))
+          (doseq [id block-ids]
+            (let [node (block (db/pull id))]
+              (tree/-del node txs-state true)))))
+      {:tx-data @txs-state})))
 
 (defn get-right-siblings
   [node]
@@ -523,6 +528,7 @@
   (let [blocks (if (sequential? blocks) blocks [blocks])]
     (when (and
            target-block
+           (seq blocks)
            (not (contains? (set (map :db/id blocks)) (:db/id target-block))))
       (let [parents (->> (db/get-block-parents (state/get-current-repo) (:block/uuid target-block))
                          (map :db/id)
