@@ -24,13 +24,13 @@
       (str (if (util/electron?) "" config/idb-db-prefix)
            path))))
 
-(defn get-conn
+(defn get-db
   ([]
-   (get-conn (state/get-current-repo) true))
+   (get-db (state/get-current-repo) true))
   ([repo-or-deref?]
    (if (boolean? repo-or-deref?)
-     (get-conn (state/get-current-repo) repo-or-deref?)
-     (get-conn repo-or-deref? true)))
+     (get-db (state/get-current-repo) repo-or-deref?)
+     (get-db repo-or-deref? true)))
   ([repo deref?]
    (let [repo (if repo repo (state/get-current-repo))]
      (when-let [conn (get @conns (datascript-db repo))]

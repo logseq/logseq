@@ -348,7 +348,7 @@
              :as opts}]
   (spec/validate :repos/url repo-url)
   (when (and
-         (db/get-conn repo-url true)
+         (db/get-db repo-url true)
          (db/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
@@ -516,7 +516,7 @@
   [{:keys [id url] :as repo}]
   ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
-                      (let [graph-exists? (db/get-conn url)]
+                      (let [graph-exists? (db/get-db url)]
                         (db/remove-conn! url)
                         (db-persist/delete-graph! url)
                         (search/remove-db! url)

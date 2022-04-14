@@ -58,7 +58,7 @@
        (when (and (seq txs)
                  (not (:skip-transact? opts)))
         (try
-          (let [conn (conn/get-conn false)
+          (let [conn (conn/get-db false)
                 editor-cursor (state/get-current-edit-block-and-position)
                 meta (merge opts {:editor-cursor editor-cursor})
                 rs (d/transact! conn txs meta)]

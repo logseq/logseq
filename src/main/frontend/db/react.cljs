@@ -143,7 +143,7 @@
          result-atom (:result (get @query-state k))]
      (when-let [component *query-component*]
        (add-query-component! k component))
-     (when-let [db (conn/get-conn repo)]
+     (when-let [db (conn/get-db repo)]
        (let [result (d/entity db id-or-lookup-ref)
              result-atom (or result-atom (atom nil))]
          (set! (.-state result-atom) result)
@@ -160,7 +160,7 @@
   {:pre [(s/valid? ::react-query-keys k)]}
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
-    (when-let [conn (conn/get-conn repo)]
+    (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
@@ -168,20 +168,20 @@
           result-atom
           (let [result (cond
                          query-fn
-                         (query-fn conn nil nil)
+                         (query-fn db nil nil)
 
                          inputs-fn
                          (let [inputs (inputs-fn)]
-                           (apply d/q query conn inputs))
+                           (apply d/q query db inputs))
 
                          kv?
-                         (d/entity conn (last k))
+                         (d/entity db (last k))
 
                          (seq inputs)
-                         (apply d/q query conn inputs)
+                         (apply d/q query db inputs)
 
                          :else
-                         (d/q query conn))
+                         (d/q query db))
                 result (transform-fn result)
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
@@ -296,7 +296,7 @@
   (when (and repo-url
              (seq tx-data)
              (not (:skip-refresh? tx-meta)))
-    (let [db (conn/get-conn repo-url)
+    (let [db (conn/get-db repo-url)
           affected-keys (get-affected-queries-keys tx)]
       (doseq [[k cache] @query-state]
         (let [custom? (= :custom (second k))
@@ -330,7 +330,7 @@
   ([key]
    (sub-key-value (state/get-current-repo) key))
   ([repo-url key]
-   (when (conn/get-conn repo-url)
+   (when (conn/get-db repo-url)
      (let [m (some-> (q repo-url [:kv key] {} key key) react)]
        (if-let [result (get m key)]
          result

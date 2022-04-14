@@ -25,7 +25,7 @@
 
 (defn get-block-by-id
   [id]
-  (let [c (conn/get-conn false)
+  (let [c (conn/get-db false)
         r (db-outliner/get-by-id c (outliner-u/->block-lookup-ref id))]
     (when r (->Block r))))
 
@@ -34,7 +34,7 @@
   (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
         left-id (:db/id (db/entity [:block/uuid left-uuid]))]
     (some->
-     (db-model/get-by-parent-&-left (conn/get-conn) parent-id left-id)
+     (db-model/get-by-parent-&-left (conn/get-db) parent-id left-id)
      :db/id
      db/pull
      block)))
@@ -201,9 +201,9 @@
   [db-id]
   (when db-id
     (when-let [block (db/entity db-id)]
-     (db-model/get-by-parent-&-left (conn/get-conn)
-                                    (:db/id (:block/parent block))
-                                    db-id))))
+      (db-model/get-by-parent-&-left (conn/get-db)
+                                     (:db/id (:block/parent block))
+                                     db-id))))
 
 (defn save-block
   [blok]
@@ -603,7 +603,7 @@
   (let [first-block (db/entity (:db/id (first blocks)))
         left (db/entity (:db/id (:block/left first-block)))
         parent (:block/parent first-block)
-        db (db/get-conn)
+        db (db/get-db)
         top-level-blocks (get-top-level-blocks blocks)
         concat-tx-fn (fn [& results]
                        {:tx-data (->> (map :tx-data results)

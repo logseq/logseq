@@ -583,9 +583,9 @@
 (defn ^:export datascript_query
   [query & inputs]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (db/get-conn repo)]
+    (when-let [db (db/get-db repo)]
       (let [query (cljs.reader/read-string query)
-            result (apply d/q query conn inputs)]
+            result (apply d/q query db inputs)]
         (clj->js result)))))
 
 (def ^:export custom_query db/custom-query)
@@ -593,7 +593,7 @@
 (defn ^:export download_graph_db
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [db (db/get-conn repo)]
+    (when-let [db (db/get-db repo)]
       (let [db-str (if db (db/db->string db) "")
             data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-str))]
         (when-let [anchor (gdom/getElement "download")]

@@ -93,7 +93,7 @@
 
 (defn- transact!
   [txs]
-  (let [conn (conn/get-conn false)
+  (let [conn (conn/get-db false)
         db-report (d/transact! conn txs)]
     (pipelines/invoke-hooks db-report)))
 
