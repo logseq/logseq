@@ -455,7 +455,7 @@
       [fst-block-text snd-block-text])))
 
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid? additional-tx]}]
+  [config current-block new-block {:keys [sibling? keep-uuid?]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         skip-save-current-block? (:skip-save-current-block? config)
@@ -473,8 +473,7 @@
                    :else
                    (not has-children?))]
     (outliner-tx/transact!
-      {:outliner-op :insert-blocks
-       :additional-tx additional-tx}
+      {:outliner-op :insert-blocks}
       (when-not skip-save-current-block?
         (outliner-core/save-block! current-block))
       (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
@@ -510,10 +509,10 @@
         left-block (db/pull (:db/id (:block/left block)))]
     (profile
      "outliner insert block"
-     (let [tx (outliner-core/save-block current-block)
+     (let [tx (:tx-data (outliner-core/save-block current-block))
            sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :additional-tx tx})))
+                                                             :keep-uuid? true})))
     (ok-handler prev-block)))
 
 (defn insert-new-block-aux!
