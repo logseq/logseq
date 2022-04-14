@@ -586,7 +586,6 @@
          parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
                    :block/level 0
                    :block/level-spaces 0}]
-         _sibling nil
          result []]
     (if (empty? blocks)
       (map #(dissoc % :block/level-spaces) result)
@@ -594,7 +593,7 @@
             level-spaces (:block/level-spaces block)
             {:block/keys [uuid level parent] :as last-parent} (last parents)
             parent-spaces (:block/level-spaces last-parent)
-            [blocks parents sibling result]
+            [blocks parents result]
             (cond
               (= level-spaces parent-spaces)        ; sibling
               (let [block (assoc block
@@ -603,7 +602,7 @@
                                  :block/level level)
                     parents' (conj (vec (butlast parents)) block)
                     result' (conj result block)]
-                [others parents' block result'])
+                [others parents' result'])
 
               (> level-spaces parent-spaces)         ; child
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
@@ -620,7 +619,7 @@
                             (assoc :block/level (inc level)))
                     parents' (conj parents block)
                     result' (conj result block)]
-                [others parents' block result'])
+                [others parents' result'])
 
               (< level-spaces parent-spaces)
               (cond
@@ -631,7 +630,7 @@
                                           :block/level (dec level)
                                           :block/left [:block/uuid (:block/uuid left)])
                                    (rest blocks))]
-                  [blocks parents' left result])
+                  [blocks parents' result])
 
                 :else
                 (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
@@ -648,8 +647,8 @@
 
                       parents' (->> (concat f [block]) vec)
                       result' (conj result block)]
-                  [others parents' block result'])))]
-        (recur blocks parents sibling result)))))
+                  [others parents' result'])))]
+        (recur blocks parents result)))))
 
 (defn parse-block
   ([block]
