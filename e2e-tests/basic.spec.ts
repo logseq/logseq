@@ -110,7 +110,7 @@ test('delete and backspace', async ({ page, block }) => {
 
   // refill
   await block.enterNext()
-  await page.type('textarea >> nth=0', 'test', { delay: 50 })
+  await block.mustType('test')
   await page.keyboard.press('ArrowLeft', { delay: 50 })
   await page.keyboard.press('ArrowLeft', { delay: 50 })
 
@@ -194,20 +194,17 @@ test('template', async ({ page, block }) => {
   await block.waitForBlocks(8)
 })
 
-test('auto completion square brackets', async ({ page }) => {
+test('auto completion square brackets', async ({ page, block }) => {
   await createRandomPage(page)
 
   // In this test, `type` is unsed instead of `fill`, to allow for auto-completion.
 
   // [[]]
-  await page.type('textarea >> nth=0', 'This is a [')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('This is a []')
-  await page.waitForTimeout(100)
-  await page.type('textarea >> nth=0', '[')
+  await block.mustType('This is a [', { toBe: 'This is a []'})
+  await block.mustType('[', { toBe: 'This is a [[]]'})
+
   // wait for search popup
   await page.waitForSelector('text="Search for a page"')
-
-  expect(await page.inputValue('textarea >> nth=0')).toBe('This is a [[]]')
 
   // re-enter edit mode
   await page.press('textarea >> nth=0', 'Escape')
@@ -236,43 +233,27 @@ test('auto completion and auto pair', async ({ page, block }) => {
   await block.enterNext()
 
   // {{
-  await page.type('textarea >> nth=0', 'type {{')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type {{}}')
+  await block.mustType('type {{', { toBe: 'type {{}}'})
 
   // ((
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type (')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type ()')
-  await page.type('textarea >> nth=0', '(')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type (())')
-
-  // 99  #3444
-  // TODO: Test under different keyboard layout when Playwright supports it
-  // await block.clickNext()
-
-  // await page.type('textarea >> nth=0', 'type 9')
-  // expect(await page.inputValue('textarea >> nth=0')).toBe('type 9')
-  // await page.type('textarea >> nth=0', '9')
-  // expect(await page.inputValue('textarea >> nth=0')).toBe('type 99')
+  await block.mustType('type (', { toBe: 'type ()'})
+  await block.mustType('(', { toBe: 'type (())'})
 
   // [[  #3251
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type [')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type []')
-  await page.type('textarea >> nth=0', '[')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type [[]]')
+  await block.mustType('type [', { toBe: 'type []'})
+  await block.mustType('[', { toBe: 'type [[]]'})
+
   await page.press('textarea >> nth=0', 'Escape') // escape any popup from `[[]]`
 
   // ``
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type `')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type ``')
-  await page.type('textarea >> nth=0', 'code here')
-
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type `code here`')
+  await block.mustType('type `', { toBe: 'type ``'})
+  await block.mustType('code here', { toBe: 'type `code here`'})
 })
 
 test('invalid page props #3944', async ({ page, block }) => {

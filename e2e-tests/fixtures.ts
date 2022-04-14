@@ -118,7 +118,7 @@ interface Block {
    * Must type input some text into an **empty** block.
    * **DO NOT USE** this if there's auto-complete
    */
-  mustType(value: string, options?: { delay?: number }): Promise<void>;
+  mustType(value: string, options?: { delay?: number, toBe?: string }): Promise<void>;
   /**
    * Press Enter and go to next block, require cursor to be in current block(editing mode).
    * When cursor is not at the end of block, trailing text will be moved to the next block.
@@ -136,6 +136,10 @@ interface Block {
   waitForSelectedBlocks(total: number): Promise<void>;
   /** Escape editing mode, modal popup and selection. */
   escapeEditing(): Promise<void>;
+  /** Find current selectionStart, i.e. text cursor position. */
+  selectionStart(): Promise<number>;
+  /** Find current selectionEnd. */
+  selectionEnd(): Promise<number>;
 }
 
 // hijack electron app into the test context
@@ -156,12 +160,13 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
         await locator.fill(value)
         await expect(locator).toHaveText(value, { timeout: 1000 })
       },
-      mustType: async (value: string, options?: { delay?: number }) => {
+      mustType: async (value: string, options?: { delay?: number, toBe?: string }) => {
         const locator: Locator = page.locator('textarea >> nth=0')
         await locator.waitFor({ timeout: 1000 })
         const { delay = 100 } = options || {};
+        const { toBe = value } = options || {};
         await locator.type(value, { delay })
-        await expect(locator).toHaveText(value, { timeout: 1000 })
+        await expect(locator).toHaveText(toBe, { timeout: 1000 })
       },
       enterNext: async (): Promise<Locator> => {
         let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
@@ -199,6 +204,18 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
       escapeEditing: async (): Promise<void> => {
         await page.keyboard.press('Escape')
         await page.keyboard.press('Escape')
+      },
+      selectionStart: async (): Promise<number> => {
+        return await page.locator('textarea >> nth=0').evaluate(node => {
+          const elem = <HTMLTextAreaElement>node
+          return elem.selectionStart
+        })
+      },
+      selectionEnd: async (): Promise<number> => {
+        return await page.locator('textarea >> nth=0').evaluate(node => {
+          const elem = <HTMLTextAreaElement>node
+          return elem.selectionEnd
+        })
       }
     }
     use(block)

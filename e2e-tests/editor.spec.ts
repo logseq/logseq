@@ -45,7 +45,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 
   await page.type('textarea >> nth=0', '#foo bar')
   await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: 100})
+  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: 100 })
 
   for (let i = 0; i < 12; i++) {
     await page.press('textarea >> nth=0', 'ArrowLeft')
@@ -86,7 +86,26 @@ test('disappeared children #4814', async ({ page, block }) => {
   await block.waitForBlocks(7) // 1 + 5 + 1 empty
 
   // Ensures there's no active editor
-  await expect(page.locator('.editor-inner')).toHaveCount(0, {timeout: 500})
+  await expect(page.locator('.editor-inner')).toHaveCount(0, { timeout: 500 })
+})
+
+test('backspace and cursor position', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Delete to previous block, and check cursor postion, with markup
+  await block.mustFill('`012345`')
+  await block.enterNext()
+  await block.mustType('`abcdef', { toBe: '`abcdef`' }) // "`" auto-completes
+
+  expect(await block.selectionStart()).toBe(7)
+  expect(await block.selectionEnd()).toBe(7)
+  for (let i = 0; i < 7; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  expect(await block.selectionStart()).toBe(0)
+
+  await page.keyboard.press('Backspace')
+  expect(await block.selectionStart()).toBe(8)
 })
 
 // FIXME: ClipboardItem is not defined when running with this test
