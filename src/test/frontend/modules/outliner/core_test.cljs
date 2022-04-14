@@ -3,78 +3,70 @@
             [frontend.test.fixtures :as fixtures]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.transaction :as outliner-tx]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [clojure.walk :as walk]
+            [frontend.format.block :as block]))
 
 (use-fixtures :each
   fixtures/load-test-env
   fixtures/react-components
   fixtures/reset-db)
 
-(defn build-block
-  ([id]
-   (build-block id nil nil))
-  ([id parent-id left-id & [m]]
-   (let [m (->> (merge m {:block/uuid id
-                          :block/parent
-                          (outliner-u/->block-lookup-ref parent-id)
-                          :block/left
-                          (outliner-u/->block-lookup-ref left-id)
-                          :block/content (str id)})
-                (remove #(nil? (val %)))
-                (into {}))]
-     (outliner-core/block m))))
-
 (defn get-block
   ([id]
    (get-block id false))
   ([id node?]
-   (cond-> (frontend.db/pull [:block/uuid id])
+   (cond-> (db/pull [:block/uuid id])
      node?
      outliner-core/block)))
 
-(defrecord TreeNode [id children])
-
 (defn build-node-tree
-  [[id children :as _tree]]
-  (let [children (mapv build-node-tree children)]
-    (->TreeNode id children)))
+  [col]
+  (let [blocks (walk/postwalk
+                (fn [f]
+                  (cond
+                    (and (vector? f)
+                         (= 2 (count f))
+                         (integer? (first f)))
+                    {:block/uuid (first f)
+                     :block/children (let [v (second f)]
+                                       (if (sequential? v) v [v]))}
 
-(defn build-db-records
-  "build RDS record from memory node struct."
-  [tree-record]
-  (outliner-tx/transact!
-    {}
-    (letfn [(build [node queue]
-              (let [{:keys [id left parent]} node
-                    block (build-block id parent left)
-                    left (atom (:id node))
-                    children (map (fn [c]
-                                    (let [node (assoc c :left @left :parent (:id node))]
-                                      (swap! left (constantly (:id c)))
-                                      node))
-                               (:children node))
-                    queue (concat queue children)]
-                (outliner-core/save-block! (:data block))
-                (when (seq queue)
-                  (build (first queue) (rest queue)))))]
-      (let [root (assoc tree-record :left "1" :parent "1")]
-        (outliner-core/save-block! (:data (build-block "1")))
-        (build root '())))))
+                    (and (vector? f)
+                         (= 1 (count f))
+                         (integer? (first f)))
+                    {:block/uuid (first f)}
 
+                    :else
+                    f))
+                col)]
+    (outliner-core/tree-vec-flatten blocks :block/children)))
 
-(def tree [1 [[2 [[3 [[4]
-                      [5]]]
-                  [6 [[7 [[8]]]]]
-                  [9 [[10]
-                      [11]]]]]
-              [12 [[13]
-                   [14]
-                   [15]]]
-              [16 [[17]]]]])
+(defn- build-blocks
+  [tree]
+  (block/with-parent-and-left 1 (build-node-tree tree)))
 
-(def node-tree (build-node-tree tree))
+(defn transact-tree!
+  [tree]
+  (db/transact! (build-blocks tree)))
+
+(def tree
+  [[1 [[2 [[3 [[4]
+               [5]]]
+           [6 [[7 [[8]]]]]
+           [9 [[10]
+               [11]]]]]
+       [12 [[13]
+            [14]
+            [15]]]
+       [16 [[17]]]]]])
+
+(defn get-children
+  [id]
+  (->> (get-block id true)
+       (tree/-get-children)
+       (mapv #(-> % :data :block/uuid))))
 
 (deftest test-delete-block
   (testing "
@@ -89,14 +81,11 @@
            [15]]]
       [16 [[17]]]]]
    "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (let [block (get-block 6)]
       (outliner-tx/transact! {}
         (outliner-core/delete-blocks! [block] true))
-      (let [children-of-2 (->> (get-block 2 true)
-                               (tree/-get-children)
-                               (mapv #(-> % :data :block/uuid)))]
-        (is (= [3 9] children-of-2))))))
+      (is (= [3 9] (get-children 2))))))
 
 (deftest test-move-block-as-sibling
   (testing "
@@ -111,18 +100,12 @@
            [15]]]
       [16 [[17]]]]]
    "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (outliner-tx/transact!
       {}
       (outliner-core/move-blocks! [(get-block 3)] (get-block 14) true))
-    (let [old-parent's-children (->> (get-block 2 true)
-                                     (tree/-get-children)
-                                     (mapv #(-> % :data :block/uuid)))
-          new-parent's-children (->> (get-block 12 true)
-                                     (tree/-get-children)
-                                     (mapv #(-> % :data :block/uuid)))]
-      (is (= [6 9] old-parent's-children))
-      (is (= [13 14 3 15] new-parent's-children))))
+    (is (= [6 9] (get-children 2)))
+    (is (= [13 14 3 15] (get-children 12))))
 
   (deftest test-move-block-as-first-child
     (testing "
@@ -138,19 +121,12 @@
            [15]]]
       [16 [[17]]]]]
    "
-      (build-db-records node-tree)
+      (transact-tree! tree)
       (outliner-tx/transact!
         {}
         (outliner-core/move-blocks! [(get-block 3)] (get-block 12) false))
-      (let [old-parent's-children (->> (get-block 2 true)
-                                       (tree/-get-children)
-                                       (mapv #(-> % :data :block/uuid)))
-            new-parent's-children (->> (get-block 12 true)
-                                       (tree/-get-children)
-                                       (mapv #(-> % :data :block/uuid)))]
-        (is (= [6 9] old-parent's-children))
-        (is (= [3 13 14 15] new-parent's-children))))))
-
+      (is (= [6 9] (get-children 2)))
+      (is (= [3 13 14 15] (get-children 12))))))
 
 (deftest test-indent-blocks
   (testing "
@@ -165,14 +141,11 @@
            [15]]]
       [16 [[17]]]]]
   "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (outliner-tx/transact!
       {}
       (outliner-core/indent-outdent-blocks! [(get-block 6) (get-block 9)] true))
-    (let [children-of-3 (->> (build-block 3)
-                             (tree/-get-children)
-                             (mapv #(-> % :data :block/uuid)))]
-      (is (= [4 5 6 9] children-of-3)))))
+    (is (= [4 5 6 9] (get-children 3)))))
 
 (deftest test-outdent-blocks
   (testing "
@@ -187,14 +160,11 @@
            [15]]]
       [16 [[17]]]]]
   "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (outliner-tx/transact!
       {}
       (outliner-core/indent-outdent-blocks! [(get-block 4) (get-block 5)] false))
-    (let [children-of-2 (->> (build-block 2)
-                             (tree/-get-children)
-                             (mapv #(-> % :data :block/uuid)))]
-      (is (= [3 4 5 6 9] children-of-2)))))
+    (is (= [3 4 5 6 9] (get-children 2)))))
 
 (deftest test-delete-blocks
   (testing "
@@ -209,14 +179,11 @@
            [15]]]
       [16 [[17]]]]]
 "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (outliner-tx/transact!
       {}
       (outliner-core/delete-blocks! [(get-block 6) (get-block 9)] {}))
-    (let [children-of-2 (->> (build-block 2)
-                             (tree/-get-children)
-                             (mapv #(-> % :data :block/uuid)))]
-      (is (= [3] children-of-2)))))
+    (is (= [3] (get-children 2)))))
 
 (deftest test-move-blocks-up-down
   (testing "
@@ -230,14 +197,11 @@
            [15]]]
       [16 [[17]]]]]
   "
-    (build-db-records node-tree)
+    (transact-tree! tree)
     (outliner-tx/transact!
       {}
       (outliner-core/move-blocks-up-down! [(get-block 9)] true))
-    (let [children-of-2 (->> (build-block 2)
-                             (tree/-get-children)
-                             (mapv #(-> % :data :block/uuid)))]
-      (is (= [3 9 6] children-of-2)))))
+    (is (= [3 9 6] (get-children 2)))))
 
 (deftest test-insert-blocks
   (testing "
@@ -253,61 +217,82 @@
            [15]]]
       [16 [[17]]]]]
  "
-    (build-db-records node-tree)
-    (let [new-blocks [(:data (build-block 18))
-                      (:data (build-block 19 18 18))
-                      (:data (build-block 20 18 19))
-                      (assoc (:data (build-block 21))
-                             :block/level :top)]
+    (transact-tree! tree)
+    (let [new-blocks (build-blocks [[18 [[19] [20]]]
+                                    [21]])
           target-block (get-block 6)]
       (outliner-tx/transact!
         {}
         (outliner-core/insert-blocks! new-blocks target-block {:sibling? true
-                                                               :keep-uuid? true}))
-      (let [children-of-2 (->> (build-block 2)
-                               (tree/-get-children)
-                               (mapv #(-> % :data :block/uuid)))]
-        (is (= [3 6 18 21 9] children-of-2)))
+                                                               :keep-uuid? true
+                                                               :replace-empty-target? false}))
+      (is (= [3 6 18 21 9] (get-children 2)))
 
-      (let [children-of-18 (->> (build-block 18)
-                                (tree/-get-children)
-                                (mapv #(-> % :data :block/uuid)))]
-        (is (= [19 20] children-of-18))))))
+      (is (= [19 20] (get-children 18))))))
 
 (deftest test-batch-transact
-  (testing "
-  add [18 [19 20] 21] after 6
-
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
- "
-    (let [node-tree (build-node-tree [1 [[2] [3]]])]
-      (build-db-records node-tree)
-      (let [new-blocks [(:data (build-block 4)) (:data (build-block 5 4 4))]
+  (testing "add 4, 5 after 2 and delete 3"
+    (let [tree [[1 [[2] [3]]]]]
+      (transact-tree! tree)
+      (let [new-blocks (build-blocks [[4 [5]]])
             target-block (get-block 2)]
         (outliner-tx/transact!
           {}
           (outliner-core/insert-blocks! new-blocks target-block {:sibling? false
-                                                                 :keep-uuid? true})
+                                                                 :keep-uuid? true
+                                                                 :replace-empty-target? false})
           (outliner-core/delete-blocks! [(get-block 3)] {}))
-        (let [children-of-2 (->> (build-block 2)
-                                 (tree/-get-children)
-                                 (mapv #(-> % :data :block/uuid)))]
-          (is (= [4] children-of-2)))
 
-        (let [children-of-4 (->> (build-block 4)
-                                 (tree/-get-children)
-                                 (mapv #(-> % :data :block/uuid)))]
-          (is (= [5] children-of-4)))
+        (is (= [4] (get-children 2)))
+
+        (is (= [5] (get-children 4)))
 
         (is (nil? (get-block 3)))))))
+
+(deftest test-bocks-with-level
+  (testing "blocks with level"
+    (is (= (outliner-core/blocks-with-level
+            [{:db/id 6,
+              :block/left #:db{:id 3},
+              :block/level 3,
+              :block/parent #:db{:id 2},
+              :block/uuid 6}
+             {:db/id 9,
+              :block/left #:db{:id 6},
+              :block/level 3,
+              :block/parent #:db{:id 2},
+              :block/uuid 9}])
+           [{:db/id 6,
+             :block/left #:db{:id 3},
+             :block/level 1,
+             :block/parent #:db{:id 2},
+             :block/uuid 6}
+            {:db/id 9,
+             :block/left #:db{:id 6},
+             :block/level 1,
+             :block/parent #:db{:id 2},
+             :block/uuid 9}]))
+    (is (= (outliner-core/blocks-with-level
+            [{:db/id 6,
+              :block/left #:db{:id 3},
+              :block/level 3,
+              :block/parent #:db{:id 2},
+              :block/uuid 6}
+             {:db/id 9,
+              :block/left #:db{:id 6},
+              :block/level 4,
+              :block/parent #:db{:id 6},
+              :block/uuid 9}])
+           [{:db/id 6,
+             :block/left #:db{:id 3},
+             :block/level 1,
+             :block/parent #:db{:id 2},
+             :block/uuid 6}
+            {:db/id 9,
+             :block/left #:db{:id 6},
+             :block/level 2,
+             :block/parent #:db{:id 6},
+             :block/uuid 9}]))))
 
 (comment
   (cljs.test/run-tests))

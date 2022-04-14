@@ -211,38 +211,66 @@
     (tree/-save (block blok) txs-state)
     {:tx-data @txs-state}))
 
-(defn- blocks-with-level
+(defn assoc-level-aux
+  [tree-vec children-key init-level]
+  (map (fn [block]
+         (let [children (get block children-key)
+               children' (assoc-level-aux children children-key (inc init-level))]
+           (cond-> (assoc block :block/level init-level)
+             (seq children')
+             (assoc children-key children')))) tree-vec))
+
+(defn assoc-level
+  [children-key tree-vec]
+  (assoc-level-aux tree-vec children-key 1))
+
+(defn tree-vec-flatten
+  "Converts a `tree-vec` to blocks with `:block/level`.
+
+  A `tree-vec` example:
+  [{:id 1, :children [{:id 2,
+                       :children [{:id 3}]}]}
+   {:id 4, :children [{:id 5}
+                      {:id 6}]}]"
+  ([tree-vec]
+   (tree-vec-flatten tree-vec :children))
+  ([tree-vec children-key]
+   (->> tree-vec
+        (assoc-level children-key)
+        (mapcat #(tree-seq map? children-key %))
+        (map #(dissoc % :block/children)))))
+
+(defn blocks-with-level
   "Should be sorted already."
-  [blocks move?]
+  [blocks]
   (let [blocks (if (sequential? blocks) blocks [blocks])
-        first-block (first blocks)]
-    (if (and (not move?) (:block/level first-block) (:block/children first-block))          ; extracting from markdown/org
-      blocks
-      (let [root (assoc (first blocks) :block/level 1)
-            result (loop [m [[(:db/id root) root]]
-                          blocks (rest blocks)
-                          last-top-level-block root]
-                     (if (empty? blocks)
-                       m
-                       (let [block (first blocks)
-                             parent-id (:db/id (:block/parent block))
-                             parent-level (:block/level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
-                             level (if (= (:block/level block) :top)
-                                     1
-                                     (inc parent-level))
-                             block (assoc block :block/level level)
-                             top-level? (= 1 (:block/level block))
-                             block' (if (and top-level? (not move?))
-                                      (assoc block :block/left [:block/uuid (:block/uuid last-top-level-block)])
-                                      block)
-                             m' (vec (conj m [(:db/id block') block']))
-                             last-top-level-block' (if top-level? block' last-top-level-block)]
-                         (recur m' (rest blocks) last-top-level-block'))))]
-        (map last result)))))
+        root (assoc (first blocks) :block/level 1)]
+    (loop [m [root]
+           blocks (rest blocks)]
+      (if (empty? blocks)
+        m
+        (let [block (first blocks)
+              parent (:block/parent block)
+              parent-level (when parent
+                             (:block/level
+                              (first
+                               (filter (fn [x]
+                                         (or
+                                          (and (map? parent)
+                                               (= (:db/id x) (:db/id parent)))
+                                          ;; lookup
+                                          (and (vector? parent)
+                                               (= (:block/uuid x) (second parent))))) m))))
+              level (if parent-level
+                      (inc parent-level)
+                      1)
+              block (assoc block :block/level level)
+              m' (vec (conj m block))]
+          (recur m' (rest blocks)))))))
 
 (defn get-top-level-blocks
   [blocks]
-  (let [level-blocks (blocks-with-level blocks true)]
+  (let [level-blocks (blocks-with-level blocks)]
     (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
 (defn- assign-temp-id
@@ -265,6 +293,35 @@
         (if (= (:block/parent (first blocks)) (:block/parent matched))
           (recur (rest blocks) (first blocks))
           matched)))))
+
+(defn- compute-block-parent
+  [block parent target-block prev-hop top-level? sibling? get-new-id]
+  (cond
+    prev-hop
+    (:db/id (:block/parent prev-hop))
+
+    top-level?
+    (if sibling?
+      (:db/id (:block/parent target-block))
+      (:db/id target-block))
+
+    :else
+    (get-new-id block parent)))
+
+(defn- compute-block-left
+  [blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id]
+  (cond
+    (zero? idx)
+    (if replace-empty-target?
+      (:db/id (:block/left target-block))
+      (:db/id target-block))
+
+    (and prev-hop (not left-exists-in-blocks?))
+    (:db/id (:block/left prev-hop))
+
+    :else
+    (or (get-new-id block left)
+        (get-new-id block (nth blocks (dec idx))))))
 
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move? outliner-op]}]
@@ -304,33 +361,14 @@
                                                  top-level?
                                                  (not= (:block/parent block) (:block/parent target-block)))
                            prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
-                           left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))]
+                           left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
+                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id)
+                           left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
                        (cond->
                          (merge block {:block/uuid uuid
                                        :block/page target-page
-                                       :block/parent (cond
-                                                       prev-hop
-                                                       (:db/id (:block/parent prev-hop))
-
-                                                       top-level?
-                                                       (if sibling?
-                                                         (:db/id (:block/parent target-block))
-                                                         (:db/id target-block))
-
-                                                       :else
-                                                       (get-new-id block parent))
-                                       :block/left (cond
-                                                     (zero? idx)
-                                                     (if replace-empty-target?
-                                                       (:db/id (:block/left target-block))
-                                                       (:db/id target-block))
-
-                                                     (and prev-hop (not left-exists-in-blocks?))
-                                                     (:db/id (:block/left prev-hop))
-
-                                                     :else
-                                                     (or (get-new-id block left)
-                                                         (get-new-id block (nth blocks (dec idx)))))})
+                                       :block/parent parent
+                                       :block/left left})
                          (not move?)
                          (dissoc :db/id)))))
                  blocks)))
@@ -338,16 +376,18 @@
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op] :as opts}]
+  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op replace-empty-target?] :as opts}]
   (let [blocks (if (sequential? blocks) blocks [blocks])
         target-block (db/pull (:db/id target-block))
         sibling? (if (:block/name target-block) false sibling?)
         keep-uuid? (if move? true keep-uuid?)
-        replace-empty-target? (and sibling?
-                                   (string/blank? (:block/content target-block))
-                                   (> (count blocks) 1)
-                                   (not move?))
-        blocks' (blocks-with-level blocks move?)
+        replace-empty-target? (if (some? replace-empty-target?)
+                                replace-empty-target?
+                                (and sibling?
+                                     (string/blank? (:block/content target-block))
+                                     (> (count blocks) 1)
+                                     (not move?)))
+        blocks' (blocks-with-level blocks)
         tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
                                                     :replace-empty-target? replace-empty-target?
                                                     :keep-uuid? keep-uuid?

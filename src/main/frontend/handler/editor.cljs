@@ -1965,7 +1965,7 @@
 
 (defn- block-tree->blocks
   [tree-vec format]
-  (->> (mapcat #(tree-seq map? :children %) tree-vec)
+  (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
                     props (into [] (:properties block))
@@ -1975,7 +1975,7 @@
                     blocks (block/extract-blocks ast content* true format)
                     fst-block (first blocks)]
                 (assert fst-block "fst-block shouldn't be nil")
-                fst-block)))))
+                (assoc fst-block :block/level (:block/level block)))))))
 
 (defn insert-block-tree-after-target
   "`tree-vec`: a vector of blocks.
