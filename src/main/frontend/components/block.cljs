@@ -940,14 +940,15 @@
                   label-text (get-label-text label)
                   page (if (string/blank? label-text)
                          {:block/name (db/get-file-page (string/replace href "file:" "") false)}
-                         (get-page label))]
+                         (get-page label))
+                  show-brackets? (state/show-brackets?)]
               (if (and page
                        (when-let [ext (util/get-file-ext href)]
                          (config/mldoc-support? ext)))
                 [:span.page-reference
-                 [:span.text-gray-500 "[["]
+                 (when show-brackets? [:span.text-gray-500 "[["])
                  (page-cp config page)
-                 [:span.text-gray-500 "]]"]]
+                 (when show-brackets? [:span.text-gray-500 "]]"])]
 
                 (let [href* (if (util/electron?)
                               (relative-assets-path->absolute-path href)
