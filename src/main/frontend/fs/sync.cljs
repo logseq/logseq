@@ -822,8 +822,39 @@
           local-meta (first (<! (get-local-files-meta rsapi graph-uuid base-path [file-path-without-base-path])))]
       (not= remote-meta local-meta))))
 
+(defn- local-file-exists?
+  [relative-path base-path]
+  (go (nil? (ex-cause (<! (get-local-files-meta rsapi "" base-path [relative-path]))))))
+
 (defn- contains-path? [regexps path]
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
+
+(defn- filter-local-changes
+  "filter local-change events:
+  - for 'unlink' event
+    - when related file exists on local dir, ignore this event
+  - for 'add' | 'change' event
+    - when related file's content is same as remote file, ignore it"
+  [to-ch from-ch basepath graph-uuid]
+  (async/pipeline-async
+   1 to-ch
+   (fn [^FileChangeEvent e result]
+     (go
+       (case (.-type e)
+         "unlink"
+         (let [r (<! (get-local-files-meta rsapi "" basepath [(relative-path e)]))]
+           (when (some-> r ex-cause ;; str (string/index-of "No such file or directory")
+                         )
+             (>! result e)))
+
+         ("add" "change")
+         (let [path (relative-path e)]
+           (println "debug " path basepath)
+           (when (and (<! (local-file-exists? path basepath))
+                      (<! (file-changed? graph-uuid path basepath)))
+             (>! result e))))
+       (async/close! result)))
+   from-ch false))
 
 
 (deftype ^:large-vars/cleanup-todo
@@ -865,18 +896,16 @@
               (async/close! c)
 
               timeout
-              (do
-                (<! (async/onto-chan! c (distinct (persistent! tcoll)) false))
+              (let [from-c (chan 10000)]
+                (<! (async/onto-chan! from-c (distinct (persistent! tcoll)) false))
+                (filter-local-changes c from-c base-path graph-uuid)
+                (async/close! from-c)
                 (recur (async/timeout rate) (transient [])))
 
               (some? e)
               (do
                 (when (filter-e-fn e)
-                  (if (= "unlink" (.-type e))
-                    (conj! tcoll e)
-                    (if (<! (file-changed? graph-uuid (relative-path e) base-path))
-                      (conj! tcoll e)
-                      (prn "file unchanged" (relative-path e)))))
+                  (conj! tcoll e))
                 (recur timeout-c tcoll))
 
               (nil? e)
@@ -886,12 +915,12 @@
         c))
 
 
-  (sync-local->remote! [this es]
-    (if (empty? es)
-      (go {:succ true})
-      (let [type (.-type ^FileChangeEvent (first es))
-            ignore-files (get-ignore-files this)
-            es->paths-xf (comp
+    (sync-local->remote! [this es]
+      (if (empty? es)
+        (go {:succ true})
+        (let [type (.-type ^FileChangeEvent (first es))
+              ignore-files (get-ignore-files this)
+              es->paths-xf (comp
                             (map #(relative-path %))
                             (filter #(not (contains-path? ignore-files %))))
               paths (sequence es->paths-xf es)]
@@ -952,13 +981,13 @@
             (if stopped
               {:stop true}
               (if (empty? es-partitions)
-              {:succ true}
-              (let [{:keys [succ need-sync-remote unknown] :as r}
-                    (<! (sync-local->remote! this (first es-partitions)))]
-                (s/assert ::sync-local->remote!-result r)
-                (cond
-                  succ
-                  (recur (next es-partitions))
+                {:succ true}
+                (let [{:keys [succ need-sync-remote unknown] :as r}
+                      (<! (sync-local->remote! this (first es-partitions)))]
+                  (s/assert ::sync-local->remote!-result r)
+                  (cond
+                    succ
+                    (recur (next es-partitions))
                     (or need-sync-remote unknown) r)))))))))
 
 
