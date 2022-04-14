@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
@@ -101,6 +102,11 @@
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
+          
+          (when (util/electron?)
+            {:title   (t :page/copy-page-url)
+              :options {:on-click #(util/copy-to-clipboard!
+                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
             {:title   (t :page/delete)

@@ -186,6 +186,7 @@
         :page/new-title "What's your new page title?"
         :page/earlier "Earlier"
         :page/no-more-journals "No more journals"
+        :page/copy-page-url "Copy page URL"
         :publishing/pages "Pages"
         :publishing/page-name "Page name"
         :publishing/current-project "Current project"
