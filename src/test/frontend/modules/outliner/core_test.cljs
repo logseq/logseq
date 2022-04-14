@@ -348,9 +348,10 @@
   []
   (let [datoms (->> (get-datoms)
                     (remove (fn [datom] (= 1 (:e datom)))))]
-    (when (seq datoms)
+    (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))]
-        (db/pull test-db '[*] id)))))
+        (db/pull test-db '[*] id))
+      (println "Empty DB so that there's no random blocks yet"))))
 
 (defn get-random-successive-blocks
   []
@@ -475,7 +476,7 @@
                  (outliner-tx/transact! {:repo test-db}
                    (outliner-core/indent-outdent-blocks! (get-random-successive-blocks) (gen/generate gen/boolean))))
                ]]
-      (dotimes [_i 100]
+      (dotimes [_i 500]
         ((rand-nth ops)))
       (let [total (get-blocks-count)
             page-id 1]
@@ -495,5 +496,6 @@
                total))))))
 
 (comment
-  (cljs.test/run-tests)
+  (dotimes [i 5]
+    (cljs.test/run-tests))
   )

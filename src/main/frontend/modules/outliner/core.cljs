@@ -377,38 +377,41 @@
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
   [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op replace-empty-target?] :as opts}]
-  (when-not (empty? blocks)
+  (when (and (not (empty? blocks)) target-block)
     (let [blocks (if (sequential? blocks) blocks [blocks])
-          target-block (db/pull (:db/id target-block))
-          sibling? (if (:block/name target-block) false sibling?)
+          target-block' (db/pull (:db/id target-block))
+          _ (assert (some? target-block') (str "Invalid target: " target-block))
+          sibling? (if (:block/name target-block') false sibling?)
           keep-uuid? (if move? true keep-uuid?)
           replace-empty-target? (if (some? replace-empty-target?)
                                   replace-empty-target?
                                   (and sibling?
-                                       (string/blank? (:block/content target-block))
+                                       (string/blank? (:block/content target-block'))
                                        (> (count blocks) 1)
                                        (not move?)))
           blocks' (blocks-with-level blocks)
-          tx (insert-blocks-aux blocks' target-block {:sibling? sibling?
-                                                      :replace-empty-target? replace-empty-target?
-                                                      :keep-uuid? keep-uuid?
-                                                      :move? move?
-                                                      :outliner-op outliner-op})]
+          insert-opts {:sibling? sibling?
+                       :replace-empty-target? replace-empty-target?
+                       :keep-uuid? keep-uuid?
+                       :move? move?
+                       :outliner-op outliner-op}
+          tx (insert-blocks-aux blocks' target-block' insert-opts)]
       (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx)
         (do
           (state/pub-event! [:instrument {:type :outliner/invalid-structure
                                           :payload {:data (mapv #(dissoc % :block/content) tx)}}])
           (throw (ex-info "Invalid outliner data"
-                          {:opts opts
-                           :tx tx
-                           :blocks blocks})))
+                          {:opts insert-opts
+                           :tx (vec tx)
+                           :blocks (vec blocks)
+                           :target-block target-block'})))
         (let [uuids-tx (->> (map :block/uuid tx)
                             (remove nil?)
                             (map (fn [uuid] {:block/uuid uuid})))
               tx (if move?
                    tx
-                   (assign-temp-id tx replace-empty-target? target-block))
-              target-node (block target-block)
+                   (assign-temp-id tx replace-empty-target? target-block'))
+              target-node (block target-block')
               next (if sibling?
                      (tree/-get-right target-node)
                      (tree/-get-down target-node))
