@@ -22,13 +22,6 @@
        (coll? @state))))
 
 #?(:cljs
-   (defn add-txs
-     [state txs]
-     (assert (outliner-txs-state? state)
-       "db should be satisfied outliner-tx-state?")
-     (swap! state into txs)))
-
-#?(:cljs
    (defn after-transact-pipelines
      [{:keys [_db-before _db-after _tx-data _tempids _tx-meta] :as tx-report}]
      (pipelines/invoke-hooks tx-report)
