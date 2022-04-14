@@ -341,7 +341,7 @@
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
 
-(defn block-keywordize
+(defn- block-keywordize
   [block]
   (medley/map-keys
    (fn [k]
@@ -350,7 +350,7 @@
        (keyword "block" k)))
    block))
 
-(defn safe-blocks
+(defn- sanity-blocks-data
   [blocks]
   (map (fn [block]
          (if (map? block)
@@ -463,10 +463,12 @@
           block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
 
-(defn extract-blocks*
-  [blocks body pre-block-properties encoded-content with-body?]
+(defn with-pre-block-if-exists
+  [blocks body pre-block-properties encoded-content]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
+
+        ;; Add pre-block
         blocks (if (or (> first-block-start-pos 0)
                        (empty? blocks))
                  (cons
@@ -489,96 +491,97 @@
                      (block-keywordize block))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
-                 blocks)
-        blocks (map (fn [block]
-                      (if with-body?
-                        block
-                        (dissoc block :block/body))) blocks)]
+                 blocks)]
     (with-path-refs blocks)))
 
-(defn ^:large-vars/cleanup-todo extract-blocks
-  ([blocks content with-id? format]
-   (extract-blocks blocks content with-id? format false))
-  ([blocks content with-id? format with-body?]
-   (try
-     (let [encoded-content (utf8/encode content)
-           [blocks body pre-block-properties]
-           (loop [headings []
-                  blocks (reverse blocks)
-                  timestamps {}
-                  properties {}
-                  body []]
-             (if (seq blocks)
-               (let [[block pos-meta] (first blocks)
-                     ;; fix start_pos
-                     pos-meta (assoc pos-meta :end_pos
-                                     (if (seq headings)
-                                       (get-in (last headings) [:meta :start_pos])
-                                       nil))
-                     unordered? (:unordered (second block))
-                     markdown-heading? (and (:size (second block)) (= :markdown format))]
-                 (cond
-                   (paragraph-timestamp-block? block)
-                   (let [timestamps (extract-timestamps block)
-                         timestamps' (merge timestamps timestamps)]
-                     (recur headings (rest blocks) timestamps' properties body))
+(defn- construct-block
+  [block properties timestamps body encoded-content format pos-meta with-id?]
+  (let [id (get-custom-id-or-new-id properties)
+        ref-pages-in-properties (->> (:page-refs properties)
+                                     (remove string/blank?))
+        block (second block)
+        unordered? (:unordered block)
+        markdown-heading? (and (:size block) (= :markdown format))
+        block (if markdown-heading?
+                (assoc block
+                       :type :heading
+                       :level (if unordered? (:level block) 1)
+                       :heading-level (or (:size block) 6))
+                block)
+        block (cond->
+                (assoc block
+                       :uuid id
+                       :refs ref-pages-in-properties
+                       :format format
+                       :meta pos-meta)
+                (seq (:properties properties))
+                (assoc :properties (:properties properties))
 
-                   (property/properties-ast? block)
-                   (let [properties (extract-properties format (second block))]
-                     (recur headings (rest blocks) timestamps properties body))
+                (seq (:properties-order properties))
+                (assoc :properties-order (:properties-order properties)))
+        block (if (get-in block [:properties :collapsed])
+                (assoc block :collapsed? true)
+                block)
+        block (assoc block
+                     :content (get-block-content encoded-content block format pos-meta))
+        block (if (seq timestamps)
+                (merge block (timestamps->scheduled-and-deadline timestamps))
+                block)
+        block (assoc block :body body)
+        block (with-page-block-refs block with-id?)
+        {:keys [created-at updated-at]} (:properties properties)
+        block (cond-> block
+                (and created-at (integer? created-at))
+                (assoc :block/created-at created-at)
 
-                   (heading-block? block)
-                   (let [id (get-custom-id-or-new-id properties)
-                         ref-pages-in-properties (->> (:page-refs properties)
-                                                      (remove string/blank?))
-                         block (second block)
-                         block (if markdown-heading?
-                                 (assoc block
-                                        :type :heading
-                                        :level (if unordered? (:level block) 1)
-                                        :heading-level (or (:size block) 6))
-                                 block)
-                         block (cond->
-                                 (assoc block
-                                        :uuid id
-                                        :refs ref-pages-in-properties
-                                        :format format
-                                        :meta pos-meta)
-                                 (seq (:properties properties))
-                                 (assoc :properties (:properties properties))
+                (and updated-at (integer? updated-at))
+                (assoc :block/updated-at updated-at))]
+    (dissoc block :title :body :anchor)))
 
-                                 (seq (:properties-order properties))
-                                 (assoc :properties-order (:properties-order properties)))
-                         block (if (get-in block [:properties :collapsed])
-                                 (assoc block :collapsed? true)
-                                 block)
-                         block (assoc block
-                                      :content (get-block-content encoded-content block format pos-meta))
-                         block (if (seq timestamps)
-                                 (merge block (timestamps->scheduled-and-deadline timestamps))
-                                 block)
-                         block (assoc block :body body)
-                         block (with-page-block-refs block with-id?)
-                         {:keys [created-at updated-at]} (:properties properties)
-                         block (cond-> block
-                                 (and created-at (integer? created-at))
-                                 (assoc :block/created-at created-at)
+(defn extract-blocks
+  "Extract headings from mldoc ast.
+  If `with-id?` equals to true, all the referenced pages with have new db ids."
+  [blocks content with-id? format]
+  (try
+    (let [encoded-content (utf8/encode content)
+          [blocks body pre-block-properties]
+          (loop [headings []
+                 blocks (reverse blocks)
+                 timestamps {}
+                 properties {}
+                 body []]
+            (if (seq blocks)
+              (let [[block pos-meta] (first blocks)
+                    ;; fix start_pos
+                    pos-meta (assoc pos-meta :end_pos
+                                    (if (seq headings)
+                                      (get-in (last headings) [:meta :start_pos])
+                                      nil))]
+                (cond
+                  (paragraph-timestamp-block? block)
+                  (let [timestamps (extract-timestamps block)
+                        timestamps' (merge timestamps timestamps)]
+                    (recur headings (rest blocks) timestamps' properties body))
 
-                                 (and updated-at (integer? updated-at))
-                                 (assoc :block/updated-at updated-at))]
-                     (recur (conj headings (dissoc block :title :body :anchor)) (rest blocks) {} {} []))
+                  (property/properties-ast? block)
+                  (let [properties (extract-properties format (second block))]
+                    (recur headings (rest blocks) timestamps properties body))
 
-                   :else
-                   (recur headings (rest blocks) timestamps properties (conj body block))))
-               [(-> (reverse headings)
-                    safe-blocks)
-                body
-                properties]))
-           result (extract-blocks* blocks body pre-block-properties encoded-content with-body?)]
-       (map #(dissoc % :block/meta) result))
-     (catch js/Error e
-       (js/console.error "extract-blocks-failed")
-       (log/error :exception e)))))
+                  (heading-block? block)
+                  (let [block (construct-block block properties timestamps body encoded-content format pos-meta with-id?)]
+                    (recur (conj headings block) (rest blocks) {} {} []))
+
+                  :else
+                  (recur headings (rest blocks) timestamps properties (conj body block))))
+              [(-> (reverse headings)
+                   sanity-blocks-data)
+               body
+               properties]))
+          result (with-pre-block-if-exists blocks body pre-block-properties encoded-content)]
+      (map #(dissoc % :block/meta) result))
+    (catch js/Error e
+      (js/console.error "extract-blocks-failed")
+      (log/error :exception e))))
 
 (defn with-parent-and-left
   [page-id blocks]
