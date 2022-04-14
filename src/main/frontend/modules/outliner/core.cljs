@@ -376,8 +376,8 @@
 (defn insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   `blocks` should be sorted already."
-  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op replace-empty-target?] :as opts}]
-  (when (and (not (empty? blocks)) target-block)
+  [blocks target-block {:keys [sibling? keep-uuid? move? outliner-op replace-empty-target?]}]
+  (when (and (seq blocks) target-block)
     (let [blocks (if (sequential? blocks) blocks [blocks])
           target-block' (db/pull (:db/id target-block))
           _ (assert (some? target-block') (str "Invalid target: " target-block))
