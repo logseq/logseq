@@ -26,6 +26,8 @@
             [goog.object :as gobj]
             [rum.core :as rum]))
 
+;; TODO i18n support
+
 (defn- set-format-js-loading!
   [format value]
   (when format
@@ -220,7 +222,7 @@
               :on-click (fn [_e]
                           (let [current-repo (state/get-current-repo)
                                 tap-f (fn [block-id]
-                                        (url-util/get-local-logseq-entity-url-by-uuid current-repo block-id))]
+                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                             (editor-handler/copy-block-ref! block-id tap-f)))}
              "Copy block URL"))
 
