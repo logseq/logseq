@@ -45,7 +45,7 @@
                          (config/link-format format text url)
                          url)))
         template (get-in (state/get-config)
-                         [:quick-capture-template :text]
+                         [:quick-capture-templates :text]
                          "**{time}** [[quick capture]]: {text} {url}")
         values (-> (string/replace template "{time}" time)
                    (string/replace "{text}" (or text ""))
@@ -86,7 +86,7 @@
                   (log/error :copy-file-error {:error error})))
           url (util/format "[[%s]]" title)
           template (get-in (state/get-config)
-                           [:quick-capture-template :text]
+                           [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]
     (-> (string/replace template "{time}" time)
         (string/replace "{url}" (or url "")))))
