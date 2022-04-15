@@ -33,7 +33,7 @@
         [:h1.title
          "Input command"]
         [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
-         [:input#run-command.form-input.block.w-full.sm:text-sm.sm:leading-5
+         [:input#run-command.form-input.font-mono.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
            :on-key-down util/stop-propagation
            :placeholder "git commit -m ..."
