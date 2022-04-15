@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { test as base, expect, ConsoleMessage, Locator } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
-import { loadLocalGraph, randomString } from './utils';
+import { loadLocalGraph, openLeftSidebar, randomString } from './utils';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
@@ -12,7 +12,7 @@ let repoName = randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
-  fs.rmdirSync(testTmpDir, { recursive: true })
+  fs.rmSync(testTmpDir, { recursive: true })
 }
 
 export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
@@ -49,6 +49,7 @@ base.beforeAll(async () => {
     cwd: "./static",
     args: ["electron.js"],
     locale: 'en',
+    timeout: 10_000, // should be enough for the app to start
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
@@ -61,6 +62,7 @@ base.beforeAll(async () => {
       "appData": app.getPath("appData"),
       "userData": app.getPath("userData"),
       "appName": app.getName(),
+      "electronVersion": app.getVersion(),
     }
   })
   console.log("Test start with:", info)
@@ -77,7 +79,6 @@ base.beforeAll(async () => {
   })
 
   await page.waitForLoadState('domcontentloaded')
-  // await page.waitForFunction(() => window.document.title != "Loading")
   // NOTE: The following ensures first start.
   // await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
 
@@ -92,6 +93,11 @@ base.beforeAll(async () => {
   })
 
   await loadLocalGraph(page, graphDir);
+
+  // render app
+  await page.waitForFunction('window.document.title !== "Loading"')
+  expect(await page.title()).toMatch(/^Logseq.*?/)
+  await openLeftSidebar(page)
 })
 
 base.beforeEach(async () => {
@@ -163,7 +169,7 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
       mustType: async (value: string, options?: { delay?: number, toBe?: string }) => {
         const locator: Locator = page.locator('textarea >> nth=0')
         await locator.waitFor({ timeout: 1000 })
-        const { delay = 100 } = options || {};
+        const { delay = 50 } = options || {};
         const { toBe = value } = options || {};
         await locator.type(value, { delay })
         await expect(locator).toHaveText(toBe, { timeout: 1000 })
