@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, editFirstBlock, IsMac } from './utils'
+import { createRandomPage, enterNextBlock, editFirstBlock, randomInt, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 

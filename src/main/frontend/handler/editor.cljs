@@ -1693,8 +1693,10 @@
   [up?]
   (fn [event]
     (util/stop event)
-    (let [edit-block-id (:block/uuid (state/get-edit-block))
+    (let [edit-bock (state/get-edit-block)
+          edit-block-id (:block/uuid edit-block)
           move-nodes (fn [blocks]
+                       (save-current-block!)
                        (outliner-tx/transact!
                          {:outliner-op :move-blocks}
                          (outliner-core/move-blocks-up-down! blocks up?))
