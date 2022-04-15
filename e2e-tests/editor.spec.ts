@@ -5,10 +5,10 @@ import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
 test(
-  "press Chinese parenthesis 【 by 2 times #3251 should trigger [[]], " +
+  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
   "but dont trigger RIME #3440 ",
   // cases should trigger [[]] #3251
-  async ({ page }) => {
+  async ({ page, block }) => {
     for (let [idx, events] of [
       kb_events.win10_pinyin_left_full_square_bracket,
       kb_events.macos_pinyin_left_full_square_bracket
@@ -17,10 +17,10 @@ test(
     ].entries()) {
       await createRandomPage(page)
       let check_text = "#3251 test " + idx
-      await page.fill(':nth-match(textarea, 1)', check_text + "【")
+      await block.mustFill(check_text + "【")
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
-      await page.fill(':nth-match(textarea, 1)', check_text + "【【")
+      await block.mustFill(check_text + "【【")
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
     };
@@ -32,7 +32,7 @@ test(
     ].entries()) {
       await createRandomPage(page)
       let check_text = "#3440 test " + idx
-      await page.fill(':nth-match(textarea, 1)', check_text)
+      await block.mustFill(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
       expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
       await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
@@ -45,7 +45,7 @@ test('hashtag and quare brackets in same line #4178', async ({ page }) => {
 
   await page.type('textarea >> nth=0', '#foo bar')
   await enterNextBlock(page)
-  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: 100})
+  await page.type('textarea >> nth=0', 'bar [[blah]]', { delay: 100 })
 
   for (let i = 0; i < 12; i++) {
     await page.press('textarea >> nth=0', 'ArrowLeft')
@@ -86,8 +86,46 @@ test('disappeared children #4814', async ({ page, block }) => {
   await block.waitForBlocks(7) // 1 + 5 + 1 empty
 
   // Ensures there's no active editor
-  await expect(page.locator('.editor-inner')).toHaveCount(0, {timeout: 500})
+  await expect(page.locator('.editor-inner')).toHaveCount(0, { timeout: 500 })
 })
+
+test.skip('backspace and cursor position #4897', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Delete to previous block, and check cursor postion, with markup
+  await block.mustFill('`012345`')
+  await block.enterNext()
+  await block.mustType('`abcdef', { toBe: '`abcdef`' }) // "`" auto-completes
+
+  expect(await block.selectionStart()).toBe(7)
+  expect(await block.selectionEnd()).toBe(7)
+  for (let i = 0; i < 7; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  expect(await block.selectionStart()).toBe(0)
+
+  await page.keyboard.press('Backspace')
+  await block.waitForBlocks(1) // wait for delete and re-render
+  expect(await block.selectionStart()).toBe(8)
+})
+
+test.skip('next block and cursor position', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Press Enter and check cursor postion, with markup
+  await block.mustType('abcde`12345', { toBe: 'abcde`12345`' }) // "`" auto-completes
+  for (let i = 0; i < 7; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  expect(await block.selectionStart()).toBe(5) // after letter 'e'
+
+  await block.enterNext()
+  expect(await block.selectionStart()).toBe(0) // should at the beginning of the next block
+
+  const locator = page.locator('textarea >> nth=0')
+  await expect(locator).toHaveText('`12345`', { timeout: 1000 })
+})
+
 
 // FIXME: ClipboardItem is not defined when running with this test
 // test('copy & paste block ref and replace its content', async ({ page }) => {

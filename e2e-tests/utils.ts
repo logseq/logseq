@@ -168,10 +168,12 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     }
 
     await page.click('#left-sidebar #repo-switch');
-    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
+    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
+      { state: 'visible', timeout: 5000 })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.waitForSelector('strong:has-text("Choose a folder")',
+      { state: 'visible', timeout: 5000 })
     await page.click('strong:has-text("Choose a folder")')
 
     const skip = page.locator('a:has-text("Skip")')
