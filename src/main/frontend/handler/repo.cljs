@@ -51,20 +51,23 @@
 (defn create-contents-file
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        path (str (state/get-pages-directory)
-                  "/contents."
-                  (config/get-file-extension format))
-        file-path (str "/" path)
-        default-content (case (name format)
-                          "org" (rc/inline "contents.org")
-                          "markdown" (rc/inline "contents.md")
-                          "")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
+  (p/let [repo-dir (config/get-repo-dir repo-url)
+          pages-dir (state/get-pages-directory)
+          [org-path md-path] (map #(str "/" pages-dir "/contents." %) ["org" "md"])
+          contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
+    (when-not contents-file-exist?
+      (let [format (state/get-preferred-format)
+            path (str pages-dir "/contents."
+                      (config/get-file-extension format))
+            file-path (str "/" path)
+            default-content (case (name format)
+                              "org" (rc/inline "contents.org")
+                              "markdown" (rc/inline "contents.md")
+                              "")]
+        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" pages-dir))
+                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+          (when-not file-exists?
+            (file-handler/reset-file! repo-url path default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
