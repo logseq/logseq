@@ -5,6 +5,7 @@
             [clojure.edn :as edn]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.transit :as dt]
             ["fs" :as fs]
             ["child_process" :as child-process]
             [frontend.db-schema :as db-schema]
@@ -232,17 +233,13 @@
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
-;; TODO: Actually implementation
-(defn extract-blocks
-  [& args])
-
 (defn- extract-pages-and-blocks
   #_:clj-kondo/ignore
   [repo-url format ast properties file content]
   (try
     (let [page (get-page-name file ast)
           [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
-          blocks (->> (extract-blocks ast content false format)
+          blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -338,9 +335,11 @@
     []
     (let [format (get-format file)
           _ (println "Parsing start: " file)
-          ast (mldoc/->edn content (mldoc/default-config format
+          ast (mldoc/->edn content
+                           (mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
-                                                         ))]
+                                                         )
+                           text/parse-property)]
       (println "Parsing finished : " file)
       (let [first-block (ffirst ast)
             properties (let [properties (and (property/properties-ast? first-block)
@@ -422,7 +421,7 @@
                             new?
                             (assoc :file/created-at t)))])]
       ;; TODO: Ask is {:new-graph true} needed?
-      (d/transact! conn tx))))
+      (d/transact! conn (util/remove-nils tx)))))
 
 ;; from: frontend.handler.repo
 (defn parse
@@ -453,6 +452,7 @@
   (let [conn (db-start)
         repo-dir (or (first args)
                      (throw (ex-info "Directory required" {})))
+        cached-graph-file (second args)
         files (->> (str (.-stdout (sh ["git" "ls-files"]
                                       {:cwd repo-dir :stdio nil})))
                    string/split-lines
@@ -465,7 +465,10 @@
            files)
     (prn :PAGES (d/q '[:find ?n :where [?b :block/name ?n]]
               @conn))
-    (prn :DATOMS (count (d/datoms @conn :eavt)))))
+    (prn :DATOMS (count (d/datoms @conn :eavt)))
+    (when cached-graph-file
+      (let [db (dt/read-transit-str (slurp cached-graph-file))]
+        (prn :ACTUAL-DATOMS (count (d/datoms db :eavt)))))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))

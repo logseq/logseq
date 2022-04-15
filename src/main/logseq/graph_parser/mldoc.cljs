@@ -148,8 +148,8 @@
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into {} #_(linked/map)))
           properties (cond-> properties
-                       (seq macros)
-                       (assoc :macros macros))
+                             (seq macros)
+                             (assoc :macros macros))
           alias (:alias properties)
           alias (when alias
                   (if (coll? alias)
@@ -193,10 +193,9 @@
 ;                "Hiccup"
 ;                "Heading"} type))
 
-(def parse-property nil)
-
+;; TODO: Port parse-property fix upstream
 (defn ->edn
-  [content config]
+  [content config parse-property]
   (if (string? content)
     (try
       (if (string/blank? content)
