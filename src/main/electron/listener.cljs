@@ -71,15 +71,19 @@
                          (route-handler/redirect! payload))))
 
   (js/window.apis.on "redirectWhenExists"
-                     ;; either page-name or block-id is required
+                     ;;  Redirect to the given page or block when the provided page or block exists.
+                     ;;  Either :page-name or :block-id is required.
+                     ;;  :page-name : the original-name of the page.
+                     ;;  :block-id : uuid.
                      (fn [data]
                        (let [{:keys [page-name block-id]} (bean/->clj data)]
-                         ;; TODO Junyi
                          (cond
                            page-name
-                           (let [page-name (db-model/get-redirect-page-name page-name)]
-                             (editor-handler/insert-first-page-block-if-not-exists! page-name)
-                             (route-handler/redirect-to-page! page-name))
+                           (let [db-page-name (db-model/get-redirect-page-name page-name)]
+                             ;; No error handling required, as a page name is always valid
+                             ;; Open new page if the page does not exist
+                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name)
+                             (route-handler/redirect-to-page! db-page-name))
 
                            block-id
                            (if (db-model/get-block-by-uuid block-id)

@@ -23,14 +23,14 @@
   [graph-identifier]
   (if graph-identifier
     (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Open link failed. Cannot match graph identifier `" graph-identifier "` to any linked graph.")})
+                                      :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")})
     (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Open link failed. Missing graph identifier after `logseq://graph/`.")})))
+                                      :payload (str "Failed to open link. Missing graph identifier after `logseq://graph/`.")})))
 
 (defn local-url-handler
-  "Given a URL with `graph` as path, and `graph identifier` as path, `page` (optional) and `block-id` (optional) as parameters,
-   open the local graphs accordingly.
-   `graph` is the name of the graph to open, e.g. `lambda`"
+  "Given a URL with `graph identifier` as path, `page` (optional) and `block-id` 
+   (optional) as parameters, open the local graphs accordingly.
+   `graph identifier` is the name of the graph to open, e.g. `lambda`"
   [^js win parsed-url]
   (let [graph-identifier (decode (string/replace (.-pathname parsed-url) "/" ""))
         [page-name block-id] (get-URL-decoded-params parsed-url ["page" "block-id"])
@@ -61,5 +61,5 @@
 
       :else
       (send-to-renderer "notification" {:type "error"
-                                        :payload (str "Open link failed. Cannot match `" url-host
+                                        :payload (str "Failed to open link. Cannot match `" url-host
                                                       "` to any target.")}))))
