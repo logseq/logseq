@@ -1,45 +1,16 @@
-(ns frontend.format.mldoc-slim
+(ns logseq.graph-parser.mldoc
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             ; [frontend.format.protocol :as protocol]
             [frontend.utf8 :as utf8]
-            ; [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.graph-parser.util :as util]
             ; [lambdaisland.glogi :as log]
             ; [medley.core :as medley]
             ["mldoc$default" :as mldoc :refer [Mldoc]]
             ; [linked.core :as linked]
             #_[frontend.config :as config]))
 
-;; from: frontend.util
-;; ====
-(defn json->clj
-  ([json-string]
-   (json->clj json-string false))
-  ([json-string kebab?]
-   (let [m (-> json-string
-               (js/JSON.parse)
-               (js->clj :keywordize-keys true))]
-     (if kebab?
-       m
-       #_(cske/transform-keys csk/->kebab-case-keyword m)
-       m))))
-
-(defn safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
-
-(defn split-first [pattern s]
-  (when-let [first-index (string/index-of s pattern)]
-    [(subs s 0 first-index)
-     (subs s (+ first-index (count pattern)) (count s))]))
-
-;; Normal mldoc below
-;; ============
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -121,8 +92,8 @@
   (let [lines (string/split-lines s)
         [f & r] lines
         body (map (fn [line]
-                    (if (string/blank? (safe-subs line 0 level))
-                      (safe-subs line level)
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
                       line))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
@@ -167,7 +138,7 @@
                    (->>
                     (map
                      (fn [[_ v]]
-                       (let [[k v] (split-first " " v)]
+                       (let [[k v] (util/split-first " " v)]
                          (mapv
                           string/trim
                           [k v])))
@@ -194,7 +165,6 @@
           properties (-> properties
                          (update :filetags (constantly filetags)))
           ; properties (medley/remove-kv (fn [_k v] (or (nil? v) (and (coll? v) (empty? v)))) properties)
-          ;; TODO: bring in medley?
           properties (into {} (remove (fn [[_k v]] (or (nil? v) (and (coll? v) (empty? v)))) properties))]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
@@ -233,7 +203,7 @@
         []
         (-> content
             (parse-json config)
-            (json->clj)
+            (util/json->clj)
             (update-src-full-content content)
             (collect-page-properties parse-property)))
       (catch js/Error e

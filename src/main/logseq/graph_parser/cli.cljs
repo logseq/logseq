@@ -1,4 +1,5 @@
-(ns frontend.handler.graph-parser
+(ns logseq.graph-parser.cli
+  "Main ns for graph parsing CLI"
   (:require [clojure.string :as string]
             [clojure.set :as set]
             [clojure.edn :as edn]
@@ -7,7 +8,11 @@
             ["fs" :as fs]
             ["child_process" :as child-process]
             [frontend.db-schema :as db-schema]
-            [frontend.format.mldoc-slim :as mldoc]
+            [logseq.graph-parser.mldoc :as mldoc]
+            [logseq.graph-parser.util :as util]
+            [logseq.graph-parser.property :as property]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.block :as block]
             ;; Disable for now since kondo can't pick it up
             ; #?(:org.babashka/nbb [nbb.core :as nbb])
             [nbb.core :as nbb]))
@@ -46,89 +51,6 @@
 
 ;; Copied helpers
 ;; ==============
-
-;; from: frontend.util
-;; =====
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
-
-(defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)"
-  [s]
-  (.normalize s "NFC"))
-
-(defn distinct-by
-  [f col]
-  (reduce
-   (fn [acc x]
-     (if (some #(= (f x) (f %)) acc)
-       acc
-       (vec (conj acc x))))
-   []
-   col))
-
-(defn split-last [pattern s]
-  (when-let [last-index (string/last-index-of s pattern)]
-    [(subs s 0 last-index)
-     (subs s (+ last-index (count pattern)) (count s))]))
-
-(defn get-file-ext
-  [file]
-  (and
-   (string? file)
-   (string/includes? file ".")
-   (some-> (last (string/split file #"\.")) string/lower-case)))
-
-(defn split-namespace-pages
-  [title]
-  (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
-
-(defn remove-boundary-slashes
-  [s]
-  (when (string? s)
-    (let [s (if (= \/ (first s))
-              (subs s 1)
-              s)]
-      (if (= \/ (last s))
-        (subs s 0 (dec (count s)))
-        s))))
-
-(def windows-reserved-chars #"[:\\*\\?\"<>|]+")
-
-(defn page-name-sanity
-  "Sanitize the page-name for file name (strict), for file writting"
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      ;; Windows reserved path characters
-                      (string/replace windows-reserved-chars "_")
-                      ;; for android filesystem compatiblity
-                      (string/replace #"[\\#|%]+" "_")
-                      (path-normalize))]
-     (if replace-slash?
-       (string/replace page #"/" ".")
-       page))))
-
-(defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
-  [s]
-  (page-name-sanity (string/lower-case s)))
 
 ;; from: frontend.db.model
 ;; =====
@@ -217,7 +139,7 @@
 
                  :else
                  relative-path)]
-      (path-normalize path))))
+      (util/path-normalize path))))
 
 (def app-name "logseq")
 (def pages-metadata-file "pages-metadata.edn")
@@ -269,7 +191,7 @@
 ;; ====
 (defn with-block-uuid
   [pages]
-  (->> (distinct-by :block/name pages)
+  (->> (util/distinct-by :block/name pages)
        (map (fn [page]
               (if (:block/uuid page)
                 page
@@ -285,217 +207,13 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
-;; from: frontend.util.property
-(defn properties-ast?
-  [block]
-  (and
-   (vector? block)
-   (contains? #{"Property_Drawer" "Properties"}
-              (first block))))
-
-;; from: frontend.text
-;; =====
-
-(def page-ref-re-without-nested #"\[\[([^\[\]]+)\]\]")
-
-(defn get-nested-page-name
-  [page-name]
-  (when-let [first-match (re-find page-ref-re-without-nested page-name)]
-    (second first-match)))
-
-(defn namespace-page?
-  [p]
-  (and (string? p)
-       (string/includes? p "/")
-       (not (string/starts-with? p "../"))
-       (not (string/starts-with? p "./"))
-       ;; TODO: Pull in util/url
-       #_(not (util/url? p))))
-
-(defonce non-parsing-properties
-  (atom #{"background-color" "background_color"}))
-
-;; TODO: Enable most of the property cases
-(defn parse-property
-  ([k v]
-   (parse-property :markdown k v))
-  ([_format k v]
-   (let [k (name k)
-         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
-         v (string/trim v)]
-     (cond
-       ; (contains? (set/union
-       ;             #{"title" "filters"}
-       ;             (get (state/get-config) :ignored-page-references-keywords)) k)
-       ; v
-
-       (= v "true")
-       true
-       (= v "false")
-       false
-
-       ; (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
-       ; (util/safe-parse-int v)
-
-       ; (util/wrapped-by-quotes? v) ; wrapped in ""
-       ; v
-
-       (contains? @non-parsing-properties (string/lower-case k))
-       v
-
-       ; (mldoc/link? format v)
-       ; v
-
-       #_:else
-       #_(split-page-refs-without-brackets v)))))
-
-;; from: frontend.format.block
-;; =====
-(defn heading-block?
-  [block]
-  (and
-   (vector? block)
-   (= "Heading" (first block))))
-
-(defn convert-page-if-journal
-  "Convert journal file name to user' custom date format"
-  [original-page-name]
-  (when original-page-name
-    (let [page-name (page-name-sanity-lc original-page-name)
-          ;; TODO: Enable date/* fns
-          day false #_(date/journal-title->int page-name)]
-     (if day
-       (let [original-page-name "" #_(date/int->journal-title day)]
-         [original-page-name (page-name-sanity-lc original-page-name) day])
-       [original-page-name page-name day]))))
-
-(defn with-parent-and-left
-  [page-id blocks]
-  (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-         parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
-                   :block/level 0
-                   :block/level-spaces 0}]
-         _sibling nil
-         result []]
-    (if (empty? blocks)
-      (map #(dissoc % :block/level-spaces) result)
-      (let [[block & others] blocks
-            level-spaces (:block/level-spaces block)
-            {:block/keys [uuid level parent] :as last-parent} (last parents)
-            parent-spaces (:block/level-spaces last-parent)
-            [blocks parents sibling result]
-            (cond
-              (= level-spaces parent-spaces)        ; sibling
-              (let [block (assoc block
-                                 :block/parent parent
-                                 :block/left [:block/uuid uuid]
-                                 :block/level level)
-                    parents' (conj (vec (butlast parents)) block)
-                    result' (conj result block)]
-                [others parents' block result'])
-
-              (> level-spaces parent-spaces)         ; child
-              (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
-                    block (cond->
-                            (assoc block
-                                  :block/parent parent
-                                  :block/left parent)
-                            ;; fix block levels with wrong order
-                            ;; For example:
-                            ;;   - a
-                            ;; - b
-                            ;; What if the input indentation is two spaces instead of 4 spaces
-                            (>= (- level-spaces parent-spaces) 1)
-                            (assoc :block/level (inc level)))
-                    parents' (conj parents block)
-                    result' (conj result block)]
-                [others parents' block result'])
-
-              (< level-spaces parent-spaces)
-              (cond
-                (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
-                (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                      left (last parents')
-                      blocks (cons (assoc (first blocks)
-                                          :block/level (dec level)
-                                          :block/left [:block/uuid (:block/uuid left)])
-                                   (rest blocks))]
-                  [blocks parents' left result])
-
-                :else
-                (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
-                      left (first r)
-                      parent-id (if-let [block-id (:block/uuid (last f))]
-                                  [:block/uuid block-id]
-                                  page-id)
-                      block (cond->
-                              (assoc block
-                                     :block/parent parent-id
-                                     :block/left [:block/uuid (:block/uuid left)]
-                                     :block/level (:block/level left)
-                                     :block/level-spaces (:block/level-spaces left)))
-
-                      parents' (->> (concat f [block]) vec)
-                      result' (conj result block)]
-                  [others parents' block result'])))]
-        (recur blocks parents sibling result)))))
-
-(defn page-name->map
-  "Create a page's map structure given a original page name (string).
-   map as input is supported for legacy compatibility.
-   with-timestamp?: assign timestampes to the map structure.
-    Useful when creating new pages from references or namespaces,
-    as there's no chance to introduce timestamps via editing in page"
-  ([original-page-name with-id?]
-   (page-name->map original-page-name with-id? true))
-  ([original-page-name with-id? with-timestamp?]
-   (cond
-     (and original-page-name (string? original-page-name))
-     (let [original-page-name (remove-boundary-slashes original-page-name)
-           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
-           namespace? (and (not (boolean (get-nested-page-name original-page-name)))
-                           (namespace-page? original-page-name))
-           ;; TODO: Pass db down to this fn
-           page-entity (some-> nil (d/entity [:block/name page-name]))]
-       (merge
-        {:block/name page-name
-         :block/original-name original-page-name}
-        (when with-id?
-          (if page-entity
-            {}
-            {:block/uuid (d/squuid)}))
-        (when namespace?
-          (let [namespace (first (split-last "/" original-page-name))]
-            (when-not (string/blank? namespace)
-              {:block/namespace {:block/name (page-name-sanity-lc namespace)}})))
-        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-          ;; TODO: add current time with cljs-core
-          (let [current-ms 0 #_(util/time-ms)]
-            {:block/created-at current-ms
-             :block/updated-at current-ms}))
-        (if journal-day
-          {:block/journal? true
-           :block/journal-day journal-day}
-          {:block/journal? false})))
-
-     (and (map? original-page-name) (:block/uuid original-page-name))
-     original-page-name
-
-     (and (map? original-page-name) with-id?)
-     (assoc original-page-name :block/uuid (d/squuid))
-
-     :else
-     nil)))
-
-;; from: frontend.handler.extract
-;; =====
 (defn get-page-name
   [file ast]
   ;; headline
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
       "Contents"
-      (let [first-block (last (first (filter heading-block? ast)))
+      (let [first-block (last (first (filter block/heading-block? ast)))
             property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
@@ -504,8 +222,8 @@
                                     (string? title)
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (split-last "." file-name))]
-                          (if (mldoc-support? (string/lower-case (get-file-ext file)))
+                        (let [result (first (util/split-last "." file-name))]
+                          (if (mldoc-support? (string/lower-case (util/get-file-ext file)))
                             (string/replace result "." "/")
                             result)))]
         (or property-name
@@ -523,9 +241,9 @@
   [repo-url format ast properties file content]
   (try
     (let [page (get-page-name file ast)
-          [_original-page-name page-name _journal-day] (convert-page-if-journal page)
+          [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
           blocks (->> (extract-blocks ast content false format)
-                      (with-parent-and-left {:block/name page-name}))
+                      (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
@@ -545,13 +263,13 @@
           page-entity (let [alias (:alias properties)
                             alias (if (string? alias) [alias] alias)
                             aliases (and alias
-                                         (seq (remove #(or (= page-name (page-name-sanity-lc %))
+                                         (seq (remove #(or (= page-name (util/page-name-sanity-lc %))
                                                            (string/blank? %)) ;; disable blank alias
                                                       alias)))
                             aliases (->>
                                      (map
                                        (fn [alias]
-                                         (let [page-name (page-name-sanity-lc alias)
+                                         (let [page-name (util/page-name-sanity-lc alias)
                                                aliases (distinct
                                                         (conj
                                                          (remove #{alias} aliases)
@@ -559,7 +277,7 @@
                                                aliases (when (seq aliases)
                                                          (map
                                                            (fn [alias]
-                                                             {:block/name (page-name-sanity-lc alias)})
+                                                             {:block/name (util/page-name-sanity-lc alias)})
                                                            aliases))]
                                            (if (seq aliases)
                                              {:block/name page-name
@@ -568,10 +286,10 @@
                                        aliases)
                                      (remove nil?))]
                         (cond->
-                         (remove-nils
+                         (util/remove-nils
                             (assoc
-                             (page-name->map page false)
-                             :block/file {:file/path (path-normalize file)}))
+                             (block/page-name->map page false)
+                             :block/file {:file/path (util/path-normalize file)}))
                          (seq properties)
                          (assoc :block/properties properties)
 
@@ -583,14 +301,14 @@
                                                   tags (if (string? tags) [tags] tags)
                                                   tags (remove string/blank? tags)]
                                               (swap! ref-tags set/union (set tags))
-                                              (map (fn [tag] {:block/name (page-name-sanity-lc tag)
+                                              (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
                                                    tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
-                            (when (namespace-page? page)
-                              (->> (split-namespace-pages page)
+                            (when (text/namespace-page? page)
+                              (->> (util/split-namespace-pages page)
                                    (map (fn [page]
-                                          (-> (page-name->map page true)
+                                          (-> (block/page-name->map page true)
                                               (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
@@ -598,13 +316,13 @@
                       (map
                         (fn [page]
                           {:block/original-name page
-                           :block/name (page-name-sanity-lc page)})
+                           :block/name (util/page-name-sanity-lc page)})
                         @ref-tags)
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
                      (remove nil?))
-          pages (distinct-by :block/name pages)
+          pages (util/distinct-by :block/name pages)
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
           blocks (->> (remove nil? blocks)
@@ -625,11 +343,11 @@
                                                          ))]
       (println "Parsing finished : " file)
       (let [first-block (ffirst ast)
-            properties (let [properties (and (properties-ast? first-block)
+            properties (let [properties (and (property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y]]
                                                          [x (if (string? y)
-                                                              (parse-property format x y)
+                                                              (text/parse-property format x y)
                                                               y)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
@@ -661,7 +379,7 @@
 
                :else
                file)
-        file (path-normalize file)
+        file (util/path-normalize file)
         new? (nil? (d/entity @conn [:file/path file]))]
     (d/transact! conn [{:file/path file :file/content content}])
     (let [format (get-format file)
