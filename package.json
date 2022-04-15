@@ -66,6 +66,7 @@
         "@capacitor/android": "3.2.2",
         "@capacitor/app": "1.0.6",
         "@capacitor/camera": "1.2.1",
+        "@capacitor/clipboard": "^1.0.8",
         "@capacitor/core": "3.2.2",
         "@capacitor/filesystem": "1.0.6",
         "@capacitor/ios": "3.2.2",
