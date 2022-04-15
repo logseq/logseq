@@ -421,13 +421,16 @@
 (defn hook-plugin
   [tag type payload plugin-id]
   (when lsp-enabled?
-    (js-invoke js/LSPluginCore
-               (str "hook" (string/capitalize (name tag)))
-               (name type)
-               (if (coll? payload)
-                 (bean/->js (normalize-keyword-for-json payload))
-                 payload)
-               (if (keyword? plugin-id) (name plugin-id) plugin-id))))
+    (try
+      (js-invoke js/LSPluginCore
+                 (str "hook" (string/capitalize (name tag)))
+                 (name type)
+                 (if (coll? payload)
+                   (bean/->js (normalize-keyword-for-json payload))
+                   payload)
+                 (if (keyword? plugin-id) (name plugin-id) plugin-id))
+      (catch js/Error e
+        (js/console.error "[Hook Plugin Err]" e)))))
 
 (defn hook-plugin-app
   ([type payload] (hook-plugin-app type payload nil))

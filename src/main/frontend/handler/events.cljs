@@ -352,9 +352,10 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
-(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
   (when-let [payload (and (seq blocks)
-                          (merge payload {:tx-data (map #(into [] %) tx-data)}))]
+                          (merge payload {:tx-data (map #(into [] %) tx-data)
+                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
