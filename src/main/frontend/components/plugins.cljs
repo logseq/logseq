@@ -741,7 +741,7 @@
 
   [:div
    {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
-    :class (util/classnames [{:not-edit (false? edit)}])}
+    :class         (util/classnames [{:not-edit (false? edit)}])}
    (when (fn? render)
      (js/React.createElement render #js {:content content}))])
 
@@ -776,10 +776,13 @@
 
 (rum/defcs focused-settings-content
   < rum/reactive
+    (rum/local (state/sub :plugin/focused-settings) ::cache)
   [_state title]
-  (let [focused (state/sub :plugin/focused-settings)
+  (let [*cache (::cache _state)
+        focused (state/sub :plugin/focused-settings)
         nav? (state/sub :plugin/navs-settings?)
-        _ (state/sub :plugin/installed-plugins)]
+        _ (state/sub :plugin/installed-plugins)
+        _ (js/setTimeout #(reset! *cache focused) 100)]
 
     [:div.cp__plugins-settings.cp__settings-main
      [:header
@@ -803,7 +806,8 @@
 
       [:article
        [:div.panel-wrap
-        (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
+        (when-let [^js pl (and focused (= @*cache focused)
+                               (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
             [:p.warning.text-lg.mt-5 "Settings schema Error!"]
             (plugins-settings/settings-container

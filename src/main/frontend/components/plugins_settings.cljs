@@ -3,7 +3,8 @@
             [frontend.util :as util]
             [frontend.ui :as ui]
             [frontend.handler.plugin :as plugin-handler]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [goog.functions :refer [debounce]]))
 
 (rum/defc edit-settings-file
   [pid {:keys [class]}]
@@ -24,10 +25,10 @@
     (let [input-as (util/safe-lower-case (or inputAs (name type)))
           input-as (if (= input-as "string") :text (keyword input-as))]
       [:input
-       {:class     (util/classnames [{:form-input (not (contains? #{:color :range} input-as))}])
-        :type      (name input-as)
-        :value     (or val default)
-        :on-change #(update-setting! key (util/evalue %))}])]])
+       {:class        (util/classnames [{:form-input (not (contains? #{:color :range} input-as))}])
+        :type         (name input-as)
+        :defaultValue (or val default)
+        :on-change    (debounce #(update-setting! key (util/evalue %)) 1000)}])]])
 
 (rum/defc render-item-toggle
   [val {:keys [key title description default]} update-setting!]
@@ -77,12 +78,11 @@
   [schema ^js pl]
   (let [^js _settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings] (rum/use-state nil)
+        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON _settings)))
         update-setting! (fn [k v] (.set _settings (name k) (bean/->js v)))]
 
     (rum/use-effect!
       (fn []
-        (set-settings (bean/->clj (.toJSON _settings)))
         (let [on-change (fn [^js s]
                           (when-let [s (bean/->clj s)]
                             (set-settings s)))]
