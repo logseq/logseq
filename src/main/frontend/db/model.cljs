@@ -888,7 +888,8 @@
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
-  "Accepts both sanitized or unsanitized
+  "Given any readable page-name, return the exact page-name in db. Accepts both 
+   sanitized or unsanitized names.
    alias?: if true, alias is allowed to be returned; otherwise, it would be deref."
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]

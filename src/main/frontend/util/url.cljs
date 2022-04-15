@@ -13,12 +13,12 @@
   (let [repo-path (db-conn/get-repo-name repo)]
     (db-conn/get-short-repo-name repo-path)))
 
-(defn get-repoid-url
+(defn get-repo-id-url
   "Get Logseq protocol URL, w/o param (v0.1).
    host: set to `nil` for local graph
    protocol?: if true, returns URL with protocol prefix"
   ([host action repo-identifier]
-   (get-repoid-url host action repo-identifier true))
+   (get-repo-id-url host action repo-identifier true))
   ([host action repo-identifier protocol?]
    (str (when protocol? (str LSP_SCHEME "://")) 
         (when host (str host "/")) 
@@ -37,7 +37,7 @@
    (let [repo-identifier (if host
                            repo ;; resolve remote repo identifier here
                            (get-local-repo-identifier repo))]
-     (get-repoid-url host "graph" repo-identifier protocol?))))
+     (get-repo-id-url host "graph" repo-identifier protocol?))))
 
 (defn get-logseq-graph-uuid-url
   "The URL represents an entity in graph with uuid, for example:
