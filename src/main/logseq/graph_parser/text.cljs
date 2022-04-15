@@ -4,7 +4,7 @@
             ; ["/frontend/utils" :as utils]
             [goog.string :as gstring]
             [clojure.string :as string]
-            ; [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as mldoc]
             [clojure.set :as set]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
@@ -372,9 +372,8 @@
        (contains? @non-parsing-properties (string/lower-case k))
        v
 
-       ;; TODO: Enable mldoc/link?
-       ; (mldoc/link? format v)
-       ; v
+       (mldoc/link? format v)
+       v
 
        :else
        (split-page-refs-without-brackets v)))))

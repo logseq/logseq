@@ -165,8 +165,7 @@
                      (map last)
                      (map (fn [v]
                             (when (and (string? v)
-                                       ;; TODO: Enable mldoc-link?
-                                       #_(not (mldoc/link? format v)))
+                                       (not (mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)

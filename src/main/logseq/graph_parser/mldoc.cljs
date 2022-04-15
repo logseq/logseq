@@ -223,16 +223,16 @@
 ;       (log/error :edn/convert-failed e)
 ;       [])))
 ;
-; (defn inline->edn
-;   [text config]
-;   (try
-;     (if (string/blank? text)
-;       {}
-;       (-> text
-;           (inline-parse-json config)
-;           (util/json->clj)))
-;     (catch js/Error _e
-;       [])))
+(defn inline->edn
+  [text config]
+  (try
+    (if (string/blank? text)
+      {}
+      (-> text
+          (inline-parse-json config)
+          (util/json->clj)))
+    (catch js/Error _e
+      [])))
 ;
 ; (defrecord MldocMode []
 ;   protocol/Format
@@ -262,20 +262,21 @@
 ;   (and (contains? #{"Drawer"} (ffirst ast))
 ;        (= typ (second (first ast)))))
 ;
-; (defn link?
-;   [format link]
-;   (when (string? link)
-;     (let [[type link] (first (inline->edn link (default-config format)))
-;           [ref-type ref-value] (:url link)]
-;       (and (= "Link" type)
-;            (or
-;             ;; 1. url
-;             (not (contains? #{"Page_ref" "Block_ref"} ref-type))
-;
-;             (and (contains? #{"Page_ref"} ref-type)
-;                  (or
-;                   ;; 2. excalidraw link
-;                   (config/draw? ref-value)
-;
-;                   ;; 3. local asset link
-;                   (boolean (config/local-asset? ref-value)))))))))
+(defn link?
+  [format link]
+  (when (string? link)
+    (let [[type link] (first (inline->edn link (default-config format)))
+          [ref-type ref-value] (:url link)]
+      (and (= "Link" type)
+           (or
+            ;; 1. url
+            (not (contains? #{"Page_ref" "Block_ref"} ref-type))
+
+            (and (contains? #{"Page_ref"} ref-type)
+                 ;; TODO: Pull in config
+                 #_(or
+                    ;; 2. excalidraw link
+                    (config/draw? ref-value)
+
+                    ;; 3. local asset link
+                    (boolean (config/local-asset? ref-value)))))))))
