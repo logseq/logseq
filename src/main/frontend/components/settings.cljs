@@ -191,11 +191,18 @@
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
         {:default-value secs
          :on-blur       (fn [event]
-                          (when-let [value (-> (util/evalue event)
-                                               util/safe-parse-int)]
-                            (when (< 0 value (inc 600))
-                              (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                              (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))))}]]]]))
+                          (let [value (-> (util/evalue event)
+                                          util/safe-parse-int)]
+                            (if (and (number? value)
+                                     (< 0 value (inc 600)))
+                              (do
+                                (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
+                                (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))
+                              (when-let [elem (gobj/get event "target")]
+                                (notification/show!
+                                 [:div "Invalid value! Must be a number between 1 and 600."]
+                                 :warning true)
+                                (gobj/set elem "value" secs)))))}]]]]))
 
 (rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
