@@ -350,27 +350,12 @@
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
 (defn journal-row [t enable-journals?]
-  [:span
-   (toggle "enable_journals"
-           (t :settings-page/enable-journals)
-           enable-journals?
-           (fn []
-             (let [value (not enable-journals?)]
-               (config-handler/set-config! :feature/enable-journals? value))))
-
-   (when (not enable-journals?)
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "default page"}
-       (t :settings-page/home-default-page)]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md.sm:max-w-xs
-        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-         {:default-value (state/sub-default-home-page)
-          :on-blur       update-home-page
-          :on-key-press  (fn [e]
-                           (when (= "Enter" (util/ekey e))
-                             (update-home-page e)))}]]]])])
+  (toggle "enable_journals"
+          (t :settings-page/enable-journals)
+          enable-journals?
+          (fn []
+            (let [value (not enable-journals?)]
+              (config-handler/set-config! :feature/enable-journals? value)))))
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -573,6 +558,19 @@
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)
+     (when (not enable-journals?)
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "default page"}
+         (t :settings-page/home-default-page)]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+           {:default-value (state/sub-default-home-page)
+            :on-blur       update-home-page
+            :on-key-press  (fn [e]
+                             (when (= "Enter" (util/ekey e))
+                               (update-home-page e)))}]]]])
      (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
