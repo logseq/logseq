@@ -289,6 +289,10 @@
   (= (:block/left block)
      (:block/page block)))
 
+(defn- page-block?
+  [block]
+  (some? (:block/name block)))
+
 ;;; ### public utils
 
 (defn tree-vec-flatten
@@ -416,7 +420,7 @@
     (let [blocks (if (sequential? blocks) blocks [blocks])
           target-block' (db/pull (:db/id target-block))
           _ (assert (some? target-block') (str "Invalid target: " target-block))
-          sibling? (if (:block/name target-block') false sibling?)
+          sibling? (if (page-block? target-block') false sibling?)
           keep-uuid? (if move? true keep-uuid?)
           replace-empty-target? (if (some? replace-empty-target?)
                                   replace-empty-target?
@@ -643,7 +647,7 @@
                                                :block/collapsed? false}]})]
                 (concat-tx-fn result collapsed-tx))
               (move-blocks blocks' left (merge opts {:sibling? false}))))))
-      (when (and parent (not (:block/name (db/entity (:db/id parent)))))
+      (when (and parent (not (page-block? (db/entity (:db/id parent)))))
         (let [blocks' (take-while (fn [b]
                                     (not= (:db/id (:block/parent b))
                                           (:db/id (:block/parent parent))))
