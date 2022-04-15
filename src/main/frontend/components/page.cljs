@@ -81,16 +81,21 @@
 
 (rum/defc dummy-block
   [page-name]
-  [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-   [:div.flex.flex-row
-    [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-     [:span.bullet-container.cursor
-      [:span.bullet]]]
-    [:div.flex.flex-1 {:on-click (fn []
-                                   (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name :check-empty-page? false)]
-                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))}
-     [:span.opacity-50
-      "Click here to edit..."]]]])
+  (let [handler-fn (fn []
+                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
+                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))]
+    [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+     [:div.flex.flex-row
+      [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+       [:span.bullet-container.cursor
+        [:span.bullet]]]
+      [:div.flex.flex-1 {:tabindex 0
+                         :on-key-press (fn [e]
+                                         (when (= "Enter" (util/ekey e))
+                                           (handler-fn)))
+                         :on-click handler-fn}
+       [:span.opacity-50
+        "Click here to edit..."]]]]))
 
 (rum/defc add-button
   [args]
