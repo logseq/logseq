@@ -17,7 +17,7 @@
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]))
 
-;;; Commentary
+;;; ### Commentary
 ;; file-sync related local files/dirs:
 ;; - logseq/graphs-txid.edn
 ;;   this file contains graph-uuid & transaction-id
@@ -45,7 +45,8 @@
 ;;       we need to a new type event 'rename'
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
 ;;       and re-produce a new same-file-delete diff.
-;;; specs
+
+;;; ### specs
 (s/def ::state #{::idle
                  ;; sync local-changed files
                  ::local->remote
@@ -228,6 +229,7 @@
     (write-all w "#FileTxn[\"" from-path "\" -> \"" to-path
                "\" (updated? " updated? ", renamed? " (.renamed? coll) ", deleted? " deleted?
                ", txid " txid ")]")))
+
 (defn- diff->filetxns
   "convert diff(`get-diff`) to `FileTxn`"
   [{:keys [TXId TXType TXContent]}]
@@ -365,7 +367,7 @@
     :else
     (throw (js/Error. (str "unsupport type " (type o))))))
 
-;;; APIs
+;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
@@ -711,7 +713,7 @@
                   not)
       (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
 
-;;; remote->local syncer & local->remote syncer
+;;; ### remote->local syncer & local->remote syncer
 
 (defprotocol IRemote->LocalSync
   (stop-remote->local! [this])
@@ -728,7 +730,7 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(deftype Remote->LocalSyncer [graph-uuid base-path repo *txid *sync-state
+(defrecord Remote->LocalSyncer [graph-uuid base-path repo *txid *sync-state
                               ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -826,7 +828,7 @@
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
 
-(deftype ^:large-vars/cleanup-todo
+(defrecord ^:large-vars/cleanup-todo
     Local->RemoteSyncer [graph-uuid base-path repo *sync-state
                          ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
     Object
@@ -962,7 +964,7 @@
                     (or need-sync-remote unknown) r)))))))))
 
 
-;;; sync state
+;;; ### sync state
 
 
 (defn sync-state
@@ -1022,10 +1024,9 @@
   (= ::stop (:state sync-state)))
 
 
-;;; put all stuff together
+;;; ### put all stuff together
 
-
-(deftype ^:large-vars/cleanup-todo
+(defrecord ^:large-vars/cleanup-todo
     SyncManager [graph-uuid base-path *sync-state
                  ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
                  full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
