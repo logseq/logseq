@@ -2948,8 +2948,9 @@
           input (state/get-input)]
       (if-not (string/blank? text)
         (if (thingatpt/org-admonition&src-at-point input)
-          (do (util/stop e)
-              (paste-text-in-one-block-at-point))
+          (when-not (mobile-util/native-ios?)
+            (util/stop e)
+            (paste-text-in-one-block-at-point))
           (paste-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
