@@ -1801,23 +1801,22 @@
 
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
-  [e block id]
+  [e _block id]
   (let [value (util/evalue e)
         repo (state/get-current-repo)]
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
-    (when-not (and (db-model/top-block? block)            ; don't auto-save for page's properties block
-                   (not-empty (:block/properties block)))
-      (reset! *auto-save-timeout
-              (js/setTimeout
-               (fn []
-                 (when (state/input-idle? repo)
-                   (state/set-editor-op! :auto-save)
-                   (save-current-block! {:skip-properties? true})
-                   (state/set-editor-op! nil)))
-               500)))))
+    (reset! *auto-save-timeout
+            (js/setTimeout
+             (fn []
+               (when (state/input-idle? repo)
+                 (state/set-editor-op! :auto-save)
+                 ; don't auto-save for page's properties block
+                 (save-current-block! {:skip-properties? true})
+                 (state/set-editor-op! nil)))
+             500))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)
