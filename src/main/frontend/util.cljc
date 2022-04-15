@@ -469,6 +469,13 @@
       (gobj/get node "tagName"))))
 
 #?(:cljs
+   (defn video?
+     [node]
+     (contains?
+      #{"VIDEO"}
+      (gobj/get node "tagName"))))
+
+#?(:cljs
    (defn sup?
      [node]
      (contains?
