@@ -89,7 +89,7 @@ test('disappeared children #4814', async ({ page, block }) => {
   await expect(page.locator('.editor-inner')).toHaveCount(0, { timeout: 500 })
 })
 
-test('backspace and cursor position', async ({ page, block }) => {
+test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Delete to previous block, and check cursor postion, with markup
@@ -105,8 +105,27 @@ test('backspace and cursor position', async ({ page, block }) => {
   expect(await block.selectionStart()).toBe(0)
 
   await page.keyboard.press('Backspace')
+  await block.waitForBlocks(1) // wait for delete and re-render
   expect(await block.selectionStart()).toBe(8)
 })
+
+test.skip('next block and cursor position', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Press Enter and check cursor postion, with markup
+  await block.mustType('abcde`12345', { toBe: 'abcde`12345`' }) // "`" auto-completes
+  for (let i = 0; i < 7; i++) {
+    await page.keyboard.press('ArrowLeft')
+  }
+  expect(await block.selectionStart()).toBe(5) // after letter 'e'
+
+  await block.enterNext()
+  expect(await block.selectionStart()).toBe(0) // should at the beginning of the next block
+
+  const locator = page.locator('textarea >> nth=0')
+  await expect(locator).toHaveText('`12345`', { timeout: 1000 })
+})
+
 
 // FIXME: ClipboardItem is not defined when running with this test
 // test('copy & paste block ref and replace its content', async ({ page }) => {

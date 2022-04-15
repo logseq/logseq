@@ -52,7 +52,7 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
   await block.mustFill('this is my first bullet')
   await block.enterNext()
 
-  await block.waitForBlocks(1)
+  await block.waitForBlocks(2)
 
   await block.mustFill('this is my second bullet')
   await block.clickNext()
@@ -178,7 +178,7 @@ test('template', async ({ page, block }) => {
   expect(await block.unindent()).toBe(true)
   expect(await block.unindent()).toBe(false) // already at the first level
 
-  await block.waitForBlocks(4)
+  await block.waitForBlocks(5)
 
   // NOTE: use delay to type slower, to trigger auto-completion UI.
   await block.mustType('/template')
