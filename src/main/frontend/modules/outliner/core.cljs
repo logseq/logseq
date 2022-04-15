@@ -205,13 +205,9 @@
                                      (:db/id (:block/parent block))
                                      db-id))))
 
-(defn save-block
-  [blok]
-  (let [txs-state (atom [])]
-    (tree/-save (block blok) txs-state)
-    {:tx-data @txs-state}))
 
-(defn assoc-level-aux
+
+(defn- assoc-level-aux
   [tree-vec children-key init-level]
   (map (fn [block]
          (let [children (get block children-key)
@@ -220,58 +216,9 @@
              (seq children')
              (assoc children-key children')))) tree-vec))
 
-(defn assoc-level
+(defn- assoc-level
   [children-key tree-vec]
   (assoc-level-aux tree-vec children-key 1))
-
-(defn tree-vec-flatten
-  "Converts a `tree-vec` to blocks with `:block/level`.
-
-  A `tree-vec` example:
-  [{:id 1, :children [{:id 2,
-                       :children [{:id 3}]}]}
-   {:id 4, :children [{:id 5}
-                      {:id 6}]}]"
-  ([tree-vec]
-   (tree-vec-flatten tree-vec :children))
-  ([tree-vec children-key]
-   (->> tree-vec
-        (assoc-level children-key)
-        (mapcat #(tree-seq map? children-key %))
-        (map #(dissoc % :block/children)))))
-
-(defn blocks-with-level
-  "Should be sorted already."
-  [blocks]
-  (let [blocks (if (sequential? blocks) blocks [blocks])
-        root (assoc (first blocks) :block/level 1)]
-    (loop [m [root]
-           blocks (rest blocks)]
-      (if (empty? blocks)
-        m
-        (let [block (first blocks)
-              parent (:block/parent block)
-              parent-level (when parent
-                             (:block/level
-                              (first
-                               (filter (fn [x]
-                                         (or
-                                          (and (map? parent)
-                                               (= (:db/id x) (:db/id parent)))
-                                          ;; lookup
-                                          (and (vector? parent)
-                                               (= (:block/uuid x) (second parent))))) m))))
-              level (if parent-level
-                      (inc parent-level)
-                      1)
-              block (assoc block :block/level level)
-              m' (vec (conj m block))]
-          (recur m' (rest blocks)))))))
-
-(defn get-top-level-blocks
-  [blocks]
-  (let [level-blocks (blocks-with-level blocks)]
-    (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
 
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
@@ -323,6 +270,94 @@
     (or (get-new-id block left)
         (get-new-id block (nth blocks (dec idx))))))
 
+(defn- get-left-nodes
+  [node limit]
+  (let [parent (tree/-get-parent node)]
+    (loop [node node
+           limit limit
+           result []]
+     (if (zero? limit)
+       result
+       (if-let [left (tree/-get-left node)]
+         (if-not (= left parent)
+           (recur left (dec limit) (conj result (tree/-get-id left)))
+           result)
+         result)))))
+
+(defn- page-first-child?
+  [block]
+  (= (:block/left block)
+     (:block/page block)))
+
+;;; ### public utils
+
+(defn tree-vec-flatten
+  "Converts a `tree-vec` to blocks with `:block/level`.
+
+  A `tree-vec` example:
+  [{:id 1, :children [{:id 2,
+                       :children [{:id 3}]}]}
+   {:id 4, :children [{:id 5}
+                      {:id 6}]}]"
+  ([tree-vec]
+   (tree-vec-flatten tree-vec :children))
+  ([tree-vec children-key]
+   (->> tree-vec
+        (assoc-level children-key)
+        (mapcat #(tree-seq map? children-key %))
+        (map #(dissoc % :block/children)))))
+
+
+(defn save-block
+  [blok]
+  (let [txs-state (atom [])]
+    (tree/-save (block blok) txs-state)
+    {:tx-data @txs-state}))
+
+(defn blocks-with-level
+  "Should be sorted already."
+  [blocks]
+  (let [blocks (if (sequential? blocks) blocks [blocks])
+        root (assoc (first blocks) :block/level 1)]
+    (loop [m [root]
+           blocks (rest blocks)]
+      (if (empty? blocks)
+        m
+        (let [block (first blocks)
+              parent (:block/parent block)
+              parent-level (when parent
+                             (:block/level
+                              (first
+                               (filter (fn [x]
+                                         (or
+                                          (and (map? parent)
+                                               (= (:db/id x) (:db/id parent)))
+                                          ;; lookup
+                                          (and (vector? parent)
+                                               (= (:block/uuid x) (second parent))))) m))))
+              level (if parent-level
+                      (inc parent-level)
+                      1)
+              block (assoc block :block/level level)
+              m' (vec (conj m block))]
+          (recur m' (rest blocks)))))))
+
+(defn get-top-level-blocks
+  [blocks]
+  (let [level-blocks (blocks-with-level blocks)]
+    (filter (fn [b] (= 1 (:block/level b))) level-blocks)))
+
+(defn get-right-siblings
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (when-let [parent (tree/-get-parent node)]
+    (let [children (tree/-get-children parent)]
+      (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
+           last
+           rest))))
+
+;;; ### insert-blocks, delete-blocks, move-blocks
+
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
@@ -365,12 +400,12 @@
                            parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id)
                            left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)]
                        (cond->
-                         (merge block {:block/uuid uuid
-                                       :block/page target-page
-                                       :block/parent parent
-                                       :block/left left})
-                         (not move?)
-                         (dissoc :db/id)))))
+                           (merge block {:block/uuid uuid
+                                         :block/page target-page
+                                         :block/parent parent
+                                         :block/left left})
+                           (not move?)
+                           (dissoc :db/id)))))
                  blocks)))
 
 (defn insert-blocks
@@ -437,20 +472,6 @@
         (tree/-save new-right-node txs-state)))
     @txs-state))
 
-(defn- get-left-nodes
-  [node limit]
-  (let [parent (tree/-get-parent node)]
-    (loop [node node
-           limit limit
-           result []]
-     (if (zero? limit)
-       result
-       (if-let [left (tree/-get-left node)]
-         (if-not (= left parent)
-           (recur left (dec limit) (conj result (tree/-get-id left)))
-           result)
-         result)))))
-
 (defn delete-blocks
   "Delete blocks from the tree."
   [blocks {:keys [children?]
@@ -501,15 +522,6 @@
             (let [node (block (db/pull id))]
               (tree/-del node txs-state true)))))
       {:tx-data @txs-state})))
-
-(defn get-right-siblings
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (when-let [parent (tree/-get-parent node)]
-    (let [children (tree/-get-children parent)]
-      (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
-           last
-           rest))))
 
 (defn- build-move-blocks-next-tx
   [blocks]
@@ -602,11 +614,6 @@
       :else
       nil)))
 
-(defn page-first-child?
-  [block]
-  (= (:block/left block)
-     (:block/page block)))
-
 (defn indent-outdent-blocks
   [blocks indent?]
   (let [first-block (db/entity (:db/id (first blocks)))
@@ -655,7 +662,7 @@
                   (concat-tx-fn result result2))
                 result))))))))
 
-;;; write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
+;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
 (def ^:private ^:dynamic *transaction-data*
   "Stores transaction-data that are generated by one or more write-operations,
