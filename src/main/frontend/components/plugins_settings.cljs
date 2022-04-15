@@ -77,17 +77,18 @@
   [schema ^js pl]
   (let [^js _settings (.-settings pl)
         pid (.-id pl)
-        [settings, set-settings] (rum/use-state (bean/->clj (.toJSON _settings)))
+        [settings, set-settings] (rum/use-state nil)
         update-setting! (fn [k v] (.set _settings (name k) (bean/->js v)))]
 
     (rum/use-effect!
       (fn []
+        (set-settings (bean/->clj (.toJSON _settings)))
         (let [on-change (fn [^js s]
                           (when-let [s (bean/->clj s)]
                             (set-settings s)))]
           (.on _settings "change" on-change)
           #(.off _settings "change" on-change)))
-      [])
+      [pid])
 
     (if (seq schema)
       [:div.cp__plugins-settings-inner
