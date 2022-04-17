@@ -156,6 +156,21 @@
           }
       }
   }
+
+  &[label="instruction__cp"] {
+
+      .ui__modal-panel {
+          height: 90%;
+      }
+    
+      .panel-content {
+          height: 100%;
+      }
+  }
+}
+
+.instruction {
+    height: 70%;
 }
 
 html.is-native-andorid,

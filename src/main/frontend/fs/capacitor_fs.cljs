@@ -2,14 +2,15 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.encrypt :as encrypt]
-            [frontend.state :as state]
-            [frontend.db :as db]))
+            [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -178,6 +179,33 @@
       (js/encodeURI (js/decodeURI path))
       path)))
 
+(defn- local-container-path?
+  "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
+  [path localDocumentsPath]
+  (string/includes? path localDocumentsPath))
+
+(defn- iCloud-container-path?
+  "Check whether `path' is logseq's iCloud container path on iOS"
+  [path]
+  (string/includes? path "iCloud~com~logseq~logseq"))
+
+(rum/defc instruction
+  []
+  [:div.instruction
+   [:h1.title "Please choose a valid directory!"]
+   [:p.leading-6 "Logseq app can only save or access your graphs stored in a specific directory with a "
+    [:strong "Logseq icon"]
+    " inside, located either in \"iCloud Drive\", \"On My iPhone\" or \"On My iPad\"."]
+   [:p.leading-6 "Please watch the following short instruction video. "
+    [:small.text-gray-500 "(may take few seconds to load...)"]]
+   [:iframe
+    {:src "https://www.loom.com/embed/dae612ae5fd94e508bd0acdf02efb888"
+     :frame-border "0"
+     :position "relative"
+     :allow-full-screen "allowfullscreen"
+     :webkit-allow-full-screen "webkitallowfullscreen"
+     :height "100%"}]])
+
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -249,11 +277,19 @@
         result)))
   (open-dir [_this _ok-handler]
     (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
-            path (p/chain
-                  (.pickFolder mobile-util/folder-picker)
-                  #(js->clj % :keywordize-keys true)
-                  :path)
-            _ (when (mobile-util/native-ios?) (mobile-util/sync-icloud-repo path))
+            {:keys [path localDocumentsPath]} (p/chain
+                                               (.pickFolder mobile-util/folder-picker)
+                                               #(js->clj % :keywordize-keys true))
+            _ (when (mobile-util/native-ios?)
+                (cond
+                  (not (or (local-container-path? path localDocumentsPath)
+                           (iCloud-container-path? path)))
+                  (state/pub-event! [:modal/show-instruction])
+
+                  (iCloud-container-path? path)
+                  (mobile-util/sync-icloud-repo path)
+
+                  :else nil))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))

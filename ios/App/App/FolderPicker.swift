@@ -40,13 +40,15 @@ public class FolderPicker: CAPPlugin, UIDocumentPickerDelegate {
       didPickDocumentsAt urls: [URL]
     ){
         var items: [String] = []
-
+        let documentsPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
+        
         for url in urls {
             items.append(url.absoluteString)
         }
 
         self._call?.resolve([
-                              "path": items.first as Any
+                              "path": items.first as Any,
+                              "localDocumentsPath": documentsPath[0] as Any
                             ])
     }
 }
