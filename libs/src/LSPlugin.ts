@@ -20,20 +20,20 @@ export interface Theme extends LegacyTheme {
   mode: ThemeMode
 }
 
-export type StyleString = string
-export interface StyleOptions {
+export type StyleString = string;
+export type StyleOptions = {
   key?: string
   style: StyleString
 }
 
-export interface UIContainerAttrs {
+export type UIContainerAttrs = {
   draggable: boolean
   resizable: boolean
 
   [key: string]: any
 }
 
-export interface UIBaseOptions {
+export type UIBaseOptions = {
   key?: string
   replace?: boolean
   template: string | null
@@ -43,14 +43,14 @@ export interface UIBaseOptions {
   reset?: boolean // reset slot content or not
 }
 
-export interface UIPathIdentity {
+export type UIPathIdentity = {
   /**
    * DOM selector
    */
   path: string
 }
 
-export interface UISlotIdentity {
+export type UISlotIdentity = {
   /**
    * Slot key
    */
@@ -69,7 +69,7 @@ export interface LSPluginPkgConfig {
   entry: string // alias of main
   title: string
   mode: 'shadow' | 'iframe'
-  themes: Theme[]
+  themes: Array<Theme>
   icon: string
 
   [key: string]: any
@@ -82,33 +82,25 @@ export interface LSPluginBaseInfo {
   settings: {
     disabled: boolean
     [key: string]: any
-  }
+  },
 
   [key: string]: any
 }
 
-export interface IHookEvent {
+export type IHookEvent = {
   [key: string]: any
 }
 
 export type IUserOffHook = () => void
-export type IUserHook<E = any, R = IUserOffHook> = (
-  callback: (e: IHookEvent & E) => void
-) => IUserOffHook
-export type IUserSlotHook<E = any> = (
-  callback: (e: IHookEvent & UISlotIdentity & E) => void
-) => void
+export type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
+export type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
 
 export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
 
-export interface IEntityID { id: EntityID }
-export interface IBatchBlock {
-  content: string
-  properties?: Record<string, any>
-  children?: IBatchBlock[]
-}
+export type IEntityID = { id: EntityID }
+export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
 export interface AppUserInfo {
   [key: string]: any
@@ -159,7 +151,7 @@ export interface BlockEntity {
   file?: IEntityID
   level?: number
   meta?: { timestamps: any, properties: any, startPos: number, endPos: number }
-  title?: any[]
+  title?: Array<any>
 
   [key: string]: any
 }
@@ -184,83 +176,75 @@ export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 export type BlockPageName = string
 export type PageIdentity = BlockPageName | BlockIdentity
 export type SlashCommandActionCmd =
-  | 'editor/input'
+  'editor/input'
   | 'editor/hook'
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 export type SimpleCommandCallback = (e: IHookEvent) => void
-export type BlockCommandCallback = (
-  e: IHookEvent & { uuid: BlockUUID }
-) => Promise<void>
-export interface BlockCursorPosition {
-  left: number
-  top: number
-  height: number
-  pos: number
-  rect: DOMRect
-}
+export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
+export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
-export interface SimpleCommandKeybinding {
-  mode?: 'global' | 'non-editing' | 'editing'
-  binding: string
+export type SimpleCommandKeybinding = {
+  mode?: 'global' | 'non-editing' | 'editing',
+  binding: string,
   mac?: string // special for Mac OS
 }
 
-export interface SettingSchemaDesc {
+export type SettingSchemaDesc = {
   key: string
   type: 'string' | 'number' | 'boolean' | 'enum' | 'object'
-  default: string | number | boolean | any[] | object | null
+  default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
   inputAs?: 'color' | 'date' | 'datetime-local' | 'range'
-  enumChoices?: string[]
+  enumChoices?: Array<string>
   enumPicker?: 'select' | 'radio' | 'checkbox' // default: select
 }
 
 export type ExternalCommandType =
-  | 'logseq.command/run'
-  | 'logseq.editor/cycle-todo'
-  | 'logseq.editor/down'
-  | 'logseq.editor/up'
-  | 'logseq.editor/expand-block-children'
-  | 'logseq.editor/collapse-block-children'
-  | 'logseq.editor/open-file-in-default-app'
-  | 'logseq.editor/open-file-in-directory'
-  | 'logseq.editor/select-all-blocks'
-  | 'logseq.editor/toggle-open-blocks'
-  | 'logseq.editor/zoom-in'
-  | 'logseq.editor/zoom-out'
-  | 'logseq.editor/indent'
-  | 'logseq.editor/outdent'
-  | 'logseq.editor/copy'
-  | 'logseq.editor/cut'
-  | 'logseq.go/home'
-  | 'logseq.go/journals'
-  | 'logseq.go/keyboard-shortcuts'
-  | 'logseq.go/next-journal'
-  | 'logseq.go/prev-journal'
-  | 'logseq.go/search'
-  | 'logseq.go/search-in-page'
-  | 'logseq.go/tomorrow'
-  | 'logseq.go/backward'
-  | 'logseq.go/forward'
-  | 'logseq.search/re-index'
-  | 'logseq.sidebar/clear'
-  | 'logseq.sidebar/open-today-page'
-  | 'logseq.ui/goto-plugins'
-  | 'logseq.ui/select-theme-color'
-  | 'logseq.ui/toggle-brackets'
-  | 'logseq.ui/toggle-cards'
-  | 'logseq.ui/toggle-contents'
-  | 'logseq.ui/toggle-document-mode'
-  | 'logseq.ui/toggle-help'
-  | 'logseq.ui/toggle-left-sidebar'
-  | 'logseq.ui/toggle-right-sidebar'
-  | 'logseq.ui/toggle-settings'
-  | 'logseq.ui/toggle-theme'
-  | 'logseq.ui/toggle-wide-mode'
-  | 'logseq.command-palette/toggle'
+  'logseq.command/run' |
+  'logseq.editor/cycle-todo' |
+  'logseq.editor/down' |
+  'logseq.editor/up' |
+  'logseq.editor/expand-block-children' |
+  'logseq.editor/collapse-block-children' |
+  'logseq.editor/open-file-in-default-app' |
+  'logseq.editor/open-file-in-directory' |
+  'logseq.editor/select-all-blocks' |
+  'logseq.editor/toggle-open-blocks' |
+  'logseq.editor/zoom-in' |
+  'logseq.editor/zoom-out' |
+  'logseq.editor/indent' |
+  'logseq.editor/outdent' |
+  'logseq.editor/copy' |
+  'logseq.editor/cut' |
+  'logseq.go/home' |
+  'logseq.go/journals' |
+  'logseq.go/keyboard-shortcuts' |
+  'logseq.go/next-journal' |
+  'logseq.go/prev-journal' |
+  'logseq.go/search' |
+  'logseq.go/search-in-page' |
+  'logseq.go/tomorrow' |
+  'logseq.go/backward' |
+  'logseq.go/forward' |
+  'logseq.search/re-index' |
+  'logseq.sidebar/clear' |
+  'logseq.sidebar/open-today-page' |
+  'logseq.ui/goto-plugins' |
+  'logseq.ui/select-theme-color' |
+  'logseq.ui/toggle-brackets' |
+  'logseq.ui/toggle-cards' |
+  'logseq.ui/toggle-contents' |
+  'logseq.ui/toggle-document-mode' |
+  'logseq.ui/toggle-help' |
+  'logseq.ui/toggle-left-sidebar' |
+  'logseq.ui/toggle-right-sidebar' |
+  'logseq.ui/toggle-settings' |
+  'logseq.ui/toggle-theme' |
+  'logseq.ui/toggle-wide-mode' |
+  'logseq.command-palette/toggle'
 
 /**
  * App level APIs
@@ -274,28 +258,25 @@ export interface IAppProxy {
   registerCommand: (
     type: string,
     opts: {
-      key: string
-      label: string
-      desc?: string
-      palette?: boolean
+      key: string,
+      label: string,
+      desc?: string,
+      palette?: boolean,
       keybinding?: SimpleCommandKeybinding
     },
-    action: SimpleCommandCallback
-  ) => void
+    action: SimpleCommandCallback) => void
 
   registerCommandPalette: (
     opts: {
-      key: string
-      label: string
+      key: string,
+      label: string,
       keybinding?: SimpleCommandKeybinding
     },
-    action: SimpleCommandCallback
-  ) => void
+    action: SimpleCommandCallback) => void
 
   invokeExternalCommand: (
     type: ExternalCommandType,
-    ...args: any[]
-  ) => Promise<void>
+    ...args: Array<any>) => Promise<void>
 
   /**
    * Get state from app store
@@ -308,7 +289,8 @@ export interface IAppProxy {
    * ```
    * @param path
    */
-  getStateFromStore: <T = any>(path: string | string[]) => Promise<T>
+  getStateFromStore:
+    <T = any>(path: string | Array<string>) => Promise<T>
 
   // native
   relaunch: () => Promise<void>
@@ -325,23 +307,12 @@ export interface IAppProxy {
   getCurrentGraph: () => Promise<AppGraphInfo | null>
 
   // router
-  pushState: (
-    k: string,
-    params?: Record<string, any>,
-    query?: Record<string, any>
-  ) => void
-  replaceState: (
-    k: string,
-    params?: Record<string, any>,
-    query?: Record<string, any>
-  ) => void
+  pushState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
+  replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
-  showMsg: (
-    content: string,
-    status?: 'success' | 'warning' | 'error' | string
-  ) => void
+  showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -381,9 +352,7 @@ export interface IAppProxy {
    * })
    * ```
    */
-  onMacroRendererSlotted: IUserSlotHook<{
-    payload: { arguments: string[], uuid: string, [key: string]: any }
-  }>
+  onMacroRendererSlotted: IUserSlotHook<{ payload: { arguments: Array<string>, uuid: string, [key: string]: any } }>
 
   onPageHeadActionsSlotted: IUserSlotHook
   onRouteChanged: IUserHook<{ path: string, template: string }>
@@ -417,7 +386,7 @@ export interface IEditorProxy extends Record<string, any> {
    */
   registerSlashCommand: (
     tag: string,
-    action: BlockCommandCallback | SlashCommandAction[]
+    action: BlockCommandCallback | Array<SlashCommandAction>
   ) => unknown
 
   /**
@@ -451,7 +420,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   getCurrentBlock: () => Promise<BlockEntity | null>
 
-  getSelectedBlocks: () => Promise<BlockEntity[] | null>
+  getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
 
   /**
    * get all blocks of the current page as a tree structure
@@ -462,31 +431,26 @@ export interface IEditorProxy extends Record<string, any> {
    * initMindMap(blocks)
    * ```
    */
-  getCurrentPageBlocksTree: () => Promise<BlockEntity[]>
+  getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
 
   /**
    * get all blocks for the specified page
    *
    * @param srcPage - the page name or uuid
    */
-  getPageBlocksTree: (srcPage: PageIdentity) => Promise<BlockEntity[]>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
   insertBlock: (
     srcBlock: BlockIdentity,
     content: string,
-    opts?: Partial<{
-      before: boolean
-      sibling: boolean
-      isPageBlock: boolean
-      properties: {}
-    }>
+    opts?: Partial<{ before: boolean; sibling: boolean; isPageBlock: boolean; properties: {} }>
   ) => Promise<BlockEntity | null>
 
   insertBatchBlock: (
     srcBlock: BlockIdentity,
-    batch: IBatchBlock | IBatchBlock[],
+    batch: IBatchBlock | Array<IBatchBlock>,
     opts?: Partial<{ before: boolean, sibling: boolean }>
-  ) => Promise<BlockEntity[] | null>
+  ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
     srcBlock: BlockIdentity,
@@ -494,7 +458,9 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
-  removeBlock: (srcBlock: BlockIdentity) => Promise<void>
+  removeBlock: (
+    srcBlock: BlockIdentity
+  ) => Promise<void>
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
@@ -514,15 +480,12 @@ export interface IEditorProxy extends Record<string, any> {
   createPage: (
     pageName: BlockPageName,
     properties?: {},
-    opts?: Partial<{
-      redirect: boolean
-      createFirstBlock: boolean
-      format: BlockEntity['format']
-      journal: boolean
-    }>
+    opts?: Partial<{ redirect: boolean, createFirstBlock: boolean, format: BlockEntity['format'], journal: boolean }>
   ) => Promise<PageEntity | null>
 
-  deletePage: (pageName: BlockPageName) => Promise<void>
+  deletePage: (
+    pageName: BlockPageName
+  ) => Promise<void>
 
   renamePage: (oldName: string, newName: string) => Promise<void>
 
@@ -537,7 +500,7 @@ export interface IEditorProxy extends Record<string, any> {
   moveBlock: (
     srcBlock: BlockIdentity,
     targetBlock: BlockIdentity,
-    opts?: Partial<{ before: boolean, children: boolean }>
+    opts?: Partial<{ before: boolean; children: boolean }>
   ) => Promise<void>
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
@@ -554,18 +517,15 @@ export interface IEditorProxy extends Record<string, any> {
 
   getBlockProperties: (block: BlockIdentity) => Promise<any>
 
-  scrollToBlockInPage: (pageName: BlockPageName, blockId: BlockIdentity) => void
+  scrollToBlockInPage: (
+    pageName: BlockPageName,
+    blockId: BlockIdentity
+  ) => void
 
   openInRightSidebar: (uuid: BlockUUID) => void
 
   // events
-  onInputSelectionEnd: IUserHook<{
-    caret: any
-    point: { x: number, y: number }
-    start: number
-    end: number
-    text: string
-  }>
+  onInputSelectionEnd: IUserHook<{ caret: any, point: { x: number, y: number }, start: number, end: number, text: string }>
 }
 
 /**
@@ -577,7 +537,7 @@ export interface IDBProxy {
    * @link https://docs.logseq.com/#/page/queries
    * @param dsl
    */
-  q: <T = any>(dsl: string) => Promise<T[] | null>
+  q: <T = any>(dsl: string) => Promise<Array<T> | null>
 
   /**
    * Run a datascript query
@@ -586,13 +546,13 @@ export interface IDBProxy {
 }
 
 export interface ILSPluginThemeManager extends EventEmitter {
-  themes: Map<PluginLocalIdentity, Theme[]>
+  themes: Map<PluginLocalIdentity, Array<Theme>>
 
-  registerTheme: (id: PluginLocalIdentity, opt: Theme) => Promise<void>
+  registerTheme (id: PluginLocalIdentity, opt: Theme): Promise<void>
 
-  unregisterTheme: (id: PluginLocalIdentity) => Promise<void>
+  unregisterTheme (id: PluginLocalIdentity): Promise<void>
 
-  selectTheme: (theme: Theme) => Promise<void>
+  selectTheme (opt?: Theme): Promise<void>
 }
 
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
@@ -623,10 +583,17 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *
    * @param model - same as the model in `provideModel`
    */
-  ready: ((model?: Record<string, any>) => Promise<any>) & ((callback?: (e: any) => void | {}) => Promise<any>) & ((
+  ready (model?: Record<string, any>): Promise<any>
+
+  /**
+   * @param callback - a function to run when the main Logseq app is ready
+   */
+  ready (callback?: (e: any) => void | {}): Promise<any>
+
+  ready (
     model?: Record<string, any>,
     callback?: (e: any) => void | {}
-  ) => Promise<any>)
+  ): Promise<any>
 
   beforeunload: (callback: () => Promise<void>) => void
 
@@ -642,12 +609,12 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideModel: (model: Record<string, any>) => this
+  provideModel (model: Record<string, any>): this
 
   /**
    * Set the theme for the main Logseq app
    */
-  provideTheme: (theme: Theme) => this
+  provideTheme (theme: Theme): this
 
   /**
    * Inject custom css for the main Logseq app
@@ -664,7 +631,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *
    * ```
    */
-  provideStyle: (style: StyleString | StyleOptions) => this
+  provideStyle (style: StyleString | StyleOptions): this
 
   /**
    * Inject custom UI at specific DOM node.
@@ -683,19 +650,19 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideUI: (ui: UIOptions) => this
+  provideUI (ui: UIOptions): this
 
-  useSettingsSchema: (schemas: SettingSchemaDesc[]) => this
+  useSettingsSchema (schemas: Array<SettingSchemaDesc>): this
 
-  updateSettings: (attrs: Record<string, any>) => void
+  updateSettings (attrs: Record<string, any>): void
 
-  onSettingsChanged: <T = any>(cb: (a: T, b: T) => void) => IUserOffHook
+  onSettingsChanged<T = any> (cb: (a: T, b: T) => void): IUserOffHook
 
-  showSettingsUI: () => void
+  showSettingsUI (): void
 
-  hideSettingsUI: () => void
+  hideSettingsUI (): void
 
-  setMainUIAttrs: (attrs: Record<string, any>) => void
+  setMainUIAttrs (attrs: Record<string, any>): void
 
   /**
    * Set the style for the plugin's UI
@@ -708,26 +675,26 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  setMainUIInlineStyle: (style: CSS.Properties) => void
+  setMainUIInlineStyle (style: CSS.Properties): void
 
   /**
    * show the plugin's UI
    */
-  showMainUI: (opts?: { autoFocus: boolean }) => void
+  showMainUI (opts?: { autoFocus: boolean }): void
 
   /**
    * hide the plugin's UI
    */
-  hideMainUI: (opts?: { restoreEditingCursor: boolean }) => void
+  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
 
   /**
    * toggle the plugin's UI
    */
-  toggleMainUI: () => void
+  toggleMainUI (): void
 
   isMainUIVisible: boolean
 
-  resolveResourceFullUrl: (filePath: string) => string
+  resolveResourceFullUrl (filePath: string): string
 
   App: IAppProxy & Record<string, any>
   Editor: IEditorProxy & Record<string, any>

@@ -47,10 +47,10 @@ function registerSimpleCommand (
   this: LSPluginUser,
   type: string,
   opts: {
-    key: string
-    label: string
-    desc?: string
-    palette?: boolean
+    key: string,
+    label: string,
+    desc?: string,
+    palette?: boolean,
     keybinding?: SimpleCommandKeybinding
   },
   action: SimpleCommandCallback
@@ -64,7 +64,7 @@ function registerSimpleCommand (
 
   this.Editor['on' + eventKey](action)
 
-  this.caller?.call('api:call', {
+  this.caller?.call(`api:call`, {
     method: 'register-plugin-simple-command',
     args: [this.baseInfo.id, [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]], palette]
   })
@@ -74,8 +74,9 @@ const app: Partial<IAppProxy> = {
   registerCommand: registerSimpleCommand,
 
   registerCommandPalette (
-    opts: { key: string, label: string, keybinding?: SimpleCommandKeybinding },
+    opts: { key: string; label: string, keybinding?: SimpleCommandKeybinding },
     action: SimpleCommandCallback) {
+
     const { key, label, keybinding } = opts
     const group = 'global-palette-command'
 
@@ -92,7 +93,7 @@ const app: Partial<IAppProxy> = {
     const pid = this.baseInfo.id
     // opts.key = `${pid}_${opts.key}`
 
-    this.caller?.call('api:call', {
+    this.caller?.call(`api:call`, {
       method: 'register-plugin-ui-item',
       args: [pid, type, opts]
     })
@@ -136,7 +137,7 @@ const editor: Partial<IEditorProxy> = {
   registerSlashCommand (
     this: LSPluginUser,
     tag: string,
-    actions: BlockCommandCallback | SlashCommandAction[]
+    actions: BlockCommandCallback | Array<SlashCommandAction>
   ) {
     debug('Register slash command #', this.baseInfo.id, tag, actions)
 
@@ -153,7 +154,7 @@ const editor: Partial<IEditorProxy> = {
 
       switch (tag) {
         case 'editor/hook':
-          const key = args[0]
+          let key = args[0]
           let fn = () => {
             this.caller?.callUserModel(key)
           }
@@ -175,7 +176,7 @@ const editor: Partial<IEditorProxy> = {
       return it
     })
 
-    this.caller?.call('api:call', {
+    this.caller?.call(`api:call`, {
       method: 'register-plugin-slash-command',
       args: [this.baseInfo.id, [tag, actions]]
     })
@@ -205,7 +206,7 @@ const editor: Partial<IEditorProxy> = {
     pageName: BlockPageName,
     blockId: BlockIdentity
   ) {
-    const anchor = 'block-content-' + blockId
+    const anchor = `block-content-` + blockId
     this.App.pushState(
       'page',
       { name: pageName },
@@ -216,8 +217,8 @@ const editor: Partial<IEditorProxy> = {
 
 const db: Partial<IDBProxy> = {}
 
-interface uiState {
-  key?: number
+type uiState = {
+  key?: number,
   visible: boolean
 }
 
@@ -228,14 +229,14 @@ const KEY_MAIN_UI = 0
  * @public
  */
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
-  private _settingsSchema?: SettingSchemaDesc[]
+  private _settingsSchema?: Array<SettingSchemaDesc>
   private _connected: boolean = false
 
   /**
    * ui frame identities
    * @private
    */
-  private readonly _ui = new Map<number, uiState>()
+  private _ui = new Map<number, uiState>()
 
   private readonly _fileStorage: LSPluginFileStorage
 
@@ -250,7 +251,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    * @param _caller
    */
   constructor (
-    private readonly _baseInfo: LSPluginBaseInfo,
+    private _baseInfo: LSPluginBaseInfo,
     private _caller: LSPluginCaller
   ) {
     super()
@@ -352,7 +353,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     return this
   }
 
-  useSettingsSchema (schema: SettingSchemaDesc[]) {
+  useSettingsSchema (schema: Array<SettingSchemaDesc>) {
     if (this.connected) {
       this.caller.call('settings:schema', {
         schema, isSync: true
@@ -468,7 +469,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
             if (hookMatcher != null) {
               const f = hookMatcher[0].toLowerCase()
-              const s = hookMatcher.input
+              const s = hookMatcher.input!
               const e = s.slice(f.length)
 
               const type = `hook:${tag}:${snakeCase(e)}`
@@ -479,7 +480,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
           }
 
           // Call host
-          return caller.callAsync('api:call', {
+          return caller.callAsync(`api:call`, {
             tag, method: propKey, args: args
           })
         }
@@ -490,8 +491,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   /**
    * @param args
    */
-  async _callWin (...args) {
-    return await this._caller.callAsync('api:call', {
+  _callWin (...args) {
+    return this._caller.callAsync(`api:call`, {
       method: '_callMainWin',
       args: args
     })
@@ -531,6 +532,6 @@ export function setupPluginUserInstance (
 
 if (window.__LSP__HOST__ == null) { // Entry of iframe mode
   const caller = new LSPluginCaller(null)
-  // @ts-expect-error
+  // @ts-ignore
   window.logseq = setupPluginUserInstance({} as any, caller)
 }

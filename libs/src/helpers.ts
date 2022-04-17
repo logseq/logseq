@@ -8,7 +8,7 @@ import { merge } from 'lodash-es'
 import { snakeCase } from 'snake-case'
 
 interface IObject {
-  [key: string]: any
+  [key: string]: any;
 }
 
 declare global {
@@ -18,8 +18,7 @@ declare global {
   }
 }
 
-export const path =
-  navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
+export const path = navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
 export const IS_DEV = process.env.NODE_ENV === 'development'
 export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
@@ -32,10 +31,9 @@ export async function getAppPathRoot (): Promise<string> {
     return _appPathRoot
   }
 
-  return (_appPathRoot = await invokeHostExportedApi(
-    '_callApplication',
-    'getAppPath'
-  ))
+  return (_appPathRoot =
+      await invokeHostExportedApi('_callApplication', 'getAppPath')
+  )
 }
 
 export async function getSDKPathRoot (): Promise<string> {
@@ -50,7 +48,7 @@ export async function getSDKPathRoot (): Promise<string> {
 }
 
 export function isObject (item: any) {
-  return item === Object(item) && !Array.isArray(item)
+  return (item === Object(item) && !Array.isArray(item))
 }
 
 export const deepMerge = merge
@@ -77,7 +75,7 @@ export function withFileProtocol (path: string) {
   return path
 }
 
-export function safetyPathJoin (basePath: string, ...parts: string[]) {
+export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
   try {
     const url = new URL(basePath)
     if (!url.origin) throw new Error(null)
@@ -115,38 +113,34 @@ export function deferred<T = any> (timeout?: number, tag?: string) {
     reject = timeFn(reject1)
 
     if (timeout) {
-      // @ts-expect-error
-      timeout = setTimeout(
-        () => reject(new Error(`[deferred timeout] ${tag}`)),
-        timeout
-      )
+      // @ts-ignore
+      timeout = setTimeout(() => reject(new Error(`[deferred timeout] ${tag}`)), timeout)
     }
   })
 
   return {
     created: Date.now(),
-    setTag: (t: string) => (tag = t),
-    resolve,
-    reject,
-    promise,
+    setTag: (t: string) => tag = t,
+    resolve, reject, promise,
     get settled () {
       return settled
     }
   }
 }
 
-export function invokeHostExportedApi (method: string, ...args: any[]) {
-  method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
+export function invokeHostExportedApi (
+  method: string,
+  ...args: Array<any>
+) {
+  method = method?.startsWith('_call') ? method :
+    method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
-  // @ts-expect-error
+  // @ts-ignore
   const logseqHostExportedApi = window.logseq?.api || {}
 
-  const fn =
-    logseqHostExportedApi[method1] ||
-    window.apis[method1] ||
-    logseqHostExportedApi[method] ||
-    window.apis[method]
+  const fn = logseqHostExportedApi[method1] || window.apis[method1] ||
+    logseqHostExportedApi[method] || window.apis[method]
 
   if (!fn) {
     throw new Error(`Not existed method #${method}`)
@@ -188,10 +182,9 @@ export function setupInjectedStyle (
   el = document.createElement('style')
   el.textContent = style
 
-  attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  attrs && Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
   document.head.append(el)
 
@@ -226,60 +219,46 @@ export function setupInjectedUI (
   const id = `${ui.key}-${slot}-${pl.id}`
   const key = `${ui.key}--${pl.id}`
 
-  const target = float
-    ? document.body
-    : selector && document.querySelector(selector)
+  const target = float ? document.body : (selector && document.querySelector(selector))
   if (!target) {
-    console.error(
-      `${this.debugTag} can not resolve selector target ${selector}`
-    )
+    console.error(`${this.debugTag} can not resolve selector target ${selector}`)
     return
   }
 
   if (ui.template) {
     // safe template
-    ui.template = DOMPurify.sanitize(ui.template, {
-      ADD_TAGS: ['iframe'],
-      ALLOW_UNKNOWN_PROTOCOLS: true,
-      ADD_ATTR: [
-        'allow',
-        'src',
-        'allowfullscreen',
-        'frameborder',
-        'scrolling',
-        'target'
-      ]
-    })
-  } else {
-    // remove ui
+    ui.template = DOMPurify.sanitize(
+      ui.template, {
+        ADD_TAGS: ['iframe'],
+        ALLOW_UNKNOWN_PROTOCOLS: true,
+        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling', 'target']
+      })
+  } else { // remove ui
     injectedUIEffects.get(id)?.call(null)
     return
   }
 
-  let el = document.querySelector(`#${id}`)
+  let el = document.querySelector(`#${id}`) as HTMLElement
   let content = float ? el?.querySelector('.ls-ui-float-content') : el
 
   if (content) {
     content.innerHTML = ui.template
 
     // update attributes
-    attrs &&
-      Object.entries(attrs).forEach(([k, v]) => {
-        el.setAttribute(k, v)
-      })
+    attrs && Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
 
-    const positionDirty = el.dataset.dx != null
-    ui.style &&
-      Object.entries(ui.style).forEach(([k, v]) => {
-        if (
-          positionDirty &&
-          ['left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
-        ) {
-          return
-        }
+    let positionDirty = el.dataset.dx != null
+    ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+      if (positionDirty && [
+        'left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
 
-        el.style[k] = v
-      })
+      el.style[k] = v
+    })
     return
   }
 
@@ -298,15 +277,13 @@ export function setupInjectedUI (
   // TODO: enhance template
   content.innerHTML = ui.template
 
-  attrs &&
-    Object.entries(attrs).forEach(([k, v]) => {
-      el.setAttribute(k, v)
-    })
+  attrs && Object.entries(attrs).forEach(([k, v]) => {
+    el.setAttribute(k, v)
+  })
 
-  ui.style &&
-    Object.entries(ui.style).forEach(([k, v]) => {
-      el.style[k] = v
-    })
+  ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
+  })
 
   let teardownUI: () => void
   let disposeFloat: () => void
@@ -316,54 +293,33 @@ export function setupInjectedUI (
     el.setAttribute('resizable', 'true')
     ui.close && (el.dataset.close = ui.close)
     el.classList.add('lsp-ui-float-container', 'visible')
-    disposeFloat =
-      (pl._setupResizableContainer(el, key),
-      pl._setupDraggableContainer(el, {
-        key,
-        close: () => teardownUI(),
-        title: attrs?.title
-      }))
+    disposeFloat = (
+      pl._setupResizableContainer(el, key),
+        pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
   }
 
   if (!!slot && ui.reset) {
-    const exists = Array.from(
-      target.querySelectorAll('[data-injected-ui]')
-    ).map((it: HTMLElement) => it.id)
+    const exists = Array.from(target.querySelectorAll('[data-injected-ui]'))
+      .map((it: HTMLElement) => it.id)
 
     exists?.forEach((exist: string) => {
       injectedUIEffects.get(exist)?.call(null)
     })
   }
 
-  target.appendChild(el)
+  target.appendChild(el);
 
   // TODO: How handle events
-  ;[
-    'click',
-    'focus',
-    'focusin',
-    'focusout',
-    'blur',
-    'dblclick',
-    'keyup',
-    'keypress',
-    'keydown',
-    'change',
-    'input'
-  ].forEach((type) => {
-    el.addEventListener(
-      type,
-      (e) => {
-        const target = e.target as HTMLElement
-        const trigger = target.closest(`[data-on-${type}]`)
-        if (!trigger) return
+  ['click', 'focus', 'focusin', 'focusout', 'blur', 'dblclick',
+    'keyup', 'keypress', 'keydown', 'change', 'input'].forEach((type) => {
+    el.addEventListener(type, (e) => {
+      const target = e.target! as HTMLElement
+      const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
+      if (!trigger) return
 
-        const msgType = trigger.dataset[`on${ucFirst(type)}`]
-        msgType &&
-          pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
-      },
-      false
-    )
+      const msgType = trigger.dataset[`on${ucFirst(type)}`]
+      msgType && pl.caller?.callUserModel(msgType, transformableEvent(trigger, e))
+    }, false)
   })
 
   // callback
@@ -372,7 +328,7 @@ export function setupInjectedUI (
   teardownUI = () => {
     disposeFloat?.()
     injectedUIEffects.delete(id)
-    target.removeChild(el)
+    target!.removeChild(el)
   }
 
   injectedUIEffects.set(id, teardownUI)
@@ -386,7 +342,9 @@ export function transformableEvent (target: HTMLElement, e: Event) {
     const ds = target.dataset
     const FLAG_RECT = 'rect'
 
-    ;['value', 'id', 'className', 'dataset', FLAG_RECT].forEach((k) => {
+    ;['value', 'id', 'className',
+      'dataset', FLAG_RECT
+    ].forEach((k) => {
       let v: any
 
       switch (k) {
@@ -428,8 +386,7 @@ export function injectTheme (url: string) {
 
 export function mergeSettingsWithSchema (
   settings: Record<string, any>,
-  schema: SettingSchemaDesc[]
-) {
+  schema: Array<SettingSchemaDesc>) {
   const defaults = (schema || []).reduce((a, b) => {
     if ('default' in b) {
       a[b.key] = b.default
