@@ -8,7 +8,7 @@ import {
   LSPMSG_READY,
   LSPMSG_SETTINGS,
   LSPMSG_SYNC,
-  LSPluginCaller,
+  LSPluginCaller
 } from './LSPlugin.caller'
 import {
   ILSPluginThemeManager,
@@ -18,7 +18,7 @@ import {
   StyleString,
   Theme,
   UIContainerAttrs,
-  UIOptions,
+  UIOptions
 } from './LSPlugin'
 import {
   IS_DEV,
@@ -37,7 +37,7 @@ import {
   safetyPathNormalize,
   setupInjectedStyle,
   setupInjectedUI,
-  withFileProtocol,
+  withFileProtocol
 } from './helpers'
 import { LegacyTheme, ThemeMode } from './LSPlugin.user'
 
@@ -55,7 +55,7 @@ declare global {
 }
 
 type DeferredActor = ReturnType<typeof deferred>
-type LSPluginCoreOptions = {
+interface LSPluginCoreOptions {
   dotConfigRoot: string
 }
 
@@ -64,12 +64,12 @@ type LSPluginCoreOptions = {
  */
 class PluginSettings extends EventEmitter<'change' | 'reset'> {
   private _settings: Record<string, any> = {
-    disabled: false,
+    disabled: false
   }
 
-  constructor(
-    private _userPluginSettings: any,
-    private _schema?: Array<SettingSchemaDesc>
+  constructor (
+    private readonly _userPluginSettings: any,
+    private _schema?: SettingSchemaDesc[]
   ) {
     super()
 
@@ -80,7 +80,7 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
     return this._settings[k]
   }
 
-  set(k: string | Record<string, any>, v?: any) {
+  set (k: string | Record<string, any>, v?: any) {
     const o = deepMerge({}, this._settings)
 
     if (typeof k === 'string') {
@@ -95,15 +95,15 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
     this.emit('change', Object.assign({}, this._settings), o)
   }
 
-  set settings(value: Record<string, any>) {
+  set settings (value: Record<string, any>) {
     this._settings = value
   }
 
-  get settings(): Record<string, any> {
+  get settings (): Record<string, any> {
     return this._settings
   }
 
-  setSchema(schema: Array<SettingSchemaDesc>, syncSettings?: boolean) {
+  setSchema (schema: SettingSchemaDesc[], syncSettings?: boolean) {
     this._schema = schema
 
     if (syncSettings) {
@@ -113,7 +113,7 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
     }
   }
 
-  reset() {
+  reset () {
     const o = this.settings
     const val = {}
 
@@ -125,7 +125,7 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
     this.emit('reset', val, o)
   }
 
-  toJSON() {
+  toJSON () {
     return this._settings
   }
 }
@@ -133,12 +133,12 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
 class PluginLogger extends EventEmitter<'change'> {
   private _logs: Array<[type: string, payload: any]> = []
 
-  constructor(private _tag: string) {
+  constructor (private readonly _tag: string) {
     super()
   }
 
-  write(type: string, payload: any[]) {
-    let msg = payload.reduce((ac, it) => {
+  write (type: string, payload: any[]) {
+    const msg = payload.reduce((ac, it) => {
       if (it && it instanceof Error) {
         ac += `${it.message} ${it.stack}`
       } else {
@@ -151,24 +151,24 @@ class PluginLogger extends EventEmitter<'change'> {
     this.emit('change')
   }
 
-  clear() {
+  clear () {
     this._logs = []
     this.emit('change')
   }
 
-  info(...args: any[]) {
+  info (...args: any[]) {
     this.write('INFO', args)
   }
 
-  error(...args: any[]) {
+  error (...args: any[]) {
     this.write('ERROR', args)
   }
 
-  warn(...args: any[]) {
+  warn (...args: any[]) {
     this.write('WARN', args)
   }
 
-  toJSON() {
+  toJSON () {
     return this._logs
   }
 }
@@ -180,17 +180,17 @@ interface UserPreferences {
     light: Theme
     dark: Theme
   }
-  externals: Array<string> // external plugin locations
+  externals: string[] // external plugin locations
 }
 
-type PluginLocalOptions = {
+interface PluginLocalOptions {
   key?: string // Unique from Logseq Plugin Store
   entry: string // Plugin main file
   url: string // Plugin package absolute fs location
   name: string
   version: string
   mode: 'shadow' | 'iframe'
-  settingsSchema?: Array<SettingSchemaDesc>
+  settingsSchema?: SettingSchemaDesc[]
   settings?: PluginSettings
   logger?: PluginLogger
   effect?: boolean
@@ -212,7 +212,7 @@ enum PluginLocalLoadStatus {
   ERROR = 'error',
 }
 
-function initUserSettingsHandlers(pluginLocal: PluginLocal) {
+function initUserSettingsHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `settings:${label}`
 
   // settings:schema
@@ -220,9 +220,9 @@ function initUserSettingsHandlers(pluginLocal: PluginLocal) {
     _('schema'),
     ({
       schema,
-      isSync,
+      isSync
     }: {
-      schema: Array<SettingSchemaDesc>
+      schema: SettingSchemaDesc[]
       isSync?: boolean
     }) => {
       pluginLocal.settingsSchema = schema
@@ -246,7 +246,7 @@ function initUserSettingsHandlers(pluginLocal: PluginLocal) {
   })
 }
 
-function initMainUIHandlers(pluginLocal: PluginLocal) {
+function initMainUIHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `main-ui:${label}`
 
   // main-ui:visible
@@ -258,7 +258,7 @@ function initMainUIHandlers(pluginLocal: PluginLocal) {
     if (visible) {
       if (!pluginLocal.shadow && el && autoFocus !== false) {
         ;(
-          el.querySelector('iframe') as HTMLIFrameElement
+          el.querySelector('iframe')
         )?.contentWindow?.focus()
       }
     }
@@ -279,7 +279,7 @@ function initMainUIHandlers(pluginLocal: PluginLocal) {
             title: pluginLocal.options.name,
             close: () => {
               pluginLocal.caller.call('sys:ui:visible', { toggle: true })
-            },
+            }
           })
         )
       }
@@ -303,13 +303,13 @@ function initMainUIHandlers(pluginLocal: PluginLocal) {
         return
       }
 
-      el!.style[k] = v
+      el.style[k] = v
     })
   })
 }
 
-function initProviderHandlers(pluginLocal: PluginLocal) {
-  let _ = (label: string): any => `provider:${label}`
+function initProviderHandlers (pluginLocal: PluginLocal) {
+  const _ = (label: string): any => `provider:${label}`
   let themed = false
 
   // provider:theme
@@ -339,7 +339,7 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
     pluginLocal._dispose(
       setupInjectedStyle(style, {
         'data-injected-style': key ? `${key}-${pluginLocal.id}` : '',
-        'data-ref': pluginLocal.id,
+        'data-ref': pluginLocal.id
       })
     )
   })
@@ -353,7 +353,7 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
           ui,
           Object.assign(
             {
-              'data-ref': pluginLocal.id,
+              'data-ref': pluginLocal.id
             },
             ui.attrs || {}
           ),
@@ -368,8 +368,8 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
   })
 }
 
-function initApiProxyHandlers(pluginLocal: PluginLocal) {
-  let _ = (label: string): any => `api:${label}`
+function initApiProxyHandlers (pluginLocal: PluginLocal) {
+  const _ = (label: string): any => `api:${label}`
 
   pluginLocal.on(_('call'), async (payload) => {
     let ret: any
@@ -378,7 +378,7 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
       ret = await invokeHostExportedApi(payload.method, ...payload.args)
     } catch (e) {
       ret = {
-        [LSPMSG_ERROR_TAG]: e,
+        [LSPMSG_ERROR_TAG]: e
       }
     }
 
@@ -395,7 +395,7 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
       const reply = (result: any) => {
         pluginLocal.caller?.callUserModel(LSPMSG_SYNC, {
           result,
-          _sync,
+          _sync
         })
       }
 
@@ -404,7 +404,7 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
   })
 }
 
-function convertToLSPResource(fullUrl: string, dotPluginRoot: string) {
+function convertToLSPResource (fullUrl: string, dotPluginRoot: string) {
   if (dotPluginRoot && fullUrl.startsWith(PROTOCOL_FILE + dotPluginRoot)) {
     fullUrl = safetyPathJoin(
       URL_LSP,
@@ -415,14 +415,14 @@ function convertToLSPResource(fullUrl: string, dotPluginRoot: string) {
 }
 
 class IllegalPluginPackageError extends Error {
-  constructor(message: string) {
+  constructor (message: string) {
     super(message)
     this.name = IllegalPluginPackageError.name
   }
 }
 
 class ExistedImportedPluginPackageError extends Error {
-  constructor(message: string) {
+  constructor (message: string) {
     super(message)
     this.name = ExistedImportedPluginPackageError.name
   }
@@ -432,7 +432,7 @@ class ExistedImportedPluginPackageError extends Error {
  * Host plugin for local
  */
 class PluginLocal extends EventEmitter<
-  'loaded' | 'unloaded' | 'beforeunload' | 'error'
+'loaded' | 'unloaded' | 'beforeunload' | 'error'
 > {
   private _disposes: Array<() => Promise<any>> = []
   private _id: PluginLocalIdentity
@@ -447,10 +447,10 @@ class PluginLocal extends EventEmitter<
    * @param _themeMgr
    * @param _ctx
    */
-  constructor(
+  constructor (
     private _options: PluginLocalOptions,
-    private _themeMgr: ILSPluginThemeManager,
-    private _ctx: LSPluginCore
+    private readonly _themeMgr: ILSPluginThemeManager,
+    private readonly _ctx: LSPluginCore
   ) {
     super()
 
@@ -462,7 +462,7 @@ class PluginLocal extends EventEmitter<
     initApiProxyHandlers(this)
   }
 
-  async _setupUserSettings(reload?: boolean) {
+  async _setupUserSettings (reload?: boolean) {
     const { _options } = this
     const logger = (_options.logger = new PluginLogger('Loader'))
 
@@ -508,7 +508,7 @@ class PluginLocal extends EventEmitter<
         }
 
         if (a) {
-          invokeHostExportedApi(`save_plugin_user_settings`, this.id, a)
+          invokeHostExportedApi('save_plugin_user_settings', this.id, a)
         }
       }
 
@@ -522,7 +522,7 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  getMainUIContainer(): HTMLElement | undefined {
+  getMainUIContainer (): HTMLElement | undefined {
     if (this.shadow) {
       return this.caller?._getSandboxShadowContainer()
     }
@@ -530,7 +530,7 @@ class PluginLocal extends EventEmitter<
     return this.caller?._getSandboxIframeContainer()
   }
 
-  _resolveResourceFullUrl(filePath: string, localRoot?: string) {
+  _resolveResourceFullUrl (filePath: string, localRoot?: string) {
     if (!filePath?.trim()) return
     localRoot = localRoot || this._localRoot
     const reg = /^(http|file)/
@@ -543,7 +543,7 @@ class PluginLocal extends EventEmitter<
       : filePath
   }
 
-  async _preparePackageConfigs() {
+  async _preparePackageConfigs () {
     const { url } = this._options
     let pkg: any
 
@@ -576,7 +576,7 @@ class PluginLocal extends EventEmitter<
       'repo',
       'title',
       'effect',
-      'sponsors',
+      'sponsors'
     ]
       .concat(!this.isInstalledInDotRoot ? ['devEntry'] : [])
       .forEach((k) => {
@@ -615,7 +615,7 @@ class PluginLocal extends EventEmitter<
         try {
           await invokeHostExportedApi('save_plugin_config', url, {
             ...pkg,
-            logseq,
+            logseq
           })
         } catch (e) {
           debug('[save plugin ID Error] ', e)
@@ -632,7 +632,7 @@ class PluginLocal extends EventEmitter<
     return async () => {
       try {
         // 0. Install Themes
-        let themes = logseq.themes
+        const themes = logseq.themes
 
         if (themes) {
           await this._loadConfigThemes(
@@ -645,7 +645,7 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  async _tryToNormalizeEntry() {
+  async _tryToNormalizeEntry () {
     let { entry, settings, devEntry } = this.options
     devEntry = devEntry || settings?.get('_devEntry')
 
@@ -663,9 +663,9 @@ class PluginLocal extends EventEmitter<
       dirPathInstalled = this._localRoot.replace(this.dotPluginsRoot, '')
       dirPathInstalled = path.join(DIR_PLUGINS, dirPathInstalled)
     }
-    let tag = new Date().getDay()
-    let sdkPathRoot = await getSDKPathRoot()
-    let entryPath = await invokeHostExportedApi(
+    const tag = new Date().getDay()
+    const sdkPathRoot = await getSDKPathRoot()
+    const entryPath = await invokeHostExportedApi(
       tmp_file_method,
       `${this._id}_index.html`,
       `<!doctype html>
@@ -696,7 +696,7 @@ class PluginLocal extends EventEmitter<
     this._options.entry = entry
   }
 
-  async _loadConfigThemes(themes: Array<Theme>) {
+  async _loadConfigThemes (themes: Theme[]) {
     themes.forEach((options) => {
       if (!options.url) return
 
@@ -708,12 +708,12 @@ class PluginLocal extends EventEmitter<
         }
       }
 
-      // @ts-ignore
+      // @ts-expect-error
       this.emit('provider:theme', options)
     })
   }
 
-  async _loadLayoutsData(): Promise<Record<string, any>> {
+  async _loadLayoutsData (): Promise<Record<string, any>> {
     const key = this.id + '_layouts'
     const [, layouts] = await invokeHostExportedApi(
       'load_plugin_user_settings',
@@ -722,12 +722,12 @@ class PluginLocal extends EventEmitter<
     return layouts || {}
   }
 
-  async _saveLayoutsData(data) {
+  async _saveLayoutsData (data) {
     const key = this.id + '_layouts'
     await invokeHostExportedApi('save_plugin_user_settings', key, data)
   }
 
-  async _persistMainUILayoutData(e: {
+  async _persistMainUILayoutData (e: {
     width: number
     height: number
     left: number
@@ -738,9 +738,9 @@ class PluginLocal extends EventEmitter<
     await this._saveLayoutsData(layouts)
   }
 
-  _setupDraggableContainer(
+  _setupDraggableContainer (
     el: HTMLElement,
-    opts: Partial<{ key: string; title: string; close: () => void }> = {}
+    opts: Partial<{ key: string, title: string, close: () => void }> = {}
   ): () => void {
     const ds = el.dataset
     if (ds.inited_draggable) return
@@ -776,7 +776,6 @@ class PluginLocal extends EventEmitter<
         if (target?.closest('.r')) {
           e.stopPropagation()
           e.preventDefault()
-          return
         }
       },
       false
@@ -829,7 +828,7 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  _setupResizableContainer(el: HTMLElement, key?: string): () => void {
+  _setupResizableContainer (el: HTMLElement, key?: string): () => void {
     const ds = el.dataset
     if (ds.inited_resizable) return
     if (!ds.identity) {
@@ -839,7 +838,7 @@ class PluginLocal extends EventEmitter<
     handle.classList.add('resizable-handle')
     el.prepend(handle)
 
-    // @ts-ignore
+    // @ts-expect-error
     const layoutCore = window.frontend.modules.layout.core
     const dispose = layoutCore.setup_resizable_container_BANG_(
       el,
@@ -850,7 +849,7 @@ class PluginLocal extends EventEmitter<
     return dispose
   }
 
-  async load(
+  async load (
     opts?: Partial<{
       indicator: DeferredActor
       reload: boolean
@@ -867,7 +866,7 @@ class PluginLocal extends EventEmitter<
       // if (!this.options.entry) { // Themes package no entry field
       // }
 
-      let installPackageThemes = await this._preparePackageConfigs()
+      const installPackageThemes = await this._preparePackageConfigs()
 
       this._dispose(await this._setupUserSettings(opts?.reload))
 
@@ -914,7 +913,7 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  async reload() {
+  async reload () {
     if (this.pending) {
       return
     }
@@ -928,7 +927,7 @@ class PluginLocal extends EventEmitter<
   /**
    * @param unregister If true delete plugin files
    */
-  async unload(unregister: boolean = false) {
+  async unload (unregister: boolean = false) {
     if (this.pending) {
       return
     }
@@ -970,7 +969,7 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  private async dispose() {
+  private async dispose () {
     for (const fn of this._disposes) {
       try {
         fn && (await fn())
@@ -983,12 +982,12 @@ class PluginLocal extends EventEmitter<
     this._disposes = []
   }
 
-  _dispose(fn: any) {
+  _dispose (fn: any) {
     if (!fn) return
     this._disposes.push(fn)
   }
 
-  _onHostMounted(callback: () => void) {
+  _onHostMounted (callback: () => void) {
     const actor = this._ctx.hostMountedActor
 
     if (!actor || actor.settled) {
@@ -998,98 +997,98 @@ class PluginLocal extends EventEmitter<
     }
   }
 
-  get layoutCore(): any {
-    // @ts-ignore
+  get layoutCore (): any {
+    // @ts-expect-error
     return window.frontend.modules.layout.core
   }
 
-  get isInstalledInDotRoot() {
+  get isInstalledInDotRoot () {
     const dotRoot = this.dotConfigRoot
     const plgRoot = this.localRoot
     return dotRoot && plgRoot && plgRoot.startsWith(dotRoot)
   }
 
-  get loaded() {
+  get loaded () {
     return this._status === PluginLocalLoadStatus.LOADED
   }
 
-  get pending() {
+  get pending () {
     return [
       PluginLocalLoadStatus.LOADING,
-      PluginLocalLoadStatus.UNLOADING,
+      PluginLocalLoadStatus.UNLOADING
     ].includes(this._status)
   }
 
-  get status(): PluginLocalLoadStatus {
+  get status (): PluginLocalLoadStatus {
     return this._status
   }
 
-  get settings() {
+  get settings () {
     return this.options.settings
   }
 
-  set settingsSchema(schema: Array<SettingSchemaDesc>) {
+  set settingsSchema (schema: SettingSchemaDesc[]) {
     this.options.settingsSchema = schema
   }
 
-  get settingsSchema() {
+  get settingsSchema () {
     return this.options.settingsSchema
   }
 
-  get logger() {
+  get logger () {
     return this.options.logger
   }
 
-  get disabled() {
+  get disabled () {
     return this.settings?.get('disabled')
   }
 
-  get caller() {
+  get caller () {
     return this._caller
   }
 
-  get id(): string {
+  get id (): string {
     return this._id
   }
 
-  get shadow(): boolean {
+  get shadow (): boolean {
     return this.options.mode === 'shadow'
   }
 
-  get options(): PluginLocalOptions {
+  get options (): PluginLocalOptions {
     return this._options
   }
 
-  get themeMgr(): ILSPluginThemeManager {
+  get themeMgr (): ILSPluginThemeManager {
     return this._themeMgr
   }
 
-  get debugTag() {
+  get debugTag () {
     const name = this._options?.name
     return `#${this._id} ${name ?? ''}`
   }
 
-  get localRoot(): string {
+  get localRoot (): string {
     return this._localRoot || this._options.url
   }
 
-  get loadErr(): Error | undefined {
+  get loadErr (): Error | undefined {
     return this._loadErr
   }
 
-  get dotConfigRoot() {
+  get dotConfigRoot () {
     return path.normalize(this._ctx.options.dotConfigRoot)
   }
 
-  get dotSettingsFile(): string | undefined {
+  get dotSettingsFile (): string | undefined {
     return this._dotSettingsFile
   }
 
-  get dotPluginsRoot() {
+  get dotPluginsRoot () {
     return path.join(this.dotConfigRoot, DIR_PLUGINS)
   }
 
-  toJSON() {
+  toJSON () {
     const json = { ...this.options } as any
     json.id = this.id
     json.err = this.loadErr
@@ -1105,37 +1104,37 @@ class PluginLocal extends EventEmitter<
  */
 class LSPluginCore
   extends EventEmitter<
-    | 'beforeenable'
-    | 'enabled'
-    | 'beforedisable'
-    | 'disabled'
-    | 'registered'
-    | 'error'
-    | 'unregistered'
-    | 'theme-changed'
-    | 'theme-selected'
-    | 'reset-custom-theme'
-    | 'settings-changed'
-    | 'unlink-plugin'
-    | 'beforereload'
-    | 'reloaded'
+  | 'beforeenable'
+  | 'enabled'
+  | 'beforedisable'
+  | 'disabled'
+  | 'registered'
+  | 'error'
+  | 'unregistered'
+  | 'theme-changed'
+  | 'theme-selected'
+  | 'reset-custom-theme'
+  | 'settings-changed'
+  | 'unlink-plugin'
+  | 'beforereload'
+  | 'reloaded'
   >
-  implements ILSPluginThemeManager
-{
+  implements ILSPluginThemeManager {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
-  private _hostMountedActor: DeferredActor = deferred()
-  private _userPreferences: UserPreferences = {
+  private readonly _hostMountedActor: DeferredActor = deferred()
+  private readonly _userPreferences: UserPreferences = {
     theme: null,
     themes: {
       mode: 'light',
       light: null,
-      dark: null,
+      dark: null
     },
-    externals: [],
+    externals: []
   }
-  private _registeredThemes = new Map<PluginLocalIdentity, Array<Theme>>()
-  private _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
+
+  private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
+  private readonly _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1145,13 +1144,13 @@ class LSPluginCore
   /**
    * @param _options
    */
-  constructor(private _options: Partial<LSPluginCoreOptions>) {
+  constructor (private readonly _options: Partial<LSPluginCoreOptions>) {
     super()
   }
 
-  async loadUserPreferences() {
+  async loadUserPreferences () {
     try {
-      const settings = await invokeHostExportedApi(`load_user_preferences`)
+      const settings = await invokeHostExportedApi('load_user_preferences')
 
       if (settings) {
         Object.assign(this._userPreferences, settings)
@@ -1161,14 +1160,14 @@ class LSPluginCore
     }
   }
 
-  async saveUserPreferences(settings: Partial<UserPreferences>) {
+  async saveUserPreferences (settings: Partial<UserPreferences>) {
     try {
       if (settings) {
         Object.assign(this._userPreferences, settings)
       }
 
       await invokeHostExportedApi(
-        `save_user_preferences`,
+        'save_user_preferences',
         this._userPreferences
       )
     } catch (e) {
@@ -1185,7 +1184,7 @@ class LSPluginCore
    *
    * @memberof LSPluginCore
    */
-  async activateUserPreferences() {
+  async activateUserPreferences () {
     const { theme: legacyTheme, themes } = this._userPreferences
     const currentTheme = themes[themes.mode]
 
@@ -1202,8 +1201,8 @@ class LSPluginCore
    * @param plugins
    * @param initial
    */
-  async register(
-    plugins: Array<RegisterPluginOpts> | RegisterPluginOpts,
+  async register (
+    plugins: RegisterPluginOpts[] | RegisterPluginOpts,
     initial = false
   ) {
     if (!Array.isArray(plugins)) {
@@ -1212,8 +1211,8 @@ class LSPluginCore
     }
 
     const perfTable = new Map<
-      string,
-      { o: PluginLocal; s: number; e: number }
+    string,
+    { o: PluginLocal, s: number, e: number }
     >()
     const debugPerfInfo = () => {
       const data = Array.from(perfTable.values()).reduce((ac, it) => {
@@ -1225,7 +1224,7 @@ class LSPluginCore
           status: status,
           enabled:
             typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
-          perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`,
+          perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`
         }
 
         return ac
@@ -1234,7 +1233,7 @@ class LSPluginCore
       console.table(data)
     }
 
-    // @ts-ignore
+    // @ts-expect-error
     window.__debugPluginsPerfInfo = debugPerfInfo
 
     try {
@@ -1278,7 +1277,7 @@ class LSPluginCore
         const { loadErr } = pluginLocal
 
         if (loadErr) {
-          debug(`[Failed LOAD Plugin] #`, pluginOptions)
+          debug('[Failed LOAD Plugin] #', pluginOptions)
 
           this.emit('error', loadErr)
 
@@ -1319,7 +1318,7 @@ class LSPluginCore
     }
   }
 
-  async reload(plugins: Array<PluginLocalIdentity> | PluginLocalIdentity) {
+  async reload (plugins: PluginLocalIdentity[] | PluginLocalIdentity) {
     if (!Array.isArray(plugins)) {
       await this.reload([plugins])
       return
@@ -1335,13 +1334,13 @@ class LSPluginCore
     }
   }
 
-  async unregister(plugins: Array<PluginLocalIdentity> | PluginLocalIdentity) {
+  async unregister (plugins: PluginLocalIdentity[] | PluginLocalIdentity) {
     if (!Array.isArray(plugins)) {
       await this.unregister([plugins])
       return
     }
 
-    const unregisteredExternals: Array<string> = []
+    const unregisteredExternals: string[] = []
 
     for (const identity of plugins) {
       const p = this.ensurePlugin(identity)
@@ -1356,17 +1355,17 @@ class LSPluginCore
       this.emit('unregistered', identity)
     }
 
-    let externals = this._userPreferences.externals
-    if (externals.length && unregisteredExternals.length) {
+    const externals = this._userPreferences.externals
+    if ((externals.length > 0) && (unregisteredExternals.length > 0)) {
       await this.saveUserPreferences({
         externals: externals.filter((it) => {
           return !unregisteredExternals.includes(it)
-        }),
+        })
       })
     }
   }
 
-  async enable(plugin: PluginLocalIdentity) {
+  async enable (plugin: PluginLocalIdentity) {
     const p = this.ensurePlugin(plugin)
     if (p.pending) return
 
@@ -1375,7 +1374,7 @@ class LSPluginCore
     this.emit('enabled', p.id)
   }
 
-  async disable(plugin: PluginLocalIdentity) {
+  async disable (plugin: PluginLocalIdentity) {
     const p = this.ensurePlugin(plugin)
     if (p.pending) return
 
@@ -1384,29 +1383,29 @@ class LSPluginCore
     this.emit('disabled', p.id)
   }
 
-  async _hook(ns: string, type: string, payload?: any, pid?: string) {
+  async _hook (ns: string, type: string, payload?: any, pid?: string) {
     for (const [_, p] of this._registeredPlugins) {
       if (!pid || pid === p.id) {
         p.caller?.callUserModel(LSPMSG, {
           ns,
           type: snakeCase(type),
-          payload,
+          payload
         })
       }
     }
   }
 
-  hookApp(type: string, payload?: any, pid?: string) {
-    this._hook(`hook:app`, type, payload, pid)
+  hookApp (type: string, payload?: any, pid?: string) {
+    this._hook('hook:app', type, payload, pid)
   }
 
-  hookEditor(type: string, payload?: any, pid?: string) {
-    this._hook(`hook:editor`, type, payload, pid)
+  hookEditor (type: string, payload?: any, pid?: string) {
+    this._hook('hook:editor', type, payload, pid)
   }
 
-  _execDirective(tag: string, ...params: any[]) {}
+  _execDirective (tag: string, ...params: any[]) {}
 
-  ensurePlugin(plugin: PluginLocalIdentity | PluginLocal) {
+  ensurePlugin (plugin: PluginLocalIdentity | PluginLocal) {
     if (plugin instanceof PluginLocal) {
       return plugin
     }
@@ -1420,39 +1419,39 @@ class LSPluginCore
     return p
   }
 
-  hostMounted() {
+  hostMounted () {
     this._hostMountedActor.resolve()
   }
 
-  get registeredPlugins(): Map<PluginLocalIdentity, PluginLocal> {
+  get registeredPlugins (): Map<PluginLocalIdentity, PluginLocal> {
     return this._registeredPlugins
   }
 
-  get options() {
+  get options () {
     return this._options
   }
 
-  get readyIndicator(): DeferredActor | undefined {
+  get readyIndicator (): DeferredActor | undefined {
     return this._readyIndicator
   }
 
-  get hostMountedActor(): DeferredActor {
+  get hostMountedActor (): DeferredActor {
     return this._hostMountedActor
   }
 
-  get isRegistering(): boolean {
+  get isRegistering (): boolean {
     return this._isRegistering
   }
 
-  get themes(): Map<PluginLocalIdentity, Array<Theme>> {
+  get themes (): Map<PluginLocalIdentity, Theme[]> {
     return this._registeredThemes
   }
 
-  async registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void> {
+  async registerTheme (id: PluginLocalIdentity, opt: Theme): Promise<void> {
     debug('Registere theme #', id, opt)
 
     if (!id) return
-    let themes: Array<Theme> = this._registeredThemes.get(id)!
+    let themes: Theme[] = this._registeredThemes.get(id)!
     if (!themes) {
       this._registeredThemes.set(id, (themes = []))
     }
@@ -1461,7 +1460,7 @@ class LSPluginCore
     this.emit('theme-changed', this.themes, { id, ...opt })
   }
 
-  async selectTheme(
+  async selectTheme (
     theme: Theme | LegacyTheme,
     options?: {
       effect?: boolean
@@ -1488,7 +1487,7 @@ class LSPluginCore
       this._currentTheme = {
         pid: theme.pid,
         opt: theme,
-        eject: ejectTheme,
+        eject: ejectTheme
       }
     }
 
@@ -1499,8 +1498,8 @@ class LSPluginCore
               themes: {
                 ...this._userPreferences.themes,
                 mode: theme.mode,
-                [theme.mode]: theme,
-              },
+                [theme.mode]: theme
+              }
             }
           : { theme: theme }
       )
@@ -1511,7 +1510,7 @@ class LSPluginCore
     }
   }
 
-  async unregisterTheme(id: PluginLocalIdentity, effect = true) {
+  async unregisterTheme (id: PluginLocalIdentity, effect = true) {
     debug('Unregister theme #', id)
 
     if (!this._registeredThemes.has(id)) {
@@ -1530,8 +1529,8 @@ class LSPluginCore
         themes: {
           ...themes,
           light: themes.light?.pid === id ? null : themes.light,
-          dark: themes.dark?.pid === id ? null : themes.dark,
-        },
+          dark: themes.dark?.pid === id ? null : themes.dark
+        }
       })
 
       // Reset current theme if it is unregistered
@@ -1540,7 +1539,7 @@ class LSPluginCore
   }
 }
 
-function setupPluginCore(options: any) {
+function setupPluginCore (options: any) {
   const pluginCore = new LSPluginCore(options)
 
   debug('=== 🔗 Setup Logseq Plugin System 🔗 ===')

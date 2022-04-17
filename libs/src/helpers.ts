@@ -27,7 +27,7 @@ export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
 let _appPathRoot
 
-export async function getAppPathRoot(): Promise<string> {
+export async function getAppPathRoot (): Promise<string> {
   if (_appPathRoot) {
     return _appPathRoot
   }
@@ -38,7 +38,7 @@ export async function getAppPathRoot(): Promise<string> {
   ))
 }
 
-export async function getSDKPathRoot(): Promise<string> {
+export async function getSDKPathRoot (): Promise<string> {
   if (IS_DEV) {
     // TODO: cache in preference file
     return localStorage.getItem('LSP_DEV_SDK_ROOT') || 'http://localhost:8080'
@@ -49,24 +49,24 @@ export async function getSDKPathRoot(): Promise<string> {
   return safetyPathJoin(appPathRoot, 'js')
 }
 
-export function isObject(item: any) {
+export function isObject (item: any) {
   return item === Object(item) && !Array.isArray(item)
 }
 
 export const deepMerge = merge
 
-export function genID() {
+export function genID () {
   // Math.random should be unique because of its seeding algorithm.
   // Convert it to base 36 (numbers + letters), and grab the first 9 characters
   // after the decimal.
   return '_' + Math.random().toString(36).substr(2, 9)
 }
 
-export function ucFirst(str: string) {
+export function ucFirst (str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-export function withFileProtocol(path: string) {
+export function withFileProtocol (path: string) {
   if (!path) return ''
   const reg = /^(http|file|lsp)/
 
@@ -77,7 +77,7 @@ export function withFileProtocol(path: string) {
   return path
 }
 
-export function safetyPathJoin(basePath: string, ...parts: Array<string>) {
+export function safetyPathJoin (basePath: string, ...parts: string[]) {
   try {
     const url = new URL(basePath)
     if (!url.origin) throw new Error(null)
@@ -88,7 +88,7 @@ export function safetyPathJoin(basePath: string, ...parts: Array<string>) {
   }
 }
 
-export function safetyPathNormalize(basePath: string) {
+export function safetyPathNormalize (basePath: string) {
   if (!basePath?.match(/^(http?|lsp|assets):/)) {
     basePath = path.normalize(basePath)
   }
@@ -99,7 +99,7 @@ export function safetyPathNormalize(basePath: string) {
  * @param timeout milliseconds
  * @param tag string
  */
-export function deferred<T = any>(timeout?: number, tag?: string) {
+export function deferred<T = any> (timeout?: number, tag?: string) {
   let resolve: any, reject: any
   let settled = false
   const timeFn = (r: Function) => {
@@ -115,7 +115,7 @@ export function deferred<T = any>(timeout?: number, tag?: string) {
     reject = timeFn(reject1)
 
     if (timeout) {
-      // @ts-ignore
+      // @ts-expect-error
       timeout = setTimeout(
         () => reject(new Error(`[deferred timeout] ${tag}`)),
         timeout
@@ -129,17 +129,17 @@ export function deferred<T = any>(timeout?: number, tag?: string) {
     resolve,
     reject,
     promise,
-    get settled() {
+    get settled () {
       return settled
-    },
+    }
   }
 }
 
-export function invokeHostExportedApi(method: string, ...args: Array<any>) {
+export function invokeHostExportedApi (method: string, ...args: any[]) {
   method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
-  // @ts-ignore
+  // @ts-expect-error
   const logseqHostExportedApi = window.logseq?.api || {}
 
   const fn =
@@ -154,7 +154,7 @@ export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   return typeof fn !== 'function' ? fn : fn.apply(null, args)
 }
 
-export function setupIframeSandbox(
+export function setupIframeSandbox (
   props: Record<string, any>,
   target: HTMLElement
 ) {
@@ -173,7 +173,7 @@ export function setupIframeSandbox(
   }
 }
 
-export function setupInjectedStyle(
+export function setupInjectedStyle (
   style: StyleString,
   attrs: Record<string, any>
 ) {
@@ -202,11 +202,11 @@ export function setupInjectedStyle(
 
 const injectedUIEffects = new Map<string, () => void>()
 
-export function setupInjectedUI(
+export function setupInjectedUI (
   this: PluginLocal,
   ui: UIOptions,
   attrs: Record<string, string>,
-  initialCallback?: (e: { el: HTMLElement; float: boolean }) => void
+  initialCallback?: (e: { el: HTMLElement, float: boolean }) => void
 ) {
   let slot: string = ''
   let selector: string
@@ -247,8 +247,8 @@ export function setupInjectedUI(
         'allowfullscreen',
         'frameborder',
         'scrolling',
-        'target',
-      ],
+        'target'
+      ]
     })
   } else {
     // remove ui
@@ -256,7 +256,7 @@ export function setupInjectedUI(
     return
   }
 
-  let el = document.querySelector(`#${id}`) as HTMLElement
+  let el = document.querySelector(`#${id}`)
   let content = float ? el?.querySelector('.ls-ui-float-content') : el
 
   if (content) {
@@ -268,7 +268,7 @@ export function setupInjectedUI(
         el.setAttribute(k, v)
       })
 
-    let positionDirty = el.dataset.dx != null
+    const positionDirty = el.dataset.dx != null
     ui.style &&
       Object.entries(ui.style).forEach(([k, v]) => {
         if (
@@ -321,7 +321,7 @@ export function setupInjectedUI(
       pl._setupDraggableContainer(el, {
         key,
         close: () => teardownUI(),
-        title: attrs?.title,
+        title: attrs?.title
       }))
   }
 
@@ -349,13 +349,13 @@ export function setupInjectedUI(
     'keypress',
     'keydown',
     'change',
-    'input',
+    'input'
   ].forEach((type) => {
     el.addEventListener(
       type,
       (e) => {
-        const target = e.target! as HTMLElement
-        const trigger = target.closest(`[data-on-${type}]`) as HTMLElement
+        const target = e.target as HTMLElement
+        const trigger = target.closest(`[data-on-${type}]`)
         if (!trigger) return
 
         const msgType = trigger.dataset[`on${ucFirst(type)}`]
@@ -372,14 +372,14 @@ export function setupInjectedUI(
   teardownUI = () => {
     disposeFloat?.()
     injectedUIEffects.delete(id)
-    target!.removeChild(el)
+    target.removeChild(el)
   }
 
   injectedUIEffects.set(id, teardownUI)
   return teardownUI
 }
 
-export function transformableEvent(target: HTMLElement, e: Event) {
+export function transformableEvent (target: HTMLElement, e: Event) {
   const obj: any = {}
 
   if (target) {
@@ -409,7 +409,7 @@ export function transformableEvent(target: HTMLElement, e: Event) {
   return obj
 }
 
-export function injectTheme(url: string) {
+export function injectTheme (url: string) {
   const link = document.createElement('link')
   link.rel = 'stylesheet'
   link.href = url
@@ -426,9 +426,9 @@ export function injectTheme(url: string) {
   return ejectTheme
 }
 
-export function mergeSettingsWithSchema(
+export function mergeSettingsWithSchema (
   settings: Record<string, any>,
-  schema: Array<SettingSchemaDesc>
+  schema: SettingSchemaDesc[]
 ) {
   const defaults = (schema || []).reduce((a, b) => {
     if ('default' in b) {
