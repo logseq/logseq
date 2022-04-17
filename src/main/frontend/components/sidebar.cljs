@@ -19,6 +19,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -32,7 +33,8 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
-            [frontend.components.onboarding :as onboarding]))
+            [frontend.components.onboarding :as onboarding]
+            [frontend.mobile.footer :as footer]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -159,7 +161,7 @@
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-          [:li.recent-item
+          [:li.recent-item.select-none
            {:key name
             :data-ref name}
            (page-name name (get-page-icon entity))]))])))
@@ -223,7 +225,7 @@
             :icon             "home"})
           (sidebar-item
            {:class            "journals-nav"
-            :title            (t :right-side-bar/journals)
+            :title            (t :left-side-bar/journals)
             :on-click-handler route-handler/go-to-journals!
             :icon             "calendar"}))
 
@@ -289,7 +291,8 @@
      (left-sidebar {:left-sidebar-open? left-sidebar-open?
                     :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
+     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+      
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -438,7 +441,6 @@
                 state)}
   [state route-match main-content]
   (let [{:keys [open-fn]} state
-        me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
@@ -451,13 +453,13 @@
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
-        logged? (:name me)
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
         edit? (:editor/editing? @state/state)
-        default-home (get-default-home-if-valid)]
+        default-home (get-default-home-if-valid)
+        logged? (user-handler/logged-in?)]
     (theme/container
      {:t             t
       :theme         theme
@@ -488,7 +490,6 @@
                         :logged?        logged?
                         :page?          page?
                         :route-match    route-match
-                        :me             me
                         :default-home   default-home
                         :new-block-mode new-block-mode})
 
@@ -500,7 +501,13 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})]
+               :main-content        main-content})
+
+        (when (and (mobile-util/is-native-platform?)
+                   current-repo
+                   (not (state/sub :modal/show?)))
+          (footer/footer))]
+       
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]
@@ -519,4 +526,4 @@
       (when
           (and (not config/mobile?)
                (not config/publishing?))
-        (help-button))])))
+          (help-button))])))

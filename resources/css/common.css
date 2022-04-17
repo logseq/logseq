@@ -52,6 +52,7 @@ html[data-theme='dark'] {
   );
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
+  --ls-tertiary-border-color: rgba(0, 2, 0, 0.10);
   --ls-guideline-color: #0b4a5a;
   --ls-menu-hover-color: var(--ls-secondary-background-color);
   --ls-primary-text-color: #a4b5b6;
@@ -111,6 +112,7 @@ html[data-theme='light'] {
   --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
+  --ls-tertiary-border-color: rgba(200, 200, 200, 0.30);
   --ls-guideline-color: rgba(46, 27, 5, 0.08);
   --ls-menu-hover-color: var(--ls-a-chosen-bg);
   --ls-primary-text-color: #433f38;
@@ -741,6 +743,7 @@ li p:last-child,
 }
 
 .canceled,
+.cancelled,
 .done {
   text-decoration: line-through;
   opacity: 0.6;
@@ -780,7 +783,8 @@ li p:last-child,
 }
 
 .done,
-.canceled {
+.canceled,
+.cancelled {
   opacity: 0.7;
 }
 
@@ -902,6 +906,7 @@ button.menu:focus {
 .menu-link {
   background-color: var(--ls-primary-background-color, #fff);
   color: var(--ls-primary-text-color);
+  user-select: none;
 }
 
 .menu-link:first-of-type {

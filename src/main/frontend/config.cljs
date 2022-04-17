@@ -17,6 +17,19 @@
 
 (def test? false)
 
+;; prod env
+;; (goog-define FILE-SYNC-PROD? true)
+;; (goog-define LOGIN-URL
+;;              "https://logseq.auth.us-east-1.amazoncognito.com/login?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+;; (goog-define API-DOMAIN "api-prod.logseq.com")
+
+;; dev env
+(goog-define FILE-SYNC-PROD? false)
+(goog-define LOGIN-URL
+             "https://logseq-test.auth.us-east-2.amazoncognito.com/login?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+(goog-define API-DOMAIN "api.logseq.com")
+
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 
@@ -81,6 +94,10 @@
     (set/union
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
+
+(def audio-formats #{:mp3 :ogg :mpeg :wav})
+
+(def media-formats (set/union (img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})

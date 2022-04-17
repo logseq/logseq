@@ -51,20 +51,23 @@
 (defn create-contents-file
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        path (str (state/get-pages-directory)
-                  "/contents."
-                  (config/get-file-extension format))
-        file-path (str "/" path)
-        default-content (case (name format)
-                          "org" (rc/inline "contents.org")
-                          "markdown" (rc/inline "contents.md")
-                          "")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
+  (p/let [repo-dir (config/get-repo-dir repo-url)
+          pages-dir (state/get-pages-directory)
+          [org-path md-path] (map #(str "/" pages-dir "/contents." %) ["org" "md"])
+          contents-file-exist? (some #(fs/file-exists? repo-dir %) [org-path md-path])]
+    (when-not contents-file-exist?
+      (let [format (state/get-preferred-format)
+            path (str pages-dir "/contents."
+                      (config/get-file-extension format))
+            file-path (str "/" path)
+            default-content (case (name format)
+                              "org" (rc/inline "contents.org")
+                              "markdown" (rc/inline "contents.md")
+                              "")]
+        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" pages-dir))
+                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+          (when-not file-exists?
+            (file-handler/reset-file! repo-url path default-content)))))))
 
 (defn create-custom-theme
   [repo-url]
@@ -666,21 +669,19 @@
                (when on-error
                  (on-error)))))))
 
-(defn persist-otherwindow-db!
+(defn broadcast-persist-db!
   "Only works for electron
    Call backend to handle persisting a specific db on other window
    Skip persisting if no other windows is open (controlled by electron)
-     step 1. [In HERE]  a window         --persistGraph----->   electron
-     step 2.            electron         --persistGraph----->   window holds the graph
-     step 3.            window w/ graph  --persistGraphDone->   electron
-     step 4. [In HERE]  electron         --persistGraphDone->   all windows"
+     step 1. [In HERE]  a window         ---broadcastPersistGraph---->   electron
+     step 2.            electron         ---------persistGraph------->   window holds the graph
+     step 3.            window w/ graph  --broadcastPersistGraphDone->   electron
+     step 4. [In HERE]  a window         <---broadcastPersistGraph----   electron"
   [graph]
-  (p/create (fn [resolve _]
-              (js/window.apis.on "persistGraphDone"
-                                 #(let [repo (bean/->clj %)]
-                                    (prn "received persistGraphDone" repo)
-                                    (when (= graph repo)
-                                       ;; js/window.apis.once doesn't work
-                                      (js/window.apis.removeAllListeners "persistGraphDone")
-                                      (resolve repo))))
-              (ipc/ipc "persistGraph" graph))))
+  (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
+    nil))
+
+(defn graph-ready!
+  "Call electron that the graph is loaded."
+  [graph]
+  (ipc/ipc "graphReady" graph))

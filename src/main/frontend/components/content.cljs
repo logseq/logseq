@@ -21,9 +21,12 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
+
+;; TODO i18n support
 
 (defn- set-format-js-loading!
   [format value]
@@ -211,6 +214,17 @@
             :on-click (fn [_e]
                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
            "Copy block embed")
+          
+          ;; TODO Logseq protocol mobile support
+          (when (util/electron?)
+            (ui/menu-link
+             {:key      "Copy block URL"
+              :on-click (fn [_e]
+                          (let [current-repo (state/get-current-repo)
+                                tap-f (fn [block-id]
+                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
+                            (editor-handler/copy-block-ref! block-id tap-f)))}
+             "Copy block URL"))
 
           (block-template block-id)
 

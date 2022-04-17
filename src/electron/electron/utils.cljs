@@ -111,6 +111,8 @@
       nil)))
 
 (defn send-to-renderer
+  "Notice: pass the `window` parameter if you can. Otherwise, the message
+  will not be received if there's no focused window."
   ([kind payload]
    (send-to-renderer (get-focused-window) kind payload))
   ([window kind payload]
@@ -121,3 +123,12 @@
 (defn get-graph-dir
   [graph-name]
   (string/replace graph-name "logseq_local_" ""))
+
+;; Keep update with the normalization in main
+(defn normalize
+  [s]
+  (.normalize s "NFC"))
+
+(defn normalize-lc
+  [s]
+  (normalize (string/lower-case s)))

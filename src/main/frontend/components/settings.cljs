@@ -82,24 +82,6 @@
                (util/stop e))}
             svg/external-link " release channel"]])])]))
 
-(rum/defc delete-account-confirm
-  [close-fn]
-  [:div
-   (ui/admonition
-     :important
-     [:p.text-gray-700 (t :user/delete-account-notice)])
-   [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-    [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
-     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-      {:type     "button"
-       :on-click user-handler/delete-account!}
-      (t :user/delete-account)]]
-    [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
-     [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-      {:type     "button"
-       :on-click close-fn}
-      "Cancel"]]]])
-
 (rum/defc outdenting-hint
   []
   [:div.ui__modal-panel
@@ -209,11 +191,18 @@
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
         {:default-value secs
          :on-blur       (fn [event]
-                          (when-let [value (-> (util/evalue event)
-                                               util/safe-parse-int)]
-                            (when (< 0 value (inc 600))
-                              (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                              (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))))}]]]]))
+                          (let [value (-> (util/evalue event)
+                                          util/safe-parse-int)]
+                            (if (and (number? value)
+                                     (< 0 value (inc 600)))
+                              (do
+                                (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
+                                (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))
+                              (when-let [elem (gobj/get event "target")]
+                                (notification/show!
+                                 [:div "Invalid value! Must be a number between 1 and 600."]
+                                 :warning true)
+                                (gobj/set elem "value" secs)))))}]]]]))
 
 (rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
@@ -361,27 +350,12 @@
       (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
 
 (defn journal-row [t enable-journals?]
-  [:span
-   (toggle "enable_journals"
-           (t :settings-page/enable-journals)
-           enable-journals?
-           (fn []
-             (let [value (not enable-journals?)]
-               (config-handler/set-config! :feature/enable-journals? value))))
-
-   (when (not enable-journals?)
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "default page"}
-       (t :settings-page/home-default-page)]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md.sm:max-w-xs
-        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-         {:default-value (state/sub-default-home-page)
-          :on-blur       update-home-page
-          :on-key-press  (fn [e]
-                           (when (= "Enter" (util/ekey e))
-                             (update-home-page e)))}]]]])])
+  (toggle "enable_journals"
+          (t :settings-page/enable-journals)
+          enable-journals?
+          (fn []
+            (let [value (not enable-journals?)]
+              (config-handler/set-config! :feature/enable-journals? value)))))
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -584,6 +558,19 @@
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)
+     (when (not enable-journals?)
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "default page"}
+         (t :settings-page/home-default-page)]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+           {:default-value (state/sub-default-home-page)
+            :on-blur       update-home-page
+            :on-key-press  (fn [e]
+                             (when (= "Enter" (util/ekey e))
+                               (update-home-page e)))}]]]])
      (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
@@ -615,7 +602,7 @@
         developer-mode? (state/sub [:ui/developer-mode?])
         cors-proxy (state/sub [:me :cors_proxy])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
-        logged? (state/logged?)]
+        logged? (state/deprecated-logged?)]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -655,19 +642,7 @@
                 :target "_blank"}
             "https://github.com/isomorphic-git/cors-proxy"]])])
 
-     (when logged?
-       [:div
-        [:hr]
-        [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-         [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
-          {:for "delete account"}
-          (t :user/delete-account)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
-           (ui/button (t :user/delete-your-account)
-                      :on-click (fn []
-                                  (ui-handler/toggle-settings-modal!)
-                                  (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]))
+     ]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

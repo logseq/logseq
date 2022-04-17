@@ -10,11 +10,14 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
             [electron.ipc :as ipc]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.handler.user :as user-handler]
+            [frontend.handler.file-sync :as file-sync-handler]))
 
 (defn- delete-page!
   [page-name]
@@ -68,7 +71,8 @@
           favorited? (contains? (set (map util/page-name-sanity-lc favorites))
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
-          file-path (when (util/electron?) (page-handler/get-page-file-path))]
+          file-path (when (util/electron?) (page-handler/get-page-file-path))
+          _ (state/sub :auth/id-token)]
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
@@ -81,13 +85,13 @@
                          (page-handler/favorite-page! page-original-name)))}}
 
           (when-not (mobile-util/is-native-platform?)
-           {:title (t :page/presentation-mode)
-            :options {:on-click (fn []
-                                  (state/sidebar-add-block!
-                                   repo
-                                   (:db/id page)
-                                   :page-presentation
-                                   {:page page}))}})
+            {:title (t :page/presentation-mode)
+             :options {:on-click (fn []
+                                   (state/sidebar-add-block!
+                                    repo
+                                    (:db/id page)
+                                    :page-presentation
+                                    {:page page}))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -98,6 +102,11 @@
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
+          
+          (when (util/electron?)
+            {:title   (t :page/copy-page-url)
+              :options {:on-click #(util/copy-to-clipboard!
+                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
             {:title   (t :page/delete)
@@ -123,6 +132,10 @@
              :options {:on-click
                        (fn []
                          (shell/get-file-latest-git-log page 100))}})
+          (when (and (user-handler/logged-in?) (not file-sync-handler/hiding-login&file-sync))
+            (when-let [graph-uuid (file-sync-handler/get-current-graph-uuid)]
+              {:title (t :page/file-sync-versions)
+               :options {:on-click #(file-sync-handler/list-file-versions graph-uuid page)}}))
 
           (when (and (util/electron?) file-path)
             {:title   (t :page/open-backup-directory)

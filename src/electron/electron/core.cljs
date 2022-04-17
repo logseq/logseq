@@ -2,7 +2,8 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -11,6 +12,7 @@
             ["path" :as path]
             ["os" :as os]
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron-deeplink" :refer [Deeplink]]
             [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
@@ -18,8 +20,10 @@
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
-(defonce LSP_SCHEME "lsp")
-(defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
+;; Keep same as main/frontend.util.url
+(defonce LSP_SCHEME "logseq")
+(defonce FILE_LSP_SCHEME "lsp")
+(defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
@@ -38,32 +42,43 @@
                    :logger logger
                    :win    win})))
 
-(defn setup-interceptor! []
-  (.registerFileProtocol
-    protocol "assets"
-    (fn [^js request callback]
-      (let [url (.-url request)
-            path (string/replace url "assets://" "")
-            path (js/decodeURIComponent path)]
-        (callback #js {:path path}))))
+(defn open-url-handler
+  [win url]
+  (.info logger "open-url" (str {:url url}))
+
+  (let [parsed-url (js/URL. url)
+        url-protocol (.-protocol parsed-url)]
+    (when (= (str LSP_SCHEME ":") url-protocol)
+      (logseq-url-handler win parsed-url))))
+
+(defn setup-interceptor! [^js app]
+  (.setAsDefaultProtocolClient app LSP_SCHEME)
 
   (.registerFileProtocol
-    protocol LSP_SCHEME
-    (fn [^js request callback]
-      (let [url (.-url request)
-            url' ^js (js/URL. url)
-            [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
-                         [PLUGIN_URL PLUGINS_ROOT]
-                         [STATIC_URL js/__dirname])
+   protocol "assets"
+   (fn [^js request callback]
+     (let [url (.-url request)
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
+       (callback #js {:path path}))))
 
-            path' (.-pathname url')
-            path' (js/decodeURIComponent path')
-            path' (.join path ROOT path')]
+  (.registerFileProtocol
+   protocol FILE_LSP_SCHEME
+   (fn [^js request callback]
+     (let [url (.-url request)
+           url' ^js (js/URL. url)
+           [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
+                      [PLUGIN_URL PLUGINS_ROOT]
+                      [STATIC_URL js/__dirname])
 
-        (callback #js {:path path'}))))
+           path' (.-pathname url')
+           path' (js/decodeURIComponent path')
+           path' (.join path ROOT path')]
+
+       (callback #js {:path path'}))))
 
   #(do
-     (.unregisterProtocol protocol LSP_SCHEME)
+     (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
@@ -170,14 +185,15 @@
     (do
       (search/close!)
       (.quit app))
-    (do
+    (let [privileges {:standard        true
+                      :secure          true
+                      :bypassCSP       true
+                      :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
-       protocol (bean/->js [{:scheme     LSP_SCHEME
-                             :privileges {:standard        true
-                                          :secure          true
-                                          :bypassCSP       true
-                                          :supportFetchAPI true}}]))
-
+        protocol (bean/->js [{:scheme     LSP_SCHEME
+                              :privileges privileges}
+                             {:scheme     FILE_LSP_SCHEME
+                              :privileges privileges}]))
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
@@ -194,10 +210,16 @@
                                      (.quit app)))
       (.on app "ready"
            (fn []
-             (let [t0 (setup-interceptor!)
+             (let [t0 (setup-interceptor! app)
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+
+               (Deeplink. #js
+                           {:app app
+                            :mainWindow win
+                            :protocol LSP_SCHEME
+                            :isDev dev?})
 
                (restore-user-fetch-agent)
 
@@ -219,6 +241,10 @@
                             (vreset! *teardown-fn
                                      #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
+
+               (.on app "open-url"
+                    (fn [_event url]
+                      (open-url-handler win url)))
 
                ;; setup effects
                (@*setup-fn)
@@ -249,7 +275,6 @@
                                                 (do (.once win "leave-full-screen" #(.hide win))
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
-
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 

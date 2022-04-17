@@ -252,14 +252,16 @@
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
                              (when-not (gobj/get cm "escPressed")
-                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
+                               (save-file-or-block-when-blur-or-esc! editor textarea config state))
+                             (state/set-block-component-editing-mode! false)))
+        (.on editor "focus" (fn [_e]
+                              (state/set-block-component-editing-mode! true)))
         (.addEventListener element "mousedown"
                            (fn [e]
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil false))
-                             (util/stop e)
-                             (state/set-block-component-editing-mode! true)))
+                             (util/stop e)))
         (.save editor)
         (.refresh editor)
         (when default-open?
@@ -297,7 +299,7 @@
      (when-not (= mode "calc")
        [:div.extensions__code-lang
         (string/lower-case mode)]))
-   [:div.flex.flex-1.flex-row.w-full.mt-6
+   [:div.code-editor.flex.flex-1.flex-row.w-full
     [:textarea (merge {:id id
                        ;; Expose the textarea associated with the CodeMirror instance via
                        ;; ref so that we can autofocus into the CodeMirror instance later.

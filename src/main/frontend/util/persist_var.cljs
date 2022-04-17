@@ -11,48 +11,69 @@
   (config/get-file-path (state/get-current-repo) (str config/app-name "/" location ".edn")))
 
 (defprotocol ILoad
-  (-load [this]))
+  (-load [this])
+  (-loaded? [this]))
 
 (defprotocol ISave
   (-save [this]))
 
+(defprotocol IResetValue
+  (-reset-value! [this new graph]))
+
 (deftype PersistVar [*value location]
+  IResetValue
+  (-reset-value! [_ new graph]
+    (reset! *value (assoc-in @*value [graph :value] new)))
+
   ILoad
   (-load [_]
-    (state/add-watch-state (keyword (str "persist-var/" location))
-                           (fn [_k _r _o n]
-                             (let [repo (state/get-current-repo)]
-                               (when (and
-                                      (not (get-in @*value [repo :loaded?]))
-                                      (get-in n [:nfs/user-granted? repo]))
-                                 (p/let [content (fs/read-file
-                                                  (config/get-repo-dir (state/get-current-repo))
-                                                  (load-path location))]
-                                   (when-let [content (and (some? content)
-                                                           (try (reader/read-string content)
-                                                                (catch js/Error e
-                                                                  (println (util/format "load persist-var failed: %s"  (load-path location)))
-                                                                  (js/console.dir e))))]
-                                     (swap! *value (fn [o]
-                                                     (-> o
-                                                         (assoc-in [repo :loaded?] true)
-                                                         (assoc-in [repo :value] content)))))))))))
+    (when-not (config/demo-graph?)
+      (let [repo (state/get-current-repo)]
+        (p/let [content (p/catch
+                         (fs/read-file
+                          (config/get-repo-dir (state/get-current-repo))
+                          (load-path location))
+                         (constantly nil))]
+          (when-let [content (and (some? content)
+                                  (try (cljs.reader/read-string content)
+                                       (catch js/Error e
+                                         (println (util/format "load persist-var failed: %s"  (load-path location)))
+                                         (js/console.dir e))))]
+            (swap! *value (fn [o]
+                            (-> o
+                                (assoc-in [repo :loaded?] true)
+                                (assoc-in [repo :value] content)))))))))
+  (-loaded? [_]
+    (get-in @*value [(state/get-current-repo) :loaded?]))
 
   ISave
   (-save [_]
-    (let [path (load-path location)
-          repo (state/get-current-repo)
-          content (str (get-in @*value [repo :value]))
-          dir (config/get-repo-dir repo)]
-      (fs/write-file! repo dir path content nil)))
+    (when-not (config/demo-graph?)
+      (let [path (load-path location)
+            repo (state/get-current-repo)
+            content (str (get-in @*value [repo :value]))
+            dir (config/get-repo-dir repo)]
+        (fs/write-file! repo dir path content nil))))
 
   IDeref
   (-deref [_this]
     (get-in @*value [(state/get-current-repo) :value]))
 
   IReset
-  (-reset! [_o new-value]
-    (swap! *value (fn [_o] (assoc-in @*value [(state/get-current-repo) :value] new-value)))))
+  (-reset!
+    ;; "Deprecated - use (.reset-value! o) instead."
+    [_ new-value]
+    (swap! *value (fn [_] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
+
+  IPrintWithWriter
+  (-pr-writer [_ w _opts]
+    (write-all w (str "#PersistVar[" @*value ", loc: " location "]"))))
+
+
+(def *all-persist-vars (atom []))
+
+(defn load-vars []
+  (p/all (mapv -load @*all-persist-vars)))
 
 (defn persist-var
   "This var is stored at logseq/LOCATION.edn"
@@ -61,7 +82,7 @@
                                  {:value init-value
                                   :loaded? false}})
                           location)]
-    (-load var)
+    (swap! *all-persist-vars conj var)
     var))
 
 (defn persist-save [v]

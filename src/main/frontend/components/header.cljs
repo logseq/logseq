@@ -1,24 +1,28 @@
 (ns frontend.components.header
-  (:require [frontend.components.export :as export]
+  (:require ["path" :as path]
+            [cljs-bean.core :as bean]
+            [frontend.components.export :as export]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.fs.sync :as fs-sync]
             [frontend.handler :as handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [cljs.core.async :as a]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -30,25 +34,100 @@
                    (route-handler/go-to-journals!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
-(rum/defc login
-  [logged?]
-  (when (and (not logged?)
-             (not config/publishing?))
+(rum/defc login < rum/reactive
+  []
+  (let [_ (state/sub :auth/id-token)]
+    (when-not config/publishing?
+      (if (user-handler/logged-in?)
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           [:a.button
+              {:on-click toggle-fn}
+            [:span.text-sm.font-medium (user-handler/email)]])
+         [{:title (t :logout)
+           :options {:on-click user-handler/logout}}]
+         {})
+        [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
+         [:span (t :login)]]))))
 
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:a.button.text-sm.font-medium.block {:on-click toggle-fn}
-        [:span (t :login)]])
-     (let [list [{:title (t :login-github)
-                  :url (str config/website "/login/github")}]]
-       (mapv
-        (fn [{:keys [title url]}]
-          {:title title
-           :options
-           {:on-click
-            (fn [_] (set! (.-href js/window.location) url))}})
-        list))
-     nil)))
+(rum/defcs file-sync-remote-graphs <
+  (rum/local nil ::remote-graphs)
+  [state]
+  (let [*remote-graphs (::remote-graphs state)
+        refresh-list-fn #(a/go (reset! *remote-graphs (a/<! (file-sync-handler/list-graphs))))]
+    (when (nil? @*remote-graphs)
+      (refresh-list-fn))
+    [:div
+     [:div.flex
+      [:h1.title "Remote Graphs"]
+      [:div
+       {:on-click refresh-list-fn}
+       svg/refresh]]
+     [:p.text-sm "click to delete the selected graph"]
+     [:ul
+      (for [graph @*remote-graphs]
+        [:li.mb-4
+         [:a.font-medium
+          {:on-click #(do (println "delete graph" (:GraphName graph) (:GraphUUID graph))
+                          (file-sync-handler/delete-graph (:GraphUUID graph)))}
+          (:GraphName graph)]])]]))
+
+(rum/defcs file-sync <
+  rum/reactive
+  (rum/local nil ::existed-graphs)
+  [state]
+  (let [_ (state/sub :auth/id-token)
+        sync-state (state/sub :file-sync/sync-state)
+        not-syncing? (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
+        *existed-graphs (::existed-graphs state)
+        _ (rum/react file-sync-handler/refresh-file-sync-component)
+        graph-txid-exists? (file-sync-handler/graph-txid-exists?)
+        uploading-files (:current-local->remote-files sync-state)
+        downloading-files (:current-remote->local-files sync-state)]
+    (when-not config/publishing?
+      (when (user-handler/logged-in?)
+        (when-not (file-sync-handler/graph-txid-exists?)
+          (a/go (reset! *existed-graphs (a/<! (file-sync-handler/list-graphs)))))
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           (if not-syncing?
+             [:a.button
+              {:on-click toggle-fn}
+              (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
+             [:a.button
+              {:on-click toggle-fn}
+              (ui/icon "cloud" {:style {:fontSize ui/icon-size}})]))
+         (cond-> []
+           (not graph-txid-exists?)
+           (concat (->> @*existed-graphs
+                        (filterv #(and (:GraphName %) (:GraphUUID %)))
+                        (mapv (fn [graph]
+                                {:title (:GraphName graph)
+                                 :options {:on-click #(file-sync-handler/switch-graph (:GraphUUID graph))}})))
+                   [{:hr true}
+                    {:title "create graph"
+                     :options {:on-click #(file-sync-handler/create-graph (path/basename (state/get-current-repo)))}}])
+           graph-txid-exists?
+           (concat
+            [{:title "toggle file sync"
+              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}
+             {:title "remote graph list"
+              :options {:on-click #(state/set-sub-modal! file-sync-remote-graphs)}}]
+            [{:hr true}]
+            (map (fn [f] {:title f
+                          :icon (ui/icon "arrow-narrow-up")}) uploading-files)
+            (map (fn [f] {:title f
+                          :icon (ui/icon "arrow-narrow-down")}) downloading-files)
+            (when sync-state
+              (map-indexed (fn [i f] (:time f)
+                     {:title [:div {:key i} [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
+                   (take 10 (:history sync-state))))))
+
+         (cond-> {}
+           (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
+                                                          "Switch to:"])))))))
+
+
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
@@ -60,8 +139,7 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [logged? (state/logged?)
-        page-menu (page-menu/page-menu nil)
+  (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
@@ -101,10 +179,12 @@
                   :title (t :discord-title)
                   :target "_blank"}
         :icon (ui/icon "brand-discord")}
-       (when logged?
-         {:title (t :sign-out)
-          :options {:on-click user-handler/sign-out!}
-          :icon svg/logout-sm})]
+       ;; TODO: Enable when logout is ready
+       ;; (when logged?
+       ;;   {:title (t :sign-out)
+       ;;    :options {:on-click user-handler/sign-out!}
+       ;;    :icon svg/logout-sm})
+       ]
       (concat page-menu-and-hr)
       (remove nil?))
      {}
@@ -130,17 +210,17 @@
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (rum/use-effect!
-            (fn []
-              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-                (let [callback (fn [_ args]
-                                 (js/console.debug "[new-version downloaded] args:" args)
-                                 (let [args (bean/->clj args)]
-                                   (set-downloaded args)
-                                   (state/set-state! :electron/auto-updater-downloaded args))
-                                 nil)]
-                  (js/apis.addListener channel callback)
-                  #(js/apis.removeListener channel callback))))
-            [])]
+           (fn []
+             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+               (let [callback (fn [_ args]
+                                (js/console.debug "[new-version downloaded] args:" args)
+                                (let [args (bean/->clj args)]
+                                  (set-downloaded args)
+                                  (state/set-state! :electron/auto-updater-downloaded args))
+                                nil)]
+                 (js/apis.addListener channel callback)
+                 #(js/apis.removeListener channel callback))))
+           [])]
 
     (when downloaded
       [:div.cp__header-tips
@@ -149,8 +229,8 @@
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
-(rum/defc header < rum/reactive
-  [{:keys [open-fn current-repo logged? me default-home new-block-mode]}]
+(rum/defc ^:large-vars/cleanup-todo header < rum/reactive
+  [{:keys [open-fn current-repo default-home new-block-mode]}]
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
@@ -187,10 +267,10 @@
            (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
      [:div.r.flex
-      (when (and (not (mobile-util/is-native-platform?))
-                 (not (util/electron?)))
-        (login logged?))
-
+      (when-not file-sync-handler/hiding-login&file-sync
+        (file-sync))
+      (when-not file-sync-handler/hiding-login&file-sync
+        (login))
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
@@ -201,7 +281,8 @@
                 (mobile-util/native-ios?))
         (back-and-forward))
 
-      (new-block-mode)
+      (when-not (mobile-util/is-native-platform?)
+        (new-block-mode))
 
       (repo/sync-status current-repo)
 
@@ -217,8 +298,7 @@
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
          (t :graph)])
 
-      (dropdown-menu {:me           me
-                      :t            t
+      (dropdown-menu {:t            t
                       :current-repo current-repo
                       :default-home default-home})
 

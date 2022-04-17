@@ -592,9 +592,11 @@
                                ;; same page, get the most top block before dragging
                                (let [match-ids (set (conj move-blocks target))]
                                  (loop [[id & others] cached-ids]
-                                   (if (contains? match-ids id)
-                                     id
-                                     (recur others))))))
+                                   (if id
+                                     (if (contains? match-ids id)
+                                       id
+                                       (recur others))
+                                     nil)))))
                            (let [insert? (contains? #{:insert-node :insert-nodes :save-and-insert-node} outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
@@ -662,14 +664,16 @@
                      (let [tx-data (:tx-data tx-report)
                            refs (some->> (filter #(= :block/refs (:a %)) tx-data)
                                          (map :v))
-                           tx-block-ids (distinct (->> (map :e tx-data)
-                                                       (concat refs)))
+                           tx-block-ids (distinct (-> (map :e tx-data)
+                                                      (concat refs)))
                            [tx-id->block cached-id->block] (when (and tx-report result)
                                                              (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
                                                                                (remove nil?))]
                                                                [(zipmap (mapv :db/id blocks) blocks)
                                                                 (zipmap (mapv :db/id @result) @result)]))
-                           limit (if (and result @result) (+ (count @result) 5) limit)
+                           limit (if (and result @result)
+                                   (max (+ (count @result) 5) limit)
+                                   limit)
                            outliner-op (get-in tx-report [:tx-meta :outliner-op])
                            blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
                            blocks (or blocks
@@ -884,7 +888,9 @@
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
-  "Accepts both sanitized or unsanitized"
+  "Given any readable page-name, return the exact page-name in db. Accepts both 
+   sanitized or unsanitized names.
+   alias?: if true, alias is allowed to be returned; otherwise, it would be deref."
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]
    (when page-name

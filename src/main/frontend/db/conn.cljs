@@ -4,8 +4,10 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.default :as default-db]
             [frontend.util :as util]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.text :as text]
             [datascript.core :as d]))
 
 (defonce conns (atom {}))
@@ -16,6 +18,26 @@
     (->> (take-last 2 (string/split url #"/"))
          (string/join "/"))
     url))
+
+(defn get-repo-name
+  [repo]
+  (cond
+    (mobile-util/is-native-platform?)
+    (text/get-graph-name-from-path repo)
+
+    (config/local-db? repo)
+    (config/get-local-dir repo)
+
+    :else
+    (get-repo-path repo)))
+
+(defn get-short-repo-name
+  "repo-path: output of `get-repo-name`"
+  [repo-path]
+  (if (or (util/electron?)
+          (mobile-util/is-native-platform?))
+    (text/get-file-basename repo-path)
+    repo-path))
 
 (defn datascript-db
   [repo]

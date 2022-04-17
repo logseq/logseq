@@ -1,5 +1,6 @@
 import path from 'path/path.js'
 import { StatusBar, Style } from '@capacitor/status-bar'
+import { Clipboard } from '@capacitor/clipboard';
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -242,32 +243,37 @@ export const getClipText = (cb, errorHandler) => {
 }
 
 export const writeClipboard = (text, isHtml) => {
-  let blob = new Blob([text], {
-    type: ["text/plain"]
-  });
-  let data = [new ClipboardItem({
-    ["text/plain"]: blob
-  })];
-  if (isHtml) {
-    blob = new Blob([text], {
-      type: ["text/plain", "text/html"]
-    })
-    data = [new ClipboardItem({
-      ["text/plain"]: blob,
-      ["text/html"]: blob
-    })];
-  }
-  navigator.permissions.query({
-    name: "clipboard-write"
-  }).then((result) => {
-    if (result.state == "granted" || result.state == "prompt") {
-      navigator.clipboard.write(data).then(() => {
-        /* success */
-      }).catch(e => {
-        console.log(e, "fail")
-      })
-    }
-  })
+    if (typeof navigator.permissions !== "undefined") {
+        let blob = new Blob([text], {
+            type: ["text/plain"]
+        });
+        let data = [new ClipboardItem({
+            ["text/plain"]: blob
+        })];
+        if (isHtml) {
+            blob = new Blob([text], {
+                type: ["text/plain", "text/html"]
+            })
+            data = [new ClipboardItem({
+                ["text/plain"]: blob,
+                ["text/html"]: blob
+            })];
+        }
+        navigator.permissions.query({
+            name: "clipboard-write"
+        }).then((result) => {
+            if (result.state == "granted" || result.state == "prompt") {
+                navigator.clipboard.write(data).then(() => {
+                    /* success */
+                }).catch(e => {
+                    console.log(e, "fail")
+                })
+            }
+        })} else {
+            Clipboard.write({
+                string: text
+            });
+        }
 }
 
 export const toPosixPath = (input) => {

@@ -8,7 +8,6 @@
             [frontend.date :as date]
             [frontend.util :as util]
             [frontend.commands :as commands]
-            [frontend.mobile.util :as mobile-util]
             [goog.object :as gobj]
             [frontend.util.cursor :as cursor]))
 
@@ -22,17 +21,8 @@
                                         :resultType (.-Base64 CameraResultType)}))
                     (fn [error]
                       (log/error :photo/get-failed {:error error})))
-          [repo-dir assets-dir] (editor-handler/ensure-assets-dir! (state/get-current-repo))
           filename (str (date/get-date-time-string-2) ".jpeg")
-          path (cond
-                 (mobile-util/native-android?)
-                 (str "file://" repo-dir "/" assets-dir "/" filename)
-
-                 (mobile-util/native-ios?)
-                 (str repo-dir assets-dir "/" filename)
-
-                 :else
-                 (str repo-dir assets-dir "/" filename))
+          path (editor-handler/get-asset-path filename)
           _file (p/catch
                     (.writeFile Filesystem (clj->js {:data (.-base64String photo)
                                                      :path path

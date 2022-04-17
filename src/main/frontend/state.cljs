@@ -4,6 +4,7 @@
             [cljs-time.format :as tf]
             [cljs.core.async :as async]
             [clojure.string :as string]
+            [cljs.spec.alpha :as s]
             [dommy.core :as dom]
             [medley.core :as medley]
             [electron.ipc :as ipc]
@@ -122,7 +123,11 @@
      :editor/args                           nil
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
+     :editor/editing-page-title?            false
 
+     ;; for audio record
+     :editor/record-status                  "NONE"
+     
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
@@ -205,6 +210,20 @@
      :srs/mode?                             false
 
      :srs/cards-due-count                   nil
+
+     :reactive/query-dbs                    {}
+
+     ;; login, userinfo, token, ...
+     :auth/refresh-token                    nil
+     :auth/access-token                     nil
+     :auth/id-token                         nil
+
+     ;; file-sync
+     :file-sync/sync-manager                nil
+     :file-sync/sync-state-manager          nil
+     :file-sync/sync-state                  nil
+     :file-sync/sync-uploading-files        nil
+     :file-sync/sync-downloading-files      nil
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1054,7 +1073,7 @@
   []
   (:name (get-me)))
 
-(defn logged?
+(defn deprecated-logged?
   "Whether the user has logged in."
   []
   (some? (get-name)))
@@ -1527,9 +1546,6 @@
    (set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
 
-(defn add-watch-state [key f]
-  (add-watch state key f))
-
 (defn remove-watch-state [key]
   (remove-watch state key))
 
@@ -1625,6 +1641,7 @@
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
+
 (defn toggle-collapsed-block!
   [block-id]
   (let [current-repo (get-current-repo)]
@@ -1648,3 +1665,32 @@
   (and (editing?)
        ;; config
        (:custom-query? (last (get-editor-args)))))
+
+(defn set-auth-id-token
+  [id-token]
+  (set-state! :auth/id-token id-token))
+
+(defn set-auth-refresh-token
+  [refresh-token]
+  (set-state! :auth/refresh-token refresh-token))
+
+(defn set-auth-access-token
+  [access-token]
+  (set-state! :auth/access-token access-token))
+
+(defn get-auth-id-token []
+  (:auth/id-token @state))
+
+(defn get-auth-refresh-token []
+  (:auth/refresh-token @state))
+
+(defn set-file-sync-manager [v]
+  (set-state! :file-sync/sync-manager v))
+(defn set-file-sync-state [v]
+  (when v (s/assert :frontend.fs.sync/sync-state v))
+  (set-state! :file-sync/sync-state v))
+
+(defn get-file-sync-manager []
+  (:file-sync/sync-manager @state))
+(defn get-file-sync-state []
+  (:file-sync/sync-state @state))

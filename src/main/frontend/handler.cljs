@@ -18,6 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -28,6 +29,7 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
+            [frontend.util.persist-var :as persist-var]
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -166,7 +168,7 @@
                                nil)))))))
 (defn- get-repos
   []
-  (let [logged? (state/logged?)
+  (let [logged? (state/deprecated-logged?)
         me (state/get-me)]
     (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]
@@ -238,6 +240,8 @@
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
+    (persist-var/load-vars)
+    (user-handler/refresh-tokens-loop)
     (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []

@@ -54,7 +54,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]))
+            [frontend.util.keycode :as keycode]
+            ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -600,7 +601,7 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid]
+  [content {:keys [page block-uuid sibling? before? properties custom-uuid reuse-last-block?]
             :or {sibling? false
                  before? false}}]
   (when (or page block-uuid)
@@ -616,51 +617,60 @@
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
                                (db/pull last-block-id))))
-              format (or
-                      (:block/format block)
-                      (db/get-page-format (:db/id block))
-                      (state/get-preferred-format))
-              content (if (seq properties)
-                        (property/insert-properties format content properties)
-                        content)
-              new-block (-> (select-keys block [:block/page :block/journal?
-                                                :block/journal-day])
-                            (assoc :block/content content
-                                   :block/format format))
-              new-block (assoc new-block :block/page
-                               (if page
-                                 (:db/id block)
-                                 (:db/id (:block/page new-block))))
-              new-block (-> new-block
-                            (wrap-parse-block)
-                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-              [block-m sibling?] (cond
-                                   before?
-                                   (let [first-child? (->> [:block/parent :block/left]
-                                                           (map #(:db/id (get block %)))
-                                                           (apply =))
-                                         block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (or first-child? ;; insert as first child
-                                                          (:block/name block))
-                                                    false sibling?)]
-                                     [block sibling?])
+              last-block-content (:block/content last-block)]
+          ;; when last block is blank and `reuse-last-block?' nils,
+          ;; dont't insert content to a new block but last block.
+          (if (and last-block
+                   (string/blank? last-block-content)
+                   reuse-last-block?)
+            (let [new-block (assoc last-block :block/content content)]
+              (-> (outliner-core/block new-block)
+                  (outliner-core/save-node))
+              new-block)
+            (let [format (or
+                          (:block/format block)
+                          (db/get-page-format (:db/id block))
+                          (state/get-preferred-format))
+                  content (if (seq properties)
+                            (property/insert-properties format content properties)
+                            content)
+                  new-block (-> (select-keys block [:block/page :block/journal?
+                                                    :block/journal-day])
+                                (assoc :block/content content
+                                       :block/format format))
+                  new-block (assoc new-block :block/page
+                                   (if page
+                                     (:db/id block)
+                                     (:db/id (:block/page new-block))))
+                  new-block (-> new-block
+                                (wrap-parse-block)
+                                (assoc :block/uuid (or custom-uuid (db/new-block-id))))
+                  [block-m sibling?] (cond
+                                       before?
+                                       (let [first-child? (->> [:block/parent :block/left]
+                                                               (map #(:db/id (get block %)))
+                                                               (apply =))
+                                             block (db/pull (:db/id (:block/left block)))
+                                             sibling? (if (or first-child? ;; insert as first child
+                                                              (:block/name block))
+                                                        false sibling?)]
+                                         [block sibling?])
 
-                                   sibling?
-                                   [(db/pull (:db/id block)) sibling?]
+                                       sibling?
+                                       [(db/pull (:db/id block)) sibling?]
 
-                                   last-block
-                                   [last-block true]
+                                       last-block
+                                       [last-block true]
 
-                                   block
-                                   [(db/pull (:db/id block)) sibling?]
+                                       block
+                                       [(db/pull (:db/id block)) sibling?]
 
-                                   ;; FIXME: assert
-                                   :else
-                                   nil)]
-
-          (when block-m
-            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?})
-            new-block))))))
+                                       ;; FIXME: assert
+                                       :else
+                                       nil)]
+              (when block-m
+                (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?})
+                new-block))))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-name]
@@ -1062,10 +1072,9 @@
 
 (defn select-block!
   [block-uuid]
-  (when-let [block (-> (str block-uuid)
-                       (js/document.getElementsByClassName)
-                       first)]
-    (state/exit-editing-and-set-selected-blocks! [block])))
+  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
+    (when (seq blocks)
+      (state/exit-editing-and-set-selected-blocks! blocks))))
 
 (defn- blocks-with-level
   "Should be sorted already."
@@ -1516,6 +1525,13 @@
     (p/then
      (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
      (fn [] [repo-dir assets-dir]))))
+
+(defn get-asset-path [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))
+          path (path/join repo-dir assets-dir filename)]
+    (if (mobile-util/native-android?)
+      path
+      (js/encodeURI (js/decodeURI path)))))
 
 (defn save-assets!
   ([_ repo files]
@@ -3034,7 +3050,7 @@
       (when (<  vw-height (+ cursor-y mobile-toolbar-height))
         (let [main-node (gdom/getElement "main-content-container")
               scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top (/ vw-height 2))))))))
+          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]
@@ -3161,8 +3177,9 @@
           input (state/get-input)]
       (if-not (string/blank? text)
         (if (thingatpt/org-admonition&src-at-point input)
-          (do (util/stop e)
-              (paste-text-in-one-block-at-point))
+          (when-not (mobile-util/native-ios?)
+            (util/stop e)
+            (paste-text-in-one-block-at-point))
           (paste-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")

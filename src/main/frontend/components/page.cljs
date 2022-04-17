@@ -81,16 +81,21 @@
 
 (rum/defc dummy-block
   [page-name]
-  [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-   [:div.flex.flex-row
-    [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-     [:span.bullet-container.cursor
-      [:span.bullet]]]
-    [:div.flex.flex-1 {:on-click (fn []
-                                   (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
-                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
-     [:span.opacity-50
-      "Click here to edit..."]]]])
+  (let [handler-fn (fn []
+                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
+                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))]
+    [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+     [:div.flex.flex-row
+      [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+       [:span.bullet-container.cursor
+        [:span.bullet]]]
+      [:div.flex.flex-1 {:tabindex 0
+                         :on-key-press (fn [e]
+                                         (when (= "Enter" (util/ekey e))
+                                           (handler-fn)))
+                         :on-click handler-fn}
+       [:span.opacity-50
+        "Click here to edit..."]]]]))
 
 (rum/defc add-button
   [args]
@@ -214,6 +219,7 @@
                     (when (util/wrapped-by-quotes? @*title-value)
                       (swap! *title-value util/unquote-string)
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
+                    (state/set-state! :editor/editing-page-title? false)
                     (cond
                       (= old-name @*title-value)
                       (reset! *edit? false)
@@ -248,6 +254,7 @@
                               (reset! *title-value old-name)
                               (reset! *edit? false)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
+                                         (state/set-state! :editor/editing-page-title? true)
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
                         :on-click (fn [e]
@@ -472,7 +479,7 @@
               ;;      (set-setting! :layout value))
               ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2
-               [:span (t :right-side-bar/journals)]
+               [:span (t :settings-page/enable-journals)]
                ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?
@@ -698,7 +705,7 @@
       [:tbody
        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
          [:tr {:key name}
-          [:td.n.w-10 [:span.opacity-70 (str (inc n) ". ")]]
+          [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
           [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
                      (block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]

@@ -81,6 +81,7 @@ export async function lastBlock(page: Page): Promise<Locator> {
 export async function enterNextBlock(page: Page): Promise<Locator> {
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   await page.press('textarea >> nth=0', 'Enter')
+  await page.waitForTimeout(10)
   await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible' })
   return page.locator('textarea >> nth=0')
 }
@@ -167,10 +168,12 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     }
 
     await page.click('#left-sidebar #repo-switch');
-    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
+    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
+      { state: 'visible', timeout: 5000 })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.waitForSelector('strong:has-text("Choose a folder")',
+      { state: 'visible', timeout: 5000 })
     await page.click('strong:has-text("Choose a folder")')
 
     const skip = page.locator('a:has-text("Skip")')
@@ -197,4 +200,8 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
 export async function activateNewPage(page: Page) {
   await page.click('.ls-block >> nth=0')
   await page.waitForTimeout(500)
+}
+
+export async function editFirstBlock(page: Page) {
+  await page.click('.ls-block .block-content >> nth=0')
 }

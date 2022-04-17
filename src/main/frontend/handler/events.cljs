@@ -38,7 +38,9 @@
             [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.fs.sync :as sync]))
 
 ;; TODO: should we move all events here?
 
@@ -84,6 +86,12 @@
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!))))
 
+(defn- file-sync-stop-when-switch-graph []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)
+         ;; trigger rerender file-sync-header
+         (state/set-file-sync-state nil)))
+
 (defn- graph-switch [graph]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! graph)
@@ -95,7 +103,11 @@
   (when-let [dir-name (config/get-repo-dir graph)]
     (fs/watch-dir! dir-name))
   (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph]))
+  (state/pub-event! [:graph/ready graph])
+
+  (file-sync-stop-when-switch-graph))
+
+
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -109,28 +121,30 @@
   "Logic for keeping db sync when switching graphs
    Only works for electron"
   [graph]
-  (p/let [current-repo (state/get-current-repo)
-          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
-          _ (repo-handler/persist-otherwindow-db! graph)
-          _ (repo-handler/restore-and-setup-repo! graph)]
-    (graph-switch graph)))
+  (let [current-repo (state/get-current-repo)]
+    (p/do!
+     (when (util/electron?)
+       (p/do!
+        (repo-handler/persist-db! current-repo persist-db-noti-m)
+        (repo-handler/broadcast-persist-db! graph)))
+     (repo-handler/restore-and-setup-repo! graph)
+     (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph]]
+  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
-    (if (util/electron?)
-      (graph-switch-on-persisted graph)
-      (graph-switch graph))
+    (graph-switch-on-persisted graph)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
 
-(defmethod handle :graph/open-new-window [[_ repo]]
+(defmethod handle :graph/open-new-window [[ev repo]]
   (p/let [current-repo (state/get-current-repo)
           target-repo (or repo current-repo)
-          _ (repo-handler/persist-db! current-repo persist-db-noti-m)
+          _ (repo-handler/persist-db! current-repo persist-db-noti-m) ;; FIXME: redundant when opening non-current-graph window
           _ (when-not (= current-repo target-repo)
-              (repo-handler/persist-otherwindow-db! repo))]
-    (ui-handler/open-new-window! _ repo)))
+              (repo-handler/broadcast-persist-db! repo))]
+    (ui-handler/open-new-window! ev repo)))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))
@@ -216,7 +230,8 @@
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards {:id :srs}))
+  (state/set-modal! srs/global-cards {:id :srs
+                                      :label "flashcards__cp"}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
@@ -250,10 +265,9 @@
   (p/let [content (when content (encrypt/decrypt content))]
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
-;; TODO: when "only restore the current graph instead of all the graphs" is done,
-;; remove invoke of :graph/ready in graph/switch and restore-and-setup!
 (defmethod handle :graph/ready [[_ repo]]
-  (search-handler/rebuild-indices-when-stale! repo))
+  (search-handler/rebuild-indices-when-stale! repo)
+  (repo-handler/graph-ready! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
