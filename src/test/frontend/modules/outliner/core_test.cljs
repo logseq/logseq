@@ -333,10 +333,14 @@
 
 (def gen-tree (gen/vector gen-node))
 
+(defn- gen-safe-tree
+  []
+  (->> (gen/generate gen-tree)
+       (remove integer?)))
+
 (defn gen-blocks
   []
-  (let [tree (->> (gen/generate gen-tree)
-                  (remove integer?))]
+  (let [tree (gen-safe-tree)]
     (when (seq tree)
       (build-blocks tree))))
 
@@ -375,9 +379,14 @@
                                    :keep-uuid? true
                                    :replace-empty-target? false})))
 
+(defn transact-random-tree!
+  []
+  (let [tree (gen-safe-tree)]
+    (transact-tree! tree)))
+
 (deftest random-inserts
   (testing "Random inserts"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (let [c1 (get-blocks-count)
           *random-count (atom 0)]
       (dotimes [_i 100]
@@ -389,7 +398,7 @@
 
 (deftest random-deletes
   (testing "Random deletes"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (dotimes [_i 100]
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-successive-blocks)]
@@ -398,7 +407,7 @@
 
 (deftest random-moves
   (testing "Random moves"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (let [c1 (get-blocks-count)
           *random-count (atom 0)]
       (dotimes [_i 100]
@@ -414,7 +423,7 @@
 
 (deftest random-move-up-down
   (testing "Random move up down"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (let [c1 (get-blocks-count)
           *random-count (atom 0)]
       (dotimes [_i 100]
@@ -429,7 +438,7 @@
 
 (deftest random-indent-outdent
   (testing "Random indent and outdent"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (let [c1 (get-blocks-count)
           *random-count (atom 0)]
       (dotimes [_i 100]
@@ -444,7 +453,7 @@
 
 (deftest random-mixed-ops
   (testing "Random mixed operations"
-    (transact-tree! tree)
+    (transact-random-tree!)
     (let [c1 (get-blocks-count)
           *random-count (atom 0)
           ops [
