@@ -4,16 +4,20 @@
             [clojure.walk :as walk]
             ; [cljs.core.match :as match]
             ; [frontend.config :as config]
-            ; [frontend.date :as date]
             ; [frontend.format :as format]
             ; [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [frontend.utf8 :as utf8]
+            [logseq.graph-parser.date-util :as date-util]
             [logseq.graph-parser.util :as util]
             [logseq.graph-parser.property :as property]
             [logseq.graph-parser.mldoc :as mldoc]
+            [logseq.graph-parser.time-util :as time-util]
             ; [lambdaisland.glogi :as log]
             [datascript.core :as d]))
+
+;; TODO: Remove global conn when we have better control
+(def conn (atom nil))
 
 (defn heading-block?
   [block]
@@ -237,12 +241,11 @@
   [original-page-name]
   (when original-page-name
     (let [page-name (util/page-name-sanity-lc original-page-name)
-          ;; TODO: Enable date/* fns
-          day false #_(date/journal-title->int page-name)]
-     (if day
-       (let [original-page-name "" #_(date/int->journal-title day)]
-         [original-page-name (util/page-name-sanity-lc original-page-name) day])
-       [original-page-name page-name day]))))
+          day (date-util/journal-title->int page-name)]
+      (if day
+        (let [original-page-name (date-util/int->journal-title day)]
+          [original-page-name (util/page-name-sanity-lc original-page-name) day])
+        [original-page-name page-name day]))))
 
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
@@ -259,8 +262,7 @@
            [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
            namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                            (text/namespace-page? original-page-name))
-           ;; TODO: Pass db down to this fn
-           page-entity (some-> nil (d/entity [:block/name page-name]))]
+           page-entity (d/entity (deref @conn) [:block/name page-name])]
        (merge
         {:block/name page-name
          :block/original-name original-page-name}
@@ -273,8 +275,7 @@
             (when-not (string/blank? namespace)
               {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}})))
         (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-          ;; TODO: add current time with cljs-core
-          (let [current-ms 0 #_(util/time-ms)]
+          (let [current-ms (time-util/time-ms)]
             {:block/created-at current-ms
              :block/updated-at current-ms}))
         (if journal-day

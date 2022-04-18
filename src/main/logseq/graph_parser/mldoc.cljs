@@ -1,4 +1,5 @@
 (ns logseq.graph-parser.mldoc
+  "Modified version of frontend.format.mldoc"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             ; [frontend.format.protocol :as protocol]
@@ -6,9 +7,8 @@
             [goog.object :as gobj]
             [logseq.graph-parser.util :as util]
             ; [lambdaisland.glogi :as log]
-            ; [medley.core :as medley]
             ["mldoc$default" :as mldoc :refer [Mldoc]]
-            ; [linked.core :as linked]
+            [linked.core :as linked]
             #_[frontend.config :as config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
@@ -132,7 +132,7 @@
                                        v
                                        (parse-property k v))]
                                [k v]))))
-          properties (into {} #_(linked/map) properties)
+          properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
                    (->>
@@ -146,7 +146,7 @@
                     (into {}))
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
-                          (into {} #_(linked/map)))
+                          (into (linked/map)))
           properties (cond-> properties
                              (seq macros)
                              (assoc :macros macros))
@@ -164,8 +164,7 @@
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :filetags (constantly filetags)))
-          ; properties (medley/remove-kv (fn [_k v] (or (nil? v) (and (coll? v) (empty? v)))) properties)
-          properties (into {} (remove (fn [[_k v]] (or (nil? v) (and (coll? v) (empty? v)))) properties))]
+          properties (into (linked/map) (remove (fn [[_k v]] (or (nil? v) (and (coll? v) (empty? v)))) properties))]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))

@@ -4,16 +4,19 @@
             [clojure.set :as set]
             [clojure.edn :as edn]
             [clojure.walk :as walk]
+            [clojure.data :as data]
             [datascript.core :as d]
             [datascript.transit :as dt]
             ["fs" :as fs]
             ["child_process" :as child-process]
             [frontend.db-schema :as db-schema]
+            [frontend.db.default :as default-db]
             [logseq.graph-parser.mldoc :as mldoc]
             [logseq.graph-parser.util :as util]
             [logseq.graph-parser.property :as property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as block]
+            [logseq.graph-parser.time-util :as time-util]
             ;; Disable for now since kondo can't pick it up
             ; #?(:org.babashka/nbb [nbb.core :as nbb])
             [nbb.core :as nbb]))
@@ -414,8 +417,7 @@
                  ;; does order matter?
                  (concat file-content pages-index delete-blocks pages block-ids blocks))
                file-content)
-          ;; TODO: Implement :file/created-at with cljs-time
-          tx (concat tx [(let [t 0 #_(tc/to-long (t/now))] ;; TODO: use file system timestamp?
+          tx (concat tx [(let [t (time-util/time-ms)] ;; TODO: use file system timestamp?
                            (cond->
                             {:file/path file}
                             new?
@@ -441,10 +443,11 @@
 ;; ========
 
 (defn db-start
-  ;; TODO: Add frontend.db.default/built-in-pages
   []
   (let [db-conn (d/create-conn db-schema/schema)]
     (d/transact! db-conn [{:schema/version db-schema/version}])
+    (d/transact! db-conn default-db/built-in-pages)
+    (reset! block/conn db-conn)
     db-conn))
 
 (defn -main
@@ -464,11 +467,15 @@
            file-maps
            files)
     (prn :PAGES (d/q '[:find ?n :where [?b :block/name ?n]]
-              @conn))
+                     @conn))
     (prn :DATOMS (count (d/datoms @conn :eavt)))
     (when cached-graph-file
       (let [db (dt/read-transit-str (slurp cached-graph-file))]
-        (prn :ACTUAL-DATOMS (count (d/datoms db :eavt)))))))
+        (prn :ACTUAL-DATOMS (count (d/datoms db :eavt)))
+
+        (fs/writeFileSync "diff.edn"
+                          (pr-str (butlast (data/diff (mapv seq (take 10 (d/datoms @conn :eavt)))
+                                                      (mapv seq (take 10 (d/datoms db :eavt)))))))))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))

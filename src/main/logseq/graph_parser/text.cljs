@@ -1,7 +1,7 @@
 (ns logseq.graph-parser.text
   "Modified version of frontend.text"
   (:require [logseq.graph-parser.util :as util]
-            ; ["/frontend/utils" :as utils]
+            ["path" :as path]
             [goog.string :as gstring]
             [clojure.string :as string]
             [logseq.graph-parser.mldoc :as mldoc]
@@ -11,14 +11,11 @@
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
 (def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
 
-; (defonce ^js node-path utils/nodePath)
-
-;; TODO: Load frontend/utils.js
 (defn get-file-basename
   [path]
-  path
-  #_(when-not (string/blank? path)
-      (node-path.name path)))
+  (when-not (string/blank? path)
+    ;; Reimplemented utils/nodePath.name
+    (.-name (path/parse (string/replace path "+" "/")))))
 
 (defn get-page-name
   [s]

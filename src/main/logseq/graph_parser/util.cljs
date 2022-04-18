@@ -169,3 +169,8 @@
        m
        #_(cske/transform-keys csk/->kebab-case-keyword m)
        m))))
+
+(defn capitalize-all [s]
+  (some->> (string/split s #" ")
+           (map string/capitalize)
+           (string/join " ")))
