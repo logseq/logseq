@@ -95,7 +95,7 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
-(def audio-formats #{:mp3 :ogg :mpeg :wav})
+(def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def media-formats (set/union (img-formats) audio-formats))
 
