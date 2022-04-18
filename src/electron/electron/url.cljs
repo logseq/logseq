@@ -21,7 +21,7 @@
 
 (defn graph-identifier-error-handler
   [graph-identifier]
-  (if graph-identifier
+  (if (not-empty graph-identifier)
     (send-to-renderer "notification" {:type "error"
                                       :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")})
     (send-to-renderer "notification" {:type "error"
