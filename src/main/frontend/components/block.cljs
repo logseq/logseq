@@ -1088,7 +1088,7 @@
               :height (max 500 height)}]))))))
 
 (defn- macro-else-cp
-  [config arguments]
+  [name config arguments]
   (if-let [block-uuid (:block/uuid config)]
     (let [format (get-in config [:block :block/format] :markdown)
           macro-content (or
@@ -1247,7 +1247,7 @@
       ((get @macro/macros name) config options)
 
       :else
-      (macro-else-cp config arguments))))
+      (macro-else-cp name config arguments))))
 
 (defn- emphasis-cp
   [config kind data]
