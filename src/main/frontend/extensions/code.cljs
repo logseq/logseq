@@ -326,4 +326,4 @@
              textarea-ref (.querySelector block-node "textarea")]
          (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
            (.focus codemirror-ref))))
-     0)))
+     100)))
