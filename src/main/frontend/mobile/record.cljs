@@ -60,7 +60,7 @@
     (if edit-block
       (state/append-current-edit-content! file-link)
       (editor-handler/api-insert-new-block! file-link {:page page
-                                                       :reuse-last-block? true}))))
+                                                       :replace-empty-target? true}))))
 
 (defn stop-recording []
   (p/catch
