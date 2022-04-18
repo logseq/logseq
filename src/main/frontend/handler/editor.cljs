@@ -456,7 +456,7 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid?]}]
+  [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
@@ -476,7 +476,8 @@
       {:outliner-op :insert-blocks}
       (save-current-block!)
       (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
-                                                               :keep-uuid? keep-uuid?}))))
+                                                               :keep-uuid? keep-uuid?
+                                                               :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -588,7 +589,7 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid]
+  [content {:keys [page block-uuid sibling? before? properties custom-uuid replace-empty-target?]
             :or {sibling? false
                  before? false}}]
   (when (or page block-uuid)
@@ -647,7 +648,8 @@
                                    nil)]
           (when block-m
             (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                                                        :keep-uuid? true})
+                                                          :keep-uuid? true
+                                                          :replace-empty-target? replace-empty-target?})
             (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)
             new-block))))))
 
