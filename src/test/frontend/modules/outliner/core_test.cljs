@@ -348,32 +348,6 @@
           (gen-blocks)))
       (gen-blocks))))
 
-(defn get-datoms
-  []
-  (d/datoms (db/get-db test-db) :avet :block/uuid))
-
-(defn get-random-block
-  []
-  (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))]
-    (if (seq datoms)
-      (let [id (:e (gen/generate (gen/elements datoms)))]
-        (db/pull test-db '[*] id))
-      (println "Empty DB so that there's no random blocks yet"))))
-
-(defn get-random-successive-blocks
-  []
-  (let [limit (inc (rand-int 20))]
-    (when-let [block (get-random-block)]
-      (loop [result [block]
-             node block]
-        (if-let [next (outliner-core/get-right-sibling (:db/id node))]
-          (let [next (db/pull test-db '[*] (:db/id next))]
-            (if (>= (count result) limit)
-              result
-              (recur (conj result next) next)))
-          result)))))
-
 (defn insert-blocks!
   [blocks target]
   (outliner-tx/transact! {:graph test-db}
@@ -387,6 +361,32 @@
   []
   (let [tree (gen-safe-tree)]
     (transact-tree! tree)))
+
+(defn get-datoms
+  []
+  (d/datoms (db/get-db test-db) :avet :block/uuid))
+
+(defn get-random-block
+  []
+  (let [datoms (->> (get-datoms)
+                    (remove (fn [datom] (= 1 (:e datom)))))]
+    (if (seq datoms)
+      (let [id (:e (gen/generate (gen/elements datoms)))]
+        (db/pull test-db '[*] id))
+      (get-random-block))))
+
+(defn get-random-successive-blocks
+  []
+  (let [limit (inc (rand-int 20))]
+    (when-let [block (get-random-block)]
+      (loop [result [block]
+             node block]
+        (if-let [next (outliner-core/get-right-sibling (:db/id node))]
+          (let [next (db/pull test-db '[*] (:db/id next))]
+            (if (>= (count result) limit)
+              result
+              (recur (conj result next) next)))
+          result)))))
 
 (deftest random-inserts
   (testing "Random inserts"
