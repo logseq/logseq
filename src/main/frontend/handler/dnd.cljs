@@ -40,6 +40,7 @@
       (let [target-node (outliner-core/block target-block)]
         (outliner-tx/transact!
           {:outliner-op :move-blocks}
+          (editor-handler/save-current-block!)
           (if top?
             (let [first-child?
                   (= (tree/-get-parent-id target-node)

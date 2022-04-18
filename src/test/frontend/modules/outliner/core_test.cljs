@@ -373,7 +373,9 @@
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))]
         (db/pull test-db '[*] id))
-      (get-random-block))))
+      (do
+        (transact-random-tree!)
+        (get-random-block)))))
 
 (defn get-random-successive-blocks
   []

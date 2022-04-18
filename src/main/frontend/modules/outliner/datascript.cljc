@@ -47,7 +47,7 @@
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
                                       :block/title :block/body :block/level :block/container)
                               m)) txs)]
-       ;; (util/pprint txs)
+       (util/pprint txs)
        (when (and (seq txs)
                   (not (:skip-transact? opts)))
          (try

@@ -227,35 +227,32 @@
   ([block pos id {:keys [custom-content tail-len move-cursor?]
                   :or {tail-len 0
                        move-cursor? true}}]
-   (js/setTimeout
-    (fn []
-      (when-not config/publishing?
-       (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/pull [:block/uuid block-id]) block)
-               edit-input-id (if (uuid? id)
-                               (get-edit-input-id-with-block-id id)
-                               (-> (str (subs id 0 (- (count id) 36)) block-id)
-                                   (string/replace "ls-block" "edit-block")))
-               content (or custom-content (:block/content block) "")
-               content-length (count content)
-               text-range (cond
-                            (vector? pos)
-                            (text-range-by-lst-fst-line content pos)
+   (when-not config/publishing?
+     (when-let [block-id (:block/uuid block)]
+       (let [block (or (db/pull [:block/uuid block-id]) block)
+             edit-input-id (if (uuid? id)
+                             (get-edit-input-id-with-block-id id)
+                             (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                 (string/replace "ls-block" "edit-block")))
+             content (or custom-content (:block/content block) "")
+             content-length (count content)
+             text-range (cond
+                          (vector? pos)
+                          (text-range-by-lst-fst-line content pos)
 
-                            (and (> tail-len 0) (>= (count content) tail-len))
-                            (subs content 0 (- (count content) tail-len))
+                          (and (> tail-len 0) (>= (count content) tail-len))
+                          (subs content 0 (- (count content) tail-len))
 
-                            (or (= :max pos) (<= content-length pos))
-                            content
+                          (or (= :max pos) (<= content-length pos))
+                          content
 
-                            :else
-                            (subs content 0 pos))
-               content (-> (property/remove-built-in-properties (:block/format block)
-                                                                content)
-                           (drawer/remove-logbook))]
-           (clear-selection!)
-           (state/set-editing! edit-input-id content block text-range move-cursor?)))))
-    0)))
+                          :else
+                          (subs content 0 pos))
+             content (-> (property/remove-built-in-properties (:block/format block)
+                                                              content)
+                         (drawer/remove-logbook))]
+         (clear-selection!)
+         (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -457,11 +454,11 @@
           snd-block-text (string/triml (subs value pos))]
       [fst-block-text snd-block-text])))
 
+(declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid?]}]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
-        skip-save-current-block? (:skip-save-current-block? config)
         has-children? (db/has-children? (:block/uuid current-block))
         sibling? (cond
                    ref-top-block?
@@ -477,8 +474,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (when-not skip-save-current-block?
-        (outliner-core/save-block! current-block))
+      (save-current-block!)
       (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                                :keep-uuid? keep-uuid?}))))
 
@@ -650,8 +646,9 @@
                                    :else
                                    nil)]
           (when block-m
-            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block {:sibling? sibling?
+            (outliner-insert-block! {} block-m new-block {:sibling? sibling?
                                                                                         :keep-uuid? true})
+            (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -1698,9 +1695,9 @@
     (util/stop event)
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (save-current-block!)
                        (outliner-tx/transact!
                          {:outliner-op :move-blocks}
+                         (save-current-block!)
                          (outliner-core/move-blocks-up-down! blocks up?))
                        (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))]
@@ -2034,6 +2031,7 @@
     (let [parent-node (tree/-get-parent node)]
       (outliner-tx/transact!
         {:outliner-op :move-blocks}
+        (save-current-block!)
         (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
 (defn- last-top-level-child?
@@ -2576,6 +2574,7 @@
       (state/set-editor-last-pos! pos)
       (outliner-tx/transact!
         {:outliner-op :move-blocks}
+        (save-current-block!)
         (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
 
