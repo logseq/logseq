@@ -278,7 +278,9 @@
 
    :command/run                    {:binding "mod+shift+1"
                                     :inactive (not (util/electron?))
-                                    :fn      #(state/pub-event! [:command/run])}
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (state/pub-event! [:command/run]))}
 
    :go/home                        {:binding "g h"
                                     :fn      route-handler/redirect-to-home!}
@@ -438,7 +440,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:command-palette/toggle
+     (build-category-map [:command/run
+                          :command-palette/toggle
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -487,8 +490,7 @@
 
     :shortcut.handler/global-non-editing-only
     (->
-     (build-category-map [:command/run
-                          :go/home
+     (build-category-map [:go/home
                           :go/journals
                           :go/all-pages
                           :go/flashcards

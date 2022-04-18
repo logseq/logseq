@@ -2,11 +2,13 @@
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.fs.sync :as sync]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
@@ -68,6 +70,26 @@
                              payload (update payload :to keyword)]
                          (route-handler/redirect! payload))))
 
+  (js/window.apis.on "redirectWhenExists"
+                     ;;  Redirect to the given page or block when the provided page or block exists.
+                     ;;  Either :page-name or :block-id is required.
+                     ;;  :page-name : the original-name of the page.
+                     ;;  :block-id : uuid.
+                     (fn [data]
+                       (let [{:keys [page-name block-id]} (bean/->clj data)]
+                         (cond
+                           page-name
+                           (let [db-page-name (db-model/get-redirect-page-name page-name)]
+                             ;; No error handling required, as a page name is always valid
+                             ;; Open new page if the page does not exist
+                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name)
+                             (route-handler/redirect-to-page! db-page-name))
+
+                           block-id
+                           (if (db-model/get-block-by-uuid block-id)
+                             (route-handler/redirect-to-page! block-id)
+                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))))))
+
   (js/window.apis.on "dbsync"
                      (fn [data]
                        (let [{:keys [graph tx-data]} (bean/->clj data)
@@ -78,12 +100,13 @@
 
   (js/window.apis.on "persistGraph"
                      ;; electron is requesting window for persisting a graph in it's db
+                     ;; fire back "broadcastPersistGraphDone" on done
                      (fn [data]
                        (let [repo (bean/->clj data)
                              before-f #(notification/show!
                                         (ui/loading (t :graph/persist))
                                         :warning)
-                             after-f #(ipc/ipc "persistGraphDone" repo)
+                             after-f #(ipc/ipc "broadcastPersistGraphDone")
                              error-f (fn []
                                        (after-f)
                                        (notification/show!
@@ -96,7 +119,13 @@
 
   (js/window.apis.on "loginCallback"
                      (fn [code]
-                       (user/login-callback code))))
+                       (user/login-callback code)))
+
+  (js/window.apis.on "openNewWindowOfGraph"
+                     ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
+                     ;; No db cache persisting ensured. Should be handled by the caller
+                     (fn [repo]
+                       (ui-handler/open-new-window! nil repo))))
 
 (defn listen!
   []

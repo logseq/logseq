@@ -244,9 +244,9 @@
    :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
 
 (def ^:private mobile-bar-commands-stats
-  (atom (or (:mobile/toolbar-stats (state/get-config))
-            (into {} (mapv (fn [name] [name {:counts 0}])
-                           mobile-bar-icons-keywords)))))
+  (atom (into {}
+              (mapv (fn [name] [name {:counts 0}])
+                    mobile-bar-icons-keywords))))
 
 (defn set-command-stats [icon]
   (let [key (keyword icon)
@@ -295,6 +295,8 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
+  (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
+   (reset! mobile-bar-commands-stats config-toolbar-stats))
   (let [commands (mobile-bar-commands parent-state parent-id)
         sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2

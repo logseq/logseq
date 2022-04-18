@@ -2,7 +2,8 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent send-to-renderer]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -19,6 +20,7 @@
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as utils]))
 
+;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
@@ -44,10 +46,10 @@
   [win url]
   (.info logger "open-url" (str {:url url}))
 
-  (let [parsed-url (js/URL. url)]
-    (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-               (= "auth-callback" (.-host parsed-url)))
-      (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code")))))
+  (let [parsed-url (js/URL. url)
+        url-protocol (.-protocol parsed-url)]
+    (when (= (str LSP_SCHEME ":") url-protocol)
+      (logseq-url-handler win parsed-url))))
 
 (defn setup-interceptor! [^js app]
   (.setAsDefaultProtocolClient app LSP_SCHEME)
@@ -214,10 +216,10 @@
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
                (Deeplink. #js
-                          {:app app
-                           :mainWindow win
-                           :protocol LSP_SCHEME
-                           :isDev dev?})
+                           {:app app
+                            :mainWindow win
+                            :protocol LSP_SCHEME
+                            :isDev dev?})
 
                (restore-user-fetch-agent)
 

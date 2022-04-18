@@ -123,3 +123,12 @@
 (defn get-graph-dir
   [graph-name]
   (string/replace graph-name "logseq_local_" ""))
+
+;; Keep update with the normalization in main
+(defn normalize
+  [s]
+  (.normalize s "NFC"))
+
+(defn normalize-lc
+  [s]
+  (normalize (string/lower-case s)))

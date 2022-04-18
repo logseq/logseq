@@ -16,8 +16,7 @@ test('open search dialog', async ({ page }) => {
   await page.waitForSelector('[placeholder="Search or create page"]', { state: 'hidden' })
 })
 
-// See-also: https://github.com/logseq/logseq/issues/3278
-test('insert link', async ({ page }) => {
+test('insert link #3278', async ({ page }) => {
   await createRandomPage(page)
 
   let hotKey = 'Control+l'
