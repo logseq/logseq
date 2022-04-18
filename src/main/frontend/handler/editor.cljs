@@ -1950,16 +1950,16 @@
         (outliner-core/save-block! editing-block))
       (when target-block
         (let [format (or (:block/format target-block) (state/get-preferred-format))
-              blocks (map (fn [block]
-                            (paste-block-cleanup block page exclude-properties format content-update-fn))
-                       blocks)
-              result (outliner-core/insert-blocks! blocks target-block {:sibling? sibling?})]
+              blocks' (map (fn [block]
+                             (paste-block-cleanup block page exclude-properties format content-update-fn))
+                        blocks)
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
           (js/setTimeout
            (fn []
              (when-let [last-block (last (:blocks result))]
                (clear-when-saved!)
-              (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-                (edit-block! last-block' :max (:block/uuid last-block')))))
+               (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
+                 (edit-block! last-block' :max (:block/uuid last-block')))))
            0))))))
 
 (defn- block-tree->blocks

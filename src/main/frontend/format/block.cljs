@@ -540,8 +540,13 @@
 
 (defn extract-blocks
   "Extract headings from mldoc ast.
-  If `with-id?` equals to true, all the referenced pages with have new db ids."
+  Args:
+    `blocks`: mldoc ast.
+    `content`: markdown or org-mode text.
+    `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
+    `format`: content's format, it could be either :markdown or :org-mode."
   [blocks content with-id? format]
+  {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
   (try
     (let [encoded-content (utf8/encode content)
           [blocks body pre-block-properties]

@@ -45,7 +45,7 @@
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container :level)
+                                      :block/title :block/body :block/level :block/container)
                               m)) txs)]
        ;; (util/pprint txs)
        (when (and (seq txs)

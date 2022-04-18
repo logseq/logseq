@@ -707,9 +707,8 @@
 (defn get-selection-block-ids
   []
   (->> (sub :selection/blocks)
-       (map #(when-let [id (dom/attr % "blockid")]
-               (medley/uuid id)))
-       (remove nil?)
+       (keep #(when-let [id (dom/attr % "blockid")]
+                (uuid id)))
        (distinct)))
 
 (defn in-selection-mode?

@@ -341,8 +341,12 @@
 (defn gen-blocks
   []
   (let [tree (gen-safe-tree)]
-    (when (seq tree)
-      (build-blocks tree))))
+    (if (seq tree)
+      (let [result (build-blocks tree)]
+        (if (seq result)
+          result
+          (gen-blocks)))
+      (gen-blocks))))
 
 (defn get-datoms
   []
@@ -402,8 +406,9 @@
     (dotimes [_i 100]
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-successive-blocks)]
-        (outliner-tx/transact! {:graph test-db}
-          (outliner-core/delete-blocks! blocks {}))))))
+        (when (seq blocks)
+          (outliner-tx/transact! {:graph test-db}
+            (outliner-core/delete-blocks! blocks {})))))))
 
 (deftest random-moves
   (testing "Random moves"
@@ -414,12 +419,13 @@
         (let [blocks (gen-blocks)]
           (swap! *random-count + (count blocks))
           (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)
-              target (get-random-block)]
-          (outliner-tx/transact! {:graph test-db}
-            (outliner-core/move-blocks! blocks target (gen/generate gen/boolean)))
-          (let [total (get-blocks-count)]
-            (is (= total (+ c1 @*random-count)))))))))
+        (let [blocks (get-random-successive-blocks)]
+          (when (seq blocks)
+            (let [target (get-random-block)]
+              (outliner-tx/transact! {:graph test-db}
+                (outliner-core/move-blocks! blocks target (gen/generate gen/boolean)))
+              (let [total (get-blocks-count)]
+                (is (= total (+ c1 @*random-count)))))))))))
 
 (deftest random-move-up-down
   (testing "Random move up down"
@@ -431,10 +437,11 @@
           (swap! *random-count + (count blocks))
           (insert-blocks! blocks (get-random-block)))
         (let [blocks (get-random-successive-blocks)]
-          (outliner-tx/transact! {:graph test-db}
-            (outliner-core/move-blocks-up-down! blocks (gen/generate gen/boolean)))
-          (let [total (get-blocks-count)]
-            (is (= total (+ c1 @*random-count)))))))))
+          (when (seq blocks)
+            (outliner-tx/transact! {:graph test-db}
+              (outliner-core/move-blocks-up-down! blocks (gen/generate gen/boolean)))
+            (let [total (get-blocks-count)]
+              (is (= total (+ c1 @*random-count))))))))))
 
 (deftest random-indent-outdent
   (testing "Random indent and outdent"
@@ -446,10 +453,11 @@
           (swap! *random-count + (count blocks))
           (insert-blocks! blocks (get-random-block)))
         (let [blocks (get-random-successive-blocks)]
-          (outliner-tx/transact! {:graph test-db}
-            (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
-          (let [total (get-blocks-count)]
-            (is (= total (+ c1 @*random-count)))))))))
+          (when (seq blocks)
+            (outliner-tx/transact! {:graph test-db}
+              (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
+            (let [total (get-blocks-count)]
+              (is (= total (+ c1 @*random-count))))))))))
 
 (deftest random-mixed-ops
   (testing "Random mixed operations"
@@ -466,25 +474,31 @@
                ;; delete
                (fn []
                  (let [blocks (get-random-successive-blocks)]
-                   (swap! *random-count - (count blocks))
-                   (outliner-tx/transact! {:graph test-db}
-                     (outliner-core/delete-blocks! blocks {}))))
+                   (when (seq blocks)
+                     (swap! *random-count - (count blocks))
+                     (outliner-tx/transact! {:graph test-db}
+                       (outliner-core/delete-blocks! blocks {})))))
 
                ;; move
                (fn []
-                 (outliner-tx/transact! {:graph test-db}
-                   (outliner-core/move-blocks! (get-random-successive-blocks) (get-random-block) (gen/generate gen/boolean))))
+                 (let [blocks (get-random-successive-blocks)]
+                   (when (seq blocks)
+                     (outliner-tx/transact! {:graph test-db}
+                       (outliner-core/move-blocks! blocks (get-random-block) (gen/generate gen/boolean))))))
 
                ;; move up down
                (fn []
-                 (outliner-tx/transact! {:graph test-db}
-                   (outliner-core/move-blocks-up-down! (get-random-successive-blocks)  (gen/generate gen/boolean))))
+                 (let [blocks (get-random-successive-blocks)]
+                   (when (seq blocks)
+                     (outliner-tx/transact! {:graph test-db}
+                      (outliner-core/move-blocks-up-down! blocks (gen/generate gen/boolean))))))
 
                ;; indent outdent
                (fn []
-                 (outliner-tx/transact! {:graph test-db}
-                   (outliner-core/indent-outdent-blocks! (get-random-successive-blocks) (gen/generate gen/boolean))))
-               ]]
+                 (let [blocks (get-random-successive-blocks)]
+                   (when (seq blocks)
+                     (outliner-tx/transact! {:graph test-db}
+                       (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean))))))]]
       (dotimes [_i 500]
         ((rand-nth ops)))
       (let [total (get-blocks-count)
