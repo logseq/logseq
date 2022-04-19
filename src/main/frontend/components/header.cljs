@@ -178,19 +178,10 @@
         :options {:href "https://discord.gg/KpN4eHY"
                   :title (t :discord-title)
                   :target "_blank"}
-        :icon (ui/icon "brand-discord")}
-       ;; TODO: Enable when logout is ready
-       ;; (when logged?
-       ;;   {:title (t :sign-out)
-       ;;    :options {:on-click user-handler/sign-out!}
-       ;;    :icon svg/logout-sm})
-       ]
+        :icon (ui/icon "brand-discord")}]
       (concat page-menu-and-hr)
       (remove nil?))
-     {}
-     ;; {:links-footer (when (and (util/electron?) (not logged?))
-     ;;                  [:div.px-2.py-2 (login logged?)])}
-     )))
+     {})))
 
 (rum/defc back-and-forward
   []

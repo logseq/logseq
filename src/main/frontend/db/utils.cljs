@@ -29,12 +29,6 @@
 (defn seq-flatten [col]
   (flatten (seq col)))
 
-(defn sort-by-pos
-  [blocks]
-  (sort-by
-   #(get-in % [:block/meta :start-pos])
-   blocks))
-
 (defn group-by-page
   [blocks]
   (if (:block/page (first blocks))
@@ -58,7 +52,7 @@
   ([id-or-lookup-ref]
    (entity (state/get-current-repo) id-or-lookup-ref))
   ([repo id-or-lookup-ref]
-   (when-let [db (conn/get-conn repo)]
+   (when-let [db (conn/get-db repo)]
      (d/entity db id-or-lookup-ref))))
 
 (defn pull
@@ -67,9 +61,9 @@
   ([selector eid]
    (pull (state/get-current-repo) selector eid))
   ([repo selector eid]
-   (when-let [conn (conn/get-conn repo)]
+   (when-let [db (conn/get-db repo)]
      (try
-       (d/pull conn
+       (d/pull db
                selector
                eid)
        (catch js/Error _e
@@ -81,9 +75,9 @@
   ([selector eids]
    (pull-many (state/get-current-repo) selector eids))
   ([repo selector eids]
-   (when-let [conn (conn/get-conn repo)]
+   (when-let [db (conn/get-db repo)]
      (try
-       (d/pull-many conn selector eids)
+       (d/pull-many db selector eids)
        (catch js/Error e
          (js/console.error e))))))
 
@@ -97,7 +91,7 @@
      (let [tx-data (->> (util/remove-nils tx-data)
                         (remove nil?))]
        (when (seq tx-data)
-         (when-let [conn (conn/get-conn repo-url false)]
+         (when-let [conn (conn/get-db repo-url false)]
            (if tx-meta
              (d/transact! conn (vec tx-data) tx-meta)
              (d/transact! conn (vec tx-data)))))))))
@@ -106,11 +100,11 @@
   ([key]
    (get-key-value (state/get-current-repo) key))
   ([repo-url key]
-   (when-let [db (conn/get-conn repo-url)]
+   (when-let [db (conn/get-db repo-url)]
      (some-> (d/entity db key)
              key))))
 
 (defn q
   [query & inputs]
   (when-let [repo (state/get-current-repo)]
-    (apply d/q query (conn/get-conn repo) inputs)))
+    (apply d/q query (conn/get-db repo) inputs)))

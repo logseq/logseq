@@ -26,13 +26,13 @@
   get-repo-name
   get-short-repo-name
   datascript-db
-  get-conn
+  get-db
   me-tx
   remove-conn!]
 
  [frontend.db.utils
   date->int db->json db->edn-str db->string get-max-tx-id get-tx-id
-  group-by-page seq-flatten sort-by-pos
+  group-by-page seq-flatten
   string->db
 
   entity pull pull-many transact! get-key-value]
@@ -88,10 +88,9 @@
 ;; persisting DBs between page reloads
 (defn persist! [repo]
   (let [key (datascript-db repo)
-        conn (get-conn repo false)]
-    (when conn
-      (let [db (d/db conn)
-            db-str (if db (db->string db) "")]
+        db (get-db repo)]
+    (when db
+      (let [db-str (if db (db->string db) "")]
         (p/let [_ (db-persist/save-graph! key db-str)])))))
 
 (defonce persistent-jobs (atom {}))
@@ -150,7 +149,7 @@
 
 (defn listen-and-persist!
   [repo]
-  (when-let [conn (get-conn repo false)]
+  (when-let [conn (get-db repo false)]
     (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!

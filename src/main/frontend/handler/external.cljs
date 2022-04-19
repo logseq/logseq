@@ -89,11 +89,9 @@
                                       [last-block true]
                                       (if snd-last-block
                                         [snd-last-block true]
-                                        [page-block false]))
-            tree (editor/blocks->tree-by-level parsed-blocks)]
-        (editor/paste-block-vec-tree-at-target
-         tree []
-         {:get-pos-fn #(editor/get-block-tree-insert-pos-after-target
-                        (:db/id target-block) sibling?)
-          :page-block page-block})
+                                        [page-block false]))]
+        (editor/paste-blocks
+         parsed-blocks
+         {:target target-block
+          :sibling? sibling?})
         (finished-ok-handler [page-name])))))

@@ -205,3 +205,100 @@ export async function activateNewPage(page: Page) {
 export async function editFirstBlock(page: Page) {
   await page.click('.ls-block .block-content >> nth=0')
 }
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+export function randomBoolean(): bool {
+  return Math.random() < 0.5;
+}
+
+export async function randomInsert( page, block ) {
+  let n = randomInt(0, 100)
+  await block.mustFill(n.toString())
+
+  // random indent
+  if (randomBoolean ()) {
+    await block.indent()
+  } else {
+    await block.unindent()
+  }
+
+  await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
+
+  await page.press('textarea >> nth=0', 'Enter')
+}
+
+export async function randomEditDelete( page: Page ) {
+  let n = randomInt(3)
+
+  for (let i = 0; i < n; i++) {
+    await page.keyboard.press('Backspace')
+  }
+}
+
+export async function randomEditMoveUpDown( page: Page ) {
+  let n = randomInt(3, 10)
+
+  for (let i = 0; i < n; i++) {
+    if (randomBoolean ()) {
+      await page.keyboard.press('Meta+Shift+ArrowUp')
+    } else {
+      await page.keyboard.press('Meta+Shift+ArrowDown')
+    }
+  }
+}
+
+async function scrollOnElement(page, selector) {
+  await page.$eval(selector, (element) => {
+    element.scrollIntoView();
+  });
+}
+
+export async function editRandomBlock( page: Page ) {
+  let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
+  let n = randomInt(0, blockCount - 1)
+
+  // discard any popups
+  await page.keyboard.press('Escape')
+  // click last block
+  if (await page.locator('text="Click here to edit..."').isVisible()) {
+    await page.click('text="Click here to edit..."')
+  } else {
+    await page.click(`.ls-block .block-content >> nth=${n}`)
+  }
+
+  // wait for textarea
+  await page.waitForSelector('textarea >> nth=0', { state: 'visible', timeout: 1000 })
+
+  await scrollOnElement(page, 'textarea >> nth=0');
+
+  const randomContent = randomString(10)
+
+  const locator: Locator = page.locator('textarea >> nth=0')
+
+  await locator.type(randomContent)
+
+  return locator
+}
+
+export async function randomSelectBlocks( page: Page ) {
+  await editRandomBlock(page)
+
+  let n = randomInt(1, 10)
+
+  for (let i = 0; i < n; i++) {
+    await page.keyboard.press('Shift+ArrowUp')
+  }
+}
+
+export async function randomIndentOutdent( page: Page ) {
+  await randomSelectBlocks(page)
+
+  if (randomBoolean ()) {
+    await page.keyboard.press('Tab', { delay: 100 })
+  } else {
+    await page.keyboard.press('Shift+Tab', { delay: 100 })
+  }
+}

@@ -22,13 +22,6 @@
        (coll? @state))))
 
 #?(:cljs
-   (defn add-txs
-     [state txs]
-     (assert (outliner-txs-state? state)
-       "db should be satisfied outliner-tx-state?")
-     (swap! state into txs)))
-
-#?(:cljs
    (defn after-transact-pipelines
      [{:keys [_db-before _db-after _tx-data _tempids _tx-meta] :as tx-report}]
      (pipelines/invoke-hooks tx-report)
@@ -51,48 +44,32 @@
      (let [txs (remove-nil-from-transaction txs)
            txs (map (fn [m] (if (map? m)
                               (dissoc m
-                                      :block/children :block/meta :block/top? :block/bottom?
-                                      :block/title :block/body :block/level)
+                                      :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                      :block/title :block/body :block/level :block/container)
                               m)) txs)]
-       ;; (util/pprint txs)
+       (util/pprint txs)
        (when (and (seq txs)
-                 (not (:skip-transact? opts)))
-        (try
-          (let [conn (conn/get-conn false)
-                editor-cursor (state/get-current-edit-block-and-position)
-                meta (merge opts {:editor-cursor editor-cursor})
-                rs (d/transact! conn txs meta)]
-            (when true                 ; TODO: add debug flag
-              (let [eids (distinct (mapv first (:tx-data rs)))
-                    left&parent-list (->>
-                                      (d/q '[:find ?e ?l ?p
-                                             :in $ [?e ...]
-                                             :where
-                                             [?e :block/left ?l]
-                                             [?e :block/parent ?p]] @conn eids)
-                                      (vec)
-                                      (map next))]
-                (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
-            (when-not config/test?
-              (after-transact-pipelines rs))
-            rs)
-          (catch js/Error e
-            (log/error :exception e)
-            (throw e)))))))
-
-#?(:clj
-   (defmacro auto-transact!
-     "Copy from with-open.
-     Automatically transact! after executing the body."
-     [bindings opts & body]
-     (#'core/assert-args
-       (vector? bindings) "a vector for its binding"
-       (even? (count bindings)) "an even number of forms in binding vector")
-     (cond
-       (= (count bindings) 0) `(do ~@body)
-       (symbol? (bindings 0)) `(let ~(subvec bindings 0 2)
-                                 (try
-                                   (auto-transact! ~(subvec bindings 2) ~opts ~@body)
-                                   (transact! (deref ~(bindings 0)) ~opts)))
-       :else (throw (IllegalArgumentException.
-                      "with-db only allows Symbols in bindings")))))
+                  (not (:skip-transact? opts)))
+         (try
+           (let [repo (get opts :repo (state/get-current-repo))
+                 conn (conn/get-db repo false)
+                 editor-cursor (state/get-current-edit-block-and-position)
+                 meta (merge opts {:editor-cursor editor-cursor})
+                 rs (d/transact! conn txs meta)]
+             (when true                 ; TODO: add debug flag
+               (let [eids (distinct (mapv first (:tx-data rs)))
+                     left&parent-list (->>
+                                       (d/q '[:find ?e ?l ?p
+                                              :in $ [?e ...]
+                                              :where
+                                              [?e :block/left ?l]
+                                              [?e :block/parent ?p]] @conn eids)
+                                       (vec)
+                                       (map next))]
+                 (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
+             (when-not config/test?
+               (after-transact-pipelines rs))
+             rs)
+           (catch js/Error e
+             (log/error :exception e)
+             (throw e)))))))

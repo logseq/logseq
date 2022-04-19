@@ -4,7 +4,8 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.test.helper :as helper]))
 
 (defn load-test-env
   [f]
@@ -21,12 +22,12 @@
   [repo]
   (let [db-name (conn/datascript-db repo)
         db-conn (d/create-conn db-schema/schema)]
-    (conn/reset-conn! conn/conns {})
+    (state/set-current-repo! repo)
     (swap! conn/conns assoc db-name db-conn)))
 
 (defn reset-db
   [f]
-  (let [repo (state/get-current-repo)]
+  (let [repo helper/test-db]
     (reset-datascript repo)
     (let [r (f)]
       (reset-datascript repo) r)))

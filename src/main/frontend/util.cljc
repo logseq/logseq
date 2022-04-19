@@ -749,14 +749,6 @@
            :down)))))
 
 #?(:cljs
-   (defn rec-get-block-node
-     [node]
-     (if (and node (d/has-class? node "ls-block"))
-       node
-       (and node
-            (rec-get-block-node (gobj/get node "parentNode"))))))
-
-#?(:cljs
    (defn rec-get-blocks-container
      [node]
      (if (and node (d/has-class? node "blocks-container"))
@@ -781,29 +773,6 @@
    (defn remove-embeded-blocks [blocks]
      (->> blocks
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
-
-;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
-;; FIXME: Note that it might not works for IE.
-#?(:cljs
-   (defn get-selected-nodes
-     [class-name]
-     (try
-       (when (gobj/get js/window "getSelection")
-         (let [selection (js/window.getSelection)
-               range (.getRangeAt selection 0)
-               container (-> (gobj/get range "commonAncestorContainer")
-                             (rec-get-blocks-container))
-               start-node (gobj/get range "startContainer")
-               container-nodes (array-seq (selection/getSelectedNodes container start-node))]
-           (map
-            (fn [node]
-              (if (or (= 3 (gobj/get node "nodeType"))
-                      (not (d/has-class? node class-name))) ;textnode
-                (rec-get-block-node node)
-                node))
-            container-nodes)))
-       (catch js/Error _e
-         nil))))
 
 #?(:cljs
    (defn get-selected-text
