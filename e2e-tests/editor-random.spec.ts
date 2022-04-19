@@ -1,11 +1,11 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, editFirstBlock, randomInt, IsMac,
-         randomInsert, randomEditDelete, randomEditMoveUpDown,
-         editRandomBlock, randomSelectBlocks, randomIndentOutdent} from './utils'
+import {
+  createRandomPage, randomInt, randomInsert, randomEditDelete, randomEditMoveUpDown,
+} from './utils'
 
-test('Random editor operations', async ({page, block}) => {
-  var ops = [
+test('Random editor operations', async ({ page, block }) => {
+  let ops = [
     randomInsert,
     randomEditMoveUpDown,
     randomEditDelete,
@@ -28,14 +28,11 @@ test('Random editor operations', async ({page, block}) => {
   await block.mustType('Random tests start!')
   await randomInsert(page, block)
 
-    for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 100; i++) {
     let n = randomInt(0, ops.length - 1)
 
-    var f = ops[n]
-    if (f.toString() == randomInsert.toString()) {
-      await f(page, block)
-    } else {
-      await f(page)
-    }
+    let f = ops[n]
+    await f(page, block)
+
   }
 })

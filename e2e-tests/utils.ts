@@ -1,6 +1,7 @@
 import { Page, Locator } from 'playwright'
 import { expect } from '@playwright/test'
 import * as process from 'process'
+import { Block } from './types'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -210,16 +211,19 @@ export function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1) + min)
 }
 
-export function randomBoolean(): bool {
+export function randomBoolean(): boolean {
   return Math.random() < 0.5;
 }
 
-export async function randomInsert( page, block ) {
+export async function randomInsert(page: Page, block: Block) {
+  if (!(await block.isEditing)) {
+    await block.clickNext()
+  }
   let n = randomInt(0, 100)
   await block.mustFill(n.toString())
 
   // random indent
-  if (randomBoolean ()) {
+  if (randomBoolean()) {
     await block.indent()
   } else {
     await block.unindent()
@@ -227,22 +231,22 @@ export async function randomInsert( page, block ) {
 
   await page.waitForSelector('textarea >> nth=0', { state: 'visible' })
 
-  await page.press('textarea >> nth=0', 'Enter')
+  await block.enterNext()
 }
 
-export async function randomEditDelete( page: Page ) {
-  let n = randomInt(3)
+export async function randomEditDelete(page: Page, _block: Block) {
+  let n = randomInt(1, 3)
 
   for (let i = 0; i < n; i++) {
     await page.keyboard.press('Backspace')
   }
 }
 
-export async function randomEditMoveUpDown( page: Page ) {
+export async function randomEditMoveUpDown(page: Page, _block: Block) {
   let n = randomInt(3, 10)
 
   for (let i = 0; i < n; i++) {
-    if (randomBoolean ()) {
+    if (randomBoolean()) {
       await page.keyboard.press('Meta+Shift+ArrowUp')
     } else {
       await page.keyboard.press('Meta+Shift+ArrowDown')
@@ -250,13 +254,13 @@ export async function randomEditMoveUpDown( page: Page ) {
   }
 }
 
-async function scrollOnElement(page, selector) {
+async function scrollOnElement(page: Page, selector: string) {
   await page.$eval(selector, (element) => {
     element.scrollIntoView();
   });
 }
 
-export async function editRandomBlock( page: Page ) {
+export async function editRandomBlock(page: Page) {
   let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
   let n = randomInt(0, blockCount - 1)
 
@@ -283,7 +287,7 @@ export async function editRandomBlock( page: Page ) {
   return locator
 }
 
-export async function randomSelectBlocks( page: Page ) {
+export async function randomSelectBlocks(page: Page, _block: Block) {
   await editRandomBlock(page)
 
   let n = randomInt(1, 10)
@@ -293,10 +297,10 @@ export async function randomSelectBlocks( page: Page ) {
   }
 }
 
-export async function randomIndentOutdent( page: Page ) {
-  await randomSelectBlocks(page)
+export async function randomIndentOutdent(page: Page, block: Block) {
+  await randomSelectBlocks(page, block)
 
-  if (randomBoolean ()) {
+  if (randomBoolean()) {
     await page.keyboard.press('Tab', { delay: 100 })
   } else {
     await page.keyboard.press('Shift+Tab', { delay: 100 })
