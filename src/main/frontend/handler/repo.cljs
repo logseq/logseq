@@ -189,6 +189,8 @@
 
 (defn- parse-and-load-file!
   [repo-url file new-graph? metadata]
+  (state/set-parsing-state! (fn [m]
+                              (assoc m :current-parsing-file (:file/path file))))
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
@@ -201,12 +203,10 @@
       (state/set-parsing-state! (fn [m]
                                   (update m :failed-parsing-files conj [(:file/path file) e])))))
   (state/set-parsing-state! (fn [m]
-                              (-> (update m :finished inc)
-                                  (assoc :current-parsing-file (:file/path file))))))
+                              (update m :finished inc))))
 
 (defn- after-parse
   [repo-url files file-paths first-clone? db-encrypted? re-render? re-render-opts opts graph-added-chan]
-  (state/reset-parsing-state!)
   (load-pages-metadata! repo-url file-paths files true)
   (when first-clone?
     (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
@@ -216,6 +216,7 @@
   (when re-render?
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
+  (state/reset-parsing-state!)
   (async/offer! graph-added-chan true))
 
 (defn- parse-files-and-create-default-files-inner!
@@ -240,6 +241,7 @@
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count support-files')})
+    ;; Synchronous for tests for not breaking anything
     (if util/node-test?
       (do
         (doseq [file support-files']
@@ -249,7 +251,7 @@
         (if-let [file (async/<! chan)]
           (do
             (parse-and-load-file! repo-url file new-graph? metadata)
-            (async/<! (async/timeout 1))
+            (async/<! (async/timeout 10))
             (recur))
           (after-parse repo-url files file-paths first-clone? db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
@@ -293,9 +295,8 @@
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files refresh? new-graph? empty-graph?]}]
   (spec/validate :repos/url repo-url)
-  (when (= :repos (state/get-current-route))
-    (route-handler/redirect-to-home!))
-
+  (route-handler/redirect-to-home!)
+  (state/set-parsing-state! {:graph-loading? true})
   (let [config (or (state/get-config repo-url)
                    (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
                                               :file/content)]
@@ -672,8 +673,7 @@
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
-       (fn []
-         (route-handler/redirect-to-home!))
+       (route-handler/redirect-to-home!)
        500))))
 
 (defn git-commit-and-push!
