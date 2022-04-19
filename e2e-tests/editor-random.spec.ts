@@ -1,38 +1,180 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import {
-  createRandomPage, randomInt, randomInsert, randomEditDelete, randomEditMoveUpDown,
+  createRandomPage, randomInt, randomInsert, randomEditDelete, randomEditMoveUpDown, IsMac, randomString,
 } from './utils'
 
+/**
+ * Randomized test for single page editing. Block-wise.
+ *
+ * For now, only check total number of blocks.
+ */
+
+interface RandomTestStep {
+  /// target block
+  target: number;
+  /// action
+  op: string;
+  text: string;
+  /// expected total block number
+  expectedBlocks: number;
+}
+
+const availableOps = [
+  "insertByEnter",
+  "insertAtLast",
+  "backspace",
+  "delete",
+  "edit",
+  "moveUp",
+  "moveDown",
+  "indent",
+  "unindent", // FIXME: add frequency support
+  "indent",
+  "unindent",
+  "indent",
+  "unindent",
+  "indent",
+  "unindent",
+]
+
+
+const generateRandomTest = (size: number): RandomTestStep[] => {
+  let blockCount = 1; // default block
+  let steps: RandomTestStep[] = []
+  for (let i = 0; i < size; i++) {
+    let op = availableOps[Math.floor(Math.random() * availableOps.length)];
+    if (Math.random() > 0.5) {
+      op = "insertByEnter"
+    }
+    let loc = Math.floor(Math.random() * blockCount)
+    let text = randomString(randomInt(2, 3))
+
+    if (op === "insertByEnter" || op === "insertAtLast") {
+      blockCount++
+    } else if (op === "backspace") {
+      if (blockCount == 1) {
+        continue
+      }
+      // FIXME: cannot backspace to delete block if has children, so skip
+      if (loc !== blockCount - 1) {
+        continue
+      }
+      blockCount--
+    } else if (op === "delete") {
+      if (blockCount == 1) {
+        continue
+      }
+      // cannot delete last block
+      if (loc === blockCount - 1) {
+        continue
+      }
+      blockCount--
+    } else if (op === "moveUp" || op === "moveDown") {
+      // no op
+    } else if (op === "indent" || op === "unindent") {
+      // no op
+    } else if (op === "edit") {
+      // no ap
+    } else {
+      throw new Error("unexpected op");
+    }
+    if (blockCount < 1) {
+      blockCount = 1
+    }
+
+    let step: RandomTestStep = {
+      target: loc,
+      op,
+      text,
+      expectedBlocks: blockCount,
+    }
+    steps.push(step)
+  }
+
+  return steps
+}
+
 test('Random editor operations', async ({ page, block }) => {
-  let ops = [
-    randomInsert,
-    randomEditMoveUpDown,
-    randomEditDelete,
-
-    // Errors:
-    // locator.waitFor: Timeout 1000ms exceeded.
-    //   =========================== logs ===========================
-    //   waiting for selector "textarea >> nth=0" to be visible
-    // selector resolved to hidden <textarea tabindex="-1" aria-hidden="true"></textarea>
-
-    // editRandomBlock,
-
-    // randomSelectBlocks,
-
-    // randomIndentOutdent,
-  ]
+  const steps = generateRandomTest(100)
 
   await createRandomPage(page)
+  await block.mustType("randomized test!")
 
-  await block.mustType('Random tests start!')
-  await randomInsert(page, block)
+  for (let i = 0; i < steps.length; i++) {
+    let step = steps[i]
+    const { target, op, expectedBlocks, text } = step;
 
-  for (let i = 0; i < 100; i++) {
-    let n = randomInt(0, ops.length - 1)
+    console.log(step)
 
-    let f = ops[n]
-    await f(page, block)
+    if (op === "insertByEnter") {
+      await block.activeEditing(target)
+      let charCount = (await page.inputValue('textarea >> nth=0')).length
+
+      expect(await block.selectionEnd()).toBe(charCount)
+
+      await page.keyboard.press('Enter', { delay: 50 })
+      await block.waitForBlocks(expectedBlocks)
+      await block.mustType(text)
+    } else if (op === "insertAtLast") {
+      await block.clickNext()
+      await block.mustType(text)
+    } else if (op === "backspace") {
+      await block.activeEditing(target)
+      const charCount = (await page.inputValue('textarea >> nth=0')).length
+      for (let i = 0; i < charCount + 1; i++) {
+        await page.keyboard.press('Backspace', { delay: 50 })
+      }
+    } else if (op === "delete") {
+      // move text-cursor to begining
+      // then press delete
+      // then move text-cursor to the end
+      await block.activeEditing(target)
+      let charCount = (await page.inputValue('textarea >> nth=0')).length
+      for (let i = 0; i < charCount; i++) {
+        await page.keyboard.press('ArrowLeft', { delay: 50 })
+      }
+      expect.soft(await block.selectionStart()).toBe(0)
+      for (let i = 0; i < charCount + 1; i++) {
+        await page.keyboard.press('Delete', { delay: 50 })
+      }
+      await block.waitForBlocks(expectedBlocks)
+      charCount = (await page.inputValue('textarea >> nth=0')).length
+      for (let i = 0; i < charCount; i++) {
+        await page.keyboard.press('ArrowRight', { delay: 50 })
+      }
+    } else if (op === "edit") {
+      await block.activeEditing(target)
+      await block.mustFill('') // clear old text
+      await block.mustType(text)
+    } else if (op === "moveUp") {
+      await block.activeEditing(target)
+      if (IsMac) {
+        await page.keyboard.press('Meta+Shift+ArrowUp')
+      } else {
+        await page.keyboard.press('Alt+Shift+ArrowUp')
+      }
+
+    } else if (op === "moveDown") {
+      await block.activeEditing(target)
+      if (IsMac) {
+        await page.keyboard.press('Meta+Shift+ArrowDown')
+      } else {
+        await page.keyboard.press('Alt+Shift+ArrowDown')
+      }
+    } else if (op === "indent") {
+      await block.activeEditing(target)
+      await page.keyboard.press('Tab', { delay: 50 })
+    } else if (op === "unindent") {
+      await block.activeEditing(target)
+      await page.keyboard.press('Shift+Tab', { delay: 50 })
+    } else {
+      throw new Error("unexpected op");
+    }
+
+    // await block.waitForBlocks(expectedBlocks)
+    await page.waitForTimeout(100)
 
   }
+
 })

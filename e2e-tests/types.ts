@@ -28,6 +28,8 @@ export interface Block {
   waitForSelectedBlocks(total: number): Promise<void>;
   /** Escape editing mode, modal popup and selection. */
   escapeEditing(): Promise<void>;
+  /** Active block editing, by click */
+  activeEditing(nth: number): Promise<void>;
   /** Is editing block now? */
   isEditing(): Promise<boolean>;
   /** Find current selectionStart, i.e. text cursor position. */
