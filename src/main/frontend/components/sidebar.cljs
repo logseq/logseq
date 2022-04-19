@@ -327,22 +327,19 @@
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
 
-(rum/defc parsing-state < rum/reactive
-  [current-repo]
-  (let [full-state (state/sub [:graph/parsing-state])
-        parsing-state (state/sub [:graph/parsing-state current-repo])]
-    (when (not= (:total parsing-state) (:finished parsing-state))
-     (let [finished (or (:finished parsing-state) 0)
-           total (:total parsing-state)
-           width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-           left-label [:div.flex.flex-row.font-bold
-                       (t :parsing-files)
-                       [:div.hidden.md:flex.flex-row
-                        [:span.mr-1 ": "]
-                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                         (util/node-path.basename
-                          (:current-parsing-file parsing-state))]]]]
-       (ui/progress-bar-with-label width left-label (str finished "/" total))))))
+(rum/defc parsing-progress < rum/static
+  [state]
+  (let [finished (or (:finished state) 0)
+        total (:total state)
+        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        left-label [:div.flex.flex-row.font-bold
+                    (t :parsing-files)
+                    [:div.hidden.md:flex.flex-row
+                     [:span.mr-1 ": "]
+                     [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                      (util/node-path.basename
+                       (:current-parsing-file state))]]]]
+    (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -366,31 +363,39 @@
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
-    [:div
-     (parsing-state current-repo)
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
+    (cond
+      (or
+       (:graph-loading? graph-parsing-state)
+       (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
+      [:div.flex.items-center.justify-center.full-height-without-header
+       [:div.flex-1
+        (parsing-progress graph-parsing-state)]]
 
-     (cond
-       (and default-home
-            (= :home (state/get-current-route))
-            (not (state/route-has-p?))
-            (:page default-home))
-       (route-handler/redirect-to-page! (:page default-home))
+      :else
+      [:div
+       (cond
+         (and default-home
+              (= :home (state/get-current-route))
+              (not (state/route-has-p?))
+              (:page default-home))
+         (route-handler/redirect-to-page! (:page default-home))
 
-       (and config/publishing?
-            (not default-home)
-            (empty? latest-journals))
-       (route-handler/redirect! {:to :all-pages})
+         (and config/publishing?
+              (not default-home)
+              (empty? latest-journals))
+         (route-handler/redirect! {:to :all-pages})
 
-       loading-files?
-       (ui/loading (t :loading-files))
+         loading-files?
+         (ui/loading (t :loading-files))
 
-       (seq latest-journals)
-       (journal/journals latest-journals)
+         (seq latest-journals)
+         (journal/journals latest-journals)
 
-       ;; FIXME: why will this happen?
-       :else
-       [:div])]))
+         ;; FIXME: why will this happen?
+         :else
+         [:div "bingo"])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
