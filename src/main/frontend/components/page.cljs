@@ -654,7 +654,9 @@
         indeterminate? (boolean (:indeterminate opts))]
 
     (rum/use-effect!
-     #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
+     (fn []
+       (set! (.-indeterminate (rum/deref *input)) indeterminate?)
+       #())
      [indeterminate?])
 
     [:label {:for key}

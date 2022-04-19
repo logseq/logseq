@@ -4,6 +4,7 @@
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notifications]
+            [frontend.rum :refer [mount]]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as medley]
@@ -467,7 +468,7 @@
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
-    (rum/mount
+    (mount
       (lsp-indicator) el))
 
   (state/set-state! :plugin/indicator-text "LOADING")

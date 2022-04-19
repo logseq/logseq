@@ -7,7 +7,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :refer [use-atom]]
+            [frontend.rum :refer [use-atom mount]]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -493,7 +493,8 @@
       (fn []
         (if (rum/deref *mounted)
           (set-dirty-hls! highlights)
-          (rum/set-ref! *mounted true)))
+          (rum/set-ref! *mounted true))
+        #())
       [highlights])
 
     ;; selection events
@@ -573,7 +574,8 @@
             ;; show ctx menu
             (set-tip-state! {:highlight hl-fn
                              :range     sel-range
-                             :point     point}))))
+                             :point     point})))
+        #())
 
       [(:range sel-state)])
 
@@ -587,7 +589,7 @@
             (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
               (let [page-hls (get grouped-hls page)]
 
-                (rum/mount
+                (mount
                   ;; TODO: area & text hls
                   (pdf-highlights-region-container
                     viewer page-hls {:show-ctx-tip! show-ctx-tip!
@@ -655,7 +657,8 @@
 
     (rum/use-effect!
       (fn []
-        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?)))
+        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?))
+        #())
       [area-dashed?])
 
     [:div.extensions__pdf-settings.hls-popup-wrap.visible
@@ -729,19 +732,20 @@
                               [outline-data])]
 
       (rum/use-effect!
-        (fn []
-          (p/catch
-           (p/let [^js data (.getOutline pdf-doc)]
-                  #_:clj-kondo/ignore
-                  (when-let [data (and data (.map data (fn [^js it]
-                                                         (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
-                                                         (set! (.-expanded it) false)
-                                                         it)))])
-                  (set-outline-data! (bean/->clj data)))
+       (fn []
+         (p/catch
+          (p/let [^js data (.getOutline pdf-doc)]
+            #_:clj-kondo/ignore
+            (when-let [data (and data (.map data (fn [^js it]
+                                                   (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
+                                                   (set! (.-expanded it) false)
+                                                   it)))])
+            (set-outline-data! (bean/->clj data)))
 
-            (fn [e]
-              (js/console.error "[Load outline Error]" e))))
-        [pdf-doc])
+          (fn [e]
+            (js/console.error "[Load outline Error]" e)))
+         #())
+       [pdf-doc])
 
       (rum/use-effect!
         (fn []
@@ -837,7 +841,8 @@
     (rum/use-effect!
       (fn []
         (let [^js input (rum/deref *page-ref)]
-          (set! (. input -value) current-page-num)))
+          (set! (. input -value) current-page-num))
+        #())
       [current-page-num])
 
     [:div.extensions__pdf-toolbar
@@ -1044,7 +1049,8 @@
 
             ;; write hls file error
             (fn [e]
-              (js/console.error "[write hls error]" e)))))
+              (js/console.error "[write hls error]" e))))
+        #())
 
       [(:latest-hls hls-state)])
 
@@ -1081,7 +1087,8 @@
                 (str (.-message error) " Is this the correct path?")
                 :error
                 false)
-              (state/set-state! :pdf/current nil)))))
+              (state/set-state! :pdf/current nil))))
+        #())
       [(:error state)])
 
     [:div.extensions__pdf-loader {:ref *doc-ref}
@@ -1109,7 +1116,8 @@
       (fn []
         (p/then
           (pdf-utils/load-base-assets$)
-          (fn [] (set-prepared! true))))
+          (fn [] (set-prepared! true)))
+        #())
       [])
 
     ;; refresh loader

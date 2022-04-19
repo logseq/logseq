@@ -11,6 +11,8 @@
             [frontend.rum :refer [use-mounted]]
             [rum.core :as rum]))
 
+(defn noop [] nil)
+
 (rum/defc container
   [{:keys [t route theme on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len]} child]
@@ -24,26 +26,30 @@
         (if (= theme "dark") ;; for tailwind dark mode
           (.add cls "dark")
           (.remove cls "dark"))
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme} nil)
+        noop)
      [theme])
 
     (rum/use-effect!
      #(when (and restored-sidebar?
                  (mounted-fn))
         (plugin-handler/hook-plugin-app :sidebar-visible-changed {:visible sidebar-open?})
-        (ui-handler/persist-right-sidebar-state!))
+        (ui-handler/persist-right-sidebar-state!)
+        noop)
      [sidebar-open? restored-sidebar? sidebar-blocks-len])
 
     (rum/use-effect!
      #(when lsp-enabled?
-        (plugin-handler/setup-install-listener! t))
+        (plugin-handler/setup-install-listener! t)
+        noop)
      [t])
 
     (rum/use-effect!
      (fn []
        (ui-handler/add-style-if-exists!)
        (pdf/reset-current-pdf!)
-       (plugin-handler/hook-plugin-app :current-graph-changed {}))
+       (plugin-handler/hook-plugin-app :current-graph-changed {})
+       noop)
      [current-repo])
 
     (rum/use-effect!
@@ -51,7 +57,8 @@
         (if db-restoring?
           (util/set-title! "Loading")
           (when (or nfs-granted? db-restored?)
-            (route-handler/update-page-title! route))))
+            (route-handler/update-page-title! route)))
+        noop)
      [nfs-granted? db-restoring? route])
 
     (rum/use-effect!
@@ -69,18 +76,21 @@
             (route-handler/redirect! {:to :repo-add})
             (do
               (ui-handler/restore-right-sidebar-state!)
-              (set-restored-sidebar? true))))))
+              (set-restored-sidebar? true)))))
+       noop)
      [db-restoring?])
 
     (rum/use-effect!
      #(when system-theme?
-        (ui/setup-system-theme-effect!))
+        (ui/setup-system-theme-effect!)
+        noop)
      [system-theme?])
 
     (rum/use-effect!
-     #(state/set-modal!
-       (when settings-open?
-         (fn [] [:div.settings-modal (settings/settings)])))
+     #(do (state/set-modal!
+           (when settings-open?
+             (fn [] [:div.settings-modal (settings/settings)])))
+          noop)
      [settings-open?])
 
     [:div

@@ -3,7 +3,7 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [rum.core :as rum]
+            [frontend.rum :refer [mount]]
             [frontend.handler.route :as route]
             [frontend.page :as page]
             [frontend.util :as util]
@@ -57,7 +57,7 @@
 (defn start []
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
-    (rum/mount (page/current-page) node)))
+    (mount (page/current-page) node)))
 
 (defn- register-components-fns!
   []

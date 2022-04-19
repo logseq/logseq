@@ -1,5 +1,5 @@
 (ns frontend.core
-  (:require [rum.core :as rum]
+  (:require [frontend.rum :refer [mount]]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route]
@@ -43,7 +43,7 @@
 (defn start []
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
-    (rum/mount (page/current-page) node)
+    (mount (page/current-page) node)
     (display-welcome-message)
     (persist-var/load-vars)))
 

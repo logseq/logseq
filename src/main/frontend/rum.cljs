@@ -4,7 +4,8 @@
             [clojure.walk :as w]
             [rum.core :refer [use-state use-effect!] :as rum]
             [daiquiri.interpreter :as interpreter]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            ["react-dom/client" :as react-dom]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
 
@@ -95,3 +96,11 @@
          #(rum/set-ref! *mounted false))
        [])
     #(rum/deref *mounted)))
+
+(defn mount
+  "Similar to rum/mount, but for React 18"
+  [element node]
+  (let [root (react-dom/createRoot node)]
+    (println root)
+    (. root render element)
+    nil))

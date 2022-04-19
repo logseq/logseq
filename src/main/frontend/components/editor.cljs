@@ -385,7 +385,8 @@
                                  (let [el  (rum/deref *el)
                                        ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
                                    (when (> ofx 0)
-                                     (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
+                                     (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)"))))))
+                             #())
                            [right-sidebar? editing-key])
         ;; FIXME: for translateY layer
         x-overflow-vw? (when (and (seq rect) (> vw-width max-width))

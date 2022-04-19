@@ -716,7 +716,8 @@
       (fn []
         (when-let [^js el (rum/deref *el)]
           (js/LSPlugin.pluginHelpers.setupInjectedUI.call
-            pl #js {:slot (.-id el) :key key :template template} #js {})))
+            pl #js {:slot (.-id el) :key key :template template} #js {}))
+        #())
       [])
 
     (if-not (nil? pl)
@@ -747,8 +748,10 @@
         *el-ref (rum/create-ref)]
 
     (rum/use-effect!
-      #(let [^js el (rum/deref *el-ref)]
-         (js/setTimeout (fn [] (.focus el)) 100))
+      (fn []
+        (let [^js el (rum/deref *el-ref)]
+          (js/setTimeout (fn [] (.focus el)) 100))
+        #())
       [])
 
     [:div.cp__plugins-page
@@ -815,7 +818,8 @@
     (fn []
       (when (and (not db-restoring?)
                  (or (not util/nfs?) nfs-granted?))
-        (ui-handler/exec-js-if-exists-&-allowed! t)))
+        (ui-handler/exec-js-if-exists-&-allowed! t))
+      #())
     [current-repo db-restoring? nfs-granted?])
   nil)
 
