@@ -292,7 +292,7 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
-      
+
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -327,6 +327,23 @@
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
 
+(rum/defc parsing-state < rum/reactive
+  [current-repo]
+  (let [full-state (state/sub [:graph/parsing-state])
+        parsing-state (state/sub [:graph/parsing-state current-repo])]
+    (when (not= (:total parsing-state) (:finished parsing-state))
+     (let [finished (or (:finished parsing-state) 0)
+           total (:total parsing-state)
+           width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+           left-label [:div.flex.flex-row.font-bold
+                       (t :parsing-files)
+                       [:div.hidden.md:flex.flex-row
+                        [:span.mr-1 ": "]
+                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                         (util/node-path.basename
+                          (:current-parsing-file parsing-state))]]]]
+       (ui/progress-bar-with-label width left-label (str finished "/" total))))))
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -346,12 +363,13 @@
            state)}
   []
   (let [default-home (get-default-home-if-valid)
-        parsing? (state/sub :repo/parsing-files?)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div
+     (parsing-state current-repo)
+
      (cond
        (and default-home
             (= :home (state/get-current-route))
@@ -363,9 +381,6 @@
             (not default-home)
             (empty? latest-journals))
        (route-handler/redirect! {:to :all-pages})
-
-       parsing?
-       (ui/loading (t :parsing-files))
 
        loading-files?
        (ui/loading (t :loading-files))
@@ -507,7 +522,7 @@
                    current-repo
                    (not (state/sub :modal/show?)))
           (footer/footer))]
-       
+
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]
