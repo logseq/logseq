@@ -213,10 +213,8 @@
 
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
-             (when-let [win @*win]
-               (when (.isMinimized ^object win)
-                 (.restore win))
-               (.focus win))))
+             (when-let [window @*win]
+               (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
                                      (try
