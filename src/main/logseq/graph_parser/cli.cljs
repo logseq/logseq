@@ -5,6 +5,7 @@
             [clojure.edn :as edn]
             [clojure.walk :as walk]
             [clojure.data :as data]
+            [clojure.pprint :as pprint]
             [datascript.core :as d]
             [datascript.transit :as dt]
             ["fs" :as fs]
@@ -368,7 +369,7 @@
 (defn reset-file!
   [conn repo-url file content _new-graph?]
   (let [file (cond
-               true #_(and electron-local-repo? (or
+                false #_(and electron-local-repo? (or
                                                  util/win32?
                                                  (not= "/" (first file))))
                (str (get-repo-dir repo-url) "/" file)
@@ -450,6 +451,20 @@
     (reset! block/conn db-conn)
     db-conn))
 
+(defn- mapify-datoms
+  [datoms]
+  (reduce (fn [m [e a v]]
+            (if (#{:block/created-at :block/updated-at :block/uuid :block/name
+                   :block/left :block/page :block/parent :block/namespace
+                   ;; TODO: Look at diffs from block refs + timestamps
+                   :block/path-refs :block/refs :file/last-modified-at
+                   :file/created-at :block/file}
+                  a)
+              m
+              (update m e assoc a v)))
+          {}
+          datoms))
+
 (defn -main
   [args]
   (let [conn (db-start)
@@ -468,14 +483,24 @@
            files)
     (prn :PAGES (d/q '[:find ?n :where [?b :block/name ?n]]
                      @conn))
-    (prn :DATOMS (count (d/datoms @conn :eavt)))
+    (prn :DATOMS-COUNT (count (d/datoms @conn :eavt)))
     (when cached-graph-file
-      (let [db (dt/read-transit-str (slurp cached-graph-file))]
-        (prn :ACTUAL-DATOMS (count (d/datoms db :eavt)))
+      (let [db (dt/read-transit-str (slurp cached-graph-file))
+            datoms-actual (-> (mapify-datoms (take 1000 (d/datoms @conn :eavt)))
+                              ; (select-keys (range 1 50))
+                              vals
+                              set)
+            datoms-expected (-> (mapify-datoms (take 1000 (d/datoms db :eavt)))
+                                ; (select-keys (range 1 50))
+                                vals
+                                set)]
+        (prn :ACTUAL-DATOMS-COUNT (count (d/datoms db :eavt)))
 
         (fs/writeFileSync "diff.edn"
-                          (pr-str (butlast (data/diff (mapv seq (take 10 (d/datoms @conn :eavt)))
-                                                      (mapv seq (take 10 (d/datoms db :eavt)))))))))))
+                          (with-out-str
+                            (pprint/pprint {:actual datoms-actual
+                                            :expected datoms-expected
+                                            :diff (butlast (data/diff datoms-actual datoms-expected))})))))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))
