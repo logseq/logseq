@@ -76,7 +76,7 @@
                      ;;  :page-name : the original-name of the page.
                      ;;  :block-id : uuid.
                      (fn [data]
-                       (let [{:keys [page-name block-id]} (bean/->clj data)]
+                       (let [{:keys [page-name block-id file]} (bean/->clj data)]
                          (cond
                            page-name
                            (let [db-page-name (db-model/get-redirect-page-name page-name)]
@@ -88,7 +88,12 @@
                            block-id
                            (if (db-model/get-block-by-uuid block-id)
                              (route-handler/redirect-to-page! block-id)
-                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))))))
+                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
+
+                           file
+                           (if-let [db-page-name (db-model/get-file-page file false)]
+                             (route-handler/redirect-to-page! db-page-name)
+                             (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 
   (js/window.apis.on "dbsync"
                      (fn [data]
