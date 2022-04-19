@@ -230,14 +230,16 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :readOnly (if ui-config/publishing? true false)
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
                                                    (save-file-or-block-when-blur-or-esc! cm textarea config state)
                                                    (when-let [block-id (:block/uuid config)]
                                                      (let [block (db/pull [:block/uuid block-id])]
-                                                       (editor-handler/edit-block! block :max block-id))))}})
+                                                       (editor-handler/edit-block! block :max block-id))))}}
+                          (when ui-config/publishing?
+                            {:readOnly true
+                             :cursorBlinkRate -1}))
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))]
     (when editor
