@@ -21,12 +21,12 @@
        (str/join)))
 
 (defn uuid->uid-map []
-  (let [conn (db/get-conn (state/get-current-repo))]
-    (->> conn
-     (d/q '[:find (pull ?r [:block/uuid])
-            :in $
-            :where
-            [?b :block/refs ?r]])
+  (let [db (db/get-db (state/get-current-repo))]
+    (->>
+     (d/q db '[:find (pull ?r [:block/uuid])
+               :in $
+               :where
+               [?b :block/refs ?r]])
      (map (comp :block/uuid first))
      (distinct)
      (map (fn [uuid] [uuid (nano-id)]))

@@ -359,7 +359,7 @@
 (def ^:export get_selected_blocks
   (fn []
     (when-let [blocks (and (state/in-selection-mode?)
-                           (seq (:selection/blocks @state/state)))]
+                           (seq (state/get-selection-blocks)))]
       (let [blocks (->> blocks
                         (map (fn [^js el] (some-> (.getAttribute el "blockid")
                                                   (db-model/query-block-by-uuid)))))]
@@ -441,7 +441,7 @@
       (when-let [bb (bean/->clj batch-blocks)]
         (let [bb (if-not (vector? bb) (vector bb) bb)
               {:keys [sibling]} (bean/->clj opts)
-              _ (editor-handler/paste-block-tree-after-target
+              _ (editor-handler/insert-block-tree-after-target
                   (:db/id block) sibling bb (:block/format block))]
           nil)))))
 
@@ -475,9 +475,9 @@
 
                     :else
                     nil)
-          src-block-uuid (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
-          target-block-uuid (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
-      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to) nil)))
+          src-block (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
+          target-block (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
+      (editor-dnd-handler/move-blocks nil [src-block] target-block move-to) nil)))
 
 (def ^:export get_block
   (fn [id-or-uuid ^js opts]
@@ -501,7 +501,7 @@
 (def ^:export get_current_block
   (fn [^js opts]
     (let [block (state/get-edit-block)
-          block (or block (some-> (first (:selection/blocks @state/state))
+          block (or block (some-> (first (state/get-selection-blocks))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))
           block (or block (state/get-last-edit-block))]
@@ -583,9 +583,9 @@
 (defn ^:export datascript_query
   [query & inputs]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (db/get-conn repo)]
+    (when-let [db (db/get-db repo)]
       (let [query (cljs.reader/read-string query)
-            result (apply d/q query conn inputs)]
+            result (apply d/q query db inputs)]
         (clj->js result)))))
 
 (def ^:export custom_query db/custom-query)
@@ -593,7 +593,7 @@
 (defn ^:export download_graph_db
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [db (db/get-conn repo)]
+    (when-let [db (db/get-db repo)]
       (let [db-str (if db (db/db->string db) "")
             data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-str))]
         (when-let [anchor (gdom/getElement "download")]

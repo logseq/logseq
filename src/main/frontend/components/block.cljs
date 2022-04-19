@@ -259,7 +259,7 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-    
+
     (when @src
       (let [ext (util/get-file-ext @src)]
         (if (contains? (set (map name config/audio-formats)) ext)
@@ -1311,7 +1311,7 @@
          (when (not html-export?)
            [:span {:dangerouslySetInnerHTML
                    {:__html s}}])
-         
+
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
@@ -1377,7 +1377,6 @@
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
-  (state/clear-selection!)
   (reset! *dragging? true)
   (reset! *dragging-block block))
 
@@ -1991,7 +1990,8 @@
                      :on-hide (fn [value event]
                                 (when (= event :esc)
                                   (editor-handler/save-block! (editor-handler/get-state) value)
-                                  (editor-handler/escape-editing)))}
+                                  (let [select? (not (string/includes? value "```"))]
+                                    (editor-handler/escape-editing select?))))}
                     edit-input-id
                     config))]
       [:div.flex.flex-row.block-content-wrapper
@@ -2116,12 +2116,14 @@
   (reset! *move-to nil))
 
 (defn- block-drop
-  [event uuid block *move-to]
+  [event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (dnd/move-block event @*dragging-block
-                    block
-                    @*move-to))
+    (let [block-uuids (state/get-selection-block-ids)
+          lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+          selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
+          blocks (if (seq selected) selected [@*dragging-block])]
+      (dnd/move-blocks event blocks target-block @*move-to)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
   (reset! *drag-to-block nil)
@@ -2218,7 +2220,7 @@
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2275,7 +2277,8 @@
         :data-collapsed (and collapsed? has-child?)
         :class (str uuid
                     (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl"))
+                    (when (and card? (not review-cards?)) " shadow-xl")
+                    (when (:ui/selected? block) " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
 
@@ -2917,6 +2920,11 @@
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
+        selected-blocks (set (state/get-selection-block-ids))
+        flat-blocks (if (seq selected-blocks)
+                      (map (fn [b]
+                             (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
+                      flat-blocks)
         blocks (blocks->vec-tree flat-blocks)]
     (if-not db-id
       (block-list config blocks)
@@ -2926,7 +2934,7 @@
                                (load-more-blocks! config flat-blocks)))
             has-more? (and
                        (> (count flat-blocks) model/initial-blocks-length)
-                       (some? (model/get-next-open-block (db/get-conn) (last flat-blocks) db-id)))
+                       (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}
          (ui/infinite-list

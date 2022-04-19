@@ -98,7 +98,7 @@
 (defn load-more!
   [db-id start-id]
   (let [repo (state/get-current-repo)
-        db (db/get-conn repo)
+        db (db/get-db repo)
         block (db/entity repo db-id)
         block? (not (:block/name block))
         k (if block?

@@ -126,13 +126,14 @@
 
      ;; for audio record
      :editor/record-status                  "NONE"
-     
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
      :cursor-range                          nil
 
      :selection/mode                        false
+     ;; Warning: blocks order is determined when setting this attribute
      :selection/blocks                      []
      :selection/start-block                 nil
      ;; either :up or :down, defaults to down
@@ -185,7 +186,7 @@
      :graph/syncing?                        false
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-tree nil}
+     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -682,10 +683,11 @@
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (swap! state assoc
-            :selection/mode true
-            :selection/blocks blocks
-            :selection/direction direction))))
+     (let [blocks (util/sort-by-height blocks)]
+       (swap! state assoc
+             :selection/mode true
+             :selection/blocks blocks
+             :selection/direction direction)))))
 
 (defn into-selection-mode!
   []
@@ -700,7 +702,14 @@
 
 (defn get-selection-blocks
   []
-  (util/sort-by-height (:selection/blocks @state)))
+  (:selection/blocks @state))
+
+(defn get-selection-block-ids
+  []
+  (->> (sub :selection/blocks)
+       (keep #(when-let [id (dom/attr % "blockid")]
+                (uuid id)))
+       (distinct)))
 
 (defn in-selection-mode?
   []
@@ -716,7 +725,8 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (conj (vec (:selection/blocks @state)) block)
+         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+                               (util/sort-by-height))
          :selection/direction direction))
 
 (defn drop-last-selection-block!
@@ -1466,7 +1476,13 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/block-ids ids
+                            :copy/full-blocks nil}))
+
+(defn set-copied-full-blocks!
+  [blocks]
+  (set-state! [:copy/blocks :copy/full-blocks] blocks))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -1532,11 +1548,8 @@
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
   ([blocks direction]
-   (util/select-unhighlight! (dom/by-class "selected"))
-   (clear-selection!)
    (clear-edit!)
-   (set-selection-blocks! blocks direction)
-   (util/select-highlight! blocks)))
+   (set-selection-blocks! blocks direction)))
 
 (defn remove-watch-state [key]
   (remove-watch state key))

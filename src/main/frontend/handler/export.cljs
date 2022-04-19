@@ -35,7 +35,7 @@
                           [?p :block/file ?f]
                           [?p :block/name ?pn]
                           [?f :file/path ?path]]
-                        (db/get-conn repo) file-path))]
+                        (db/get-db repo) file-path))]
     (get-page-content repo page-name)
     (ffirst
      (d/q '[:find ?content
@@ -43,7 +43,7 @@
             :where
             [?f :file/path ?path]
             [?f :file/content ?content]]
-          (db/get-conn repo) file-path))))
+          (db/get-db repo) file-path))))
 
 (defn- get-blocks-contents
   [repo root-block-uuid]
@@ -73,7 +73,7 @@
 
 (defn export-repo-as-html!
   [repo]
-  (when-let [db (db/get-conn repo)]
+  (when-let [db (db/get-db repo)]
     (let [[db asset-filenames]           (if (state/all-pages-public?)
                                            (db/clean-export! db)
                                            (db/filter-only-public-pages-and-blocks db))
@@ -105,12 +105,12 @@
   ([repo]
    (get-file-contents repo {:init-level 1}))
   ([repo file-opts]
-   (let [conn (db/get-conn repo)]
+   (let [db (db/get-db repo)]
      (->> (d/q '[:find ?n ?fp
                  :where
                  [?e :block/file ?f]
                  [?f :file/path ?fp]
-                 [?e :block/name ?n]] conn)
+                 [?e :block/name ?n]] db)
           (mapv (fn [[page-name file-path]]
                   [file-path
                    (outliner-file/tree->file-content
@@ -133,12 +133,11 @@
 (defn get-md-file-contents
   [repo]
   #_:clj-kondo/ignore
-  (let [conn (db/get-conn repo)]
-    (filter (fn [[path _]]
-              (let [path (string/lower-case path)]
-                (re-find #"\.(?:md|markdown)$" path)))
-            (get-file-contents repo {:init-level 1
-                                     :heading-to-list? true}))))
+  (filter (fn [[path _]]
+            (let [path (string/lower-case path)]
+              (re-find #"\.(?:md|markdown)$" path)))
+          (get-file-contents repo {:init-level 1
+                                   :heading-to-list? true})))
 
 
 (defn- get-embed-pages-from-ast [ast]
@@ -368,7 +367,7 @@
 
 (defn- get-file-contents-with-suffix
   [repo]
-  (let [conn (db/get-conn repo)
+  (let [db (db/get-db repo)
         md-files (get-md-file-contents repo)]
     (->>
      md-files
@@ -378,7 +377,7 @@
                                               :where [?e :file/path ?p]
                                               [?e2 :block/file ?e]
                                               [?e2 :block/name ?n]
-                                              [?e2 :block/original-name ?n2]] conn path)
+                                              [?e2 :block/original-name ?n2]] db path)
                                 :format (f/get-format path)})))))
 
 
@@ -431,7 +430,7 @@
        x))
    vec-tree))
 
-(defn- blocks [conn]
+(defn- blocks [db]
   {:version 1
    :blocks
    (->> (d/q '[:find (pull ?b [*])
@@ -439,7 +438,7 @@
                :where
                [?b :block/file]
                [?b :block/original-name]
-               [?b :block/name]] conn)
+               [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
                (assoc page
@@ -466,9 +465,9 @@
       (str "." (string/lower-case (name extension)))))
 
 (defn- export-repo-as-edn-str [repo]
-  (when-let [conn (db/get-conn repo)]
+  (when-let [db (db/get-db repo)]
     (let [sb (StringBuffer.)]
-      (pprint/pprint (blocks conn) (StringBufferWriter. sb))
+      (pprint/pprint (blocks db) (StringBufferWriter. sb))
       (str sb))))
 
 (defn export-repo-as-edn-v2!
@@ -492,9 +491,9 @@
 
 (defn export-repo-as-json-v2!
   [repo]
-  (when-let [conn (db/get-conn repo)]
+  (when-let [db (db/get-db repo)]
     (let [json-str
-          (-> (blocks conn)
+          (-> (blocks db)
               nested-update-id
               clj->js
               js/JSON.stringify)
@@ -511,13 +510,13 @@
 
 ;; https://roamresearch.com/#/app/help/page/Nxz8u0vXU
 ;; export to roam json according to above spec
-(defn- roam-json [conn]
+(defn- roam-json [db]
   (->> (d/q '[:find (pull ?b [*])
               :in $
               :where
               [?b :block/file]
               [?b :block/original-name]
-              [?b :block/name]] conn)
+              [?b :block/name]] db)
 
        (map (fn [[{:block/keys [name] :as page}]]
               (assoc page
@@ -536,9 +535,9 @@
 
 (defn export-repo-as-roam-json!
   [repo]
-  (when-let [conn (db/get-conn repo)]
+  (when-let [db (db/get-db repo)]
     (let [json-str
-          (-> (roam-json conn)
+          (-> (roam-json db)
               clj->js
               js/JSON.stringify)
           data-str (str "data:text/json;charset=utf-8,"

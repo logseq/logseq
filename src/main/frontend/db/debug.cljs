@@ -12,7 +12,7 @@
 
 (defn check-left-id-conflicts
   []
-  (let [db (db/get-conn)
+  (let [db (db/get-db)
         blocks (->> (d/datoms db :avet :block/uuid)
                     (map :v)
                     (map (fn [id]

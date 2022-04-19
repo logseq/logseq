@@ -374,7 +374,7 @@
                                   :block/original-name new-name}]
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
-        (d/transact! (db/get-conn repo false) page-txs)
+        (d/transact! (db/get-db repo false) page-txs)
 
         ;; If page name changed after sanitization
         (when (or (util/create-title-property? new-page-name)
@@ -471,9 +471,9 @@
                                     (outliner-core/block)
                                     (outliner-tree/-get-down)
                                     (outliner-core/get-data))
-          to-last-direct-child-id (model/get-block-last-direct-child (db/get-conn) to-id)
+          to-last-direct-child-id (model/get-block-last-direct-child (db/get-db) to-id false)
           repo (state/get-current-repo)
-          conn (conn/get-conn repo false)
+          conn (conn/get-db repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
           blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
@@ -737,9 +737,7 @@
                   (editor-handler/insert-template!
                    nil
                    template
-                   {:get-pos-fn (fn []
-                                  [page false false false])
-                    :page-block page})))
+                   {:target page})))
               (ui-handler/re-render-root!))))))))
 
 (defn open-today-in-sidebar

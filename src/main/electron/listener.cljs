@@ -94,7 +94,7 @@
                      (fn [data]
                        (let [{:keys [graph tx-data]} (bean/->clj data)
                              tx-data (db/string->db (:data tx-data))]
-                         (when-let [conn (db/get-conn graph false)]
+                         (when-let [conn (db/get-db graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
                          (ui-handler/re-render-root!))))
 
