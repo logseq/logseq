@@ -171,8 +171,8 @@ export const test = base.extend<LogseqFixtures>({
       },
       waitForBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
-        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { state: 'attached', timeout: 5000 })
-        await page.waitForSelector(`.ls-block >> nth=${total}`, { state: 'detached', timeout: 5000 })
+        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { state: 'attached', timeout: 50000 })
+        await page.waitForSelector(`.ls-block >> nth=${total}`, { state: 'detached', timeout: 50000 })
       },
       waitForSelectedBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
@@ -194,7 +194,7 @@ export const test = base.extend<LogseqFixtures>({
           !(await page.isVisible(`.ls-block >> nth=${nth} >> .block-children-container >> textarea`))) {
           return;
         }
-        await page.click(`.ls-block >> nth=${nth} >> .block-content`, { timeout: 1000 })
+        await page.click(`.ls-block >> nth=${nth} >> .block-content`, { delay: 10, timeout: 100000 })
         await page.waitForSelector(`.ls-block >> nth=${nth} >> .editor-wrapper >> textarea`, { timeout: 1000, state: 'visible' })
       },
       isEditing: async (): Promise<boolean> => {
