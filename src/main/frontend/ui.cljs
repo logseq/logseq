@@ -878,3 +878,21 @@
         :arrow       true}
        content)
       content)))
+
+(rum/defc progress-bar
+  [width]
+  {:pre (integer? width)}
+  [:div.w-full.bg-indigo-200.rounded-full.h-2.5
+   [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
+                                           :transition "width 1s"}]])
+
+(rum/defc progress-bar-with-label
+  [width label-left label-right]
+  {:pre (integer? width)}
+  [:div
+   [:div.flex.justify-between.mb-1
+    [:span.text-base
+     label-left]
+    [:span.text-sm.font-medium
+     label-right]]
+   (progress-bar width)])

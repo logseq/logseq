@@ -35,7 +35,6 @@
      :repo/cloning?                         false
      ;; :repo/loading-files? is only for github repos
      :repo/loading-files?                   {}
-     :repo/parsing-files?                   nil
      :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
@@ -184,6 +183,8 @@
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
      :graph/syncing?                        false
+     ;; graph -> state
+     :graph/parsing-state                   {}
 
      ;; copied blocks
      :copy/blocks                           {:copy/content nil :copy/block-ids nil}
@@ -1331,10 +1332,6 @@
   [repo]
   (get-in @state [:repo/loading-files? repo]))
 
-(defn set-parsing-files!
-  [value]
-  (set-state! :repo/parsing-files? value))
-
 (defn set-editor-last-input-time!
   [repo time]
   (swap! state assoc-in [:editor/last-input-time repo] time))
@@ -1699,3 +1696,13 @@
   (:file-sync/sync-manager @state))
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-parsing-state!
+  []
+  (set-state! [:graph/parsing-state (get-current-repo)] {}))
+
+(defn set-parsing-state!
+  [m]
+  (update-state! [:graph/parsing-state (get-current-repo)]
+                 (if (fn? m) m
+                   (fn [old-value] (merge old-value m)))))
