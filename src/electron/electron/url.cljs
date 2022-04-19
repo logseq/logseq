@@ -34,7 +34,7 @@
    `graph identifier` is the name of the graph to open, e.g. `lambda`"
   [^js win parsed-url force-new-window?]
   (let [graph-identifier (decode (string/replace (.-pathname parsed-url) "/" ""))
-        [page-name block-id] (get-URL-decoded-params parsed-url ["page" "block-id"])
+        [page-name block-id file] (get-URL-decoded-params parsed-url ["page" "block-id" "file"])
         graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
     (if graph-name
       (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
@@ -43,11 +43,12 @@
                   (handler/broadcast-persist-graph! graph-name))]
           ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
-        (when (or page-name block-id)
+        (when (or page-name block-id file)
           (let [redirect-f (fn [win' graph-name']
                          (when (= graph-name graph-name')
                            (send-to-renderer win' "redirectWhenExists" {:page-name page-name
-                                                                        :block-id block-id})))]
+                                                                        :block-id block-id
+                                                                        :file file})))]
             (if open-new-window?
               (state/set-state! :window/once-graph-ready redirect-f)
               (do (win/switch-to-window! window-on-graph)
