@@ -10,6 +10,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            NotificationCenter.default
+                .post(name: Notification.Name("triggerSendIntent"), object: nil )
+        }
         return true
     }
     
@@ -65,8 +69,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
             
             store.processed = false
-            let nc = NotificationCenter.default
-            nc.post(name: Notification.Name("triggerSendIntent"), object: nil )
+            
+            NotificationCenter.default.post(name: Notification.Name("triggerSendIntent"), object: nil )
             
             return success
         }
