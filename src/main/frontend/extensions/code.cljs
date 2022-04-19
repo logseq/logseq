@@ -230,7 +230,7 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
-                           :readOnly (if ui-config/publishing? "nocursor" false)
+                           :readOnly (if ui-config/publishing? true false)
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
