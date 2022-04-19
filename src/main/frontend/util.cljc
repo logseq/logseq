@@ -368,6 +368,11 @@
   (when input
     (.-selectionEnd input)))
 
+(defn get-selection-direction
+  [input]
+  (when input
+    (.-selectionDirection input)))
+
 (defn get-first-or-last-line-pos
   [input]
   (let [pos (get-selection-start input)
