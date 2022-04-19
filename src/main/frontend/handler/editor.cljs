@@ -1223,22 +1223,22 @@
   (cond
       ;; when editing, quit editing and select current block
     (state/editing?)
-(state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
+    (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
       ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-(let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
-      element (f (first (state/get-selection-blocks)))]
-  (when element
-    (state/conj-selection-block! element direction)))
+    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
+          element (f (first (state/get-selection-blocks)))]
+      (when element
+        (state/conj-selection-block! element direction)))
 
       ;; if same direction, keep conj on same direction
     (and (state/selection?) (= direction (state/get-selection-direction)))
-(let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
-      first-last (if (= :up direction) first last)
-      element (f (first-last (state/get-selection-blocks)))]
-  (when element
-    (state/conj-selection-block! element direction)))
+    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
+          first-last (if (= :up direction) first last)
+          element (f (first-last (state/get-selection-blocks)))]
+      (when element
+        (state/conj-selection-block! element direction)))
 
       ;; if different direction, keep clear until one left
     (state/selection?)
