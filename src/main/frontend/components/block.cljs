@@ -2566,9 +2566,11 @@
        (when-not (and built-in? (empty? result))
          (ui/foldable
           [:div.custom-query-title
-           [:span.title-text (inline-text config
-                                          (or (:block/format config) :markdown)
-                                          title)]
+           [:span.title-text (if (vector? title)
+                               title
+                               (inline-text config
+                                            (get-in config [:block :block/format] :markdown)
+                                            (str title)))]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
           (fn []
