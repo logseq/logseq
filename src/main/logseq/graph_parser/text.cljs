@@ -352,7 +352,7 @@
      (cond
        (contains? (set/union
                    #{"title" "filters"}
-                   ;; TODO: Pass in config
+                   ;; TODO: Pass in ignored-page-references-keywords config
                    #_(get (state/get-config) :ignored-page-references-keywords)) k)
        v
 

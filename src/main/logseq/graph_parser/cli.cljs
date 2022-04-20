@@ -13,6 +13,7 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.default :as default-db]
             [logseq.graph-parser.config :as config]
+            [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.mldoc :as mldoc]
             [logseq.graph-parser.util :as util]
             [logseq.graph-parser.property :as property]
@@ -86,21 +87,6 @@
         (println error-message-or-handler))
       {})))
 
-;; from: frontend.format
-;; ====
-(defn normalize
-  [format]
-  (case (keyword format)
-    :md :markdown
-    :asciidoc :adoc
-    ;; default
-    (keyword format)))
-
-(defn get-format
-  [file]
-  (when file
-    (normalize (keyword (string/lower-case (last (string/split file #"\.")))))))
-
 ;; from: frontend.handler.repo
 ;; =====
 (defn- load-pages-metadata!
@@ -132,180 +118,6 @@
       (prn e)
       #_(log/error :exception e))))
 
-;; from: frontend.handler.extract
-;; ====
-(defn with-block-uuid
-  [pages]
-  (->> (util/distinct-by :block/name pages)
-       (map (fn [page]
-              (if (:block/uuid page)
-                page
-                (assoc page :block/uuid (d/squuid)))))))
-
-(defn with-ref-pages
-  [pages blocks]
-  (let [ref-pages (->> (mapcat :block/refs blocks)
-                       (filter :block/name))]
-    (->> (concat pages ref-pages)
-         (group-by :block/name)
-         vals
-         (map (partial apply merge))
-         (with-block-uuid))))
-
-(defn get-page-name
-  [file ast]
-  ;; headline
-  (let [ast (map first ast)]
-    (if (string/includes? file "pages/contents.")
-      "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
-            property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-            first-block-name (let [title (last (first (:title first-block)))]
-                               (and first-block
-                                    (string? title)
-                                    title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (util/split-last "." file-name))]
-                          (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
-                            (string/replace result "." "/")
-                            result)))]
-        (or property-name
-            ;; TODO: Enable arg for :page-name-order config
-            (if false #_(= (state/page-name-order) "heading")
-              (or first-block-name file-name)
-              (or file-name first-block-name)))))))
-
-(defn- extract-pages-and-blocks
-  #_:clj-kondo/ignore
-  [repo-url format ast properties file content]
-  (try
-    (let [page (get-page-name file ast)
-          [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
-          blocks (->> (block/extract-blocks ast content false format)
-                      (block/with-parent-and-left {:block/name page-name}))
-          ref-pages (atom #{})
-          ref-tags (atom #{})
-          blocks (map (fn [block]
-                        (let [block-ref-pages (seq (:block/refs block))
-                              page-lookup-ref [:block/name page-name]
-                              block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
-                                                        (remove nil?))]
-                          (when block-ref-pages
-                            (swap! ref-pages set/union (set block-ref-pages)))
-                          (-> block
-                              (dissoc :ref-pages)
-                              (assoc :block/format format
-                                     :block/page [:block/name page-name]
-                                     :block/refs block-ref-pages
-                                     :block/path-refs block-path-ref-pages))))
-                   blocks)
-          page-entity (let [alias (:alias properties)
-                            alias (if (string? alias) [alias] alias)
-                            aliases (and alias
-                                         (seq (remove #(or (= page-name (util/page-name-sanity-lc %))
-                                                           (string/blank? %)) ;; disable blank alias
-                                                      alias)))
-                            aliases (->>
-                                     (map
-                                       (fn [alias]
-                                         (let [page-name (util/page-name-sanity-lc alias)
-                                               aliases (distinct
-                                                        (conj
-                                                         (remove #{alias} aliases)
-                                                         page))
-                                               aliases (when (seq aliases)
-                                                         (map
-                                                           (fn [alias]
-                                                             {:block/name (util/page-name-sanity-lc alias)})
-                                                           aliases))]
-                                           (if (seq aliases)
-                                             {:block/name page-name
-                                              :block/alias aliases}
-                                             {:block/name page-name})))
-                                       aliases)
-                                     (remove nil?))]
-                        (cond->
-                         (util/remove-nils
-                            (assoc
-                             (block/page-name->map page false)
-                             :block/file {:file/path (util/path-normalize file)}))
-                         (seq properties)
-                         (assoc :block/properties properties)
-
-                         (seq aliases)
-                         (assoc :block/alias aliases)
-
-                         (:tags properties)
-                         (assoc :block/tags (let [tags (:tags properties)
-                                                  tags (if (string? tags) [tags] tags)
-                                                  tags (remove string/blank? tags)]
-                                              (swap! ref-tags set/union (set tags))
-                                              (map (fn [tag]
-                                                     {:block/name (util/page-name-sanity-lc tag)
-                                                      :block/original-name tag})
-                                                   tags)))))
-          namespace-pages (let [page (:block/original-name page-entity)]
-                            (when (text/namespace-page? page)
-                              (->> (util/split-namespace-pages page)
-                                   (map (fn [page]
-                                          (-> (block/page-name->map page true)
-                                              (assoc :block/format format)))))))
-          pages (->> (concat
-                      [page-entity]
-                      @ref-pages
-                      (map
-                       (fn [page]
-                         {:block/original-name page
-                          :block/name (util/page-name-sanity-lc page)})
-                        @ref-tags)
-                      namespace-pages)
-                     ;; remove block references
-                     (remove vector?)
-                     (remove nil?))
-          pages (util/distinct-by :block/name pages)
-          pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
-          blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta :block/anchor))))]
-      [pages blocks])
-    (catch js/Error e
-      (prn e)
-      #_(log/error :exception e))))
-
-(defn extract-blocks-pages
-  [repo-url file content]
-  (if (string/blank? content)
-    []
-    (let [format (get-format file)
-          _ (println "Parsing start: " file)
-          ast (mldoc/->edn content
-                           (mldoc/default-config format
-                                                         ;; {:parse_outline_only? true}
-                                                         )
-                           text/parse-property)]
-      (println "Parsing finished : " file)
-      (let [first-block (ffirst ast)
-            properties (let [properties (and (property/properties-ast? first-block)
-                                             (->> (last first-block)
-                                                  (map (fn [[x y]]
-                                                         [x (if (string? y)
-                                                              (text/parse-property format x y)
-                                                              y)]))
-                                                  (into {})
-                                                  (walk/keywordize-keys)))]
-                         (when (and properties (seq properties))
-                           (if (:filters properties)
-                             (update properties :filters
-                                     (fn [v]
-                                       (string/replace (or v "") "\\" "")))
-                             properties)))]
-        (extract-pages-and-blocks
-         repo-url
-         format ast properties
-         file content)))))
-
 ;; from: frontend.handler.file
 (defn reset-file!
   [conn repo-url file content _new-graph?]
@@ -326,10 +138,10 @@
         file (util/path-normalize file)
         new? (nil? (d/entity @conn [:file/path file]))]
     (d/transact! conn [{:file/path file :file/content content}])
-    (let [format (get-format file)
+    (let [format (extract/get-format file)
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
-               (let [[pages blocks] (extract-blocks-pages repo-url file content)
+               (let [[pages blocks] (extract/extract-blocks-pages repo-url file content)
                      _first-page (first pages)
                      ;; Don't do deletion now
                      delete-blocks []
@@ -354,12 +166,12 @@
                                          (seq))
                      ;; To prevent "unique constraint" on datascript
                      block-ids (set/union (set block-ids) (set block-refs-ids))
-                     pages (with-ref-pages pages blocks)
+                     pages (extract/with-ref-pages pages blocks)
                      pages-index (map #(select-keys % [:block/name]) pages)]
                  ;; does order matter?
                  (concat file-content pages-index delete-blocks pages block-ids blocks))
                file-content)
-          tx (concat tx [(let [t (time-util/time-ms)] ;; TODO: use file system timestamp?
+          tx (concat tx [(let [t (time-util/time-ms)] ;; TODO use file system timestamp?
                            (cond->
                             {:file/path file}
                             new?
@@ -373,7 +185,7 @@
   [conn repo-url files file-paths]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (get-format (:file/path file))]
+                         (let [format (extract/get-format (:file/path file))]
                            (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
                        files)
         _support-files (sort-by :file/path support-files)]

@@ -157,7 +157,7 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
-;; TODO: we should move this to mldoc
+;; TODO we should move this to mldoc
 (defn extract-properties
   [format properties]
   (when (seq properties)
