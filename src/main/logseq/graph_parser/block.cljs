@@ -3,11 +3,11 @@
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
             ; [cljs.core.match :as match]
-            ; [frontend.config :as config]
             ; [frontend.format :as format]
             ; [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [frontend.utf8 :as utf8]
+            [logseq.graph-parser.config :as config]
             [logseq.graph-parser.date-util :as date-util]
             [logseq.graph-parser.util :as util]
             [logseq.graph-parser.property :as property]
@@ -58,8 +58,7 @@
                   (and
                    (= typ "Page_ref")
                    (and (string? value)
-                          ;; TODO: Support config
-                          #_(not (or (config/local-asset? value)
+                          (not (or (config/local-asset? value)
                                    (config/draw? value))))
                    value)
 
@@ -75,10 +74,10 @@
                      (when (and (not (string/starts-with? value "http:"))
                                 (not (string/starts-with? value "https:"))
                                 (not (string/starts-with? value "file:"))
-                                ;; TODO: Enable config
-                                #_(not (config/local-asset? value))
-                                #_(or (= ext :excalidraw)
-                                    (not (contains? (config/supported-formats) ext))))
+                                (not (config/local-asset? value))
+                                (or (= ext :excalidraw)
+                                    ;; TODO: config/supported-formats
+                                    #_(not (contains? (config/supported-formats) ext))))
                        value)))
 
                   (and

@@ -12,6 +12,7 @@
             ["child_process" :as child-process]
             [frontend.db-schema :as db-schema]
             [frontend.db.default :as default-db]
+            [logseq.graph-parser.config :as config]
             [logseq.graph-parser.mldoc :as mldoc]
             [logseq.graph-parser.util :as util]
             [logseq.graph-parser.property :as property]
@@ -100,74 +101,13 @@
   (when file
     (normalize (keyword (string/lower-case (last (string/split file #"\.")))))))
 
-;; from: frontend.config
-;; ====
-(defonce local-db-prefix "logseq_local_")
-
-(defn get-local-dir
-  [s]
-  (string/replace s local-db-prefix ""))
-
-(defn get-repo-dir
-  [repo-url]
-  (cond
-    true
-    #_(and (util/electron?) (local-db? repo-url))
-    (get-local-dir repo-url)
-
-    #_(and (mobile-util/is-native-platform?) (local-db? repo-url))
-    #_(let [dir (get-local-dir repo-url)]
-      (if (string/starts-with? dir "file:")
-        dir
-        (str "file:///" (string/replace dir #"^/+" ""))))
-
-    :else
-    (str "/"
-         (->> (take-last 2 (string/split repo-url #"/"))
-              (string/join "_")))))
-
-(defn get-file-path
-  "Normalization happens here"
-  [repo-url relative-path]
-  (when (and repo-url relative-path)
-    (let [path (cond
-                 true
-                 #_(and (util/electron?) (local-db? repo-url))
-                 (let [dir (get-repo-dir repo-url)]
-                   (if (string/starts-with? relative-path dir)
-                     relative-path
-                     (str dir "/"
-                          (string/replace relative-path #"^/" ""))))
-
-                 (= "/" (first relative-path))
-                 (subs relative-path 1)
-
-                 :else
-                 relative-path)]
-      (util/path-normalize path))))
-
-(def app-name "logseq")
-(def pages-metadata-file "pages-metadata.edn")
-
-(defn get-pages-metadata-path
-  [repo]
-  (when repo
-    (get-file-path repo (str app-name "/" pages-metadata-file))))
-
-(defonce mldoc-support-formats
-  #{:org :markdown :md})
-
-(defn mldoc-support?
-  [format]
-  (contains? mldoc-support-formats (keyword format)))
-
 ;; from: frontend.handler.repo
 ;; =====
 (defn- load-pages-metadata!
   "force?: if set true, skip the metadata timestamp range check"
   [conn repo _file-paths files _force?]
   (try
-    (let [file (get-pages-metadata-path repo)]
+    (let [file (config/get-pages-metadata-path repo)]
       (when-let [content (some #(when (= (:file/path %) file) (:file/content %)) files)]
         (let [metadata (safe-read-string content "Parsing pages metadata file failed: ")
               ;; pages (get-all-pages repo)
@@ -228,7 +168,7 @@
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (let [result (first (util/split-last "." file-name))]
-                          (if (mldoc-support? (string/lower-case (util/get-file-ext file)))
+                          (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
                             (string/replace result "." "/")
                             result)))]
         (or property-name
@@ -302,8 +242,9 @@
                                                   tags (if (string? tags) [tags] tags)
                                                   tags (remove string/blank? tags)]
                                               (swap! ref-tags set/union (set tags))
-                                              (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
-                                                              :block/original-name tag})
+                                              (map (fn [tag]
+                                                     {:block/name (util/page-name-sanity-lc tag)
+                                                      :block/original-name tag})
                                                    tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
@@ -315,9 +256,9 @@
                       [page-entity]
                       @ref-pages
                       (map
-                        (fn [page]
-                          {:block/original-name page
-                           :block/name (util/page-name-sanity-lc page)})
+                       (fn [page]
+                         {:block/original-name page
+                          :block/name (util/page-name-sanity-lc page)})
                         @ref-tags)
                       namespace-pages)
                      ;; remove block references
@@ -372,7 +313,7 @@
                 false #_(and electron-local-repo? (or
                                                  util/win32?
                                                  (not= "/" (first file))))
-               (str (get-repo-dir repo-url) "/" file)
+               (str (config/get-repo-dir repo-url) "/" file)
 
                ; (and (mobile/native-android?) (not= "/" (first file)))
                ; file
@@ -387,7 +328,7 @@
     (d/transact! conn [{:file/path file :file/content content}])
     (let [format (get-format file)
           file-content [{:file/path file}]
-          tx (if (contains? mldoc-support-formats format)
+          tx (if (contains? config/mldoc-support-formats format)
                (let [[pages blocks] (extract-blocks-pages repo-url file content)
                      _first-page (first pages)
                      ;; Don't do deletion now
@@ -433,7 +374,7 @@
   (let [support-files (filter
                        (fn [file]
                          (let [format (get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} mldoc-support-formats) format)))
+                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
                        files)
         _support-files (sort-by :file/path support-files)]
     (doseq [{:file/keys [path content]} support-files]

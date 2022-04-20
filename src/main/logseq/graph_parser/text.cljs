@@ -188,15 +188,15 @@
      :else
      s)))
 
-(defn extract-level-spaces
-  [text _format]
-  (if-not (string/blank? text)
-    (let [pattern (gstring/format
-                   "^[%s]+\\s?"
-                   ;; TODO: Pass in config
-                   "-"  #_(config/get-block-pattern format))]
-      (util/safe-re-find (re-pattern pattern) text))
-    ""))
+;; NOTE: Can remove unused fn
+; (defn extract-level-spaces
+;   [text _format]
+;   (if-not (string/blank? text)
+;     (let [pattern (gstring/format
+;                    "^[%s]+\\s?"
+;                    "-"  #_(config/get-block-pattern format))]
+;       (util/safe-re-find (re-pattern pattern) text))
+;     ""))
 
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
@@ -223,6 +223,7 @@
             (string/starts-with? text "---"))
        text
 
+       ;; TODO: Pass in block-pattern from config and state
        :else
        (remove-level-space-aux! text "-" #_(config/get-block-pattern format) space? trim-left?)))))
 

@@ -9,7 +9,7 @@
             ; [lambdaisland.glogi :as log]
             ["mldoc$default" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
-            #_[frontend.config :as config]))
+            [logseq.graph-parser.config :as config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -271,8 +271,7 @@
             (not (contains? #{"Page_ref" "Block_ref"} ref-type))
 
             (and (contains? #{"Page_ref"} ref-type)
-                 ;; TODO: Pull in config
-                 #_(or
+                 (or
                     ;; 2. excalidraw link
                     (config/draw? ref-value)
 
