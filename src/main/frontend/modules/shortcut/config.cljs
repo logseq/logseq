@@ -344,11 +344,11 @@
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app {:binding "mod+d"
+   :editor/open-file-in-default-app {:binding "mod+d mod+a"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   {:binding "mod+shift+d"
+   :editor/open-file-in-directory   {:binding "mod+d"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-directory}
 
