@@ -128,15 +128,19 @@
 
 (defn org-admonition&src-at-point [& [input]]
   (when-let [admonition&src (thing-at-point ["#+BEGIN_" "#+END_"] input)]
-    (let [params (string/split
-                  (first (string/split-lines (:full-content admonition&src)))
-                  #"\s")]
+    (let [src-lines (string/split-lines (:full-content admonition&src))
+          params (string/split (first src-lines) #"\s")
+          blank-raw-content? (and (= (count src-lines) 3)
+                                  (-> (second src-lines)
+                                      string/trim
+                                      string/blank?))]
       (cond (coll? params)
             (assoc admonition&src
                    :type "source-block"
                    :language (ffirst params)
                    :headers (when (> (count params) 2)
                               (last (params)))
+                   :action (if blank-raw-content? :into-code-editor :none)
                    :end (+ (:end admonition&src) (count "src")))
             :else
             (when-let [name (-> params

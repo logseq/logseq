@@ -2303,12 +2303,11 @@
                           (+ (string/index-of content right-bound pos)
                              (count right-bound))))
               "admonition-block" (keydown-new-line)
-              "source-block" (do
-                               (keydown-new-line)
-                               (case (:action thing-at-point)
-                                 :into-code-editor
-                                 (state/into-code-editor-mode!)
-                                 nil))
+              "source-block" (case (:action thing-at-point)
+                               :into-code-editor
+                               (do (state/into-code-editor-mode!)
+                                   (commands/handle-step [:codemirror/focus]))
+                               (keydown-new-line))
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (let [page (:link thing-at-point)
