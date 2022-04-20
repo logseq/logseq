@@ -131,6 +131,7 @@
      ;; whether database is persisted
      :db/persisted?                         {}
      :cursor-range                          nil
+     :editing-input?                        false
 
      :selection/mode                        false
      ;; Warning: blocks order is determined when setting this attribute

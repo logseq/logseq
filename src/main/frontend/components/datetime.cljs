@@ -24,6 +24,11 @@
       [:div.flex.flex-row {:style {:height 32}}
        [:input#time.form-input.w-20.ms:w-60
         {:default-value default-value
+         :on-focus (fn [_event]
+                     (state/set-state! :editing-input? true))
+         :on-blur (fn [_event]
+                    (state/set-state! :editing-input? false))
+
          :on-change (fn [event]
                       (util/stop event)
                       (let [value (util/evalue event)]
@@ -47,6 +52,10 @@
       [:div.w.full.flex.flex-row.justify-left {:style {:height 32}}
        [:input#repeater-num.form-input.mt-1.w-8.px-1.sm:w-20.sm:px-2.text-center
         {:default-value num
+         :on-focus (fn [_event]
+                     (state/set-state! :editing-input? true))
+         :on-blur (fn [_event]
+                    (state/set-state! :editing-input? false))
          :on-change (fn [event]
                       (let [value (util/evalue event)]
                         (swap! *timestamp assoc-in [:repeater :num] value)))}]

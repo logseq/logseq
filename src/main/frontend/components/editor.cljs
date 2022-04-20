@@ -616,9 +616,11 @@
 
      (when (and (or (mobile-util/is-native-platform?)
                     config/mobile?)
-                (not (:review-cards? config)))
+                (not (or (:review-cards? config)
+                         (state/sub :editor/show-date-picker?)
+                         (state/sub :editor/show-input))))
        (mobile-bar state id))
-     
+
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)

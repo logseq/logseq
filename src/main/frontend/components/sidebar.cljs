@@ -505,7 +505,8 @@
 
         (when (and (mobile-util/is-native-platform?)
                    current-repo
-                   (not (state/sub :modal/show?)))
+                   (not (or (state/sub :modal/show?)
+                            (state/sub :editor/show-input))))
           (footer/footer))]
        
        (right-sidebar/sidebar)
