@@ -414,7 +414,10 @@
         :select/default-prompt "Select one"
         :select.graph/prompt "Select a graph"
         :select.graph/empty-placeholder-description "No matched graphs. Do you want to add another one?"
-        :select.graph/add-graph "Yes, add another graph"}
+        :select.graph/add-graph "Yes, add another graph"
+
+        :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
+        }
 
    :de {:help/about "Über Logseq"
         :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
@@ -732,7 +735,9 @@
         :updater/new-version-install "Eine neue Version wurde heruntergeladen."
         :updater/quit-and-install "Neu starten, um zu installieren"
         :user/delete-account "Konto löschen"
-        :user/delete-your-account "Ihr Konto löschen"}
+        :user/delete-your-account "Ihr Konto löschen"
+
+        :file-sync/other-user-graph "Aktuelle lokale Grafik ist an das Remote-Graph des anderen Benutzers gebunden. Kann also nicht mit der Synchronisierung beginnen."}
 
    :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
@@ -904,7 +909,9 @@
         :language "Langage"
         :white "Clair"
         :dark "Foncé"
-        :remove-background "Retirer le fond"}
+        :remove-background "Retirer le fond"
+
+        :file-sync/other-user-graph "Le graphique local actuel est lié à l'autre graphique à distance de l'utilisateur. Alors ne peut pas commencer à la synchroniser."}
 
    :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
            :on-boarding/sharing "分享"
@@ -1298,7 +1305,9 @@
 
            :tips/all-done "处理完成"
 
-           :command-palette/prompt "输入指令"}
+           :command-palette/prompt "输入指令"
+
+           :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"}
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
              :on-boarding/sharing "分享"
@@ -1549,7 +1558,9 @@
 
              :pdf/copy-ref "復製引用"
              :pdf/copy-text "復製文本"
-             :pdf/linked-ref "轉到註解"}
+             :pdf/linked-ref "轉到註解"
+
+             :file-sync/other-user-graph "當前本地 graph 綁定到其他用戶的遠程 graph 上。因此無法啟動同步。"}
 
    :af {:on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "meedeling"
@@ -1778,7 +1789,9 @@
         :download "Laai af"
         :language "Taal"
         :white "Wit"
-        :dark "Swart"}
+        :dark "Swart"
+
+        :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."}
 
    :es {:on-boarding/title "¡Hola, bienvenido a Logseq!"
         :on-boarding/sharing "compartir"
@@ -2067,7 +2080,8 @@
         :select/default-prompt "Seleccione uno"
         :select.graph/prompt "Seleccione un grafo"
         :select.graph/empty-placeholder-description "No encontramos un grafo. Queries añadir otro?"
-        :select.graph/add-graph "Si, añadame otro grafo"}
+        :select.graph/add-graph "Si, añadame otro grafo"
+        :file-sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"}
 
    :nb-NO {:on-boarding/title "Hei, og velkommen til Logseq!"
            :on-boarding/sharing "deling"
@@ -2456,7 +2470,9 @@
            :select/default-prompt "Velg en"
            :select.graph/prompt "Velg en graf"
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
-           :select.graph/add-graph "Ja, legg til en ny graf"}
+           :select.graph/add-graph "Ja, legg til en ny graf"
+
+           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjernkontroll. Så kan ikke begynne å synkronisere."}
 
    :pt-BR {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "compartilhar"
@@ -2857,7 +2873,9 @@
            :graph/save-success "Salvo com sucesso"
            :graph/save-error "Falha ao salvar"
            :settings-page/plugin-system "Sistema de Plugins"
-           :settings-page/network-proxy "Proxy de Rede"}
+           :settings-page/network-proxy "Proxy de Rede"
+
+           :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."}
 
    :pt-PT {:on-boarding/title "Olá, bem-vindo ao Logseq!"
            :on-boarding/sharing "partilhar"
@@ -3240,7 +3258,9 @@
         :select/default-prompt "Selecione um"
         :select.graph/prompt "Selecione um grafo"
         :select.graph/empty-placeholder-description "Sem grafos correspondentes. Quer adicionar outro?"
-        :select.graph/add-graph "Sim, adicionar outro grafo"}
+        :select.graph/add-graph "Sim, adicionar outro grafo"
+
+        :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."}
 
    :ru {:on-boarding/title "Привет, добро пожаловать в Logseq!"
         :on-boarding/sharing "распространения"
@@ -3608,7 +3628,9 @@
 
         :tips/all-done "Все сделано"
 
-        :command-palette/prompt "Набери команду"}
+        :command-palette/prompt "Набери команду"
+
+        :file-sync/other-user-graph "Текущий локальный график привязан к удаленному диаграмму другого пользователя. Так что не могу начать синхронизирование"}
 
    :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
                                 :default "tutorial-ja.md")
@@ -4002,7 +4024,9 @@
         :select/default-prompt "選択してください"
         :select.graph/prompt "グラフを選んでください"
         :select.graph/empty-placeholder-description "マッチするグラフがありません。新しいグラフを追加しますか？"
-        :select.graph/add-graph "はい、新規グラフを追加します。"}
+        :select.graph/add-graph "はい、新規グラフを追加します。"
+
+        :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"}
 
    :tongue/fallback :en})
 

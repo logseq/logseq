@@ -14,6 +14,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
+            [frontend.handler.notification :as notification]
+            [frontend.context.i18n :refer [t]]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]))
 
@@ -101,7 +103,7 @@
         :need-sync-remote ::need-sync-remote
         :unknown ::unknown-map))
 
-(def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
+(def ws-addr config/WS-URL)
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
@@ -1221,6 +1223,19 @@
     (println "stopping sync-manager")
     (-stop! sm)))
 
+
+(defn- check-graph-belong-to-current-user
+  [graph-uuid]
+  (go
+    (let [result (->> (<! (list-remote-graphs remoteapi))
+                      :Graphs
+                      (mapv :GraphUUID)
+                      set
+                      (#(contains? % graph-uuid)))]
+      (when-not result
+        (notification/show! (t :file-sync/other-user-graph) :warning false))
+      result)))
+
 (defn sync-start []
   (let [graph-uuid (first @graphs-txid)
         txid (second @graphs-txid)
@@ -1229,30 +1244,33 @@
                          (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
                          txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                          local-changes-chan)]
-    ;; set-env
-    (set-env rsapi config/FILE-SYNC-PROD?)
+    ;; check this graph belong to current logged-in user
+    (go
+      (when (<! (check-graph-belong-to-current-user graph-uuid))
+        ;; set-env
+        (set-env rsapi config/FILE-SYNC-PROD?)
 
-    ;; drain `local-changes-chan`
-    (->> (repeatedly #(poll! local-changes-chan))
-         (take-while identity))
-    (poll! stop-sync-chan)
-    ;; update global state when *sync-state changes
-    (add-watch *sync-state ::update-global-state
-               (fn [_ _ _ n]
-                 (state/set-file-sync-state n)))
-    (.start sm)
+        ;; drain `local-changes-chan`
+        (->> (repeatedly #(poll! local-changes-chan))
+             (take-while identity))
+        (poll! stop-sync-chan)
+        ;; update global state when *sync-state changes
+        (add-watch *sync-state ::update-global-state
+                   (fn [_ _ _ n]
+                     (state/set-file-sync-state n)))
+        (.start sm)
 
-    (state/set-file-sync-manager sm)
+        (state/set-file-sync-manager sm)
 
-    (offer! full-sync-chan true)
+        (offer! full-sync-chan true)
 
-    ;; watch :network/online?
-    (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-               (fn [_k _r _o n]
-                 (when (false? n)
-                   (sync-stop))))
-    ;; watch :auth/id-token
-    (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-               (fn [_k _r _o n]
-                 (when (nil? n)
-                   (sync-stop))))))
+        ;; watch :network/online?
+        (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+                   (fn [_k _r _o n]
+                     (when (false? n)
+                       (sync-stop))))
+        ;; watch :auth/id-token
+        (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+                   (fn [_k _r _o n]
+                     (when (nil? n)
+                       (sync-stop))))))))
