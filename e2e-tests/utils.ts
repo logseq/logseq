@@ -248,6 +248,9 @@ export async function randomEditMoveUpDown( page: Page ) {
       await page.keyboard.press('Meta+Shift+ArrowDown')
     }
   }
+
+  // Leave some time for UI refresh
+  await page.waitForTimeout(10)
 }
 
 async function scrollOnElement(page, selector) {

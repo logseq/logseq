@@ -119,6 +119,7 @@ export interface AppUserConfigs {
   preferredThemeMode: 'dark' | 'light'
   preferredFormat: 'markdown' | 'org'
   preferredDateFormat: string
+  preferredStartOfWeek: string
   preferredLanguage: string
   preferredWorkflow: string
 

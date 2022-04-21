@@ -91,6 +91,7 @@
          :preferred-workflow    (state/get-preferred-workflow)
          :preferred-todo        (state/get-preferred-todo)
          :preferred-date-format (state/get-date-formatter)
+         :preferred-start-of-week (state/get-start-of-week)
          :current-graph         (state/get-current-repo)
          :show-brackets         (state/show-brackets?)
          :me                    (state/get-me)}))))

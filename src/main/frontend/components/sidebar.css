@@ -474,3 +474,7 @@ html[data-theme='dark'] {
 .favorites li.dragging-target {
   border-left: 5px solid green;
 }
+
+.full-height-without-header {
+    height: calc(100vh - var(--ls-headbar-height) - 4rem);
+}
