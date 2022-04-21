@@ -65,18 +65,38 @@
       (util/format "\"%s\"" original-name)
       original-name)))
 
+(defn default-properties-block
+  ([title format page]
+   (default-properties-block title format page {}))
+  ([title format page properties]
+   (let [p (common-handler/get-page-default-properties title)
+         ps (merge p properties)
+         content (page-property/insert-properties format "" ps)
+         refs (block/get-page-refs-from-properties properties)]
+     {:block/uuid (db/new-block-id)
+      :block/properties ps
+      :block/properties-order (keys ps)
+      :block/refs refs
+      :block/left page
+      :block/format format
+      :block/content content
+      :block/parent page
+      :block/page page})))
+
+(defn- create-title-property?
+  [journal? page-name]
+  (and (not journal?)
+       (util/create-title-property? page-name)))
+
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title-property? (and (not journal?)
-                                      (util/create-title-property? (:block/name page)))
+          create-title? (create-title-property? journal? (:block/name page))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
-        (and (seq properties) create-title-property?)
-        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
-
-        create-title-property?
-        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
+        create-title?
+        [page
+         (default-properties-block (build-title page) format page-entity properties)]
 
         (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
@@ -116,7 +136,9 @@
          (db/transact! txs)))
 
      (when create-first-block?
-       (when (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+       (when (or
+              (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+              (create-title-property? journal? page-name))
          (editor-handler/api-insert-new-block! "" {:page page-name})))
 
      (when redirect?
