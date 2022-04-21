@@ -97,7 +97,7 @@ const generateRandomTest = (size: number): RandomTestStep[] => {
 }
 
 test('Random editor operations', async ({ page, block }) => {
-  const steps = generateRandomTest(100)
+  const steps = generateRandomTest(20)
 
   await createRandomPage(page)
   await block.mustType("randomized test!")
