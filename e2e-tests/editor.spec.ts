@@ -168,3 +168,27 @@ test.skip('next block and cursor position', async ({ page, block }) => {
 //     await page.keyboard.press('Control+Shift+v')
 //   }
 // })
+
+test('cut blocks and paste', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  for (let i = 0; i < 5; i++) {
+    await block.mustType(i.toString())
+    await block.enterNext()
+  }
+
+  // shift+up select 3 blocks
+  await page.keyboard.down('Shift')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.up('Shift')
+
+  await block.waitForSelectedBlocks(3)
+
+  await page.keyboard.press('Meta+x')
+
+  await page.keyboard.press('Meta+v')
+
+  await expect(page.locator('.ls-block')).toHaveCount(6, { timeout: 1000 })
+})

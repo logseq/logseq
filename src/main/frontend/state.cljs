@@ -1477,6 +1477,11 @@
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
+(defn set-copied-full-blocks
+  [content blocks]
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/full-blocks blocks}))
+
 (defn set-copied-full-blocks!
   [blocks]
   (set-state! [:copy/blocks :copy/full-blocks] blocks))
