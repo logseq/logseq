@@ -916,7 +916,7 @@
 
 (defn set-editor-last-pos!
   [new-pos]
-  (set-state! :editor/last-saved-cursor new-pos))
+  (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
 
 (defn clear-editor-last-pos!
   []
@@ -924,13 +924,13 @@
 
 (defn get-editor-last-pos
   []
-  (:editor/last-saved-cursor @state))
+  (get-in @state [:editor/last-saved-cursor (:block/uuid (get-edit-block))]))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (set-state! :editor/last-saved-cursor new-pos)))
+    (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
 (defn set-theme!
   [theme]

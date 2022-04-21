@@ -175,15 +175,12 @@
 (defn restore-cursor-pos!
   [id markup]
   (when-let [node (gdom/getElement (str id))]
-    (let [last-edit-block (state/get-last-edit-block)
-          current-edit-block (state/get-edit-block)]
-      (when-let [cursor-range (state/get-cursor-range)]
-        (when-let [range cursor-range]
-          (let [pos (when (= (:db/id last-edit-block) (:db/id current-edit-block))
-                      (state/get-editor-last-pos))
-                pos (or pos (diff/find-position markup range))]
-            (cursor/move-cursor-to node pos)
-            (state/clear-editor-last-pos!)))))))
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
 
 (defn highlight-block!
   [block-uuid]
