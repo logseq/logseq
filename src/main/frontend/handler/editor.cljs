@@ -679,43 +679,6 @@
      :block/parent page
      :block/page page}))
 
-(defn default-properties-block
-  ([title format page]
-   (default-properties-block title format page {}))
-  ([title format page properties]
-   (let [p (common-handler/get-page-default-properties title)
-         ps (merge p properties)
-         content (page-property/insert-properties format "" ps)
-         refs (block/get-page-refs-from-properties properties)]
-     {:block/pre-block? true
-      :block/uuid (db/new-block-id)
-      :block/properties ps
-      :block/properties-order (keys ps)
-      :block/refs refs
-      :block/left page
-      :block/format format
-      :block/content content
-      :block/parent page
-      :block/page page})))
-
-(defn add-default-title-property-if-needed!
-  [page-name]
-  (when (string? page-name)
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (when (db/page-empty? (state/get-current-repo) (:db/id page))
-        (let [title (or (:block/original-name page)
-                        (:block/name page))
-              format (db/get-page-format page)
-              create-title-property? (util/create-title-property? title)]
-          (when create-title-property?
-            (let [default-properties (default-properties-block title format (:db/id page))
-                  new-empty-block (-> (dissoc default-properties :block/pre-block? :block/uuid :block/left :block/properties)
-                                      (assoc :block/uuid (db/new-block-id)
-                                             :block/content ""
-                                             :block/left [:block/uuid (:block/uuid default-properties)]))]
-              (db/transact! [default-properties new-empty-block])
-              true)))))))
-
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]
   (if repeated?
