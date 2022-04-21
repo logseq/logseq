@@ -48,11 +48,28 @@
 
       [:div.mt-1.sm:mt-0.sm:col-span-2
        {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
-       [:div (ui/button
-               (if update-pending? "Checking ..." "Check for updates")
-               :class "text-sm p-1 mr-1"
-               :disabled update-pending?
-               :on-click #(js/window.apis.checkForUpdates false))]
+       [:div (cond
+               (mobile-util/native-android?)
+               (ui/button
+                "Check for updates"
+                :class "text-sm p-1 mr-1"
+                :href "https://github.com/logseq/logseq/releases" )
+
+               (mobile-util/native-ios?)
+               (ui/button
+                "Check for updates"
+                :class "text-sm p-1 mr-1"
+                :href "https://apps.apple.com/app/logseq/id1601013908" )
+
+               (util/electron?)
+               (ui/button
+                (if update-pending? "Checking ..." "Check for updates")
+                :class "text-sm p-1 mr-1"
+                :disabled update-pending?
+                :on-click #(js/window.apis.checkForUpdates false))
+
+               :else
+               nil)]
 
        [:div.text-sm.opacity-50 (str "Version " version)]]]
 
@@ -521,8 +538,7 @@
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
-     (when-not (mobile-util/is-native-platform?)
-       (version-row t version))
+     (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when current-repo (edit-config-edn))

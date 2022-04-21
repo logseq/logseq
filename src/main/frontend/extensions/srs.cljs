@@ -20,6 +20,7 @@
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
+            [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.modules.shortcut.core :as shortcut]
             [medley.core :as medley]))
@@ -265,8 +266,8 @@
                                                (merge
                                                 {:use-cache? use-cache?}
                                                 (cond->
-                                                  (when sort-by
-                                                    {:transform-fn sort-by})
+                                                 (when sort-by
+                                                   {:transform-fn sort-by})
                                                   disable-reactive?
                                                   (assoc :disable-reactive? true))))]
            (when result
@@ -393,15 +394,15 @@
 (def review-finished
   [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
-(defn btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
-  (ui/tippy
-   {:html  [:div.text-sm.font-medium shortcut]
-    :delay 200
-    :theme "monospace"}
-   (ui/button btn-text
-     :id id
-     :background background
-     :on-click on-click)))
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
+  (ui/button [:span btn-text " " (ui/render-keyboard-shortcut shortcut)]
+             :id id
+             :background background
+             :on-click (fn [e]
+                         (when-let [elem (gobj/get e "target")]
+                           (js/console.log (.-classList elem))
+                           (.add (.-classList elem) "opacity-25"))
+                         (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view
   < rum/reactive
@@ -444,55 +445,53 @@
                   :review-cards? true}))
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
-            [:div.flex-1
-             (when-not (and (not preview?) (= next-phase 1))
-               [:div.flex.flex-row.justify-between
-                (btn-with-shortcut {:btn-text (case next-phase
-                                                1 "Hide answers"
-                                                2 "Show answers"
-                                                3 "Show clozes")
-                                    :shortcut "s"
-                                    :id       "card-answers"
-                                    :on-click #(reset! phase next-phase)})])
+            (when-not (and (not preview?) (= next-phase 1))
+              (ui/button [:span (case next-phase
+                                  1 "Hide answers"
+                                  2 "Show answers"
+                                  3 "Show clozes")
+                          (ui/render-keyboard-shortcut [:s])]
+                         :id "card-answers"
+                         :class "mr-2"
+                         :on-click #(reset! phase next-phase)))
 
-             (when (and (> (count cards) 1) preview?)
-               (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
-                 :id "card-next"
-                 :class "mr-2"
-                 :on-click #(skip-card card card-index cards phase review-records cb)))
+            (when (and (> (count cards) 1) preview?)
+              (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
+                         :id "card-next"
+                         :class "mr-2"
+                         :on-click #(skip-card card card-index cards phase review-records cb)))
 
-             (when (and (not preview?) (= 1 next-phase))
-               [:div.flex.flex-row.justify-between
-                (btn-with-shortcut {:btn-text   "Forgotten"
-                                    :shortcut   "f"
-                                    :id         "card-forgotten"
-                                    :background "red"
-                                    :on-click   (fn []
-                                                  (score-and-next-card 1 card card-index cards phase review-records cb)
-                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                    (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+            (when (and (not preview?) (= 1 next-phase))
+              [:<>
+               (btn-with-shortcut {:btn-text   "Forgotten"
+                                   :shortcut   "f"
+                                   :id         "card-forgotten"
+                                   :background "red"
+                                   :on-click   (fn []
+                                                 (score-and-next-card 1 card card-index cards phase review-records cb)
+                                                 (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                                   (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-                (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
-                                    :shortcut "t"
-                                    :id       "card-recall"
-                                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
+               (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+                                   :shortcut "t"
+                                   :id       "card-recall"
+                                   :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
 
-                (btn-with-shortcut {:btn-text   "Remembered"
-                                    :shortcut   "r"
-                                    :id         "card-remembered"
-                                    :background "green"
-                                    :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})])]
+               (btn-with-shortcut {:btn-text   "Remembered"
+                                   :shortcut   "r"
+                                   :id         "card-remembered"
+                                   :background "green"
+                                   :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})])
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
                                 "Reset this card so that you can review it immediately."]
                          :class "tippy-hover"
                          :interactive true}
-                        (ui/button "Reset"
-                          :id "card-reset"
-                          :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                          :small? true
-                          :on-click #(operation-reset! card))))]
+                        (ui/button [:span "Reset"]
+                                   :id "card-reset"
+                                   :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                                   :on-click #(operation-reset! card))))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
@@ -563,53 +562,67 @@
 (rum/defcs ^:large-vars/cleanup-todo cards < rum/reactive db-mixins/query
   (rum/local 0 ::card-index)
   (rum/local false ::random-mode?)
+  (rum/local false ::preview-mode?)
   [state config options]
   (let [*random-mode? (::random-mode? state)
+        *preview-mode? (::preview-mode? state)
         repo (state/get-current-repo)
         query-string (string/join ", " (:arguments options))
         query-result (query repo query-string)
-        card-index (::card-index state)
+        *card-index (::card-index state)
         global? (:global? config)]
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
             review-cards result
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
-            modal? (:modal? config)]
+            ;; FIXME: It seems that model? is always true?
+            modal? (:modal? config)
+            callback-fn (fn [review-records]
+                          (when-not @*preview-mode?
+                            (operation-card-info-summary!
+                             review-records review-cards card-query-block)
+                            (persist-var/persist-save of-matrix)))]
         [:div.flex-1.cards-review {:style (when modal? {:height "100%"})
                                    :class (if global? "" "shadow-xl")}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
-           (ui/icon "infinity" {:style {:font-size 20}})
+           (if @*preview-mode?
+             (ui/icon "book" {:style {:font-size 20}})
+             (ui/icon "infinity" {:style {:font-size 20}}))
            [:div.ml-1.text-sm.font-medium (if (string/blank? query-string) "All" query-string)]]
 
           [:div.flex.flex-row.items-center
 
            ;; FIXME: CSS issue
-           (ui/tippy {:html [:div.text-sm "overdue/total"]
+           (if @*preview-mode?
+             (ui/tippy {:html [:div.text-sm "current/total"]
+                        :interactive true}
+                       [:div.opacity-60.text-sm.mr-3
+                        @*card-index
+                        [:span "/"]
+                        total])
+             (ui/tippy {:html [:div.text-sm "overdue/total"]
                       ;; :class "tippy-hover"
-                      :interactive true}
-                     [:div.opacity-60.text-sm.mr-3
-                      filtered-total
-                      [:span "/"]
-                      total])
+                        :interactive true}
+                       [:div.opacity-60.text-sm.mr-3
+                        filtered-total
+                        [:span "/"]
+                        total]))
 
            (ui/tippy
-            {:html [:div.text-sm "Click to preview all cards"]
+            {:html [:div.text-sm "Toggle preview mode"]
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true
              :disabled false}
             [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
              {:id "preview-all-cards"
-              :on-click (fn [_]
-                          (let [blocks-f (fn [] (query repo query-string))]
-                            (state/set-modal! #(view-modal
-                                                blocks-f
-                                                {:preview? true
-                                                 :random-mode? *random-mode?}
-                                                card-index)
-                                              {:id :srs})))}
+              :style (when @*preview-mode? {:color "orange"})
+              :on-click (fn [e]
+                          (util/stop e)
+                          (swap! *preview-mode? not)
+                          (reset! *card-index 0))}
              "A"])
 
            (ui/tippy
@@ -617,43 +630,43 @@
              :delay [1000, 100]
              :class "tippy-hover"
              :interactive true}
-            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100 {:on-mouse-down (fn [e]
-                                                                               (util/stop e)
-                                                                               (swap! *random-mode? not))}
+            [:a.mt-1.ml-2.block.opacity-60.hover:opacity-100
+             {:on-mouse-down (fn [e]
+                               (util/stop e)
+                               (swap! *random-mode? not))}
              (ui/icon "arrows-shuffle" {:style (cond->
-                                                 {:font-size 18
-                                                  :font-weight 600}
+                                                {:font-size 18
+                                                 :font-weight 600}
                                                  @*random-mode?
                                                  (assoc :color "orange"))})])]]
          (if (seq review-cards)
            [:div.px-1
             (when-not modal?
               {:on-click (fn []
-                           (let [blocks-f (fn []
-                                            (let [query-result (query repo query-string)]
-                                              (:result (query-scheduled repo query-result (tl/local-now)))))]
+                           (let [blocks-f (if @*preview-mode?
+                                            (fn [] (query repo query-string))
+                                            (fn []
+                                              (let [query-result (query repo query-string)]
+                                                (:result (query-scheduled repo query-result (tl/local-now))))))]
                              (state/set-modal! #(view-modal
                                                  blocks-f
                                                  {:modal? true
                                                   :random-mode? *random-mode?
-                                                  :callback
-                                                  (fn [review-records]
-                                                    (operation-card-info-summary!
-                                                     review-records review-cards card-query-block)
-                                                    (persist-var/persist-save of-matrix))}
-                                                 card-index)
+                                                  :preview? @*preview-mode?
+                                                  :callback callback-fn}
+                                                 *card-index)
                                                {:id :srs})))})
-            (let [view-fn (if modal? view-modal view)]
-              (view-fn review-cards
-                       (merge config
-                              {:global? global?
-                               :random-mode? @*random-mode?
-                               :callback
-                               (fn [review-records]
-                                 (operation-card-info-summary!
-                                  review-records review-cards card-query-block)
-                                 (persist-var/persist-save of-matrix))})
-                       card-index))]
+            (let [view-fn (if modal? view-modal view)
+                  blocks-fn (if @*preview-mode?
+                              (fn [] (query repo query-string))
+                              review-cards)]
+              (view-fn blocks-fn
+               (merge config
+                      {:global? global?
+                       :random-mode? @*random-mode?
+                       :preview? @*preview-mode?
+                       :callback callback-fn})
+               *card-index))]
            review-finished)])
       (if global?
         [:div.ls-card.content

@@ -240,7 +240,7 @@ test('auto completion and auto pair', async ({ page, block }) => {
   await block.mustType('type [', { toBe: 'type []'})
   await block.mustType('[', { toBe: 'type [[]]'})
 
-  await page.press('textarea >> nth=0', 'Escape') // escape any popup from `[[]]`
+  await block.escapeEditing() // escape any popup from `[[]]`
 
   // ``
   await block.clickNext()

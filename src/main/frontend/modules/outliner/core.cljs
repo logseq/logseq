@@ -448,7 +448,8 @@
         sibling? (if (page-block? target-block') false sibling?)
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
         keep-uuid? (if move? true keep-uuid?)
-        replace-empty-target? (if (some? replace-empty-target?)
+        replace-empty-target? (if (and (some? replace-empty-target?)
+                                       (string/blank? (:block/content target-block')))
                                 replace-empty-target?
                                 (and sibling?
                                      (string/blank? (:block/content target-block'))

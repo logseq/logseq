@@ -51,3 +51,9 @@
     }
   }
 }
+
+html.is-ios {
+    .cp__palette-main {
+        margin-bottom: 0px;
+    } 
+}
