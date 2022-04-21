@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [clojure.set :as set]
             [clojure.edn :as edn]
-            [clojure.walk :as walk]
             [clojure.data :as data]
             [clojure.pprint :as pprint]
             [datascript.core :as d]
@@ -14,10 +13,7 @@
             [frontend.db.default :as default-db]
             [logseq.graph-parser.config :as config]
             [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.mldoc :as mldoc]
             [logseq.graph-parser.util :as util]
-            [logseq.graph-parser.property :as property]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.block :as block]
             [logseq.graph-parser.time-util :as time-util]
             ;; Disable for now since kondo can't pick it up
