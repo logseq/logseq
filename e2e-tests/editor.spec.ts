@@ -1,44 +1,8 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock } from './utils'
+import { createRandomPage, enterNextBlock, systemModifier } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
-
-test(
-  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
-  "but dont trigger RIME #3440 ",
-  // cases should trigger [[]] #3251
-  async ({ page, block }) => {
-    for (let [idx, events] of [
-      kb_events.win10_pinyin_left_full_square_bracket,
-      kb_events.macos_pinyin_left_full_square_bracket
-      // TODO: support #3741
-      // kb_events.win10_legacy_pinyin_left_full_square_bracket,
-    ].entries()) {
-      await createRandomPage(page)
-      let check_text = "#3251 test " + idx
-      await block.mustFill(check_text + "【")
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
-      await block.mustFill(check_text + "【【")
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
-    };
-
-    // dont trigger RIME #3440
-    for (let [idx, events] of [
-      kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
-      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
-    ].entries()) {
-      await createRandomPage(page)
-      let check_text = "#3440 test " + idx
-      await block.mustFill(check_text)
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
-    }
-  })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
@@ -89,6 +53,22 @@ test('disappeared children #4814', async ({ page, block }) => {
   await expect(page.locator('.editor-inner')).toHaveCount(0, { timeout: 500 })
 })
 
+test('create new page from bracketing text #4971', async ({ page, block }) => {
+  let title = 'Page not Exists yet'
+  await createRandomPage(page)
+
+  await block.mustType(`[[${title}]]`)
+
+  await page.keyboard.press(systemModifier('Control+o'))
+
+  // Check page title equals to `title`
+  await page.waitForTimeout(100)
+  expect(await page.locator('h1.title').innerText()).toContain(title)
+
+  // Check there're linked references
+  await page.waitForSelector(`.references .ls-block >> nth=1`, { state: 'detached', timeout: 100 })
+})
+
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -126,6 +106,41 @@ test.skip('next block and cursor position', async ({ page, block }) => {
   await expect(locator).toHaveText('`12345`', { timeout: 1000 })
 })
 
+test(
+  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
+  "but dont trigger RIME #3440 ",
+  // cases should trigger [[]] #3251
+  async ({ page, block }) => {
+    for (let [idx, events] of [
+      kb_events.win10_pinyin_left_full_square_bracket,
+      kb_events.macos_pinyin_left_full_square_bracket
+      // TODO: support #3741
+      // kb_events.win10_legacy_pinyin_left_full_square_bracket,
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3251 test " + idx
+      await block.mustFill(check_text + "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
+      await block.mustFill(check_text + "【【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
+    };
+
+    // dont trigger RIME #3440
+    for (let [idx, events] of [
+      kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
+      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3440 test " + idx
+      await block.mustFill(check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+    }
+  })
 
 // FIXME: ClipboardItem is not defined when running with this test
 // test('copy & paste block ref and replace its content', async ({ page }) => {
