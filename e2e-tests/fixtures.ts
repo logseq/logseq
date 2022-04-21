@@ -181,6 +181,9 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
         return page.locator('textarea >> nth=0')
       },
       clickNext: async (): Promise<Locator> => {
+        await page.$eval('.add-button-link-wrap', (element) => {
+          element.scrollIntoView();
+        });
         let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
         // the next element after all blocks.
         await page.click('.add-button-link-wrap')
@@ -201,8 +204,8 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
       },
       waitForBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
-        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { timeout: 1000 })
-        await page.waitForSelector(`.ls-block >> nth=${total}`, { state: 'detached', timeout: 1000 })
+        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { state: 'attached', timeout: 50000 })
+        await page.waitForSelector(`.ls-block >> nth=${total}`, { state: 'detached', timeout: 50000 })
       },
       waitForSelectedBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
