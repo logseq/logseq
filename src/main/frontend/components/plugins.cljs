@@ -13,7 +13,6 @@
             [frontend.components.plugins-settings :as plugins-settings]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.page :as page-handler]
             [clojure.string :as string]))
 
 (rum/defcs installed-themes
@@ -234,8 +233,7 @@
 
     (ui/toggle (not disabled?)
                (fn []
-                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
-                 (page-handler/init-commands!))
+                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id))
                true)]])
 
 (rum/defc plugin-item-card < rum/static
@@ -316,10 +314,12 @@
    [:input.form-input.is-small
     {:placeholder "Search plugins"
      :ref         *search-ref
+     :auto-focus  true
      :on-key-down (fn [^js e]
                     (when (= 27 (.-keyCode e))
-                      (when-not (string/blank? search-key)
-                        (util/stop e)
+                      (util/stop e)
+                      (if (string/blank? search-key)
+                        (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
                         (reset! *search-key nil))))
      :on-change   #(let [^js target (.-target %)]
                      (reset! *search-key (util/trim-safe (.-value target))))
@@ -726,10 +726,7 @@
       [:span])))
 
 (rum/defcs hook-ui-items < rum/reactive
-                           "type
-                                                        - :toolbar
-                                                        - :pagebar
-                                                     "
+ "type: :toolbar, :pagebar"
   [_state type]
   (when (state/sub [:plugin/installed-ui-items])
     (let [items (state/get-plugins-ui-items-with-type type)]
@@ -739,17 +736,21 @@
          (for [[_ {:keys [key] :as opts} pid] items]
            (rum/with-key (ui-item-renderer pid type opts) key))]))))
 
+(rum/defcs hook-ui-fenced-code < rum/reactive
+  [_state content {:keys [render edit] :as _opts}]
+
+  [:div
+   {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+    :class         (util/classnames [{:not-edit (false? edit)}])}
+   (when (fn? render)
+     (js/React.createElement render #js {:content content}))])
+
 (rum/defc plugins-page
   []
 
   (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
-
-    (rum/use-effect!
-      #(let [^js el (rum/deref *el-ref)]
-         (js/setTimeout (fn [] (.focus el)) 100))
-      [])
 
     [:div.cp__plugins-page
      {:ref       *el-ref
@@ -775,10 +776,13 @@
 
 (rum/defcs focused-settings-content
   < rum/reactive
+    (rum/local (state/sub :plugin/focused-settings) ::cache)
   [_state title]
-  (let [focused (state/sub :plugin/focused-settings)
+  (let [*cache (::cache _state)
+        focused (state/sub :plugin/focused-settings)
         nav? (state/sub :plugin/navs-settings?)
-        _ (state/sub :plugin/installed-plugins)]
+        _ (state/sub :plugin/installed-plugins)
+        _ (js/setTimeout #(reset! *cache focused) 100)]
 
     [:div.cp__plugins-settings.cp__settings-main
      [:header
@@ -802,7 +806,8 @@
 
       [:article
        [:div.panel-wrap
-        (when-let [^js pl (and focused (plugin-handler/get-plugin-inst focused))]
+        (when-let [^js pl (and focused (= @*cache focused)
+                               (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
             [:p.warning.text-lg.mt-5 "Settings schema Error!"]
             (plugins-settings/settings-container

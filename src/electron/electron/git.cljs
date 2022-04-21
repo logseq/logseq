@@ -33,6 +33,13 @@
               (log-error error))
             (p/rejected error)))))))
 
+(defn run-git2!
+  [commands]
+  (when-let [path (state/get-graph-path)]
+    (when (fs/existsSync path)
+      (p/let [^js result (.exec GitProcess commands path)]
+        result))))
+
 (defn git-dir-exists?
   []
   (try

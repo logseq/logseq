@@ -28,6 +28,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.loader :as loader]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
@@ -56,6 +57,20 @@
       (catch js/Error e
         (js/console.error "[parse hiccup error]" e) input))))
 
+(defn ^:export install-plugin-hook
+  [pid hook]
+  (state/install-plugin-hook pid hook))
+
+(defn ^:export uninstall-plugin-hook
+  [pid hook-or-all]
+  (state/uninstall-plugin-hook pid hook-or-all))
+
+(defn ^:export should-exec-plugin-hook
+  [pid hook]
+  (let [hooks (:plugin/installed-hooks @state/state)]
+    (or (nil? (seq hooks))
+        (contains? (get hooks hook) (keyword pid)))))
+
 ;; base
 (defn ^:export get_state_from_store
   [^js path]
@@ -69,16 +84,17 @@
 (def ^:export get_user_configs
   (fn []
     (bean/->js
-     (normalize-keyword-for-json
-      {:preferred-language      (:preferred-language @state/state)
-       :preferred-theme-mode    (:ui/theme @state/state)
-       :preferred-format        (state/get-preferred-format)
-       :preferred-workflow      (state/get-preferred-workflow)
-       :preferred-todo          (state/get-preferred-todo)
-       :preferred-date-format   (state/get-date-formatter)
-       :preferred-start-of-week (state/get-start-of-week)
-       :current-graph           (state/get-current-repo)
-       :me                      (state/get-me)}))))
+      (normalize-keyword-for-json
+        {:preferred-language    (:preferred-language @state/state)
+         :preferred-theme-mode  (:ui/theme @state/state)
+         :preferred-format      (state/get-preferred-format)
+         :preferred-workflow    (state/get-preferred-workflow)
+         :preferred-todo        (state/get-preferred-todo)
+         :preferred-date-format (state/get-date-formatter)
+         :preferred-start-of-week (state/get-start-of-week)
+         :current-graph         (state/get-current-repo)
+         :show-brackets         (state/show-brackets?)
+         :me                    (state/get-me)}))))
 
 (def ^:export get_current_graph
   (fn []
@@ -206,7 +222,7 @@
       (p/let [repo ""
               path (plugin-handler/get-ls-dotdir-root)
               path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
+             (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
   ;; results [path data]
@@ -234,19 +250,22 @@
             cmd (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key (:key cmd)
             keybinding (:keybinding cmd)
-            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))
+            action' #(state/pub-event! [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}])]
 
         ;; handle simple commands
         (plugin-handler/register-plugin-simple-command pid cmd action)
 
         ;; handle palette commands
-        (when palette-cmd
+        (when palette?
           (palette-handler/register palette-cmd))
 
         ;; handle keybinding commands
-        (when-let [shortcut-args (and palette-cmd keybinding
-                                      (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
-          (let [dispatch-cmd (fn [_ _e] (palette-handler/invoke-command palette-cmd))
+        (when-let [shortcut-args (and keybinding (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
+          (let [dispatch-cmd (fn [_e]
+                               (if palette?
+                                 (palette-handler/invoke-command palette-cmd)
+                                 (action')))
                 [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
             (js/console.debug :shortcut/register-shortcut [handler-id id shortcut-map])
             (st/register-shortcut! handler-id id shortcut-map)))))))
@@ -509,27 +528,29 @@
       (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block
-  (fn [uuid]
-    (when-let [block (db-model/query-block-by-uuid uuid)]
+  (fn [block-uuid]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
       (let [{:block/keys [parent left]} block
             block (when-not (= parent left) (db-utils/pull (:db/id left)))]
         (and block (bean/->js (normalize-keyword-for-json block)))))))
 
 (def ^:export get_next_sibling_block
-  (fn [uuid]
-    (when-let [block (db-model/query-block-by-uuid uuid)]
+  (fn [block-uuid]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
       (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
         (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
 
 (def ^:export set_block_collapsed
-  (fn [uuid ^js opts]
-    (when-let [block (db-model/get-block-by-uuid uuid)]
+  (fn [block-uuid ^js opts]
+    (when-let [block (db-model/get-block-by-uuid block-uuid)]
       (let [{:keys [flag]} (bean/->clj opts)
+            block-uuid (uuid block-uuid)
             flag (if (= "toggle" flag)
                    (not (util/collapsed? block))
                    (boolean flag))]
-        (if flag (editor-handler/collapse-block! uuid)
-                 (editor-handler/expand-block! uuid))))))
+        (if flag (editor-handler/collapse-block! block-uuid)
+                 (editor-handler/expand-block! block-uuid))
+        nil))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
@@ -565,6 +586,76 @@
             blocks (outliner-tree/blocks->vec-tree blocks page-name)
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
+
+(defn ^:export get_page_linked_references
+  [page-name-or-uuid]
+  (when-let [page (and page-name-or-uuid (db-model/get-page page-name-or-uuid))]
+    (let [page-name (:block/name page)
+          ref-blocks (if page-name
+                       (db-model/get-page-referenced-blocks page-name)
+                       (db-model/get-block-referenced-blocks (:block/uuid page)))
+          ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
+      (bean/->js (normalize-keyword-for-json ref-blocks)))))
+
+(defn ^:export get_pages_from_namespace
+  [ns]
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-pages repo ns)]
+      (bean/->js (normalize-keyword-for-json pages)))))
+
+(defn ^:export get_pages_tree_from_namespace
+  [ns]
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
+      (bean/->js (normalize-keyword-for-json pages)))))
+
+(defn first-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (first (db-model/sort-by-left children block))))
+
+(defn second-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (second (db-model/sort-by-left children block))))
+
+(defn last-child-of-block
+  [block]
+  (when-let [children (:block/_parent block)]
+    (last (db-model/sort-by-left children block))))
+
+(defn ^:export prepend_block_in_page
+  [uuid-or-page-name content ^js opts]
+  (let [page? (not (util/uuid-string? uuid-or-page-name))
+        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+        _ (and page-not-exist? (page-handler/create! uuid-or-page-name
+                                 {:redirect? false
+                                  :create-first-block? true
+                                  :format (state/get-preferred-format)}))]
+    (when-let [block (db-model/get-page uuid-or-page-name)]
+      (let [block'   (if page? (second-child-of-block block) (first-child-of-block block))
+            sibling? (and page? (not (nil? block')))
+            opts     (bean/->clj opts)
+            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling? :before sibling?})
+            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
+        (insert_block src content (bean/->js opts))))))
+
+(defn ^:export append_block_in_page
+  [uuid-or-page-name content ^js opts]
+  (let [page? (not (util/uuid-string? uuid-or-page-name))
+        page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+        _ (and page-not-exist? (page-handler/create! uuid-or-page-name
+                                 {:redirect? false
+                                  :create-first-block? true
+                                  :format (state/get-preferred-format)}))]
+    (when-let [block (db-model/get-page uuid-or-page-name)]
+      (let [block'   (last-child-of-block block)
+            sibling? (not (nil? block'))
+            opts     (bean/->clj opts)
+            opts     (merge opts {:isPageBlock (and page? (not sibling?)) :sibling sibling?}
+                       (when sibling? {:before false}))
+            src      (if sibling? (str (:block/uuid block')) uuid-or-page-name)]
+        (insert_block src content (bean/->js opts))))))
 
 ;; plugins
 (def ^:export __install_plugin
@@ -612,13 +703,79 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
-;; helpers
-(defn ^:export show_msg
-  ([content] (show_msg content :success))
-  ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
-                          content (if hiccup? (parse-hiccup-ui content) content)]
-                      (notification/show! content (keyword status)))))
+;; git
+(defn ^:export git_exec_command
+  [^js args]
+  (when-let [args (and args (seq (bean/->clj args)))]
+    (shell/run-git-command2! args)))
 
+(defn ^:export git_load_ignore_file
+  []
+  (when-let [repo (state/get-current-repo)]
+    (p/let [file ".gitignore"
+            dir (config/get-repo-dir repo)
+            _ (fs/create-if-not-exists repo dir file)
+            content (fs/read-file dir file)]
+           content)))
+
+(defn ^:export git_save_ignore_file
+  [content]
+  (when-let [repo (and (string? content) (state/get-current-repo))]
+    (p/let [file ".gitignore"
+            dir (config/get-repo-dir repo)
+            _ (fs/write-file! repo dir file content {:skip-compare? true})])))
+
+;; ui
+(defn ^:export show_msg
+  ([content] (show_msg content :success nil))
+  ([content status ^js opts]
+   (let [{:keys [key timeout]} (bean/->clj opts)
+         hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
+         content (if hiccup? (parse-hiccup-ui content) content)
+         uid (when (string? key) (keyword key))
+         clear? (not= timeout 0)
+         key' (notification/show! content (keyword status) clear? uid timeout)]
+     (name key'))))
+
+(defn ^:export ui_show_msg
+  [& args]
+  (apply show_msg args))
+
+(defn ^:export ui_close_msg
+  [key]
+  (when (string? key)
+    (notification/clear! (keyword key)) nil))
+
+;; assets
+(defn ^:export assets_list_files_of_current_graph
+  [^js exts]
+  (p/let [files (ipc/ipc :getAssetsFiles {:exts exts})]
+         (bean/->js files)))
+
+;; experiments
+(defn ^:export exper_load_scripts
+  [pid & scripts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (doseq [s scripts
+            :let [upt-status #(state/upt-plugin-resource pid :scripts s :status %)
+                  init? (plugin-handler/register-plugin-resources pid :scripts {:key s :src s})]]
+      (when init?
+        (p/catch
+          (p/then
+            (do
+              (upt-status :pending)
+              (loader/load s nil {:attributes {:data-ref (name pid)}}))
+            #(upt-status :done))
+          #(upt-status :error))))))
+
+(defn ^:export exper_register_fenced_code_renderer
+  [pid type ^js opts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (plugin-handler/register_fenced_code_renderer
+      (keyword pid) type (reduce #(assoc %1 %2 (aget opts (name %2))) {}
+                                 [:edit :before :subs :render]))))
+
+;; helpers
 (defn ^:export query_element_by_id
   [id]
   (let [^js el (gdom/getElement id)]
@@ -633,7 +790,7 @@
 (defn ^:export force_save_graph
   []
   (p/let [_ (el/persist-dbs!)]
-    true))
+         true))
 
 (defn ^:export __debug_state
   [path]

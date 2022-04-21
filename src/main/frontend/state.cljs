@@ -33,7 +33,7 @@
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
-     ;; :repo/loading-files? is only for github repos
+     ;; :repo/loading-files? is only for GitHub repos
      :repo/loading-files?                   {}
      :repo/changed-files                    nil
      :nfs/user-granted?                     {}
@@ -160,8 +160,10 @@
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
-     :plugin/installed-commands             {}
+     :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
+     :plugin/installed-resources            {}
+     :plugin/installed-hooks                {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -1294,7 +1296,7 @@
 
 (defn get-plugins-commands
   []
-  (mapcat seq (flatten (vals (:plugin/installed-commands @state)))))
+  (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
 (defn get-plugins-commands-with-type
   [type]
@@ -1305,6 +1307,43 @@
   [type]
   (filterv #(= (keyword (first %)) (keyword type))
            (apply concat (vals (:plugin/installed-ui-items @state)))))
+
+(defn get-plugin-resources-with-type
+  [pid type]
+  (when-let [pid (and type (keyword pid))]
+    (get-in @state [:plugin/installed-resources pid (keyword type)])))
+
+(defn get-plugin-resource
+  [pid type key]
+  (when-let [resources (get-plugin-resources-with-type pid type)]
+    (get resources key)))
+
+(defn upt-plugin-resource
+  [pid type key attr val]
+  (when-let [resource (get-plugin-resource pid type key)]
+    (let [resource (assoc resource (keyword attr) val)]
+      (set-state!
+        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+      resource)))
+
+(defn install-plugin-hook
+  [pid hook]
+  (when-let [pid (keyword pid)]
+    (set-state!
+      [:plugin/installed-hooks hook]
+      (conj
+        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
+        pid)) true))
+
+(defn uninstall-plugin-hook
+  [pid hook-or-all]
+  (when-let [pid (keyword pid)]
+    (if (nil? hook-or-all)
+      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
+        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+    true))
+
 
 (defn get-scheduled-future-days
   []
@@ -1593,6 +1632,9 @@
 (defn lsp-enabled?-or-theme
   []
   (:plugin/enabled @state))
+
+(def lsp-enabled?
+  (lsp-enabled?-or-theme))
 
 (defn consume-updates-coming-plugin
   [payload updated?]

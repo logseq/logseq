@@ -2880,7 +2880,10 @@
               [:sup.fn (str name "↩︎")]])]])
 
         ["Src" options]
-        (src-cp config options html-export?)
+        [:div.cp__fenced-code-block
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
+           (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+           (src-cp config options html-export?))]
 
         :else
         "")

@@ -2,6 +2,7 @@
   (:require [promesa.core :as p]
             [rum.core :as rum]
             [frontend.util :as util]
+            [clojure.walk :as walk]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notifications]
             [camel-snake-kebab.core :as csk]
@@ -18,6 +19,16 @@
 (defonce lsp-enabled?
          (and (util/electron?)
               (state/lsp-enabled?-or-theme)))
+
+(defn- normalize-keyword-for-json
+  [input]
+  (when input
+    (walk/postwalk
+      (fn [a]
+        (cond
+          (keyword? a) (csk/->camelCase (name a))
+          (uuid? a) (str a)
+          :else a)) input)))
 
 (defn invoke-exported-api
   [type & args]
@@ -84,7 +95,7 @@
     (p/create
       (fn [resolve]
         (state/set-state! :plugin/installing mft)
-        (ipc/ipc "installMarketPlugin" mft)
+        (ipc/ipc :installMarketPlugin mft)
         (resolve id)))))
 
 (defn check-or-update-marketplace-plugin
@@ -100,20 +111,21 @@
                 (state/reset-all-updates-state)
                 (throw e))))
         (fn [mfts]
-          (if-let [mft (some #(when (= (:id %) id) %) mfts)]
-            (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft))
-            (throw (js/Error. (str ":not-found-in-marketplace" id))))
+
+          (let [mft (some #(when (= (:id %) id) %) mfts)]
+            ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+            (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
           true))
 
       (fn [^js e]
-        (error-handler "Update Error: remote error")
+        (error-handler e)
         (state/set-state! :plugin/installing nil)
         (js/console.error e)))))
 
 (defn get-plugin-inst
   [id]
   (try
-    (js/LSPluginCore.ensurePlugin id)
+    (js/LSPluginCore.ensurePlugin (name id))
     (catch js/Error _e
       nil)))
 
@@ -175,7 +187,7 @@
                                  (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
-                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:]+" ""))
+                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
                              [msg type] (case error-code
 
                                           :no-new-version
@@ -195,7 +207,8 @@
                              ;; notify human tips
                              (notifications/show!
                                (str
-                                 (if (= :error type) "[Install Error]" "")
+                                 (if (= :error type) "[Error]" "")
+                                 (str "<" (:id payload) "> ")
                                  msg) type)))
 
                          (js/console.error payload))
@@ -228,13 +241,15 @@
   [pid [cmd actions]]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/installed-commands pid]
+      (swap! state/state update-in [:plugin/installed-slash-commands pid]
              (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
+      (state/pub-event! [:rebuild-slash-commands-list])
       true)))
 
 (defn unregister-plugin-slash-command
   [pid]
-  (swap! state/state medley/dissoc-in [:plugin/installed-commands (keyword pid)]))
+  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+  (state/pub-event! [:rebuild-slash-commands-list]))
 
 (def keybinding-mode-handler-map
   {:global      :shortcut.handler/editor-global
@@ -292,10 +307,42 @@
   [pid]
   (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
 
+(defn register-plugin-resources
+  [pid type {:keys [key] :as opts}]
+  (when-let [pid (keyword pid)]
+    (when-let [type (and key (keyword type))]
+      (let [path [:plugin/installed-resources pid type]]
+        (when (contains? #{:error nil} (get-in @state/state (conj path key)))
+          (swap! state/state update-in path
+            (fnil assoc {}) key (merge opts {:pid pid}))
+          true)))))
+
+(defn unregister-plugin-resources
+  [pid]
+  (when-let [pid (keyword pid)]
+    (swap! state/state medley/dissoc-in [:plugin/installed-resources pid])
+    true))
+
 (defn unregister-plugin-themes
   ([pid] (unregister-plugin-themes pid true))
   ([pid effect]
    (js/LSPluginCore.unregisterTheme (name pid) effect)))
+
+(def *fenced-code-providers (atom #{}))
+
+(defn register_fenced_code_renderer
+  [pid type {:keys [before subs render edit] :as _opts}]
+  (when-let [key (and type (keyword type))]
+    (register-plugin-resources pid :fenced-code-renderers
+      {:key key :edit edit :before before :subs subs :render render})
+    (swap! *fenced-code-providers conj pid)
+    #(swap! *fenced-code-providers disj pid)))
+
+(defn hook-fenced-code-by-type
+  [type]
+  (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
+    (first (map #(state/get-plugin-resource % :fenced-code-renderers key)
+                @*fenced-code-providers))))
 
 (defn select-a-plugin-theme
   [pid]
@@ -374,13 +421,16 @@
 (defn hook-plugin
   [tag type payload plugin-id]
   (when lsp-enabled?
-    (js-invoke js/LSPluginCore
-               (str "hook" (string/capitalize (name tag)))
-               (name type)
-               (if (coll? payload)
-                 (bean/->js (into {} (for [[k v] payload] [(csk/->camelCase k) (if (uuid? v) (str v) v)])))
-                 payload)
-               (if (keyword? plugin-id) (name plugin-id) plugin-id))))
+    (try
+      (js-invoke js/LSPluginCore
+                 (str "hook" (string/capitalize (name tag)))
+                 (name type)
+                 (if (coll? payload)
+                   (bean/->js (normalize-keyword-for-json payload))
+                   payload)
+                 (if (keyword? plugin-id) (name plugin-id) plugin-id))
+      (catch js/Error e
+        (js/console.error "[Hook Plugin Err]" e)))))
 
 (defn hook-plugin-app
   ([type payload] (hook-plugin-app type payload nil))
@@ -389,6 +439,18 @@
 (defn hook-plugin-editor
   ([type payload] (hook-plugin-editor type payload nil))
   ([type payload plugin-id] (hook-plugin :editor type payload plugin-id)))
+
+(defn hook-plugin-db
+  ([type payload] (hook-plugin-db type payload nil))
+  ([type payload plugin-id] (hook-plugin :db type payload plugin-id)))
+
+(defn hook-plugin-block-changes
+  [{:keys [blocks tx-data tx-meta]}]
+
+  (doseq [b blocks
+          :let [tx-data' (group-by first tx-data)
+                type     (str "block:" (:block/uuid b))]]
+    (hook-plugin-db type {:block b :tx-data (get tx-data' (:db/id b)) :tx-meta tx-meta})))
 
 (defn get-ls-dotdir-root
   []
@@ -480,7 +542,9 @@
                               ;; commands
                               (unregister-plugin-slash-command pid)
                               (invoke-exported-api "unregister_plugin_simple_command" pid)
-                              (unregister-plugin-ui-items pid))
+                              (invoke-exported-api "uninstall_plugin_hook" pid)
+                              (unregister-plugin-ui-items pid)
+                              (unregister-plugin-resources pid))
 
             _ (doto js/LSPluginCore
                 (.on "registered"

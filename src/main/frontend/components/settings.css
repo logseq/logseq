@@ -69,9 +69,15 @@
       flex: 1;
       padding: 0 12px 12px;
       max-height: 70vh;
+      min-height: 380px;
+      width: auto;
       overflow: auto;
       margin-right: -17px;
       margin-bottom: -17px;
+
+      @screen md {
+        width: 680px;
+      }
     }
 
     &.no-aside {
