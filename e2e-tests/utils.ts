@@ -214,3 +214,11 @@ export function randomInt(min: number, max: number): number {
 export function randomBoolean(): boolean {
   return Math.random() < 0.5;
 }
+
+export function systemModifier(shortcut: string): string {
+  if (IsMac) {
+    return shortcut.replace('Control', 'Meta')
+  } else {
+    return shortcut
+  }
+}
