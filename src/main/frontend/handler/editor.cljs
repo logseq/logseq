@@ -42,7 +42,6 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
-            [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.priority :as priority]
             [frontend.util.thingatpt :as thingatpt]
