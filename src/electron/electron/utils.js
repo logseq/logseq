@@ -1,5 +1,5 @@
-const path = require('path')
-const { readdir, lstat } = require('fs').promises
+import path from "path";
+import fs from 'fs';
 
 // workaround from https://github.com/electron/electron/issues/426#issuecomment-658901422
 // We set an intercept on incoming requests to disable x-frame-options
