@@ -2121,7 +2121,7 @@
     (save-block-if-changed! block new-content)))
 
 (defn- dwim-in-list
-  [_state]
+  []
   (when-not (auto-complete?)
     (let [{:keys [block]} (get-state)]
       (when block
@@ -2130,21 +2130,35 @@
             (let [{:keys [full-content indent bullet checkbox ordered _]} item
                   next-bullet (if ordered (str (inc bullet) ".") bullet)
                   checkbox (when checkbox "[ ] ")]
-              (if (= (count full-content)
-                     (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
+              (if (and
+                   (= (count full-content)
+                      (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
+                   (string/includes? (.-value input) "\n"))
                 (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
-                (do
-                  (cursor/move-cursor-to-line-end input)
-                  (insert (str "\n" indent next-bullet " " checkbox))
+                (let [start-pos (util/get-selection-start input)
+                      value (.-value input)
+                      before (subs value 0 start-pos)
+                      after (subs value start-pos)
+                      cursor-in-item-content? (and (re-find #"^(\d+){1}\." (last (string/split-lines before)))
+                                                   (not (string/blank? (first (string/split-lines after)))))]
+                  (when-not cursor-in-item-content?
+                    (cursor/move-cursor-to-line-end input)
+                    (insert (str "\n" indent next-bullet " " checkbox)))
                   (when ordered
                     (let [value (.-value input)
                           start-pos (util/get-selection-start input)
                           after-lists-str (string/trim (subs value start-pos))
+                          after-lists-str (if cursor-in-item-content?
+                                            (str indent next-bullet " " after-lists-str)
+                                            after-lists-str)
                           lines (string/split-lines after-lists-str)
-                          after-lists-str' (list/re-order-items lines (inc bullet))
-                          value' (str (subs value 0 start-pos) "\n" after-lists-str')]
+                          after-lists-str' (list/re-order-items lines (if cursor-in-item-content? bullet (inc bullet)))
+                          value' (str (subs value 0 start-pos) "\n" after-lists-str')
+                          cursor' (if cursor-in-item-content?
+                                    (inc (count (str (subs value 0 start-pos) indent next-bullet " ")))
+                                    (+ (:end item) (count next-bullet) 2))]
                       (state/set-edit-content! (state/get-edit-input-id) value')
-                      (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+                      (cursor/move-cursor-to input cursor'))))))))))))
 
 (defn toggle-list!
   []
@@ -2302,7 +2316,7 @@
                                  page-name (db-model/get-redirect-page-name page)]
                              (insert-first-page-block-if-not-exists! page-name)
                              (route-handler/redirect-to-page! page-name)))
-              "list-item" (dwim-in-list state)
+              "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
 
             (and
