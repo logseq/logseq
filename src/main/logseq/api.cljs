@@ -523,8 +523,7 @@
     (let [block (state/get-edit-block)
           block (or block (some-> (first (state/get-selection-blocks))
                             (.getAttribute "blockid")
-                            (db-model/get-block-by-uuid)))
-          block (or block (state/get-last-edit-block))]
+                            (db-model/get-block-by-uuid)))]
       (get_block (:db/id block) opts))))
 
 (def ^:export get_previous_sibling_block

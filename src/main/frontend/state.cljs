@@ -868,6 +868,8 @@
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
+   (when-let [editing-block (get-edit-block)]
+     (swap! state assoc :editor/last-edit-block editing-block))
    (when (and edit-input-id block
               (or
                 (publishing-enable-editing?)
@@ -886,7 +888,6 @@
                     (assoc
                      :editor/block block
                      :editor/editing? {edit-input-id true}
-                     :editor/last-edit-block block
                      :editor/last-key-code nil
                      :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
