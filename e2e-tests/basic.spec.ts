@@ -149,11 +149,12 @@ test('selection', async ({ page, block }) => {
 })
 
 test('template', async ({ page, block }) => {
-  const randomTemplate = randomString(10)
+  const randomTemplate = randomString(6)
 
   await createRandomPage(page)
 
   await block.mustFill('template test\ntemplate:: ' + randomTemplate)
+  await page.keyboard.press('Enter')
   await block.clickNext()
 
   expect(await block.indent()).toBe(true)
@@ -240,7 +241,7 @@ test('auto completion and auto pair', async ({ page, block }) => {
   await block.mustType('type [', { toBe: 'type []'})
   await block.mustType('[', { toBe: 'type [[]]'})
 
-  await page.press('textarea >> nth=0', 'Escape') // escape any popup from `[[]]`
+  await block.escapeEditing() // escape any popup from `[[]]`
 
   // ``
   await block.clickNext()
