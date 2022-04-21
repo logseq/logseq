@@ -838,10 +838,6 @@
   []
   (get @state :editor/block))
 
-(defn get-last-edit-block
-  []
-  (:editor/last-edit-block @state))
-
 (defn get-current-edit-block-and-position
   []
   (let [edit-input-id (get-edit-input-id)
@@ -868,8 +864,6 @@
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
-   (when-let [editing-block (get-edit-block)]
-     (swap! state assoc :editor/last-edit-block editing-block))
    (when (and edit-input-id block
               (or
                 (publishing-enable-editing?)
