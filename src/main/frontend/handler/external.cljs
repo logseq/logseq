@@ -78,7 +78,7 @@
                          (block/extract-blocks parsed-blocks "" true :markdown)
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
-      (when (not (page/page-exists? page-name))
+      (when (not (db/page-exists? page-name))
         (page/create! page-name {:redirect? false}))
       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)

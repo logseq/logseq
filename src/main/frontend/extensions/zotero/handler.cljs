@@ -7,7 +7,8 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [frontend.db :as db]))
 
 (defn add [page-name type item]
   (go
@@ -68,7 +69,7 @@
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
 
-       (if (page-handler/page-exists? (str/lower-case page-name))
+       (if (db/page-exists? (str/lower-case page-name))
          (if (setting/setting :overwrite-mode?)
            (page-handler/delete!
             page-name
