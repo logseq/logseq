@@ -902,7 +902,7 @@
   ([page-name alias?]
    (when page-name
      (let [page-name' (util/page-name-sanity-lc page-name)
-           page-entity (db-utils/entity [:block/name page-name])]
+           page-entity (db-utils/entity [:block/name page-name'])]
        (cond
          alias?
          page-name'
@@ -911,7 +911,7 @@
          page-name
 
          (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-         (let [source-page (get-alias-source-page (state/get-current-repo) page-name)]
+         (let [source-page (get-alias-source-page (state/get-current-repo) page-name')]
            (or (when source-page (:block/name source-page))
                page-name'))
 
