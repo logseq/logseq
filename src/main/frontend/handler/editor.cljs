@@ -2130,19 +2130,18 @@
               (if (= (count full-content)
                      (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
                 (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
-                (do (cursor/move-cursor-to-line-end input)
-                    (insert (str "\n" indent next-bullet " " checkbox))
-                    (when ordered
-                      (let [bullet-atom (atom (inc bullet))]
-                        (while (when-let [next-item (list/get-next-item input)]
-                                 (swap! bullet-atom inc)
-                                 (let [{:keys [full-content start end]} next-item
-                                       new-bullet @bullet-atom]
-                                   (delete-and-update input start end)
-                                   (insert (string/replace-first full-content (:bullet next-item) new-bullet))
-                                   true))
-                          nil)
-                        (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+                (do
+                  (cursor/move-cursor-to-line-end input)
+                  (insert (str "\n" indent next-bullet " " checkbox))
+                  (when ordered
+                    (let [value (.-value input)
+                          start-pos (util/get-selection-start input)
+                          after-lists-str (string/trim (subs value start-pos))
+                          lines (string/split-lines after-lists-str)
+                          after-lists-str' (list/re-order-items lines (inc bullet))
+                          value' (str (subs value 0 start-pos) "\n" after-lists-str')]
+                      (state/set-edit-content! (state/get-edit-input-id) value')
+                      (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
 
 (defn toggle-list!
   []
