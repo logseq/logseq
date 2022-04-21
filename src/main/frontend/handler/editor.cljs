@@ -2884,19 +2884,22 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
-(defn- paste-text
+(defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
-      (or (seq copied-block-ids)
-          (seq (:copy/full-blocks copied-blocks))
-          (and text
-               (:copy/content copied-blocks)
-               (= (string/replace (string/trim text) "\r" "")
-                  (string/replace (string/trim (:copy/content copied-blocks)) "\r" ""))))
+      ;; Internal blocks by either copy or cut blocks
+      (and
+       (or (seq copied-block-ids)
+           (seq (:copy/full-blocks copied-blocks)))
+       text
+       (or (:copy/content copied-blocks) "")
+       ;; not copied from the external clipboard
+       (= (string/replace (string/trim text) "\r" "")
+          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
@@ -2970,7 +2973,7 @@
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
-          (paste-text text e))
+          (paste-copied-blocks-or-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
