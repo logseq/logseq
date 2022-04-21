@@ -2207,13 +2207,14 @@
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
+             (prn {:root-block (root-block? config block)})
              (cond
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
                (:ref? config)
                (state/set-collapsed-block! block-id
                                            (editor-handler/block-default-collapsed? block config))
-
-               (root-block? config block)
-               (state/set-collapsed-block! block-id false)
 
                :else
                nil)

@@ -488,7 +488,8 @@
    (let [block-id (:db/id block)
          block-parent-id (:db/id (:block/parent block))
          next-block (or
-                     (if (collapsed-and-has-children? db block) ; skips children
+                     (if (and (collapsed-and-has-children? db block)
+                              (not= block-id scoped-block-id)) ; skips children
                        ;; Sibling
                        (get-by-parent-&-left db block-parent-id block-id)
                        (or
@@ -520,7 +521,7 @@
                         result []]
                    (if (and limit (>= (count result) limit))
                      result
-                     (let [next-block (get-next-open-block db block)]
+                     (let [next-block (get-next-open-block db block scoped-block-id)]
                        (if next-block
                          (if (and (seq scoped-block-parents)
                                   (contains? scoped-block-parents (:db/id (:block/parent next-block))))
@@ -885,7 +886,7 @@
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
-  "Given any readable page-name, return the exact page-name in db. Accepts both 
+  "Given any readable page-name, return the exact page-name in db. Accepts both
    sanitized or unsanitized names.
    alias?: if true, alias is allowed to be returned; otherwise, it would be deref."
   ([page-name] (get-redirect-page-name page-name false))
