@@ -589,9 +589,11 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid replace-empty-target?]
+  [content {:keys [page block-uuid sibling? before? properties
+                   custom-uuid replace-empty-target? edit-block?]
             :or {sibling? false
-                 before? false}}]
+                 before? false
+                 edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
           sibling? (if before? true (if page false sibling?))
@@ -650,18 +652,17 @@
             (outliner-insert-block! {} block-m new-block {:sibling? sibling?
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
-            (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)
+            (when edit-block?
+              (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  [page-name & {:keys [check-empty-page?]
-                :or {check-empty-page? true}}]
-  (when (string? page-name)
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (when (or
-             (and check-empty-page? (db/page-empty? (state/get-current-repo) (:db/id page)))
-             (false? check-empty-page?))
-        (api-insert-new-block! "" {:page page-name})))))
+  ([page-name]
+   (insert-first-page-block-if-not-exists! page-name {}))
+  ([page-name opts]
+   (when (and (string? page-name)
+              (not (string/blank? page-name)))
+     (state/pub-event! [:page/create page-name opts]))))
 
 (defn properties-block
   [properties format page]
@@ -1172,8 +1173,7 @@
         (js/window.open page)
         (let [page-name (db-model/get-redirect-page-name page)]
           (state/clear-edit!)
-          (insert-first-page-block-if-not-exists! page-name)
-          (route-handler/redirect-to-page! page-name))))))
+          (insert-first-page-block-if-not-exists! page-name))))))
 
 (defn open-link-in-sidebar!
   []
@@ -2311,8 +2311,7 @@
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (let [page (:link thing-at-point)
                                  page-name (db-model/get-redirect-page-name page)]
-                             (insert-first-page-block-if-not-exists! page-name)
-                             (route-handler/redirect-to-page! page-name)))
+                             (insert-first-page-block-if-not-exists! page-name)))
               "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
 
