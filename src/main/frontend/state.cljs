@@ -838,10 +838,6 @@
   []
   (get @state :editor/block))
 
-(defn get-last-edit-block
-  []
-  (:editor/last-edit-block @state))
-
 (defn get-current-edit-block-and-position
   []
   (let [edit-input-id (get-edit-input-id)
@@ -868,8 +864,6 @@
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
-   (when-let [editing-block (get-edit-block)]
-     (swap! state assoc :editor/last-edit-block editing-block))
    (when (and edit-input-id block
               (or
                 (publishing-enable-editing?)
@@ -916,7 +910,7 @@
 
 (defn set-editor-last-pos!
   [new-pos]
-  (set-state! :editor/last-saved-cursor new-pos))
+  (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
 
 (defn clear-editor-last-pos!
   []
@@ -924,13 +918,13 @@
 
 (defn get-editor-last-pos
   []
-  (:editor/last-saved-cursor @state))
+  (get-in @state [:editor/last-saved-cursor (:block/uuid (get-edit-block))]))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (set-state! :editor/last-saved-cursor new-pos)))
+    (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
 (defn set-theme!
   [theme]
