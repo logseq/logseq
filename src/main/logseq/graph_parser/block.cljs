@@ -2,7 +2,6 @@
   "Modified version of frontend.format.block"
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            ; [cljs.core.match :as match]
             ; [frontend.format :as format]
             ; [frontend.state :as state]
             [logseq.graph-parser.text :as text]
@@ -30,22 +29,14 @@
   (when-let [tag-value (and (vector? block)
                             (= "Tag" (first block))
                             (second block))]
-    ;; TODO: Enable or replace match
-    (->
-     #_(map (fn [e]
-              (match/match e
-                           ["Plain" s]
-                           s
-                           ["Link" t]
-                           (let [{full_text :full_text} t]
-                             full_text)
-                           ["Nested_link" t]
-                           (let [ {content :content} t]
-                             content)
-                           :else
-                           ""
-                           )) tag-value)
-     (string/join))))
+    (->> tag-value
+        (map (fn [[elem value]]
+                 (case elem
+                   "Plain" value
+                   "Link" (:full_text value)
+                   "Nested_link" (:content value)
+                   "")))
+         (string/join))))
 
 (defn get-page-reference
   [block]
@@ -590,8 +581,8 @@
                properties]))
           result (with-pre-block-if-exists blocks body pre-block-properties encoded-content)]
       (map #(dissoc % :block/meta) result))
-    (catch js/Error _e
-      (js/console.error "extract-blocks-failed")
+    (catch js/Error e
+      (js/console.error "extract-blocks-failed" e)
       #_(log/error :exception e))))
 
 (defn with-parent-and-left
