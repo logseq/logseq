@@ -465,7 +465,6 @@
         :right-side-bar/flashcards "Flashcards"
         :right-side-bar/new-page "Neue Seite"
         :left-side-bar/journals "Journale"
-        :git/set-access-token "Persönliches GitHub-Zugangs-Token festlegen"
         :git/push "Jetzt übertragen"
         :git/push-failed "Übertragung fehlgeschlagen!"
         :git/local-changes-synced "Alle lokalen Änderungen sind synchronisiert!"
