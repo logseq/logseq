@@ -1401,8 +1401,12 @@ class LSPluginCore
         const sdkVersion = p.sdk?.version
 
         // TODO: remove optimization after few releases
-        if (!sdkVersion && (isDbChangedHook || isDbBlockChangeHook)) {
-          continue
+        if (!sdkVersion) {
+          if (isDbChangedHook || isDbBlockChangeHook) {
+            continue
+          } else {
+            act(p)
+          }
         }
 
         if (
