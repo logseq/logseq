@@ -24,7 +24,6 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
@@ -398,7 +397,7 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [repo block value {}]
+  [_repo block value {}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -414,9 +413,7 @@
            (when (and (:block/pre-block? block)
                       (not (string/blank? title))
                       (not= (util/page-name-sanity-lc title) old-page-name))
-             (state/pub-event! [:page/title-property-changed old-page-name title]))))))
-
-    (repo-handler/push-if-auto-enabled! repo)))
+             (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
 
 (defn save-block-if-changed!
   ([block value]

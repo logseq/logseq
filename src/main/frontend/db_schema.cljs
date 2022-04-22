@@ -9,13 +9,8 @@
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 
-   :db/encrypted?    {}
-   :db/encryption-keys {}
-
    ;; user
-   :me/name {}
    :me/email {}
-   :me/avatar {}
 
    ;; Git
    :repo/url {:db/unique :db.unique/identity}

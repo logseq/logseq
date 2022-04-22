@@ -1,9 +1,3 @@
-#diffs-body {
-  textarea {
-    color: var(--ls-primary-text-color, #a4b5b6);
-  }
-}
-
 .cp__diff-file {
     @apply mb-3;
 

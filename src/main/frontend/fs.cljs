@@ -1,19 +1,17 @@
 (ns frontend.fs
   (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
-            [frontend.fs.bfs :as bfs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
             [frontend.fs.capacitor-fs :as mobile]
+            [frontend.fs.bfs :as bfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
-            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db :as db]
+            [clojure.string :as string]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -28,12 +26,9 @@
 (defn get-fs
   [dir]
   (let [bfs-local? (or (string/starts-with? dir "/local")
-                       (string/starts-with? dir "local"))
-        current-repo (state/get-current-repo)
-        git-repo? (and current-repo
-                       (string/starts-with? current-repo "https://"))]
+                       (string/starts-with? dir "local"))]
     (cond
-      (and (util/electron?) (not bfs-local?) (not git-repo?))
+      (and (util/electron?) (not bfs-local?))
       node-record
 
       (mobile-util/is-native-platform?)
@@ -79,20 +74,17 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (let [fs-record (get-fs dir)]
-      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
-              content (if-not md-or-org? content (encrypt/encrypt content))]
-        (->
-         (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-           (when (= bfs-record fs-record)
-             (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-         (p/catch (fn [error]
-                    (log/error :file/write-failed {:dir dir
-                                                   :path path
-                                                   :error error})
-                    ;; Disable this temporarily
-                    ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                    )))))))
+    (->
+     (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+       (when (= bfs-record (get-fs dir))
+         (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+     (p/catch (fn [error]
+                (log/error :file/write-failed {:dir dir
+                                               :path path
+                                               :error error})
+                ;; Disable this temporarily
+                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                )))))
 
 (defn read-file
   ([dir path]
@@ -102,8 +94,7 @@
                    {})]
      (read-file dir path options)))
   ([dir path options]
-   (p/chain (protocol/read-file (get-fs dir) dir path options)
-            encrypt/decrypt)))
+   (protocol/read-file (get-fs dir) dir path options)))
 
 (defn rename!
   [repo old-path new-path]
@@ -122,6 +113,7 @@
 
 (defn stat
   [dir path]
+  (prn {:dir dir})
   (protocol/stat (get-fs dir) dir path))
 
 (defn- get-record

@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -167,16 +166,14 @@
            (-> (p/all (map (fn [file]
                              (p/let [content (if nfs?
                                                (.text (:file/file file))
-                                               (:file/content file))
-                                     content (encrypt/decrypt content)]
+                                               (:file/content file))]
                                (assoc file :file/content content))) markup-files))
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                            (async/go
                              (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                       {:first-clone? true
-                                                                                        :new-graph?   true
+                                                                                       {:new-graph?   true
                                                                                         :empty-graph? (nil? (seq markup-files))
                                                                                         :nfs-files    files}))]
                                (state/add-repo! {:url repo :nfs? true})
@@ -248,8 +245,7 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))
-                                content (encrypt/decrypt content)]
+                                          (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)
@@ -267,8 +263,6 @@
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
-                                                      ;; re-ask encryption
-                                                      :first-clone? re-index?
                                                       :refresh? (not re-index?)}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))

@@ -6,7 +6,6 @@
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.plugins :as plugin]
-            [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
             [frontend.components.search :as search]
@@ -35,7 +34,6 @@
             [rum.core :as rum]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
-            [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
             [clojure.string :as string]
@@ -66,17 +64,6 @@
 (defmethod handle :repo/install-error [[_ repo-url title]]
   (show-install-error! repo-url title))
 
-(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
-  (state/set-modal!
-   (encryption/encryption-setup-dialog repo-url close-fn)))
-
-(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
-  (state/set-modal!
-   (encryption/encryption-input-secret-dialog
-    repo-url
-    db-encrypted-secret
-    close-fn)))
-
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
@@ -93,7 +80,6 @@
          (state/set-file-sync-state nil)))
 
 (defn- graph-switch [graph]
-  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! graph)
   ;; load config
   (common-handler/reset-config! graph nil)
@@ -106,8 +92,6 @@
   (state/pub-event! [:graph/ready graph])
 
   (file-sync-stop-when-switch-graph))
-
-
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -265,8 +249,7 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (p/let [content (when content (encrypt/decrypt content))]
-    (state/set-modal! #(git-component/file-specific-version path hash content))))
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
