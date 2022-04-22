@@ -283,6 +283,7 @@
   [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
+                                  (not config/publishing?)
                                   (= :home route-name))]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
