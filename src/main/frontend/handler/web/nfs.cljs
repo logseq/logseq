@@ -20,7 +20,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [clojure.core.async :as async]))
 
 (defn remove-ignore-files
   [files]
@@ -172,16 +173,17 @@
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
                            (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
-                           (p/let [_ (repo-handler/load-repo-to-db! repo
-                                                                    {:first-clone? true
-                                                                     :new-graph?   true
-                                                                     :empty-graph? (nil? (seq markup-files))
-                                                                     :nfs-files    files})]
-                             (state/add-repo! {:url repo :nfs? true})
-                             (state/set-loading-files! repo false)
-                             (when ok-handler (ok-handler))
-                             (fs/watch-dir! dir-name)
-                             (db/persist-if-idle! repo)))))
+                           (async/go
+                             (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
+                                                                                       {:first-clone? true
+                                                                                        :new-graph?   true
+                                                                                        :empty-graph? (nil? (seq markup-files))
+                                                                                        :nfs-files    files}))]
+                               (state/add-repo! {:url repo :nfs? true})
+                               (state/set-loading-files! repo false)
+                               (when ok-handler (ok-handler))
+                               (fs/watch-dir! dir-name)
+                               (db/persist-if-idle! repo))))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))

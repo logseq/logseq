@@ -2208,12 +2208,12 @@
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
              (cond
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
                (:ref? config)
                (state/set-collapsed-block! block-id
                                            (editor-handler/block-default-collapsed? block config))
-
-               (root-block? config block)
-               (state/set-collapsed-block! block-id false)
 
                :else
                nil)
@@ -2566,7 +2566,11 @@
        (when-not (and built-in? (empty? result))
          (ui/foldable
           [:div.custom-query-title
-           [:span.title-text title]
+           [:span.title-text (if (vector? title)
+                               title
+                               (inline-text config
+                                            (get-in config [:block :block/format] :markdown)
+                                            (str title)))]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
           (fn []
@@ -2876,7 +2880,10 @@
               [:sup.fn (str name "↩︎")]])]])
 
         ["Src" options]
-        (src-cp config options html-export?)
+        [:div.cp__fenced-code-block
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
+           (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+           (src-cp config options html-export?))]
 
         :else
         "")

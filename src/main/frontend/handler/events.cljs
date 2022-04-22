@@ -325,9 +325,12 @@
 
     (when-let [coming (and (not downloading?)
                            (get-in @state/state [:plugin/updates-coming id]))]
-      (notification/show!
-       (str "Checked: " (:title coming))
-       :success))
+      (let [error-code (:error-code coming)
+            error-code (if (= error-code (str :no-new-version)) nil error-code)]
+        (when (or pending? (not error-code))
+          (notification/show!
+            (str "[Checked]<" (:title coming) "> " error-code)
+            (if error-code :error :success)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
@@ -348,6 +351,13 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
+  (when-let [payload (and (seq blocks)
+                          (merge payload {:tx-data (map #(into [] %) tx-data)
+                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
+    (plugin-handler/hook-plugin-db :changed payload)
+    (plugin-handler/hook-plugin-block-changes payload)))
+
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
@@ -366,6 +376,9 @@
    (update (js->clj event :keywordize-keys true)
            :path
            js/decodeURI)))
+
+(defmethod handle :rebuild-slash-commands-list [[_]]
+  (page-handler/rebuild-slash-commands-list!))
 
 (defn run!
   []

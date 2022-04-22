@@ -175,12 +175,12 @@
 (defn restore-cursor-pos!
   [id markup]
   (when-let [node (gdom/getElement (str id))]
-    (when-let [cursor-range (state/get-cursor-range)]
-      (when-let [range cursor-range]
-        (let [pos (state/get-editor-last-pos)
-              pos (or pos (diff/find-position markup range))]
-          (cursor/move-cursor-to node pos)
-          (state/clear-editor-last-pos!))))))
+    (let [cursor-range (state/get-cursor-range)
+          pos (or (state/get-editor-last-pos)
+                  (and cursor-range
+                       (diff/find-position markup cursor-range)))]
+      (cursor/move-cursor-to node pos)
+      (state/clear-editor-last-pos!))))
 
 (defn highlight-block!
   [block-uuid]
@@ -885,23 +885,20 @@
    (state/set-editor-op! nil)))
 
 (defn delete-blocks!
-  [repo dom-blocks]
-  (let [block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))]
-    (when (seq block-uuids)
-      (let [uuid->dom-block (zipmap block-uuids dom-blocks)
-            lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-            blocks (db/pull-many repo '[*] lookup-refs)
-            block (first blocks)
-            block-parent (get uuid->dom-block (:block/uuid block))
-            sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
-        (outliner-tx/transact!
-          {:outliner-op :delete-blocks}
-          (outliner-core/delete-blocks! blocks {}))
-        (when sibling-block
-          (move-to-prev-block repo sibling-block
-                              (:block/format block)
-                              (dom/attr sibling-block "id")
-                              ""))))))
+  [repo block-uuids blocks dom-blocks]
+  (when (seq block-uuids)
+    (let [uuid->dom-block (zipmap block-uuids dom-blocks)
+          block (first blocks)
+          block-parent (get uuid->dom-block (:block/uuid block))
+          sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
+      (outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (outliner-core/delete-blocks! blocks {}))
+      (when sibling-block
+        (move-to-prev-block repo sibling-block
+                            (:block/format block)
+                            (dom/attr sibling-block "id")
+                            "")))))
 
 (defn- batch-set-block-property!
   "col: a collection of [block-id property-key property-value]."
@@ -1019,9 +1016,8 @@
   []
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
-          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))
+          ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
+                                 (uuid id)) blocks))
           content (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
@@ -1097,12 +1093,16 @@
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
-    (let [blocks (remove (fn [block]
+    (let [dom-blocks (remove (fn [block]
                            (or (= "true" (dom/attr block "data-transclude"))
                                (= "true" (dom/attr block "data-query")))) blocks)]
-      (when (seq blocks)
-        (let [repo (state/get-current-repo)]
-          (delete-blocks! repo blocks))))))
+      (when (seq dom-blocks)
+        (let [repo (state/get-current-repo)
+              block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
+              lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+              blocks (db/pull-many repo '[*] lookup-refs)]
+          (state/set-copied-full-blocks nil blocks)
+          (delete-blocks! repo block-uuids blocks dom-blocks))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -1236,6 +1236,7 @@
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           md-content (compose-copied-blocks-contents repo [block-id])]
+      (state/set-copied-full-blocks md-content [block])
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
       (delete-block-aux! block true))))
 
@@ -2117,7 +2118,7 @@
     (save-block-if-changed! block new-content)))
 
 (defn- dwim-in-list
-  [_state]
+  []
   (when-not (auto-complete?)
     (let [{:keys [block]} (get-state)]
       (when block
@@ -2126,22 +2127,35 @@
             (let [{:keys [full-content indent bullet checkbox ordered _]} item
                   next-bullet (if ordered (str (inc bullet) ".") bullet)
                   checkbox (when checkbox "[ ] ")]
-              (if (= (count full-content)
-                     (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
+              (if (and
+                   (= (count full-content)
+                      (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
+                   (string/includes? (.-value input) "\n"))
                 (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
-                (do (cursor/move-cursor-to-line-end input)
-                    (insert (str "\n" indent next-bullet " " checkbox))
-                    (when ordered
-                      (let [bullet-atom (atom (inc bullet))]
-                        (while (when-let [next-item (list/get-next-item input)]
-                                 (swap! bullet-atom inc)
-                                 (let [{:keys [full-content start end]} next-item
-                                       new-bullet @bullet-atom]
-                                   (delete-and-update input start end)
-                                   (insert (string/replace-first full-content (:bullet next-item) new-bullet))
-                                   true))
-                          nil)
-                        (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+                (let [start-pos (util/get-selection-start input)
+                      value (.-value input)
+                      before (subs value 0 start-pos)
+                      after (subs value start-pos)
+                      cursor-in-item-content? (and (re-find #"^(\d+){1}\." (last (string/split-lines before)))
+                                                   (not (string/blank? (first (string/split-lines after)))))]
+                  (when-not cursor-in-item-content?
+                    (cursor/move-cursor-to-line-end input)
+                    (insert (str "\n" indent next-bullet " " checkbox)))
+                  (when ordered
+                    (let [value (.-value input)
+                          start-pos (util/get-selection-start input)
+                          after-lists-str (string/trim (subs value start-pos))
+                          after-lists-str (if cursor-in-item-content?
+                                            (str indent next-bullet " " after-lists-str)
+                                            after-lists-str)
+                          lines (string/split-lines after-lists-str)
+                          after-lists-str' (list/re-order-items lines (if cursor-in-item-content? bullet (inc bullet)))
+                          value' (str (subs value 0 start-pos) "\n" after-lists-str')
+                          cursor' (if cursor-in-item-content?
+                                    (inc (count (str (subs value 0 start-pos) indent next-bullet " ")))
+                                    (+ (:end item) (count next-bullet) 2))]
+                      (state/set-edit-content! (state/get-edit-input-id) value')
+                      (cursor/move-cursor-to input cursor'))))))))))))
 
 (defn toggle-list!
   []
@@ -2299,7 +2313,7 @@
                                  page-name (db-model/get-redirect-page-name page)]
                              (insert-first-page-block-if-not-exists! page-name)
                              (route-handler/redirect-to-page! page-name)))
-              "list-item" (dwim-in-list state)
+              "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
 
             (and
@@ -2867,21 +2881,25 @@
     (if (seq ids)
       (let [blocks (db/get-block-and-children repo (first ids))
             result (vec (concat result blocks))]
-        (recur (remove (set (map :block/uuid result)) ids) result))
+        (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
-(defn- paste-text
+(defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
-      (and (seq copied-block-ids)
-           (:copy/content copied-blocks)
-           (not (string/blank? text))
-           (= (string/replace (string/trim text) "\r" "")
-              (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+      ;; Internal blocks by either copy or cut blocks
+      (and
+       (or (seq copied-block-ids)
+           (seq (:copy/full-blocks copied-blocks)))
+       text
+       (or (:copy/content copied-blocks) "")
+       ;; not copied from the external clipboard
+       (= (string/replace (string/trim text) "\r" "")
+          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
@@ -2955,7 +2973,7 @@
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
-          (paste-text text e))
+          (paste-copied-blocks-or-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]

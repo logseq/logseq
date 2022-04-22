@@ -1,7 +1,8 @@
 (ns electron.url
   (:require [electron.handler :as handler]
             [electron.state :as state]
-            [electron.utils :refer [send-to-renderer]]
+            [electron.window :as win]
+            [electron.utils :refer [send-to-renderer] :as utils]
             [clojure.string :as string]
             [promesa.core :as p]))
 
@@ -31,21 +32,29 @@
   "Given a URL with `graph identifier` as path, `page` (optional) and `block-id` 
    (optional) as parameters, open the local graphs accordingly.
    `graph identifier` is the name of the graph to open, e.g. `lambda`"
-  [^js win parsed-url]
+  [^js win parsed-url force-new-window?]
   (let [graph-identifier (decode (string/replace (.-pathname parsed-url) "/" ""))
-        [page-name block-id] (get-URL-decoded-params parsed-url ["page" "block-id"])
+        [page-name block-id file] (get-URL-decoded-params parsed-url ["page" "block-id" "file"])
         graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
     (if graph-name
-      (p/let [_ (handler/broadcast-persist-graph! graph-name)]
+      (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
+              open-new-window? (or force-new-window? (not window-on-graph))
+              _ (when (and force-new-window? window-on-graph)
+                  (handler/broadcast-persist-graph! graph-name))]
           ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
-        (when (or page-name block-id)
-          (let [then-f (fn [win' graph-name']
+        (when (or page-name block-id file)
+          (let [redirect-f (fn [win' graph-name']
                          (when (= graph-name graph-name')
                            (send-to-renderer win' "redirectWhenExists" {:page-name page-name
-                                                                        :block-id block-id})))]
-            (state/set-state! :window/once-graph-ready then-f)))
-        (send-to-renderer win "openNewWindowOfGraph" graph-name))
+                                                                        :block-id block-id
+                                                                        :file file})))]
+            (if open-new-window?
+              (state/set-state! :window/once-graph-ready redirect-f)
+              (do (win/switch-to-window! window-on-graph)
+                  (redirect-f window-on-graph graph-name)))))
+        (when open-new-window?
+          (send-to-renderer win "openNewWindowOfGraph" graph-name)))
       (graph-identifier-error-handler graph-identifier))))
 
 (defn logseq-url-handler
@@ -57,7 +66,10 @@
 
       ;; identifier of graph in local
       (= "graph" url-host)
-      (local-url-handler win parsed-url)
+      (local-url-handler win parsed-url false)
+
+      (= "new-window" url-host)
+      (local-url-handler win parsed-url true)
 
       :else
       (send-to-renderer "notification" {:type "error"

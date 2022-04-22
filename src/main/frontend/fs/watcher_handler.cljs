@@ -92,7 +92,7 @@
           (and (contains? #{"add"} type)
                (= path pages-metadata-path))
           (p/do! (repo-handler/update-pages-metadata! repo content true))
-          
+
           ;; Change is triggered by external changes, so update to the db
           ;; Don't forced update when db is online, but resolving conflicts
           (and (contains? #{"change"} type)

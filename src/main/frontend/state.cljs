@@ -33,9 +33,8 @@
      :notification/show?                    false
      :notification/content                  nil
      :repo/cloning?                         false
-     ;; :repo/loading-files? is only for github repos
+     ;; :repo/loading-files? is only for GitHub repos
      :repo/loading-files?                   {}
-     :repo/parsing-files?                   nil
      :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
@@ -161,8 +160,10 @@
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
-     :plugin/installed-commands             {}
+     :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
+     :plugin/installed-resources            {}
+     :plugin/installed-hooks                {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -184,6 +185,8 @@
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
      :graph/syncing?                        false
+     ;; graph -> state
+     :graph/parsing-state                   {}
 
      ;; copied blocks
      :copy/blocks                           {:copy/content nil :copy/block-ids nil}
@@ -835,10 +838,6 @@
   []
   (get @state :editor/block))
 
-(defn get-last-edit-block
-  []
-  (:editor/last-edit-block @state))
-
 (defn get-current-edit-block-and-position
   []
   (let [edit-input-id (get-edit-input-id)
@@ -883,7 +882,6 @@
                     (assoc
                      :editor/block block
                      :editor/editing? {edit-input-id true}
-                     :editor/last-edit-block block
                      :editor/last-key-code nil
                      :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
@@ -912,7 +910,7 @@
 
 (defn set-editor-last-pos!
   [new-pos]
-  (set-state! :editor/last-saved-cursor new-pos))
+  (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
 
 (defn clear-editor-last-pos!
   []
@@ -920,13 +918,13 @@
 
 (defn get-editor-last-pos
   []
-  (:editor/last-saved-cursor @state))
+  (get-in @state [:editor/last-saved-cursor (:block/uuid (get-edit-block))]))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (set-state! :editor/last-saved-cursor new-pos)))
+    (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
 (defn set-theme!
   [theme]
@@ -1293,7 +1291,7 @@
 
 (defn get-plugins-commands
   []
-  (mapcat seq (flatten (vals (:plugin/installed-commands @state)))))
+  (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
 (defn get-plugins-commands-with-type
   [type]
@@ -1304,6 +1302,43 @@
   [type]
   (filterv #(= (keyword (first %)) (keyword type))
            (apply concat (vals (:plugin/installed-ui-items @state)))))
+
+(defn get-plugin-resources-with-type
+  [pid type]
+  (when-let [pid (and type (keyword pid))]
+    (get-in @state [:plugin/installed-resources pid (keyword type)])))
+
+(defn get-plugin-resource
+  [pid type key]
+  (when-let [resources (get-plugin-resources-with-type pid type)]
+    (get resources key)))
+
+(defn upt-plugin-resource
+  [pid type key attr val]
+  (when-let [resource (get-plugin-resource pid type key)]
+    (let [resource (assoc resource (keyword attr) val)]
+      (set-state!
+        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+      resource)))
+
+(defn install-plugin-hook
+  [pid hook]
+  (when-let [pid (keyword pid)]
+    (set-state!
+      [:plugin/installed-hooks hook]
+      (conj
+        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
+        pid)) true))
+
+(defn uninstall-plugin-hook
+  [pid hook-or-all]
+  (when-let [pid (keyword pid)]
+    (if (nil? hook-or-all)
+      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
+        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+    true))
+
 
 (defn get-scheduled-future-days
   []
@@ -1330,10 +1365,6 @@
 (defn loading-files?
   [repo]
   (get-in @state [:repo/loading-files? repo]))
-
-(defn set-parsing-files!
-  [value]
-  (set-state! :repo/parsing-files? value))
 
 (defn set-editor-last-input-time!
   [repo time]
@@ -1480,6 +1511,11 @@
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
+(defn set-copied-full-blocks
+  [content blocks]
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/full-blocks blocks}))
+
 (defn set-copied-full-blocks!
   [blocks]
   (set-state! [:copy/blocks :copy/full-blocks] blocks))
@@ -1592,6 +1628,9 @@
   []
   (:plugin/enabled @state))
 
+(def lsp-enabled?
+  (lsp-enabled?-or-theme))
+
 (defn consume-updates-coming-plugin
   [payload updated?]
   (when-let [id (keyword (:id payload))]
@@ -1699,3 +1738,13 @@
   (:file-sync/sync-manager @state))
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-parsing-state!
+  []
+  (set-state! [:graph/parsing-state (get-current-repo)] {}))
+
+(defn set-parsing-state!
+  [m]
+  (update-state! [:graph/parsing-state (get-current-repo)]
+                 (if (fn? m) m
+                   (fn [old-value] (merge old-value m)))))

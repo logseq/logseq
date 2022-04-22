@@ -84,6 +84,12 @@
                          (when @*quitting?
                            (async/put! state/persistent-dbs-chan true)))))))
 
+(defn switch-to-window!
+  [^js win]
+  (when (.isMinimized ^object win)
+    (.restore win))
+  (.focus win))
+
 (defn get-all-windows
   []
   (.getAllWindows BrowserWindow))
