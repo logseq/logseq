@@ -348,7 +348,7 @@
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   {:binding "mod+d"
+   :editor/open-file-in-directory   {:binding "mod+d mod+i"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-directory}
 
