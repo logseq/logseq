@@ -189,21 +189,6 @@
            (string/trim)))
 
 #?(:cljs
-   (defn fetch-raw
-     ([url on-ok on-failed]
-      (fetch-raw url {} on-ok on-failed))
-     ([url opts on-ok on-failed]
-      (-> (js/fetch url (bean/->js opts))
-          (.then (fn [resp]
-                   (if (>= (.-status resp) 400)
-                     (on-failed resp)
-                     (if (.-ok resp)
-                       (-> (.text resp)
-                           (.then bean/->clj)
-                           (.then #(on-ok %)))
-                       (on-failed resp)))))))))
-
-#?(:cljs
    (defn fetch
      ([url on-ok on-failed]
       (fetch url {} on-ok on-failed))
@@ -238,14 +223,6 @@
      (fetch url {:method "post"
                  :headers {:Content-Type "application/json"}
                  :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
-
-#?(:cljs
-   (defn delete
-     [url on-ok on-failed]
-     (fetch url {:method "delete"
-                 :headers {:Content-Type "application/json"}}
             on-ok
             on-failed)))
 

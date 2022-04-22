@@ -2,18 +2,15 @@
   (:refer-clojure :exclude [load-file])
   (:require ["/frontend/utils" :as utils]
             [borkdude.rewrite-edn :as rewrite]
-            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async.interop :refer [<p!]]
             [clojure.core.async :as async]
-            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
-            [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
             [frontend.handler.ui :as ui-handler]
@@ -49,10 +46,6 @@
        (contains? formats format)))
    files))
 
-(defn- only-supported-formats
-  [files]
-  (keep-formats files (config/supported-formats)))
-
 (defn- only-text-formats
   [files]
   (keep-formats files (config/text-formats)))
@@ -69,20 +62,6 @@
                             (common-handler/get-config repo-url))]
      (when config-content
        (common-handler/reset-config! repo-url config-content)))))
-
-(defn load-files
-  [repo-url]
-  (state/set-cloning! false)
-  (state/set-loading-files! repo-url true)
-  (p/let [files (git/list-files repo-url)
-          files (bean/->clj files)
-          config-content (load-file repo-url
-                                    (config/get-config-path repo-url))
-          files (if config-content
-                  (let [config (restore-config! repo-url config-content true)]
-                    (common-handler/remove-hidden-files files config identity))
-                  files)]
-    (only-supported-formats files)))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -273,25 +252,6 @@
                    (js/console.error error)
                    (async/put! chan false))))))
 
-(defn remove-file!
-  [repo file]
-  (when-not (string/blank? file)
-    (->
-     (p/let [_ (or (config/local-db? repo) (git/remove-file repo file))
-             _ (fs/unlink! repo (config/get-repo-path repo file) nil)]
-       (when-let [file (db/entity repo [:file/path file])]
-         (common-handler/check-changed-files-status)
-         (let [file-id (:db/id file)
-               page-id (db/get-file-page-id (:file/path file))
-               tx-data (map
-                         (fn [db-id]
-                           [:db.fn/retractEntity db-id])
-                         (remove nil? [file-id page-id]))]
-           (when (seq tx-data)
-             (db/transact! repo tx-data)))))
-     (p/catch (fn [err]
-                (js/console.error "error: " err))))))
-
 (defn run-writes-chan!
   []
   (let [chan (state/get-file-write-chan)]
@@ -310,17 +270,6 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
       (fs/watch-dir! dir))))
-
-(defn create-metadata-file
-  [repo-url encrypted?]
-  (let [repo-dir (config/get-repo-dir repo-url)
-        path (str config/app-name "/" config/metadata-file)
-        file-path (str "/" path)
-        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (reset-file! repo-url path default-content)))))
 
 (defn create-pages-metadata-file
   [repo-url]

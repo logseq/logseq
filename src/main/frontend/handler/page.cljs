@@ -13,11 +13,9 @@
             [frontend.db.conn :as conn]
             [frontend.format.block :as block]
             [frontend.fs :as fs]
-            [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -153,14 +151,10 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (->
-       (p/let [_ (or (config/local-db? repo)
-                     (git/remove-file repo file-path))
-               _ (and (config/local-db? repo)
+       (p/let [_ (and (config/local-db? repo)
                       (mobile-util/is-native-platform?)
                       (fs/delete-file! repo file-path file-path {}))
-               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
-         (common-handler/check-changed-files-status)
-         (repo-handler/push-if-auto-enabled! repo))
+               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
        (p/catch (fn [err]
                   (js/console.error "error: " err)))))))
 
@@ -183,10 +177,7 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo old-path new-path)
-             _ (when-not (config/local-db? repo)
-                 (git/rename repo old-path new-path))]
-       (common-handler/check-changed-files-status)
+     (p/let [_ (fs/rename! repo old-path new-path)]
        (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
@@ -413,8 +404,6 @@
         (route-handler/redirect! {:to          :page
                                   :push        false
                                   :path-params {:name new-page-name}}))
-
-      (repo-handler/push-if-auto-enabled! repo)
 
       (when (favorited? old-page-name)
         (p/do!

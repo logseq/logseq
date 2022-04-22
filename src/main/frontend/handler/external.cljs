@@ -2,7 +2,6 @@
   (:require [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
@@ -64,7 +63,6 @@
     (let [files (external/to-markdown-files :roam data {})]
       (index-files! repo files
                     (fn []
-                      (common-handler/check-changed-files-status)
                       (finished-ok-handler))))))
 
 

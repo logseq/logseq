@@ -1,15 +1,9 @@
 (ns frontend.components.repo
   (:require [clojure.string :as string]
-            [frontend.components.commit :as commit]
-            [frontend.components.encryption :as encryption]
-            [frontend.components.svg :as svg]
             [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.encrypt :as e]
-            [frontend.handler.common :as common-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.web.nfs :as nfs-handler]
@@ -17,7 +11,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
@@ -44,9 +37,7 @@
       [:div#graphs
        [:h1.title "All Graphs"]
        [:p.ml-2.opacity-70
-        (if (state/github-authed?)
-          "A \"graph\" in Logseq could be either a local directory or a git repo."
-          "A \"graph\" in Logseq means a local directory.")]
+        "A \"graph\" in Logseq means a local directory."]
 
        [:div.pl-1.content.mt-3
         [:div.flex.flex-row.my-4
@@ -55,12 +46,7 @@
            [:div.mr-8
             (ui/button
               (t :open-a-directory)
-              :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
-         (when (and (state/deprecated-logged?) (not (util/electron?)))
-           (ui/button
-             "Add another git repo"
-             :href (rfe/href :repo-add nil {:graph-types "github"})
-             :intent "logseq"))]
+              :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
         (for [{:keys [id url] :as repo} repos]
           (let [local? (config/local-db? url)]
             [:div.flex.justify-between.mb-4 {:key id}
@@ -74,11 +60,6 @@
                     :href url}
                 (db/get-repo-path url)])
              [:div.controls
-              (when (e/encrypted-db? url)
-                [:a.control {:title "Show encryption information about this graph"
-                             :on-click (fn []
-                                         (state/set-modal! (encryption/encryption-dialog url)))}
-                 "🔐"])
               [:a.text-gray-400.ml-4.font-medium.text-sm
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []
@@ -89,93 +70,6 @@
 (defn refresh-cb []
   (page-handler/create-today-journal!)
   (shortcut/refresh!))
-
-(rum/defc sync-status < rum/reactive
-  {:did-mount (fn [state]
-                (js/setTimeout common-handler/check-changed-files-status 1000)
-                state)}
-  [repo]
-  (when (and repo
-             (string/starts-with? repo "https://"))
-    (let [changed-files (state/sub [:repo/changed-files repo])
-          should-push? (seq changed-files)
-          git-status (state/sub [:git/status repo])
-          pushing? (= :pushing git-status)
-          pulling? (= :pulling git-status)
-          git-failed? (contains?
-                       #{:push-failed
-                         :clone-failed
-                         :checkout-failed
-                         :fetch-failed
-                         :merge-failed}
-                       git-status)
-          push-failed? (= :push-failed git-status)
-          last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
-          ;; db-persisted? (state/sub [:db/persisted? repo])
-          editing? (seq (state/sub :editor/editing?))]
-      [:div.flex-row.flex.items-center.cp__repo-indicator
-       (when pushing? svg/loading)
-       (ui/dropdown
-        (fn [{:keys [toggle-fn]}]
-          [:div.cursor.w-2.h-2.sync-status.mr-2
-           {:class (cond
-                     git-failed?
-                     "bg-red-500"
-                     (or
-                      ;; (not db-persisted?)
-                      editing?
-                      should-push? pushing?)
-                     "bg-orange-400"
-                     :else
-                     "bg-green-600")
-            :style {:border-radius "50%"
-                    :margin-top 2}
-            :on-mouse-over
-            (fn [_e]
-              (toggle-fn)
-              (js/setTimeout common-handler/check-changed-files-status 0))}])
-        (fn [{:keys [toggle-fn]}]
-          [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-           {:on-mouse-leave toggle-fn}
-           [:div
-            [:div
-             (cond
-               push-failed?
-               [:p (t :git/push-failed)]
-               (and should-push? (seq changed-files))
-               [:div.changes
-                [:ul.overflow-y-auto {:style {:max-height 250}}
-                 (for [file changed-files]
-                   [:li {:key (str "sync-" file)}
-                    [:div.flex.flex-row.justify-between.align-items
-                     [:a {:href (rfe/href :file {:path file})}
-                      file]
-                     [:a.ml-4.text-sm.mt-1
-                      {:on-click (fn [_e]
-                                   (export-handler/download-file! file))}
-                      [:span (t :download)]]]])]]
-               :else
-               [:p (t :git/local-changes-synced)])]
-            ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
-            [:div.flex.flex-row.justify-between.align-items.mt-2
-             (ui/button (t :git/push)
-               :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-             (when pushing? svg/loading)]]
-           [:hr]
-           [:div
-            (when-not (string/blank? last-pulled-at)
-              [:p {:style {:font-size 12}} (t :git/last-pull)
-               (str ": " last-pulled-at)])
-            [:div.flex.flex-row.justify-between.align-items
-             (ui/button (t :git/pull)
-               :on-click (fn [] (repo-handler/pull-current-repo)))
-             (when pulling? svg/loading)]
-            [:a.mt-5.text-sm.opacity-50.block
-             {:on-click (fn []
-                          (export-handler/export-repo-as-zip! repo))}
-             (t :repo/download-zip)]
-            [:p.pt-2.text-sm.opacity-50
-             (t :git/version) (str " " version/version)]]]))])))
 
 (defn- check-multiple-windows?
   [state]
