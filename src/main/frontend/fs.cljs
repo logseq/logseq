@@ -113,7 +113,6 @@
 
 (defn stat
   [dir path]
-  (prn {:dir dir})
   (protocol/stat (get-fs dir) dir path))
 
 (defn- get-record
