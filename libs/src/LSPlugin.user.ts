@@ -394,9 +394,14 @@ export class LSPluginUser
           this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
       }
 
-      await this._execCallableAPIAsync('setSDKMetadata', {
-        version: this._version,
-      })
+      try {
+        await this._execCallableAPIAsync('setSDKMetadata', {
+          version: this._version,
+        })
+      } catch (e) {
+        console.warn(e)
+      }
+
 
       callback && callback.call(this, baseInfo)
     } catch (e) {
