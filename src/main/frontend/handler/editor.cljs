@@ -2896,10 +2896,9 @@
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
        text
-       (or (:copy/content copied-blocks) "")
        ;; not copied from the external clipboard
        (= (string/replace (string/trim text) "\r" "")
-          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+          (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
