@@ -174,16 +174,16 @@
    :editor/open-edit               {:binding "enter"
                                     :fn      (partial editor-handler/open-selected-block! :right)}
 
-   :editor/select-block-up         {:binding "shift+up"
+   :editor/select-block-up         {:binding "alt+up"
                                     :fn      (editor-handler/on-select-block :up)}
 
-   :editor/select-block-down       {:binding "shift+down"
+   :editor/select-block-down       {:binding "alt+down"
                                     :fn      (editor-handler/on-select-block :down)}
 
-   :editor/select-up               {:binding false
+   :editor/select-up               {:binding "shift+up"
                                     :fn      (editor-handler/shortcut-select-up-down :up)}
 
-   :editor/select-down             {:binding false
+   :editor/select-down             {:binding "shift+down"
                                     :fn      (editor-handler/shortcut-select-up-down :down)}
 
    :editor/delete-selection        {:binding ["backspace" "delete"]
