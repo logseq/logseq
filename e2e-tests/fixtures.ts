@@ -153,7 +153,7 @@ export const test = base.extend<LogseqFixtures>({
         });
         let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
         // the next element after all blocks.
-        await page.click('.add-button-link-wrap', { delay: 50 })
+        await page.click('.add-button-link-wrap', { delay: 100 })
         await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible', timeout: 1000 })
         return page.locator('textarea >> nth=0')
       },
