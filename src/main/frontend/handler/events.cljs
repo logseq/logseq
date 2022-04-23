@@ -27,7 +27,6 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
-            [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -42,27 +41,7 @@
 
 ;; TODO: should we move all events here?
 
-(defn show-install-error!
-  [repo-url title]
-  (spec/validate :repos/url repo-url)
-  (notification/show!
-   [:p.content
-    title
-    " "
-    [:span.mr-2
-     (util/format
-      "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-      repo-url)
-     (ui/button
-      "Install Logseq on GitHub"
-      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-   :error
-   false))
-
 (defmulti handle first)
-
-(defmethod handle :repo/install-error [[_ repo-url title]]
-  (show-install-error! repo-url title))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)

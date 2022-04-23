@@ -397,7 +397,7 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [_repo block value {}]
+  [block value {}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -436,12 +436,12 @@
         :error)
 
        force?
-       (save-block-inner! repo block value opts)
+       (save-block-inner! block value opts)
 
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when (and content-changed? page)
-           (save-block-inner! repo block value opts)))))))
+           (save-block-inner! block value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value pos]

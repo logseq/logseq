@@ -61,10 +61,6 @@
     (if dev? path
         (str asset-domain path))))
 
-(goog-define GITHUB_APP_NAME "logseq-test")
-
-(def github-app-name (if dev? GITHUB_APP_NAME "logseq"))
-
 (defn text-formats
   []
   (let [config-formats (some->> (get-in @state/state [:config :text-formats])
