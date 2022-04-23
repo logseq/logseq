@@ -30,8 +30,7 @@
                            :externs            ["datascript/externs.js"
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false}}
-        :closure-defines  {goog.debug.LOGGING_ENABLED      true
-                           frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
+        :closure-defines  {goog.debug.LOGGING_ENABLED      true}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
