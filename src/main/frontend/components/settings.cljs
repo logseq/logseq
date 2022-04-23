@@ -9,7 +9,6 @@
             [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
@@ -25,7 +24,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.db :as db]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -357,7 +357,7 @@
         (config-handler/set-config! :default-home new-home)
         (notification/show! "Home default page updated successfully!" :success))
 
-      (page-handler/page-exists? (string/lower-case value))
+      (db/page-exists? value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)

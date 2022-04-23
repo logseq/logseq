@@ -716,7 +716,15 @@
   (when-let [db (conn/get-db repo)]
     (count (d/datoms db :avet :block/page page-id))))
 
+(defn page-exists?
+  "Whether a page exists."
+  [page-name]
+  (when page-name
+    (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
+
 (defn page-empty?
+  "Whether a page is empty. Does it has a non-page block?
+  `page-id` could be either a string or a db/id."
   [repo page-id]
   (when-let [db (conn/get-db repo)]
     (let [page-id (if (string? page-id)
@@ -886,25 +894,29 @@
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
-  "Given any readable page-name, return the exact page-name in db. Accepts both
+  "Given any readable page-name, return the exact page-name in db. If page
+   doesn't exists yet, will return the passed `page-name`. Accepts both
    sanitized or unsanitized names.
    alias?: if true, alias is allowed to be returned; otherwise, it would be deref."
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]
    (when page-name
-     (let [page-name (util/page-name-sanity-lc page-name)
-           page-entity (db-utils/entity [:block/name page-name])]
+     (let [page-name' (util/page-name-sanity-lc page-name)
+           page-entity (db-utils/entity [:block/name page-name'])]
        (cond
          alias?
+         page-name'
+
+         (nil? page-entity)
          page-name
 
          (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-         (let [source-page (get-alias-source-page (state/get-current-repo) page-name)]
+         (let [source-page (get-alias-source-page (state/get-current-repo) page-name')]
            (or (when source-page (:block/name source-page))
-               page-name))
+               page-name'))
 
          :else
-         page-name)))))
+         page-name')))))
 
 (defn get-page-original-name
   [page-name]

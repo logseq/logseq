@@ -82,7 +82,7 @@
 (rum/defc dummy-block
   [page-name]
   (let [handler-fn (fn []
-                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name :check-empty-page? false)]
+                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
                        (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))]
     [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
      [:div.flex.flex-row
@@ -194,8 +194,8 @@
                        (let [new-page-name (string/trim @*title-value)
                              merge? (and (not= (util/page-name-sanity-lc page-name)
                                                (util/page-name-sanity-lc @*title-value))
-                                         (page-handler/page-exists? page-name)
-                                         (page-handler/page-exists? @*title-value))]
+                                         (db/page-exists? page-name)
+                                         (db/page-exists? @*title-value))]
                          (ui/make-confirm-modal
                           {:title         (if merge?
                                             (str "Page “" @*title-value "” already exists, merge to it?")

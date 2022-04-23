@@ -65,18 +65,38 @@
       (util/format "\"%s\"" original-name)
       original-name)))
 
+(defn default-properties-block
+  ([title format page]
+   (default-properties-block title format page {}))
+  ([title format page properties]
+   (let [p (common-handler/get-page-default-properties title)
+         ps (merge p properties)
+         content (page-property/insert-properties format "" ps)
+         refs (block/get-page-refs-from-properties properties)]
+     {:block/uuid (db/new-block-id)
+      :block/properties ps
+      :block/properties-order (keys ps)
+      :block/refs refs
+      :block/left page
+      :block/format format
+      :block/content content
+      :block/parent page
+      :block/page page})))
+
+(defn- create-title-property?
+  [journal? page-name]
+  (and (not journal?)
+       (util/create-title-property? page-name)))
+
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title-property? (and (not journal?)
-                                      (util/create-title-property? (:block/name page)))
+          create-title? (create-title-property? journal? (:block/name page))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
-        (and (seq properties) create-title-property?)
-        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
-
-        create-title-property?
-        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
+        create-title?
+        [page
+         (default-properties-block (build-title page) format page-entity properties)]
 
         (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
@@ -95,8 +115,9 @@
                   split-namespace?    true}}]
    (let [title (string/trim title)
          title (util/remove-boundary-slashes title)
-         page-name (util/page-name-sanity-lc title)]
-     (when-not (db/entity [:block/name page-name])
+         page-name (util/page-name-sanity-lc title)
+         repo (state/get-current-repo)]
+     (when-not (db/page-exists? page-name)
        (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
@@ -104,7 +125,7 @@
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
-                           pages)
+                        pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
@@ -112,19 +133,17 @@
                            (remove nil?))
              last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
+         (db/transact! txs)))
 
-         ;; (util/pprint txs)
-         (db/transact! txs)
+     (when create-first-block?
+       (when (or
+              (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+              (create-title-property? journal? page-name))
+         (editor-handler/api-insert-new-block! "" {:page page-name})))
 
-         (when create-first-block?
-           (editor-handler/insert-first-page-block-if-not-exists! page-name))
-
-         (when-let [page (db/entity [:block/name page-name])]
-           (outliner-file/sync-to-file page))
-
-         (when redirect?
-           (route-handler/redirect-to-page! page-name))
-         page-name)))))
+     (when redirect?
+       (route-handler/redirect-to-page! page-name))
+     page-name)))
 
 (defn delete-file!
   [repo page-name]
@@ -453,16 +472,11 @@
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
-(defn page-exists?
-  [page-name]
-  (when page-name
-    (db/entity [:block/name (util/page-name-sanity-lc page-name)])))
-
 (defn merge-pages!
   "Only accepts sanitized page names"
   [from-page-name to-page-name]
-  (when (and (page-exists? from-page-name)
-             (page-exists? to-page-name)
+  (when (and (db/page-exists? from-page-name)
+             (db/page-exists? to-page-name)
              (not= from-page-name to-page-name))
     (let [to-page (db/entity [:block/name to-page-name])
           to-id (:db/id to-page)

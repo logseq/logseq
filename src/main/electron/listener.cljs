@@ -82,8 +82,7 @@
                            (let [db-page-name (db-model/get-redirect-page-name page-name)]
                              ;; No error handling required, as a page name is always valid
                              ;; Open new page if the page does not exist
-                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name)
-                             (route-handler/redirect-to-page! db-page-name))
+                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
 
                            block-id
                            (if (db-model/get-block-by-uuid block-id)

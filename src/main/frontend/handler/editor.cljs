@@ -42,7 +42,6 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
-            [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.priority :as priority]
             [frontend.util.thingatpt :as thingatpt]
@@ -589,9 +588,11 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid replace-empty-target?]
+  [content {:keys [page block-uuid sibling? before? properties
+                   custom-uuid replace-empty-target? edit-block?]
             :or {sibling? false
-                 before? false}}]
+                 before? false
+                 edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
           sibling? (if before? true (if page false sibling?))
@@ -650,18 +651,17 @@
             (outliner-insert-block! {} block-m new-block {:sibling? sibling?
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
-            (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)
+            (when edit-block?
+              (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  [page-name & {:keys [check-empty-page?]
-                :or {check-empty-page? true}}]
-  (when (string? page-name)
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (when (or
-             (and check-empty-page? (db/page-empty? (state/get-current-repo) (:db/id page)))
-             (false? check-empty-page?))
-        (api-insert-new-block! "" {:page page-name})))))
+  ([page-name]
+   (insert-first-page-block-if-not-exists! page-name {}))
+  ([page-name opts]
+   (when (and (string? page-name)
+              (not (string/blank? page-name)))
+     (state/pub-event! [:page/create page-name opts]))))
 
 (defn properties-block
   [properties format page]
@@ -677,43 +677,6 @@
      :block/content content
      :block/parent page
      :block/page page}))
-
-(defn default-properties-block
-  ([title format page]
-   (default-properties-block title format page {}))
-  ([title format page properties]
-   (let [p (common-handler/get-page-default-properties title)
-         ps (merge p properties)
-         content (page-property/insert-properties format "" ps)
-         refs (block/get-page-refs-from-properties properties)]
-     {:block/pre-block? true
-      :block/uuid (db/new-block-id)
-      :block/properties ps
-      :block/properties-order (keys ps)
-      :block/refs refs
-      :block/left page
-      :block/format format
-      :block/content content
-      :block/parent page
-      :block/page page})))
-
-(defn add-default-title-property-if-needed!
-  [page-name]
-  (when (string? page-name)
-    (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-      (when (db/page-empty? (state/get-current-repo) (:db/id page))
-        (let [title (or (:block/original-name page)
-                        (:block/name page))
-              format (db/get-page-format page)
-              create-title-property? (util/create-title-property? title)]
-          (when create-title-property?
-            (let [default-properties (default-properties-block title format (:db/id page))
-                  new-empty-block (-> (dissoc default-properties :block/pre-block? :block/uuid :block/left :block/properties)
-                                      (assoc :block/uuid (db/new-block-id)
-                                             :block/content ""
-                                             :block/left [:block/uuid (:block/uuid default-properties)]))]
-              (db/transact! [default-properties new-empty-block])
-              true)))))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]
@@ -1172,8 +1135,7 @@
         (js/window.open page)
         (let [page-name (db-model/get-redirect-page-name page)]
           (state/clear-edit!)
-          (insert-first-page-block-if-not-exists! page-name)
-          (route-handler/redirect-to-page! page-name))))))
+          (insert-first-page-block-if-not-exists! page-name))))))
 
 (defn open-link-in-sidebar!
   []
@@ -1256,32 +1218,36 @@
                    blocks)]
       (state/exit-editing-and-set-selected-blocks! blocks direction))))
 
+(defn- select-block-up-down
+  [direction]
+  (cond
+      ;; when editing, quit editing and select current block
+    (state/editing?)
+    (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
+
+      ;; when selection and one block selected, select next block
+    (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
+          element (f (first (state/get-selection-blocks)))]
+      (when element
+        (state/conj-selection-block! element direction)))
+
+      ;; if same direction, keep conj on same direction
+    (and (state/selection?) (= direction (state/get-selection-direction)))
+    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
+          first-last (if (= :up direction) first last)
+          element (f (first-last (state/get-selection-blocks)))]
+      (when element
+        (state/conj-selection-block! element direction)))
+
+      ;; if different direction, keep clear until one left
+    (state/selection?)
+    (clear-last-selected-block!)))
+
 (defn on-select-block
   [direction]
   (fn [_event]
-    (cond
-      ;; when editing, quit editing and select current block
-      (state/editing?)
-      (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
-
-      ;; when selection and one block selected, select next block
-      (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-      (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
-            element (f (first (state/get-selection-blocks)))]
-        (when element
-          (state/conj-selection-block! element direction)))
-
-      ;; if same direction, keep conj on same direction
-      (and (state/selection?) (= direction (state/get-selection-direction)))
-      (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
-            first-last (if (= :up direction) first last)
-            element (f (first-last (state/get-selection-blocks)))]
-        (when element
-          (state/conj-selection-block! element direction)))
-
-      ;; if different direction, keep clear until one left
-      (state/selection?)
-      (clear-last-selected-block!))))
+    (select-block-up-down direction)))
 
 (defn save-block-aux!
   [block value opts]
@@ -2311,8 +2277,7 @@
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (let [page (:link thing-at-point)
                                  page-name (db-model/get-redirect-page-name page)]
-                             (insert-first-page-block-if-not-exists! page-name)
-                             (route-handler/redirect-to-page! page-name)))
+                             (insert-first-page-block-if-not-exists! page-name)))
               "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
 
@@ -2896,10 +2861,9 @@
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
        text
-       (or (:copy/content copied-blocks) "")
        ;; not copied from the external clipboard
        (= (string/replace (string/trim text) "\r" "")
-          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+          (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
@@ -3079,6 +3043,26 @@
 
         :else
         (select-first-last direction)))))
+
+(defn shortcut-select-up-down [direction]
+  (fn [e]
+    (util/stop e)
+    (if (state/editing?)
+      (let [input (state/get-input)
+            selected-start (util/get-selection-start input)
+            selected-end (util/get-selection-end input)
+            [anchor cursor] (case (util/get-selection-direction input)
+                              "backward" [selected-end selected-start]
+                              [selected-start selected-end])
+            cursor-rect (cursor/get-caret-pos input cursor)]
+        (if
+          ;; if the move is to cross block boundary, select the whole block
+         (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
+             (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
+          (select-block-up-down direction)
+          ;; simulate text selection
+          (cursor/select-up-down input direction anchor cursor-rect)))
+      (select-block-up-down direction))))
 
 (defn open-selected-block!
   [direction e]

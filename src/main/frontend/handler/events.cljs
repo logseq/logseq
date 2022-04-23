@@ -249,6 +249,9 @@
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 
+(defmethod handle :page/create [[_ page-name opts]]
+  (page-handler/create! page-name opts))
+
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))

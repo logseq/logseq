@@ -230,6 +230,7 @@
         cm-options (merge default-cm-options
                           (extra-codemirror-options)
                           {:mode mode
+                           :tabindex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys #js {"Esc" (fn [cm]
                                                    ;; Avoid reentrancy
                                                    (gobj/set cm "escPressed" true)
