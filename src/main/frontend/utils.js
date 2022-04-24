@@ -1,6 +1,8 @@
 import path from 'path/path.js'
+
+// TODO split the capacitor abilities to a separate file for capacitor APIs
 import { StatusBar, Style } from '@capacitor/status-bar'
-import { Clipboard } from '@capacitor/clipboard';
+import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -242,8 +244,19 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
+// TODO split the capacitor clipboard to a separate file for capacitor APIs
 export const writeClipboard = (text, isHtml) => {
-    if (typeof navigator.permissions !== "undefined") {
+    if (typeof navigator.permissions == "undefined") {
+        CapacitorClipboard.write({ string: text });
+        return
+    }
+    navigator.permissions.query({
+        name: "clipboard-write"
+    }).then((result) => {
+        if (typeof ClipboardItem === 'undefined' || (result.state != "granted" && result.state != "prompt")){
+            console.debug("Copy without `clipboard-write` permission:", text)
+            return
+        }
         let blob = new Blob([text], {
             type: ["text/plain"]
         });
@@ -259,21 +272,12 @@ export const writeClipboard = (text, isHtml) => {
                 ["text/html"]: blob
             })];
         }
-        navigator.permissions.query({
-            name: "clipboard-write"
-        }).then((result) => {
-            if (result.state == "granted" || result.state == "prompt") {
-                navigator.clipboard.write(data).then(() => {
-                    /* success */
-                }).catch(e => {
-                    console.log(e, "fail")
-                })
-            }
-        })} else {
-            Clipboard.write({
-                string: text
-            });
-        }
+        navigator.clipboard.write(data).then(() => {
+            /* success */
+        }).catch(e => {
+            console.log(e, "fail")
+        })
+    })
 }
 
 export const toPosixPath = (input) => {
