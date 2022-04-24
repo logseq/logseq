@@ -1,6 +1,6 @@
 ## @logseq/libs
 
-🚀 Logseq SDK libraries [Draft].
+🚀 Logseq SDK libraries.
 
 #### Installation
 
@@ -16,8 +16,9 @@ Load `logseq` plugin sdk as global namespace
 import "@logseq/libs"
 ```
 
-#### Samples
-https://github.com/logseq/logseq-plugin-samples
+#### APIs & Samples
+- https://logseq.github.io/plugins/
+- https://github.com/logseq/logseq-plugin-samples
 
 #### Community templates
 
