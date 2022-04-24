@@ -95,8 +95,7 @@
               seconds (mod reduced-seconds 60)
               minutes (mod (+ reduced-minutes (quot reduced-seconds 60)) 60)
               hours (+ reduced-hours
-                       (quot reduced-minutes 60)
-                       (quot (+ (mod reduced-minutes 60) reduced-seconds) 3600))]
+                       (quot (+ reduced-minutes (quot reduced-seconds 60)) 60))]
           (if string?
             (util/format "%s%s%s"
                          (if (>= hours 1)
