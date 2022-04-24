@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.components.diff :as diff]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.components.plugins :as plugin]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
@@ -195,6 +196,10 @@
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards {:id :srs
                                       :label "flashcards__cp"}))
+
+(defmethod handle :modal/show-instruction [_]
+  (state/set-modal! capacitor-fs/instruction {:id :instruction
+                                              :label "instruction__cp"}))
 
 (defmethod handle :modal/show-themes-modal [_]
   (plugin/open-select-theme!))
