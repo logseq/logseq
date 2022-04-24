@@ -14,7 +14,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]))
 
-(defn- resolve-input
+(defn resolve-input
   [input]
   (cond
     (= :right-now-ms input) (util/time-ms)

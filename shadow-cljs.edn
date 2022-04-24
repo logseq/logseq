@@ -18,9 +18,6 @@
                         :code-editor
                         {:entries    [frontend.extensions.code]
                          :depends-on #{:main}}
-                        :age-encryption
-                        {:entries    [frontend.extensions.age-encryption]
-                         :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
                          :depends-on #{:main}}}
@@ -33,8 +30,7 @@
                            :externs            ["datascript/externs.js"
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false}}
-        :closure-defines  {goog.debug.LOGGING_ENABLED      true
-                           frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
+        :closure-defines  {goog.debug.LOGGING_ENABLED      true}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
@@ -78,9 +74,6 @@
                                ;;  :depends-on #{:main}}
                                :code-editor
                                {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :age-encryption
-                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]

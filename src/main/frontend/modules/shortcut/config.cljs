@@ -344,11 +344,11 @@
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app {:binding false
+   :editor/open-file-in-default-app {:binding "mod+d mod+a"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   {:binding false
+   :editor/open-file-in-directory   {:binding "mod+d mod+i"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-directory}
 
@@ -638,6 +638,8 @@
     :sidebar/open-today-page
     :search/re-index
     :editor/insert-youtube-timestamp
+    :editor/open-file-in-default-app
+    :editor/open-file-in-directory
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

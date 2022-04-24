@@ -13,6 +13,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
+            [frontend.db.query-react :as query-react]
             [frontend.fs :as fs]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
@@ -676,7 +677,8 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [db (db/get-db repo)]
       (let [query (cljs.reader/read-string query)
-            result (apply d/q query db inputs)]
+            resolved-inputs (map (comp query-react/resolve-input cljs.reader/read-string) inputs)
+            result (apply d/q query db resolved-inputs)]
         (clj->js result)))))
 
 (def ^:export custom_query db/custom-query)

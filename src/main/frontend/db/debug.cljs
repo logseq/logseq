@@ -46,16 +46,3 @@
             (vector? x)
             (= :block/uuid (first x))
             (nil? (second x)))))))
-
-(comment
-  (defn debug!
-    []
-    (let [repos (->> (get-in @state/state [:me :repos])
-                     (map :url))]
-      (mapv (fn [repo]
-              {:repo/current (state/get-current-repo)
-               :repo repo
-               :git/cloned? (cloned? repo)
-               :git/status (get-key-value repo :git/status)
-               :git/error (get-key-value repo :git/error)})
-            repos))))

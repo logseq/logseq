@@ -38,7 +38,7 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
+  blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
@@ -52,7 +52,7 @@
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
-  journal-page? mark-repo-as-cloned! page-alias-set pull-block
+  journal-page? page-alias-set pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
@@ -167,8 +167,7 @@
           db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
           stored (db-persist/get-serialized-graph db-name)
-          logged? (:name me)
-          _ (if stored
+          _ (when stored
               (let [stored-db (try (string->db stored)
                                    (catch js/Error _e
                                      (js/console.warn "Invalid graph cache")
@@ -179,9 +178,7 @@
                     db (if (old-schema? attached-db)
                          (db-migrate/migrate attached-db)
                          attached-db)]
-                (conn/reset-conn! db-conn db))
-              (when logged?
-                (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+                (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn restore!

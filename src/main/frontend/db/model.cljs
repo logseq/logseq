@@ -1285,25 +1285,6 @@
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
 
-(defn mark-repo-as-cloned!
-  [repo-url]
-  (db-utils/transact!
-   [{:repo/url repo-url
-     :repo/cloned? true}]))
-
-(defn cloned?
-  [repo-url]
-  (when-let [db (conn/get-db repo-url)]
-    (->
-     (d/q '[:find ?cloned
-            :in $ ?repo-url
-            :where
-            [?repo :repo/url ?repo-url]
-            [?repo :repo/cloned? ?cloned]]
-          db
-          repo-url)
-     ffirst)))
-
 (defn get-db-type
   [repo]
   (db-utils/get-key-value repo :db/type))
