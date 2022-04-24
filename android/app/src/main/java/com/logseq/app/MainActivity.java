@@ -6,12 +6,28 @@ import android.webkit.ValueCallback;
 
 import com.getcapacitor.BridgeActivity;
 
+import java.util.Timer;
+import java.util.TimerTask;
+
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         registerPlugin(FolderPicker.class);
         registerPlugin(FsWatcher.class);
+
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String s) {
+                        //
+                    }
+                });
+            }
+        }, 5000);
+
     }
 
     @Override

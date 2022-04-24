@@ -29,7 +29,8 @@
 (defn fetch-latest-release-asset
   [{:keys [repo theme]}]
   (p/catch
-    (p/let [api #(str "https://api.github.com/repos/" repo "/" %)
+    (p/let [repo (some-> repo (string/trim) (string/replace #"^/+(.+?)/+$" "$1"))
+            api #(str "https://api.github.com/repos/" repo "/" %)
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
@@ -47,14 +48,15 @@
        (:body res)])
 
     (fn [^js e]
-      (emit :lsp-installed {:status :error :payload e})
-      (throw (js/Error. :release-network-issue)))))
+      (debug e)
+      (throw (js/Error. [:release-channel-issue (.-message e)])))))
 
 (defn download-asset-zip
   [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
     (p/let [^js res (fetch dl-url {:timeout 30000})
-            _ (when-not (.-ok res) (throw (js/Error. :download-network-issue)))
+            _ (when-not (.-ok res)
+                (throw (js/Error. [:download-channel-issue (.-statusText res)])))
             frm-zip (p/create
                       (fn [resolve1 reject1]
                         (let [body (.-body res)
@@ -155,7 +157,7 @@
 
                           _ (when-not dl-url
                               (debug "[Download URL Error]" asset)
-                              (throw (js/Error. :release-asset-not-found)))
+                              (throw (js/Error. [:release-asset-not-found (js/JSON.stringify asset)])))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
                           _ (when-not only-check (download-asset-zip item dl-url latest-version dest))
@@ -175,7 +177,8 @@
                       (emit :lsp-installed
                             {:status     :error
                              :only-check only-check
-                             :payload    (assoc item :error-code (.-message e))}))
+                             :payload    (assoc item :error-code (.-message e))})
+                      (debug e))
                     (resolve nil)))))
 
           (p/finally

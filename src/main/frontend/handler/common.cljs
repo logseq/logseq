@@ -1,60 +1,18 @@
 (ns frontend.handler.common
   (:require [cljs-bean.core :as bean]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
             [cljs.reader :as reader]
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.git :as git]
-            [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [goog.object :as gobj]
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
             [borkdude.rewrite-edn :as rewrite]))
-
-(defn get-ref
-  [repo-url]
-  (git/resolve-ref repo-url "HEAD"))
-
-(defn get-remote-ref
-  [repo-url]
-  (let [branch (state/get-default-branch repo-url)]
-    ;; TODO: what if the remote is not named "origin", check the api from isomorphic-git
-    (git/resolve-ref repo-url (str "refs/remotes/origin/" branch))))
-
-(defn check-changed-files-status
-  ([]
-   (check-changed-files-status (state/get-current-repo)))
-  ([repo]
-   (when (and
-          repo
-          (db/cloned? repo)
-          (gobj/get js/window "workerThread")
-          (gobj/get js/window.workerThread "getChangedFiles"))
-     (->
-      (p/let [files (js/window.workerThread.getChangedFiles (config/get-repo-dir repo))
-              files (bean/->clj files)]
-        (->
-         (p/let [remote-latest-commit (get-remote-ref repo)
-                 local-latest-commit (get-ref repo)]
-           (p/let [descendent? (git/descendent? repo local-latest-commit remote-latest-commit)
-                   diffs (git/get-diffs repo local-latest-commit remote-latest-commit)]
-             (let [files (if descendent?
-                           (->> (concat (map :path diffs) files)
-                                distinct)
-                           files)]
-               (state/set-changed-files! repo files))))
-         (p/catch (fn [error]
-                    (log/warn :git/ref-not-found {:error error})))))
-      (p/catch (fn [error]
-                 (js/console.dir error)))))))
 
 (defn copy-to-clipboard-without-id-property!
   [format content]
@@ -93,15 +51,6 @@
                 (hidden? path patterns))) files)
     files))
 
-(comment
-  (let [repo (state/get-current-repo)]
-    (p/let [remote-oid (get-remote-ref repo)
-            local-oid (get-ref repo)
-            diffs (git/get-diffs repo local-oid remote-oid)]
-      (println {:local-oid local-oid
-                :remote-oid remote-oid
-                :diffs diffs}))))
-
 (defn get-config
   [repo-url]
   (db/get-file repo-url (config/get-config-path)))
@@ -130,71 +79,6 @@
     (let [config (read-config content)]
       (state/set-config! repo-url config)
       config)))
-
-(defn read-metadata!
-  [content]
-  (try
-   (reader/read-string content)
-   (catch :default e
-     (log/error :parse/metadata-failed e)
-     {})))
-
-(defn request-app-tokens!
-  [ok-handler error-handler]
-  (let [repos (state/get-repos)
-        installation-ids (->> (map :installation_id repos)
-                              (remove nil?)
-                              (distinct))]
-    (when (or (seq repos)
-              (seq installation-ids))
-      (util/post (str config/api "refresh_github_token")
-                 {:installation-ids installation-ids
-                  :repos repos}
-                 (fn [result]
-                   (state/set-github-installation-tokens! result)
-                   (when ok-handler (ok-handler)))
-                 (fn [error]
-                   (log/error :token/http-request-failed error)
-                   (js/console.dir error)
-                   (when error-handler (error-handler)))))))
-
-(defn- get-github-token*
-  [repo]
-  (spec/validate :repos/url repo)
-  (when repo
-    (let [{:keys [token expires_at] :as token-state}
-          (state/get-github-token repo)]
-      (spec/validate :repos/repo token-state)
-      (if (and (map? token-state)
-               (string? expires_at))
-        (let [expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
-              now (t/now)
-              expired? (t/after? now expires-at)]
-          {:exist? true
-           :expired? expired?
-           :token token})
-        {:exist? false}))))
-
-(defn get-github-token
-  ([]
-   (get-github-token  (state/get-current-repo)))
-  ([repo]
-   (when-not (config/local-db? repo)
-     (js/Promise.
-      (fn [resolve reject]
-        (let [{:keys [expired? token exist?]} (get-github-token* repo)
-              valid-token? (and exist? (not expired?))]
-          (if valid-token?
-            (resolve token)
-            (request-app-tokens!
-             (fn []
-               (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
-                     valid-token? (and exist? (not expired?))]
-                 (if valid-token?
-                   (resolve token)
-                   (do (log/error :token/failed-get-token token-m)
-                       (reject)))))
-             nil))))))))
 
 (defn get-page-default-properties
   [page-name]

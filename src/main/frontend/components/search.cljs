@@ -21,8 +21,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (defn highlight-exact-query
   [content q]
@@ -357,9 +356,6 @@
         timeout 300
         in-page-search? (= search-mode :page)]
     [:div.cp__palette.cp__palette-main
-     (when (mobile-util/is-native-platform?)
-       {:style {:min-height "50vh"}})
-
      [:div.input-wrap
       [:input.cp__palette-input.w-full
        {:type          "text"

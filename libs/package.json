@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.0.1-alpha.35",
+  "version": "0.0.2",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -10,7 +10,9 @@
     "dev:user": "npm run build:user -- --mode development --watch",
     "build:core": "webpack --config webpack.config.core.js --mode production",
     "dev:core": "npm run build:core -- --mode development --watch",
-    "build": "tsc && rm dist/*.js && npm run build:user"
+    "build": "tsc && rm dist/*.js && npm run build:user",
+    "lint": "prettier --check \"src/**/*.{ts, js}\"",
+    "fix": "prettier --write \"src/**/*.{ts, js}\""
   },
   "dependencies": {
     "csstype": "3.0.8",
@@ -26,6 +28,8 @@
     "@types/debug": "^4.1.5",
     "@types/dompurify": "^2.2.1",
     "@types/lodash-es": "^4.17.4",
+    "prettier": "^2.6.2",
+    "prettier-config-standard": "^5.0.0",
     "ts-loader": "^8.0.17",
     "typescript": "^4.2.2",
     "webpack": "^5.24.3",

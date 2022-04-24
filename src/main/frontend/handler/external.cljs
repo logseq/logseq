@@ -2,7 +2,6 @@
   (:require [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
@@ -64,7 +63,6 @@
     (let [files (external/to-markdown-files :roam data {})]
       (index-files! repo files
                     (fn []
-                      (common-handler/check-changed-files-status)
                       (finished-ok-handler))))))
 
 
@@ -78,7 +76,7 @@
                          (block/extract-blocks parsed-blocks "" true :markdown)
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
-      (when (not (page/page-exists? page-name))
+      (when (not (db/page-exists? page-name))
         (page/create! page-name {:redirect? false}))
       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
             children (:block/_parent page-block)
@@ -89,11 +87,9 @@
                                       [last-block true]
                                       (if snd-last-block
                                         [snd-last-block true]
-                                        [page-block false]))
-            tree (editor/blocks->tree-by-level parsed-blocks)]
-        (editor/paste-block-vec-tree-at-target
-         tree []
-         {:get-pos-fn #(editor/get-block-tree-insert-pos-after-target
-                        (:db/id target-block) sibling?)
-          :page-block page-block})
+                                        [page-block false]))]
+        (editor/paste-blocks
+         parsed-blocks
+         {:target target-block
+          :sibling? sibling?})
         (finished-ok-handler [page-name])))))

@@ -168,18 +168,15 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
+      # NOTE: require the app to be build in debug mode(compile instead of build).
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && yarn cljs:release
+          yarn gulp:build && clojure -M:cljs compile app publishing electron
           (cd static && yarn install && yarn rebuild:better-sqlite3)
 
       # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
       - name: Ensure static yarn.lock is up to date
         run: git diff --exit-code static/yarn.lock
-
-      # If not building, the `event_` of `goog.event.KeyboardEvent` would be missing
-      - name: Build app
-        run: clojure -M:cljs compile app
 
       - name: Run Playwright test
         run: xvfb-run -- yarn e2e-test

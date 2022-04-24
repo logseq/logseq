@@ -30,12 +30,12 @@
     (and
       (vector? id)
       (= (first id) :block/name))
-    (let [conn (conn/get-conn false)]
+    (let [conn (conn/get-db false)]
       (-> (db-outliner/get-by-id conn id)
         (:block/uuid)))
 
     (or (e/entity? id) (map? id))
-    (let [conn (conn/get-conn false)]
+    (let [conn (conn/get-db false)]
       (-> (db-outliner/get-by-id conn (:db/id id))
         (:block/uuid)))
 

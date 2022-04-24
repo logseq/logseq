@@ -91,7 +91,7 @@
                    :end (+ line-beginning-pos (count (str key "::")))}))))]
       (assoc property :type "property-key"))))
 
-(defn- get-list-item-indent&bullet [line]
+(defn get-list-item-indent&bullet [line]
   (when-not (string/blank? line)
     (or (re-matches #"^([ \t\r]*)(\+|\*|-){1} (\[[X ]\])?.*$" line)
         (re-matches #"^([\s]*)(\d+){1}\. (\[[X ]\])?.*$" line))))

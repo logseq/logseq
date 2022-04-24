@@ -4,78 +4,38 @@ import path from 'path'
 import { test } from './fixtures'
 import { randomString, createRandomPage } from './utils'
 
-test('render app', async ({ page }) => {
-  // NOTE: part of app startup tests is moved to `fixtures.ts`.
-  await page.waitForFunction('window.document.title != "Loading"')
-
-  expect(await page.title()).toMatch(/^Logseq.*?/)
-})
-
-test('toggle sidebar', async ({ page }) => {
-  let sidebar = page.locator('#left-sidebar')
-
-  // Left sidebar is toggled by `is-open` class
-  if (/is-open/.test(await sidebar.getAttribute('class'))) {
-    await page.click('#left-menu.button')
-    await expect(sidebar).not.toHaveClass(/is-open/)
-  } else {
-    await page.click('#left-menu.button')
-    await page.waitForTimeout(10)
-    await expect(sidebar).toHaveClass(/is-open/)
-    await page.click('#left-menu.button')
-    await page.waitForTimeout(10)
-    await expect(sidebar).not.toHaveClass(/is-open/)
-  }
-
-  await page.click('#left-menu.button')
-
-  await page.waitForTimeout(10)
-  await expect(sidebar).toHaveClass(/is-open/)
-  await page.waitForSelector('#left-sidebar .left-sidebar-inner', { state: 'visible' })
-  await page.waitForSelector('#left-sidebar a:has-text("New page")', { state: 'visible' })
-})
-
-test('search', async ({ page }) => {
-  await page.click('#search-button')
-  await page.waitForSelector('[placeholder="Search or create page"]')
-  await page.fill('[placeholder="Search or create page"]', 'welcome')
-
-  await page.waitForTimeout(500)
-  const results = await page.$$('#ui__ac-inner .block')
-  expect(results.length).toBeGreaterThanOrEqual(1)
-})
 
 test('create page and blocks, save to disk', async ({ page, block, graphDir }) => {
   const pageTitle = await createRandomPage(page)
 
   // do editing
-  await block.mustFill('this is my first bullet')
+  await page.keyboard.type('first bullet')
   await block.enterNext()
 
-  await block.waitForBlocks(1)
+  await block.waitForBlocks(2)
 
-  await block.mustFill('this is my second bullet')
+  await page.keyboard.type('second bullet')
   await block.clickNext()
 
-  await block.mustFill('this is my third bullet')
-  await block.indent()
+  await page.keyboard.type('third bullet')
+  expect(await block.indent()).toBe(true)
   await block.enterNext()
 
-  await page.keyboard.type('continue editing test')
+  await page.keyboard.type('continue editing')
   await page.keyboard.press('Shift+Enter')
-  await page.keyboard.type('continue')
+  await page.keyboard.type('second line')
 
   await block.enterNext()
   expect(await block.unindent()).toBe(true)
   expect(await block.unindent()).toBe(false)
-  await block.mustFill('test ok')
+  await page.keyboard.type('test ok')
   await page.keyboard.press('Escape')
 
   await block.waitForBlocks(5)
 
   // active edit, and create next block
   await block.clickNext()
-  await page.fill('textarea >> nth=0', 'test')
+  await page.keyboard.type('test')
   for (let i = 0; i < 5; i++) {
     await page.keyboard.press('Backspace', { delay: 100 })
   }
@@ -89,11 +49,11 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
     'utf8'
   )
   expect(contentOnDisk.trim()).toEqual(`
-- this is my first bullet
-- this is my second bullet
-	- this is my third bullet
-	- continue editing test
-	  continue
+- first bullet
+- second bullet
+	- third bullet
+	- continue editing
+	  second line
 - test ok`.trim())
 })
 
@@ -110,7 +70,7 @@ test('delete and backspace', async ({ page, block }) => {
 
   // refill
   await block.enterNext()
-  await page.type('textarea >> nth=0', 'test', { delay: 50 })
+  await block.mustType('test')
   await page.keyboard.press('ArrowLeft', { delay: 50 })
   await page.keyboard.press('ArrowLeft', { delay: 50 })
 
@@ -156,11 +116,12 @@ test('selection', async ({ page, block }) => {
 })
 
 test('template', async ({ page, block }) => {
-  const randomTemplate = randomString(10)
+  const randomTemplate = randomString(6)
 
   await createRandomPage(page)
 
   await block.mustFill('template test\ntemplate:: ' + randomTemplate)
+  await page.keyboard.press('Enter')
   await block.clickNext()
 
   expect(await block.indent()).toBe(true)
@@ -178,7 +139,7 @@ test('template', async ({ page, block }) => {
   expect(await block.unindent()).toBe(true)
   expect(await block.unindent()).toBe(false) // already at the first level
 
-  await block.waitForBlocks(4)
+  await block.waitForBlocks(5)
 
   // NOTE: use delay to type slower, to trigger auto-completion UI.
   await block.mustType('/template')
@@ -194,20 +155,17 @@ test('template', async ({ page, block }) => {
   await block.waitForBlocks(8)
 })
 
-test('auto completion square brackets', async ({ page }) => {
+test('auto completion square brackets', async ({ page, block }) => {
   await createRandomPage(page)
 
   // In this test, `type` is unsed instead of `fill`, to allow for auto-completion.
 
   // [[]]
-  await page.type('textarea >> nth=0', 'This is a [')
-  await expect(page.locator('textarea >> nth=0')).toHaveText('This is a []')
-  await page.waitForTimeout(100)
-  await page.type('textarea >> nth=0', '[')
+  await block.mustType('This is a [', { toBe: 'This is a []' })
+  await block.mustType('[', { toBe: 'This is a [[]]' })
+
   // wait for search popup
   await page.waitForSelector('text="Search for a page"')
-
-  expect(await page.inputValue('textarea >> nth=0')).toBe('This is a [[]]')
 
   // re-enter edit mode
   await page.press('textarea >> nth=0', 'Escape')
@@ -236,43 +194,27 @@ test('auto completion and auto pair', async ({ page, block }) => {
   await block.enterNext()
 
   // {{
-  await page.type('textarea >> nth=0', 'type {{')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type {{}}')
+  await block.mustType('type {{', { toBe: 'type {{}}' })
 
   // ((
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type (')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type ()')
-  await page.type('textarea >> nth=0', '(')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type (())')
-
-  // 99  #3444
-  // TODO: Test under different keyboard layout when Playwright supports it
-  // await block.clickNext()
-
-  // await page.type('textarea >> nth=0', 'type 9')
-  // expect(await page.inputValue('textarea >> nth=0')).toBe('type 9')
-  // await page.type('textarea >> nth=0', '9')
-  // expect(await page.inputValue('textarea >> nth=0')).toBe('type 99')
+  await block.mustType('type (', { toBe: 'type ()' })
+  await block.mustType('(', { toBe: 'type (())' })
 
   // [[  #3251
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type [')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type []')
-  await page.type('textarea >> nth=0', '[')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type [[]]')
-  await page.press('textarea >> nth=0', 'Escape') // escape any popup from `[[]]`
+  await block.mustType('type [', { toBe: 'type []' })
+  await block.mustType('[', { toBe: 'type [[]]' })
+
+  await block.escapeEditing() // escape any popup from `[[]]`
 
   // ``
   await block.clickNext()
 
-  await page.type('textarea >> nth=0', 'type `')
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type ``')
-  await page.type('textarea >> nth=0', 'code here')
-
-  expect(await page.inputValue('textarea >> nth=0')).toBe('type `code here`')
+  await block.mustType('type `', { toBe: 'type ``' })
+  await block.mustType('code here', { toBe: 'type `code here`' })
 })
 
 test('invalid page props #3944', async ({ page, block }) => {

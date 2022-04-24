@@ -1,3 +1,4 @@
+const pkg = require('./package.json')
 const path = require('path')
 const webpack = require('webpack')
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
@@ -20,6 +21,9 @@ module.exports = {
     new webpack.ProvidePlugin({
       process: 'process/browser',
     }),
+    new webpack.DefinePlugin({
+      LIB_VERSION: JSON.stringify(pkg.version)
+    })
     // new BundleAnalyzerPlugin()
   ],
   output: {

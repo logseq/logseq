@@ -1,10 +1,7 @@
 (ns frontend.handler.user
   (:require [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.debug :as debug]
             [clojure.string :as string]
             [cljs-time.core :as t]
@@ -12,43 +9,17 @@
             [cljs-http.client :as http]
             [cljs.core.async :as async :refer [go go-loop <! timeout]]))
 
-(defn set-cors!
-  [cors-proxy]
-  (util/post (str config/api "cors_proxy")
-             {:cors-proxy cors-proxy}
-             (fn [_result]
-               (db/transact! [{:me/cors_proxy cors-proxy}])
-               (swap! state/state assoc-in [:me :cors_proxy] cors-proxy))
-             (fn [error]
-               (notification/show! "Set cors proxy failed." :error)
-               (js/console.dir error))))
-
 (defn set-preferred-format!
   [format]
   (when format
     (config-handler/set-config! :preferred-format format)
-    (state/set-preferred-format! format)
-    ;; (when (:name (:me @state/state))
-    ;;   (when (state/logged?)
-    ;;     (util/post (str config/api "set_preferred_format")
-    ;;                {:preferred_format (name format)}
-    ;;                (fn [_result]
-    ;;                  (notification/show! "Format set successfully!" :success))
-    ;;                (fn [_e]))))
-    ))
+    (state/set-preferred-format! format)))
 
 (defn set-preferred-workflow!
   [workflow]
   (when workflow
     (config-handler/set-config! :preferred-workflow workflow)
-    (state/set-preferred-workflow! workflow)
-    ;; (when (:name (:me @state/state))
-    ;;   (util/post (str config/api "set_preferred_workflow")
-    ;;              {:preferred_workflow (name workflow)}
-    ;;              (fn [_result]
-    ;;                (notification/show! "Workflow set successfully!" :success))
-    ;;              (fn [_e])))
-    ))
+    (state/set-preferred-workflow! workflow)))
 
 ;;; userinfo, token, login/logout, ...
 

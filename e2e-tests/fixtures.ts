@@ -2,7 +2,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { test as base, expect, ConsoleMessage, Locator } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
-import { loadLocalGraph, randomString } from './utils';
+import { loadLocalGraph, openLeftSidebar, randomString } from './utils';
+import { LogseqFixtures } from './types';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
@@ -12,7 +13,7 @@ let repoName = randomString(10)
 let testTmpDir = path.resolve(__dirname, '../tmp')
 
 if (fs.existsSync(testTmpDir)) {
-  fs.rmdirSync(testTmpDir, { recursive: true })
+  fs.rmSync(testTmpDir, { recursive: true })
 }
 
 export let graphDir = path.resolve(testTmpDir, "e2e-test", repoName)
@@ -49,6 +50,7 @@ base.beforeAll(async () => {
     cwd: "./static",
     args: ["electron.js"],
     locale: 'en',
+    timeout: 10_000, // should be enough for the app to start
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
@@ -61,6 +63,7 @@ base.beforeAll(async () => {
       "appData": app.getPath("appData"),
       "userData": app.getPath("userData"),
       "appName": app.getName(),
+      "electronVersion": app.getVersion(),
     }
   })
   console.log("Test start with:", info)
@@ -73,11 +76,10 @@ base.beforeAll(async () => {
   })
   page.on('pageerror', (err) => {
     console.log(err)
-    expect(false, 'Page must not have errors!').toBeTruthy()
+    // expect(false, 'Page must not have errors!').toBeTruthy()
   })
 
   await page.waitForLoadState('domcontentloaded')
-  // await page.waitForFunction(() => window.document.title != "Loading")
   // NOTE: The following ensures first start.
   // await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
 
@@ -92,6 +94,11 @@ base.beforeAll(async () => {
   })
 
   await loadLocalGraph(page, graphDir);
+
+  // render app
+  await page.waitForFunction('window.document.title !== "Loading"')
+  expect(await page.title()).toMatch(/^Logseq.*?/)
+  await openLeftSidebar(page)
 })
 
 base.beforeEach(async () => {
@@ -108,39 +115,9 @@ base.afterAll(async () => {
   //}
 })
 
-/**
- * Block provides helper functions for Logseq's block testing.
- */
-interface Block {
-  /** Must fill some text into a block, use `textarea >> nth=0` as selector. */
-  mustFill(value: string): Promise<void>;
-  /**
-   * Must type input some text into an **empty** block.
-   * **DO NOT USE** this if there's auto-complete
-   */
-  mustType(value: string, options?: { delay?: number }): Promise<void>;
-  /**
-   * Press Enter and go to next block, require cursor to be in current block(editing mode).
-   * When cursor is not at the end of block, trailing text will be moved to the next block.
-   */
-  enterNext(): Promise<Locator>;
-  /** Click `.add-button-link-wrap` and create the next block. */
-  clickNext(): Promise<Locator>;
-  /** Indent block, return whether it's success. */
-  indent(): Promise<boolean>;
-  /** Unindent block, return whether it's success. */
-  unindent(): Promise<boolean>;
-  /** Await for a certain number of blocks, with default timeout. */
-  waitForBlocks(total: number): Promise<void>;
-  /** Await for a certain number of selected blocks, with default timeout. */
-  waitForSelectedBlocks(total: number): Promise<void>;
-  /** Escape editing mode, modal popup and selection. */
-  escapeEditing(): Promise<void>;
-}
-
 // hijack electron app into the test context
 // FIXME: add type to `block`
-export const test = base.extend<{ page: Page, block: Block, context: BrowserContext, app: ElectronApplication, graphDir: string }>({
+export const test = base.extend<LogseqFixtures>({
   page: async ({ }, use) => {
     await use(page);
   },
@@ -156,12 +133,13 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
         await locator.fill(value)
         await expect(locator).toHaveText(value, { timeout: 1000 })
       },
-      mustType: async (value: string, options?: { delay?: number }) => {
+      mustType: async (value: string, options?: { delay?: number, toBe?: string }) => {
         const locator: Locator = page.locator('textarea >> nth=0')
         await locator.waitFor({ timeout: 1000 })
-        const { delay = 100 } = options || {};
+        const { delay = 50 } = options || {};
+        const { toBe = value } = options || {};
         await locator.type(value, { delay })
-        await expect(locator).toHaveText(value, { timeout: 1000 })
+        await expect(locator).toHaveText(toBe, { timeout: 1000 })
       },
       enterNext: async (): Promise<Locator> => {
         let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
@@ -170,9 +148,12 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
         return page.locator('textarea >> nth=0')
       },
       clickNext: async (): Promise<Locator> => {
+        await page.$eval('.add-button-link-wrap', (element) => {
+          element.scrollIntoView();
+        });
         let blockCount = await page.locator('.page-blocks-inner .ls-block').count()
         // the next element after all blocks.
-        await page.click('.add-button-link-wrap')
+        await page.click('.add-button-link-wrap', { delay: 100 })
         await page.waitForSelector(`.ls-block >> nth=${blockCount} >> textarea`, { state: 'visible', timeout: 1000 })
         return page.locator('textarea >> nth=0')
       },
@@ -190,7 +171,8 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
       },
       waitForBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
-        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { timeout: 1000 })
+        await page.waitForSelector(`.ls-block >> nth=${total - 1}`, { state: 'attached', timeout: 50000 })
+        await page.waitForSelector(`.ls-block >> nth=${total}`, { state: 'detached', timeout: 50000 })
       },
       waitForSelectedBlocks: async (total: number): Promise<void> => {
         // NOTE: `nth=` counts from 0.
@@ -199,6 +181,37 @@ export const test = base.extend<{ page: Page, block: Block, context: BrowserCont
       escapeEditing: async (): Promise<void> => {
         await page.keyboard.press('Escape')
         await page.keyboard.press('Escape')
+      },
+      activeEditing: async (nth: number): Promise<void> => {
+        await page.waitForSelector(`.ls-block >> nth=${nth}`, { timeout: 1000 })
+        // scroll, for isVisble test
+        await page.$eval(`.ls-block >> nth=${nth}`, (element) => {
+          element.scrollIntoView();
+        });
+        // when blocks are nested, the first block(the parent) is selected.
+        if (
+          (await page.isVisible(`.ls-block >> nth=${nth} >> .editor-wrapper >> textarea`)) &&
+          !(await page.isVisible(`.ls-block >> nth=${nth} >> .block-children-container >> textarea`))) {
+          return;
+        }
+        await page.click(`.ls-block >> nth=${nth} >> .block-content`, { delay: 10, timeout: 100000 })
+        await page.waitForSelector(`.ls-block >> nth=${nth} >> .editor-wrapper >> textarea`, { timeout: 1000, state: 'visible' })
+      },
+      isEditing: async (): Promise<boolean> => {
+        const locator = page.locator('.ls-block textarea >> nth=0')
+        return await locator.isVisible()
+      },
+      selectionStart: async (): Promise<number> => {
+        return await page.locator('textarea >> nth=0').evaluate(node => {
+          const elem = <HTMLTextAreaElement>node
+          return elem.selectionStart
+        })
+      },
+      selectionEnd: async (): Promise<number> => {
+        return await page.locator('textarea >> nth=0').evaluate(node => {
+          const elem = <HTMLTextAreaElement>node
+          return elem.selectionEnd
+        })
       }
     }
     use(block)

@@ -7,7 +7,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.components.plugins :as plugin]
-            [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
             [frontend.components.search :as search]
@@ -29,14 +28,12 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
-            [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.mobile.util :as mobile-util]
-            [frontend.encrypt :as encrypt]
             [promesa.core :as p]
             [frontend.fs :as fs]
             [clojure.string :as string]
@@ -45,38 +42,7 @@
 
 ;; TODO: should we move all events here?
 
-(defn show-install-error!
-  [repo-url title]
-  (spec/validate :repos/url repo-url)
-  (notification/show!
-   [:p.content
-    title
-    " "
-    [:span.mr-2
-     (util/format
-      "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-      repo-url)
-     (ui/button
-      "Install Logseq on GitHub"
-      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-   :error
-   false))
-
 (defmulti handle first)
-
-(defmethod handle :repo/install-error [[_ repo-url title]]
-  (show-install-error! repo-url title))
-
-(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
-  (state/set-modal!
-   (encryption/encryption-setup-dialog repo-url close-fn)))
-
-(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
-  (state/set-modal!
-   (encryption/encryption-input-secret-dialog
-    repo-url
-    db-encrypted-secret
-    close-fn)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
@@ -94,7 +60,6 @@
          (state/set-file-sync-state nil)))
 
 (defn- graph-switch [graph]
-  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
   (state/set-current-repo! graph)
   ;; load config
   (common-handler/reset-config! graph nil)
@@ -107,8 +72,6 @@
   (state/pub-event! [:graph/ready graph])
 
   (file-sync-stop-when-switch-graph))
-
-
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -254,6 +217,9 @@
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 
+(defmethod handle :page/create [[_ page-name opts]]
+  (page-handler/create! page-name opts))
+
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
@@ -267,8 +233,7 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (p/let [content (when content (encrypt/decrypt content))]
-    (state/set-modal! #(git-component/file-specific-version path hash content))))
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
@@ -330,9 +295,12 @@
 
     (when-let [coming (and (not downloading?)
                            (get-in @state/state [:plugin/updates-coming id]))]
-      (notification/show!
-       (str "Checked: " (:title coming))
-       :success))
+      (let [error-code (:error-code coming)
+            error-code (if (= error-code (str :no-new-version)) nil error-code)]
+        (when (or pending? (not error-code))
+          (notification/show!
+            (str "[Checked]<" (:title coming) "> " error-code)
+            (if error-code :error :success)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
@@ -353,6 +321,13 @@
         (when (and pending? (seq (state/all-available-coming-updates)))
           (plugin/open-waiting-updates-modal!))))))
 
+(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data tx-meta] :as payload}]]
+  (when-let [payload (and (seq blocks)
+                          (merge payload {:tx-data (map #(into [] %) tx-data)
+                                          :tx-meta (dissoc tx-meta :editor-cursor)}))]
+    (plugin-handler/hook-plugin-db :changed payload)
+    (plugin-handler/hook-plugin-block-changes payload)))
+
 (defmethod handle :backup/broken-config [[_ repo content]]
   (when (and repo content)
     (let [path (config/get-config-path)
@@ -371,6 +346,9 @@
    (update (js->clj event :keywordize-keys true)
            :path
            js/decodeURI)))
+
+(defmethod handle :rebuild-slash-commands-list [[_]]
+  (page-handler/rebuild-slash-commands-list!))
 
 (defn run!
   []

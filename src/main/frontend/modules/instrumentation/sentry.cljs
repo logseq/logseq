@@ -43,5 +43,6 @@
                  event)})
 
 (defn init []
-  (let [config (clj->js config)]
-    (Sentry/init config)))
+  (when-not cfg/dev?
+    (let [config (clj->js config)]
+     (Sentry/init config))))

@@ -9,17 +9,6 @@
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 
-   :db/encrypted?    {}
-   :db/encryption-keys {}
-
-   ;; user
-   :me/name {}
-   :me/email {}
-   :me/avatar {}
-
-   ;; Git
-   :repo/url {:db/unique :db.unique/identity}
-
    :recent/pages {}
 
    :block/type {}
@@ -59,12 +48,6 @@
 
    ;; "A", "B", "C"
    :block/priority {}
-
-   ;; TODO: remove
-   ;; 1, 2, 3, etc.
-   :block/level {}
-   ;; TODO: remove
-   :block/meta {}
 
    ;; block key value properties
    :block/properties {}
@@ -112,14 +95,6 @@
    ;; :file/last-modified-at {}
    ;; :file/size {}
    ;; :file/handle {}
-
-   ;; git
-   :repo/cloned? {}
-   :git/status {}
-   :git/last-pulled-at {}
-   ;; last error, better we should record all the errors
-   :git/error {}
-
    })
 
 (def retract-attributes
@@ -134,7 +109,6 @@
     :block/deadline
     :block/repeated?
     :block/pre-block?
-    :block/level
     :block/heading-level
     :block/type
     :block/properties

@@ -24,36 +24,5 @@
 
 ;; repo
 
-(s/def :repos/id string?)
 (s/def :repos/url string?)
 (s/def :repos/branch string?)
-(s/def :repos/installation_id string?)
-(s/def :repos/token string?)
-(s/def :repos/expires_at string?)
-(s/def :repos/repo (s/keys :req-un [:repos/id :repos/url :repos/branch :repos/installation_id]
-                           :opt-un [:repos/token :repos/expires_at]))
-
-; Didn't know how to impl both `require token` and `not require token`version in :me key.
-(s/def :repos/repo-require-token (s/keys :req-un [:repos/id :repos/url :repos/branch :repos/installation_id
-                                                  :repos/token :repos/expires_at]))
-
-(s/def :me/repos (s/* :repos/repo))
-
-;; me
-
-(s/def :me/name string?)
-(s/def :me/email string?)
-(s/def :me/avatar string?)
-(s/def :me/preferred_format string?)
-(s/def :me/preferred_workflow string?)
-(s/def :me/cors_proxy (s/or :nil nil?
-                            :string string?))
-
-;; state
-
-(s/def :state/me (s/keys :req-un [:me/name :me/email :me/avatar :me/repos :me/preferred_format
-                                  :me/preferred_workflow :me/cors_proxy]))
-
-
-(comment
-  (validate :user/repo 1))

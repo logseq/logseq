@@ -1,6 +1,7 @@
 import { Page, Locator } from 'playwright'
 import { expect } from '@playwright/test'
 import * as process from 'process'
+import { Block } from './types'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -168,10 +169,12 @@ export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
     }
 
     await page.click('#left-sidebar #repo-switch');
-    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"', { state: 'visible' })
+    await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
+      { state: 'visible', timeout: 5000 })
 
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")', { state: 'visible' })
+    await page.waitForSelector('strong:has-text("Choose a folder")',
+      { state: 'visible', timeout: 5000 })
     await page.click('strong:has-text("Choose a folder")')
 
     const skip = page.locator('a:has-text("Skip")')
@@ -202,4 +205,20 @@ export async function activateNewPage(page: Page) {
 
 export async function editFirstBlock(page: Page) {
   await page.click('.ls-block .block-content >> nth=0')
+}
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+export function randomBoolean(): boolean {
+  return Math.random() < 0.5;
+}
+
+export function systemModifier(shortcut: string): string {
+  if (IsMac) {
+    return shortcut.replace('Control', 'Meta')
+  } else {
+    return shortcut
+  }
 }

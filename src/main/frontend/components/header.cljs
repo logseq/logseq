@@ -4,7 +4,6 @@
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
-            [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -178,19 +177,10 @@
         :options {:href "https://discord.gg/KpN4eHY"
                   :title (t :discord-title)
                   :target "_blank"}
-        :icon (ui/icon "brand-discord")}
-       ;; TODO: Enable when logout is ready
-       ;; (when logged?
-       ;;   {:title (t :sign-out)
-       ;;    :options {:on-click user-handler/sign-out!}
-       ;;    :icon svg/logout-sm})
-       ]
+        :icon (ui/icon "brand-discord")}]
       (concat page-menu-and-hr)
       (remove nil?))
-     {}
-     ;; {:links-footer (when (and (util/electron?) (not logged?))
-     ;;                  [:div.px-2.py-2 (login logged?)])}
-     )))
+     {})))
 
 (rum/defc back-and-forward
   []
@@ -283,8 +273,6 @@
 
       (when-not (mobile-util/is-native-platform?)
         (new-block-mode))
-
-      (repo/sync-status current-repo)
 
       (when show-open-folder?
         [:a.text-sm.font-medium.button.add-graph-btn.flex.items-center

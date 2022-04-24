@@ -40,14 +40,10 @@
 <script>let worker = new Worker('./js/worker.js')
 const portal = new MagicPortal(worker);
 (async () => {
-  const git = await portal.get('git')
-  window.git = git
   const fs = await portal.get('fs')
   window.fs = fs
   const pfs = await portal.get('pfs')
   window.pfs = pfs
-  const gitHttp = await portal.get('gitHttp')
-  window.gitHttp = gitHttp
   const workerThread = await portal.get('workerThread')
   window.workerThread = workerThread
 })()
@@ -57,7 +53,6 @@ const portal = new MagicPortal(worker);
 <script defer src="./js/lsplugin.core.js"></script>
 <script defer src="./js/main.js"></script>
 <script defer src="./js/code-editor.js"></script>
-<script defer src="./js/age-encryption.js"></script>
 <script defer src="./js/excalidraw.js"></script>
 </body>
 </html>

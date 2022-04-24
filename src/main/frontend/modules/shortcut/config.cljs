@@ -174,11 +174,17 @@
    :editor/open-edit               {:binding "enter"
                                     :fn      (partial editor-handler/open-selected-block! :right)}
 
-   :editor/select-block-up         {:binding "shift+up"
+   :editor/select-block-up         {:binding "alt+up"
                                     :fn      (editor-handler/on-select-block :up)}
 
-   :editor/select-block-down       {:binding "shift+down"
+   :editor/select-block-down       {:binding "alt+down"
                                     :fn      (editor-handler/on-select-block :down)}
+
+   :editor/select-up               {:binding "shift+up"
+                                    :fn      (editor-handler/shortcut-select-up-down :up)}
+
+   :editor/select-down             {:binding "shift+down"
+                                    :fn      (editor-handler/shortcut-select-up-down :down)}
 
    :editor/delete-selection        {:binding ["backspace" "delete"]
                                     :fn      editor-handler/delete-selection}
@@ -278,7 +284,9 @@
 
    :command/run                    {:binding "mod+shift+1"
                                     :inactive (not (util/electron?))
-                                    :fn      #(state/pub-event! [:command/run])}
+                                    :fn      #(do
+                                                (editor-handler/escape-editing)
+                                                (state/pub-event! [:command/run]))}
 
    :go/home                        {:binding "g h"
                                     :fn      route-handler/redirect-to-home!}
@@ -336,11 +344,11 @@
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app {:binding false
+   :editor/open-file-in-default-app {:binding "mod+d mod+a"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   {:binding false
+   :editor/open-file-in-directory   {:binding "mod+d mod+i"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-directory}
 
@@ -438,7 +446,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:command-palette/toggle
+     (build-category-map [:command/run
+                          :command-palette/toggle
                           :graph/open
                           :graph/remove
                           :graph/add
@@ -448,6 +457,8 @@
                           :editor/down
                           :editor/left
                           :editor/right
+                          :editor/select-up
+                          :editor/select-down
                           :editor/move-block-up
                           :editor/move-block-down
                           :editor/open-edit
@@ -487,8 +498,7 @@
 
     :shortcut.handler/global-non-editing-only
     (->
-     (build-category-map [:command/run
-                          :go/home
+     (build-category-map [:go/home
                           :go/journals
                           :go/all-pages
                           :go/flashcards
@@ -590,7 +600,9 @@
     :editor/forward-kill-word
     :editor/backward-kill-word
     :editor/replace-block-reference-at-point
-    :editor/paste-text-in-one-block-at-point]
+    :editor/paste-text-in-one-block-at-point
+    :editor/select-up
+    :editor/select-down]
 
    :shortcut.category/block-selection
    [:editor/open-edit
@@ -626,6 +638,8 @@
     :sidebar/open-today-page
     :search/re-index
     :editor/insert-youtube-timestamp
+    :editor/open-file-in-default-app
+    :editor/open-file-in-directory
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

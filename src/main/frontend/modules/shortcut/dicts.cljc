@@ -53,6 +53,8 @@
    :editor/down                    "Move cursor down / Select down"
    :editor/left                    "Move cursor left / Open selected block at beginning"
    :editor/right                   "Move cursor right / Open selected block at end"
+   :editor/select-up               "Select content above"
+   :editor/select-down             "Select content below"
    :editor/move-block-up           "Move block up"
    :editor/move-block-down         "Move block down"
    :editor/open-edit               "Edit selected block"

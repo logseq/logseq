@@ -6,8 +6,4 @@
   []
   (->
     (state/get-current-repo)
-    (conn/get-conn false)))
-
-
-
-
+    (conn/get-db false)))
