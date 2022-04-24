@@ -269,3 +269,8 @@ export async function doesClipboardItemExists(page: Page): Promise<boolean> {
     return typeof ClipboardItem !== "undefined"
   })
 }
+
+export async function getIsWebAPIClipboardSupported(page: Page): Promise<boolean> {
+  // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
+  return await queryPermission(page, "clipboard-write") && await doesClipboardItemExists(page)
+}

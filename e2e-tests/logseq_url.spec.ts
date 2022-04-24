@@ -1,16 +1,12 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, lastBlock, captureConsoleWithPrefix, IsMac, IsLinux, queryPermission, doesClipboardItemExists } from './utils'
+import { createRandomPage, lastBlock, captureConsoleWithPrefix, IsMac, IsLinux, getIsWebAPIClipboardSupported } from './utils'
 
 test(
   "Logseq URLs (same graph)",
   async ({ page, block }) => {
     let paste_key = IsMac ? 'Meta+v' : 'Control+v'
-    let IsWebAPIClipboardSupported = (
-        // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
-        await queryPermission(page, "clipboard-write") && 
-        await doesClipboardItemExists(page)
-    )
+    let IsWebAPIClipboardSupported = await getIsWebAPIClipboardSupported(page)
     // create a page with identify block
     let identify_text = "URL redirect target"
     let page_title = await createRandomPage(page)
