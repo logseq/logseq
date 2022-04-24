@@ -3,7 +3,6 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
