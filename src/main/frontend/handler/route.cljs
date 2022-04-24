@@ -17,7 +17,9 @@
     :or {push true}}]
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (state/save-scroll-position! (util/scroll-top))
-    (route-fn to path-params query-params)))
+    (route-fn to path-params query-params))
+  ;; force return nil for usage in render phase of React
+  nil)
 
 (defn redirect-to-home!
   ([]
