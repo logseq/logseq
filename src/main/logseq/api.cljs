@@ -727,6 +727,7 @@
 ;; ui
 (defn ^:export show_msg
   ([content] (show_msg content :success nil))
+  ([content status] (show_msg content status nil))
   ([content status ^js opts]
    (let [{:keys [key timeout]} (bean/->clj opts)
          hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
