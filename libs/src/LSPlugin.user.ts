@@ -402,7 +402,6 @@ export class LSPluginUser
         console.warn(e)
       }
 
-
       callback && callback.call(this, baseInfo)
     } catch (e) {
       console.error(`${this._debugTag} [Ready Error]`, e)
@@ -575,13 +574,15 @@ export class LSPluginUser
               const handler = args[0]
               caller[f](type, handler)
 
-              if (isOff) {
-                return () => {
-                  caller.off(type, handler)
+              if (!isOff) {
+                that.App._installPluginHook(pid, type)
+              }
+
+              return () => {
+                caller.off(type, handler)
+                if (!caller.listenerCount(type)) {
                   that.App._uninstallPluginHook(pid, type)
                 }
-              } else {
-                return that.App._installPluginHook(pid, type)
               }
             }
           }
