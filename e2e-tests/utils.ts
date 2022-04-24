@@ -1,11 +1,12 @@
 import { Page, Locator } from 'playwright'
-import { expect } from '@playwright/test'
+import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
 export const IsWindows = process.platform === 'win32'
+export const IsCI = process.env.CI === 'true'
 
 export function randomString(length: number) {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -233,4 +234,38 @@ export function systemModifier(shortcut: string): string {
   } else {
     return shortcut
   }
+}
+
+export async function captureConsoleWithPrefix(page: Page, prefix: string, timeout: number=3000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let console_handler = (msg: ConsoleMessage) => {
+      let text = msg.text()
+      if (text.startsWith(prefix)) {
+        page.removeListener('console', console_handler)
+        resolve(text.substring(prefix.length))
+      }
+    }
+    page.on('console', console_handler)
+    setTimeout(reject.bind("timeout"), timeout)
+  })
+}
+
+export async function queryPermission(page: Page, permission: PermissionName): Promise<boolean> {
+  // Check if WebAPI clipboard supported
+  return await page.evaluate(async (eval_permission: PermissionName): Promise<boolean> => {
+    if (typeof navigator.permissions == "undefined")
+        return Promise.resolve(false);
+    return navigator.permissions.query({
+      name: eval_permission 
+    }).then((result: PermissionStatus): boolean => {
+      return (result.state == "granted" || result.state == "prompt")
+   })
+  }, permission)
+}
+
+export async function doesClipboardItemExists(page: Page): Promise<boolean> {
+  // Check if WebAPI clipboard supported
+  return await page.evaluate((): boolean => {
+    return typeof ClipboardItem !== "undefined"
+  })
 }
