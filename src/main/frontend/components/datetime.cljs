@@ -117,7 +117,7 @@
                                         :on-enter on-submit) 100))))
   []
   (let [{:keys [time repeater]} (rum/react *timestamp)]
-    [:div#time-repeater.py-1.px-4 {:style {:min-width 300}}
+    [:div#time-repeater.py-1.px-4
      [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
      (time-input time)
 
