@@ -9,7 +9,6 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
             [frontend.handler.user :as user]))
 
 (def hiding-login&file-sync (not config/dev?))
