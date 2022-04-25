@@ -27,6 +27,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
+            [frontend.modules.crdt.outliner :as crdt-outliner]
             [frontend.commands :as commands]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -38,7 +39,8 @@
             [frontend.fs :as fs]
             [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
-            [frontend.fs.sync :as sync]))
+            [frontend.fs.sync :as sync]
+            [frontend.modules.crdt.yjs :as yjs]))
 
 ;; TODO: should we move all events here?
 
@@ -237,6 +239,10 @@
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
+
+  ;; only for debug
+  (yjs/debug-sync!)
+
   (repo-handler/graph-ready! repo))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
@@ -346,6 +352,10 @@
    (update (js->clj event :keywordize-keys true)
            :path
            js/decodeURI)))
+
+
+(defmethod handle :graph/merge-remote-changes [[_ graph changes]]
+  (crdt-outliner/merge-remote-changes! graph changes))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

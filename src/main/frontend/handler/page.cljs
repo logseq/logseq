@@ -756,11 +756,15 @@
      page)))
 
 (defn open-file-in-default-app []
-  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+  (when-let [file-path (and (util/electron?)
+                            (not (db/db-only?))
+                            (get-page-file-path))]
     (js/window.apis.openPath file-path)))
 
 (defn copy-current-file []
-  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+  (when-let [file-path (and (util/electron?)
+                            (not (db/db-only?))
+                            (get-page-file-path))]
     (util/copy-to-clipboard! file-path)))
 
 (defn open-file-in-directory []

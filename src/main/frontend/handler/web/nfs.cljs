@@ -316,7 +316,7 @@
     (search/reset-indice! repo)
     (db/remove-conn! repo)
     (db/clear-query-state!)
-    (db/start-db-conn! (state/get-me) repo)
+    (db/start-db-conn! repo)
     (p/let [_ (reload-dir! repo true)
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))

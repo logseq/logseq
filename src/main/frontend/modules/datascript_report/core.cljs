@@ -17,7 +17,7 @@
   (let [r (safe-pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
       ;; block has been deleted
-      (safe-pull db-before '[*] db-id)
+      (assoc (safe-pull db-before '[*] db-id) :db/deleted? true)
       r)))
 
 (defn get-blocks-and-pages

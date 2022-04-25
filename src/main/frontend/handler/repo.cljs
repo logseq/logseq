@@ -327,7 +327,7 @@
 (defn start-repo-db-if-not-exists!
   [repo option]
   (state/set-current-repo! repo)
-  (db/start-db-conn! nil repo option))
+  (db/start-db-conn! repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
@@ -335,7 +335,7 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! nil repo)
+             (db/start-db-conn! repo)
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))

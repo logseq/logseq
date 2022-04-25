@@ -67,16 +67,10 @@
   [repo]
   (swap! conns dissoc (datascript-db repo)))
 
-(defn me-tx
-  [_db {:keys [name email avatar]}]
-  (util/remove-nils {:me/name name
-                     :me/email email
-                     :me/avatar avatar}))
-
 (defn start!
-  ([me repo]
-   (start! me repo {}))
-  ([me repo {:keys [db-type listen-handler]}]
+  ([repo]
+   (start! repo {}))
+  ([repo {:keys [db-type listen-handler]}]
    (let [db-name (datascript-db repo)
          db-conn (d/create-conn db-schema/schema)]
      (swap! conns assoc db-name db-conn)
@@ -86,8 +80,6 @@
                            {:block/name "card"
                             :block/original-name "card"
                             :block/uuid (d/squuid)}])
-     (when me
-       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
 
      (d/transact! db-conn default-db/built-in-pages)
 

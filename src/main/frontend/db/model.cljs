@@ -1294,6 +1294,17 @@
   [repo]
   (db-utils/get-key-value repo :db/type))
 
+(defn db-only?
+  ([]
+   (db-only? (state/get-current-repo)))
+  ([repo]
+   (= :db-only (get-db-type repo))))
+
+(defn set-db-only-type
+  "No plain-text files support."
+  [repo]
+  (react/set-key-value repo :db/type :db-only))
+
 (defn get-public-pages
   [db]
   (-> (d/q
@@ -1516,9 +1527,7 @@
   (assert (string? namespace))
   (let [namespace (util/page-name-sanity-lc namespace)]
     (d/q
-      '[:find [(pull ?c [:db/id :block/name :block/original-name
-                         :block/namespace
-                         {:block/file [:db/id :file/path]}]) ...]
+      '[:find [(pull ?c [*]) ...]
         :in $ % ?namespace
         :where
         [?p :block/name ?namespace]
@@ -1565,8 +1574,10 @@
                        (map :e)))]
         (when (seq ids)
           (db-utils/pull-many repo
-                              '[:db/id :block/name :block/original-name
-                                {:block/file [:db/id :file/path]}]
+                              (if (db-only? repo)
+                                '[:db/id :block/name :block/original-name]
+                                '[:db/id :block/name :block/original-name
+                                  {:block/file [:db/id :file/path]}])
                               ids))))))
 
 (defn get-orphaned-pages

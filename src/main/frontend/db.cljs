@@ -27,7 +27,6 @@
   get-short-repo-name
   datascript-db
   get-db
-  me-tx
   remove-conn!]
 
  [frontend.db.utils
@@ -54,7 +53,7 @@
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? page-alias-set pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
-  set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
+  set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition db-only?]
 
  [frontend.db.react
   get-current-page set-key-value
@@ -153,10 +152,10 @@
     (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
-  ([me repo]
-   (start-db-conn! me repo {}))
-  ([me repo option]
-   (conn/start! me repo
+  ([repo]
+   (start-db-conn! repo {}))
+  ([repo option]
+   (conn/start! repo
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
@@ -172,9 +171,7 @@
                                    (catch js/Error _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db db-schema/schema)))
-                    attached-db (d/db-with stored-db (concat
-                                                      [(me-tx stored-db me)]
-                                                      default-db/built-in-pages)) ;; TODO bug overriding uuids?
+                    attached-db (d/db-with stored-db default-db/built-in-pages) ;; TODO bug overriding uuids?
                     db (if (old-schema? attached-db)
                          (db-migrate/migrate attached-db)
                          attached-db)]

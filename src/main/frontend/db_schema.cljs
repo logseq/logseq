@@ -83,6 +83,8 @@
    ;; page's namespace
    :block/namespace {:db/valueType :db.type/ref}
 
+   ;; TODO: remove file related schema for `db-only` graphs
+
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
