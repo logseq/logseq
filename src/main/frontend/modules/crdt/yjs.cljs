@@ -175,7 +175,12 @@
 
 (defn debug-sync!
   []
-  (let [server-address "ws://192.168.2.179:1234"]
+  ;; 1. install and run y-websocket
+  ;;     npm i y-websocket
+  ;;     HOST=localhost PORT=1234 npx y-websocket
+  ;; 2. change localhost to your local ip address to test concurrent edits
+  ;; on both pc and mobile :)
+  (let [server-address "ws://localhost:1234"]
     (setup-sync-server! server-address (frontend.state/get-current-repo)
                         (str (random-uuid)))))
 
