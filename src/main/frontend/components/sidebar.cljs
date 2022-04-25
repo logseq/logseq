@@ -119,10 +119,9 @@
 (rum/defc favorites < rum/reactive
   [t]
   (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md
-    (ui/icon "star mr-1" {:style {:font-size 18}})
-    [:span.flex-1.ml-1 {:style {:padding-top 2}}
-     (t :left-side-bar/nav-favorites)]]
+   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+    (ui/icon "star mr-1" {:style {:font-size 16}})
+    [:span.flex-1.ml-1 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
    {:class "favorites"
     :edit-fn
@@ -144,10 +143,10 @@
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
   (nav-content-item
-   [:a.flex.items-center.text-sm.font-medium.rounded-md
-    (ui/icon "history mr-2" {:style {:font-size 18}})
-    [:span.flex-1 {:style {:padding-top 2}}
-     (t :left-side-bar/nav-recent-pages)]]
+   [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+    (ui/icon "history mr-2" {:style {:font-size 16}})
+    [:span.flex-1
+     (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
    {:class "recent"}
 
@@ -173,7 +172,7 @@
   [state]
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
-     (ui/icon "infinity mr-3" {:style {:font-size 20}})
+     (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
      (when (and num (not (zero? num)))
        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
@@ -200,7 +199,7 @@
    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
     {:on-click on-click-handler
      :href href}
-    (ui/icon (str icon " mr-3") {:style {:font-size 20}})
+    (ui/icon (str icon))
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
@@ -213,7 +212,7 @@
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
      [:div.flex.flex-col.pb-4.wrap
-      [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
+      [:nav.px-4.pt-3.space-y-1 {:aria-label "Sidebar"}
        (repo/repos-dropdown)
 
        [:div.nav-header
@@ -251,12 +250,12 @@
       [:nav.px-2 {:aria-label "Sidebar"
                   :class      "new-page"}
        (when-not config/publishing?
-         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+         [:a.item.group.flex.items-center.px-4.py-2.text-sm.font-medium.rounded-md.new-page-link
           {:on-click (fn []
                        (and (util/sm-breakpoint?)
                             (state/toggle-left-sidebar!))
                        (state/pub-event! [:go/search]))}
-          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+          (ui/icon "circle-plus mr-3" {:style {:font-size 16}})
           [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
 
 (rum/defc left-sidebar < rum/reactive
