@@ -178,26 +178,28 @@
   (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
-      (cond->
-       {:className "resize image-resize"
-        :onSizeChanged (fn [value]
-                         (when (and (not @*resizing-image?)
-                                    (some? @size)
-                                    (not= value @size))
-                           (reset! *resizing-image? true))
-                         (reset! size value))
-        :onMouseUp (fn []
-                     (when (and @size @*resizing-image?)
-                       (when-let [block-id (:block/uuid config)]
-                         (let [size (bean/->clj @size)]
-                           (editor-handler/resize-image! block-id metadata full_text size))))
-                     (when @*resizing-image?
-                        ;; TODO: need a better way to prevent the clicking to edit current block
-                       (js/setTimeout #(reset! *resizing-image? false) 200)))
-        :onClick (fn [e]
-                   (when @*resizing-image? (util/stop e)))}
-        (and (:width metadata) (not (util/mobile?)))
-        (assoc :style {:width (:width metadata)}))
+      (if-not (mobile-util/native-ios?)
+        (cond->
+            {:className "resize image-resize"
+             :onSizeChanged (fn [value]
+                              (when (and (not @*resizing-image?)
+                                         (some? @size)
+                                         (not= value @size))
+                                (reset! *resizing-image? true))
+                              (reset! size value))
+             :onMouseUp (fn []
+                          (when (and @size @*resizing-image?)
+                            (when-let [block-id (:block/uuid config)]
+                              (let [size (bean/->clj @size)]
+                                (editor-handler/resize-image! block-id metadata full_text size))))
+                          (when @*resizing-image?
+                            ;; TODO: need a better way to prevent the clicking to edit current block
+                            (js/setTimeout #(reset! *resizing-image? false) 200)))
+             :onClick (fn [e]
+                        (when @*resizing-image? (util/stop e)))}
+            (and (:width metadata) (not (util/mobile?)))
+            (assoc :style {:width (:width metadata)}))
+        {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
         (merge
