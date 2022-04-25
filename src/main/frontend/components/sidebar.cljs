@@ -193,18 +193,21 @@
     class :class
     title :title
     icon :icon
+    active :active
     href :href}]
   [:div
    {:class class}
    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
     {:on-click on-click-handler
+     :class (when active "active")
      :href href}
     (ui/icon (str icon))
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
-  [_route-match close-modal-fn left-sidebar-open?]
-  (let [default-home (get-default-home-if-valid)]
+  [route-match close-modal-fn left-sidebar-open?]
+  (let [default-home (get-default-home-if-valid)
+        route-name (get-in route-match [:data :name])]
 
     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
      {:on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
@@ -216,14 +219,17 @@
        (repo/repos-dropdown)
 
        [:div.nav-header
-        (if (:page default-home)
-          (sidebar-item
-           {:class            "home-nav"
-            :title            (:page default-home)
-            :on-click-handler route-handler/redirect-to-home!
-            :icon             "home"})
+        (if-let [page (:page default-home)]
+          (do
+            (sidebar-item
+              {:class            "home-nav"
+               :title            page
+               :on-click-handler route-handler/redirect-to-home!
+               :active           (and (= route-name :page) (= page (get-in route-match [:path-params :name])))
+               :icon             "home"}))
           (sidebar-item
            {:class            "journals-nav"
+            :active           (= route-name :home)
             :title            (t :left-side-bar/journals)
             :on-click-handler route-handler/go-to-journals!
             :icon             "calendar"}))
@@ -235,12 +241,14 @@
          {:class "graph-view-nav"
           :title (t :right-side-bar/graph-view)
           :href  (rfe/href :graph)
+          :active (= route-name :graph)
           :icon  "hierarchy"})
 
         (sidebar-item
          {:class "all-pages-nav"
           :title (t :right-side-bar/all-pages)
           :href  (rfe/href :all-pages)
+          :active (= route-name :all-pages)
           :icon  "files"})]]
 
       (favorites t)

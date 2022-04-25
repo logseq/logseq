@@ -98,7 +98,7 @@
       top: -1px;
     }
 
-    &:hover {
+    &.active, &:hover {
       background-color: var(--ls-quaternary-background-color);
     }
   }
