@@ -115,14 +115,14 @@
           page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
-        (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
-                file-exists? (fs/file-exists? repo-dir file-path)]
-          (when-not file-exists?
-            (p/let [_ (file-handler/reset-file! repo-url path content)]
-              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
-                (when-not (state/editing?)
-                  (ui-handler/re-render-root!)))))
+        (p/let [_ (if (db/db-only? repo-url)
+                    (file-handler/reset-file! repo-url path content)
+                    (p/let [_ (nfs/check-directory-permission! repo-url)
+                            _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+                            file-exists? (fs/file-exists? repo-dir file-path)]
+                      (when-not file-exists?
+                        (p/let [_ (file-handler/reset-file! repo-url path content)]
+                          (fs/create-if-not-exists repo-url repo-dir file-path content)))))]
           (when-not (state/editing?)
             (ui-handler/re-render-root!)))))))
 
@@ -335,7 +335,9 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! repo)
+             (db/start-db-conn! repo (if config/dev?
+                                       {:db-type :db-only}
+                                       {}))
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -384,9 +386,10 @@
         (p/let [_ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
-      (js/setTimeout
-       (route-handler/redirect-to-home!)
-       500))))
+      (when-not (= (state/get-current-route) :home)
+        (js/setTimeout
+         (route-handler/redirect-to-home!)
+         500)))))
 
 (defn persist-db!
   ([]

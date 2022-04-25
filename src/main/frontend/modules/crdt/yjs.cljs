@@ -10,7 +10,8 @@
             [cljs-bean.core :as bean]
             [frontend.modules.crdt.outliner :as outliner]
             [frontend.modules.outliner.pipeline :as outliner-pipeline]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clojure.walk :as walk]))
 
 ;; TODO: Replace Y.Map with Y.Array because Y.Map has large metadata overhead
 ;; https://discuss.yjs.dev/t/map-metadata-overhead/492
@@ -79,11 +80,26 @@
                             {:action :delete
                              :block-id (uuid uuid-str)})))
                       changed-keys)]
-        (state/pub-event! [:graph/merge-remote-updates graph changes])))))
+        (state/pub-event! [:graph/merge-remote-changes graph changes])))))
 
 (defn- get-page-blocks-uuids [db page-id]
   (->> (d/datoms db :avet :block/page page-id)
        (map (fn [d] (:block/uuid (d/entity db (:e d)))))))
+
+(defn- replace-db-id-with-block-uuid
+  [tx-report block]
+  (walk/postwalk (fn [f]
+                   (if (and (map? f)
+                            (= 1 (count f))
+                            (:db/id f))
+                     (let [block-uuid (:block/uuid (or (d/entity (:db-before tx-report) (:db/id f))
+                                                       (d/entity (:db-after tx-report) (:db/id f))))]
+                       (if block-uuid
+                         [:block/uuid block-uuid]
+                         (throw (ex-info "Can't resolve entity in both db-before and db-after"
+                                         {:block block}))))
+                     f))
+                 block))
 
 (defn- transact-blocks!
   [tx-report graph pages blocks]
@@ -97,7 +113,10 @@
            (if (:db/deleted? block)
              (.delete ymap k)
              ;; FIXME: construct a Y.Map from `block`
-             (let [value (pr-str block)]
+             ;; replace :db/id with :block/uuid
+             (let [block (->> (dissoc block :db/id)
+                              (replace-db-id-with-block-uuid tx-report))
+                   value (pr-str block)]
                (.set ymap k value)))))
        (doseq [page pages]
          (when (:db/deleted? page)
@@ -163,3 +182,7 @@
   (let [server-address "ws://localhost:1234"]
     (setup-sync-server! server-address (frontend.state/get-current-repo)
                         (str (random-uuid)))))
+
+(comment
+  (frontend.db/set-key-value (state/get-current-repo) :db-type :db-only)
+  )

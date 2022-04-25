@@ -116,10 +116,10 @@
                 :else
                 file)
          file (util/path-normalize file)
-         new? (nil? (db/entity [:file/path file]))]
-     (db/set-file-content! repo-url file content)
+         db-only? (db/db-only? repo-url)]
+     (when-not db-only? (db/set-file-content! repo-url file content))
      (let [format (format/get-format file)
-           file-content [{:file/path file}]
+           file-content (when-not db-only? [{:file/path file}])
            tx (if (contains? config/mldoc-support-formats format)
                 (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
                       first-page (first pages)
@@ -128,13 +128,14 @@
                                       (db/delete-file-blocks! repo-url file)
                                       (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
                                      (distinct))
-                      _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-                          (when (not= file current-file)
-                            (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
-                              (state/pub-event! [:notification/show
-                                                 {:content error
-                                                  :status :error
-                                                  :clear? false}]))))
+                      _ (when-not db-only?
+                          (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
+                            (when (not= file current-file)
+                              (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+                                (state/pub-event! [:notification/show
+                                                   {:content error
+                                                    :status :error
+                                                    :clear? false}])))))
                       block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                       block-refs-ids (->> (mapcat :block/refs blocks)
                                           (filter (fn [ref] (and (vector? ref)
@@ -148,12 +149,16 @@
                   ;; does order matter?
                   (concat file-content pages-index delete-blocks pages block-ids blocks))
                 file-content)
-           tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
-                            (cond->
-                              {:file/path file}
-                              new?
-                              (assoc :file/created-at t)))])]
-       (db/transact! repo-url tx (when new-graph? {:new-graph? true}))))))
+           file-tx (when-not db-only?
+                     [(let [new? (nil? (db/entity [:file/path file]))
+                            t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
+                        (cond->
+                          {:file/path file}
+                          new?
+                          (assoc :file/created-at t)))])
+           tx (concat tx file-tx)]
+       (when (seq tx)
+         (db/transact! repo-url tx (when new-graph? {:new-graph? true})))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file

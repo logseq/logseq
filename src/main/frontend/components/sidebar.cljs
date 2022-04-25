@@ -396,7 +396,7 @@
 
          ;; FIXME: why will this happen?
          :else
-         [:div "bingo"])])))
+         [:div ""])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []

@@ -311,7 +311,7 @@
 
 (defn rebuild-index!
   [repo ok-handler]
-  (when repo
+  (when (and repo (not (db/db-only? repo)))
     (state/set-nfs-refreshing! true)
     (search/reset-indice! repo)
     (db/remove-conn! repo)
@@ -323,7 +323,7 @@
 
 (defn refresh!
   [repo ok-handler]
-  (when repo
+  (when (and repo (not (db/db-only? repo)))
     (state/set-nfs-refreshing! true)
     (p/let [_ (reload-dir! repo)
             _ (ok-handler)]

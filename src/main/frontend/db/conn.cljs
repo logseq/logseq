@@ -74,12 +74,14 @@
    (let [db-name (datascript-db repo)
          db-conn (d/create-conn db-schema/schema)]
      (swap! conns assoc db-name db-conn)
-     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
-                             db-type
-                             (assoc :db/type db-type))
+     (d/transact! db-conn [{:schema/version db-schema/version}
                            {:block/name "card"
                             :block/original-name "card"
                             :block/uuid (d/squuid)}])
+     (when db-type
+       (d/transact! db-conn [{:db/id -1
+                              :db/ident :db/type
+                              :db/type db-type}]))
 
      (d/transact! db-conn default-db/built-in-pages)
 

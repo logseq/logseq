@@ -4,6 +4,8 @@
 (defn merge-remote-changes!
   "Notice that `:db/id` need to be changed to `:block/uuid` in `changes`"
   [graph changes]
+  (prn {:graph graph
+        :changes changes})
   (let [tx (keep
              (fn [{:keys [action] :as data}]
                (case action
