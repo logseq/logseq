@@ -11,35 +11,37 @@
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
+            [frontend.components.plugins :as plugins]
+            [frontend.components.query-table :as query-table]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.sci :as sci]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.zotero :as zotero]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
+            [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.components.plugins :as plugins]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.query :as query-handler]
-            [frontend.handler.common :as common-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.security :as security]
@@ -49,8 +51,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -58,9 +60,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]
-            [frontend.mobile.util :as mobile-util]))
+            [shadow.loader :as loader]))
 
 (defn safe-read-string
   ([s]
@@ -1876,6 +1876,54 @@
                     [:a.fade-link
                      summary]])]))))
 
+(def swipe (atom nil))
+
+(defn- on-touch-start
+  [event]
+  (let [touch (aget (.-touches event) 0)
+        x (.-clientX touch)
+        y (.-clientY touch)]
+    (reset! swipe {:x x :y y})))
+
+(defn- on-touch-move
+  [event uuid]
+  (let [{:keys [x y]} @swipe
+        touch (aget (.-touches event) 0)
+        tx (.-clientX touch)
+        ty (.-clientY touch)
+        dx (- tx x)
+        dy (- ty y)]
+    (swap! swipe #(-> %
+                      (assoc :tx tx)
+                      (assoc :ty ty)))
+    (when-not (or (> (. js/Math abs dy) 5)
+                  (< (. js/Math abs dx) 3))
+      (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
+            right (.querySelector js/document (str "#block-right-menu-" uuid))]
+        (if (> dx 0)
+          (set! (.. left -style -width) (str dx "px"))
+          (set! (.. right -style -width) (str (- dx) "px")))))))
+
+(defn- on-touch-end
+  [_event block uuid]
+  (let [{:keys [x tx]} @swipe
+        dx (- tx x)]
+    (prn :tx tx :x x)
+    (when (> (. js/Math abs dx) 10)
+      (cond
+        (> dx 50)
+        (prn "indent")
+
+        (< dx -50)
+        (editor-handler/delete-block-aux! block true)
+
+        :else
+        nil)
+      (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
+            right (.querySelector js/document (str "#block-right-menu-" uuid))]
+        (set! (.. right -style -width) "0px")
+        (set! (.. left -style -width) "0px")))))
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
@@ -1904,7 +1952,10 @@
                                     (not (string/includes? content "```"))
                                     (not (gobj/get e "shiftKey")))
                                ;; clear highlighted text
-                               (util/clear-selection!)))}
+                               (util/clear-selection!)))
+              :on-touch-start on-touch-start
+              :on-touch-move (fn [event] (on-touch-move event uuid))
+              :on-touch-end (fn [event] (on-touch-end event block uuid))}
        (not slide?)
        (merge attrs))
 
@@ -2198,6 +2249,22 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
+(rum/defc block-left-menu < rum/reactive
+  [config {:block/keys [uuid] :as block}]
+  [:div.bg-red-100.flex
+   [:div.block-left-menu.w-0
+    {:id (str "block-left-menu-" uuid)
+     :style {:overflow "hidden"}}
+    (ui/icon "arrow-bar-right")]])
+
+(rum/defc block-right-menu < rum/reactive
+  [config {:block/keys [uuid] :as block}]
+  [:div.bg-red-100.flex
+   [:div.block-right-menu.w-0
+    {:id (str "block-right-menu-" uuid)
+     :style {:overflow "hidden"}}
+    (ui/icon "trash")]])
+
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)
@@ -2309,7 +2376,11 @@
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-      (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
+      (when (mobile-util/is-native-platform?)
+        (block-left-menu config block))
+      (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+      (when (mobile-util/is-native-platform?)
+        (block-right-menu config block))]
 
      (block-children config children collapsed?)
 
