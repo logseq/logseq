@@ -1286,7 +1286,7 @@
          ["Email" address]
          (let [{:keys [local_part domain]} address
                address (str local_part "@" domain)]
-           [:a {:href (str "mainto:" address)} address])
+           [:a {:href (str "mailto:" address)} address])
 
          ["Nested_link" link]
          (nested-link config html-export? link)
