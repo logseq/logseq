@@ -98,8 +98,16 @@
       top: -1px;
     }
 
-    &.active, &:hover {
+    &.active {
       background-color: var(--ls-quaternary-background-color);
+    }
+
+    &:hover {
+      opacity: .8;
+
+      .ti {
+        opacity: .8;
+      }
     }
   }
 
