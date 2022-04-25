@@ -41,16 +41,17 @@
 
   [:div.nav-content-item.is-expand
    {:class class}
-   [:div.header.items-center.mb-1
-    {:on-click (fn [^js/MouseEvent e]
-                 (let [^js target (.-target e)
-                       ^js parent (.closest target ".nav-content-item")]
-                   (.toggle (.-classList parent) "is-expand")))}
+   [:div.nav-content-item-inner
+    [:div.header.items-center.mb-1
+     {:on-click (fn [^js/MouseEvent e]
+                  (let [^js target (.-target e)
+                        ^js parent (.closest target ".nav-content-item")]
+                    (.toggle (.-classList parent) "is-expand")))}
 
-    [:div.font-medium.fade-link name]
-    [:span
-     [:a.more svg/arrow-down-v2]]]
-   [:div.bd child]])
+     [:div.font-medium.fade-link name]
+     [:span
+      [:a.more svg/arrow-down-v2]]]
+    [:div.bd child]]])
 
 (defn- delta-y
   [e]

@@ -88,7 +88,7 @@
 
   a.item {
     user-select: none;
-    transition: background-color .3s;
+    transition: none;
 
     > .ti {
       font-size: 16px;
@@ -112,15 +112,19 @@
   }
 
   .nav-content-item {
-    padding: 14px 0 0 0;
+    margin-top: 14px;
 
-    > .header {
+    &-inner {
+      border-radius: 8px;
+    }
+
+    .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       cursor: pointer;
-      padding: 4px 26px;
+      padding: 4px 25px;
 
       > span {
         > a {
@@ -173,7 +177,7 @@
       }
     }
 
-    > .bd {
+    .bd {
       display: none;
 
       ul {
@@ -183,12 +187,13 @@
 
         a {
           width: 100%;
-          padding: 2px 20px;
+          padding: 2px 18px;
           display: block;
           text-overflow: ellipsis;
           overflow: hidden;
           white-space: nowrap;
           color: var(--ls-primary-text-color);
+          transition: background-color .3s;
 
           &:hover {
             background-color: var(--ls-quaternary-background-color);
@@ -202,13 +207,13 @@
     }
 
     &.is-expand {
-      > .header > span > a {
+      .header > span > a {
         &:last-child {
           transform: translateY(2px) translateX(-3px);
         }
       }
 
-      > .bd {
+      .bd {
         display: block;
       }
     }
