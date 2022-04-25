@@ -773,7 +773,8 @@
               (if (instance? ExceptionInfo diff-r)
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
-                  (if (> (dec min-txid) @*txid) ;; if min-txid-1 > @*txid, need to remote->local-full-sync
+                  (if (or (nil? min-txid)             ;; if min-txid is nil(not found any diff txn)
+                          (> (dec min-txid) @*txid))  ;; or min-txid-1 > @*txid, need to remote->local-full-sync
                     (do (println "min-txid" min-txid "request-txid" @*txid)
                         {:need-remote->local-full-sync true})
 
@@ -854,7 +855,6 @@
 
          ("add" "change")
          (let [path (relative-path e)]
-           (println "debug " path basepath)
            (when (and (<! (local-file-exists? path basepath))
                       (<! (file-changed? graph-uuid path basepath)))
              (>! result e))))
