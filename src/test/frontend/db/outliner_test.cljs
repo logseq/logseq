@@ -15,20 +15,6 @@
         result (outliner/get-by-id conn [:block/uuid block-id])]
     (is (= block-id (:block/uuid result)))))
 
-;; (deftest test-get-by-parent-&-left
-;;   (let [conn (core-test/get-current-conn)
-;;         data [{:block/uuid "1"}
-;;               {:block/uuid "2"
-;;                :block/parent [:block/uuid "1"]
-;;                :block/left [:block/uuid "1"]}
-;;               {:block/uuid "3"
-;;                :block/parent [:block/uuid "1"]
-;;                :block/left [:block/uuid "2"]}]
-;;         _ (d/transact! conn data)
-;;         result (outliner/get-by-parent-&-left
-;;                  @conn [:block/uuid "1"] [:block/uuid "2"])]
-;;     (is (= "3" (:block/uuid result)))))
-
 (deftest test-get-by-parent-id
   (let [conn (core-test/get-current-conn)
         data [{:block/uuid "1"}

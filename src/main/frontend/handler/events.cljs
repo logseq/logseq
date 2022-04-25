@@ -354,8 +354,8 @@
            js/decodeURI)))
 
 
-(defmethod handle :graph/merge-remote-changes [[_ graph changes]]
-  (crdt-outliner/merge-remote-changes! graph changes))
+(defmethod handle :graph/merge-remote-changes [[_ graph changes event]]
+  (crdt-outliner/merge-remote-changes! graph changes event))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

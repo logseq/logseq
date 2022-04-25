@@ -31,12 +31,8 @@
 
 (defn sync-doc [local remote]
   (.on remote "update" (fn [update]
-                         (prn "Remote update: ")
-                         (js/console.dir update)
                          (y/applyUpdate local update)))
   (.on local "update" (fn [update]
-                        (prn "Local update: ")
-                        (js/console.dir update)
                         (y/applyUpdate remote update))))
 
 (defn get-local-doc
@@ -80,7 +76,7 @@
                             {:action :delete
                              :block-id (uuid uuid-str)})))
                       changed-keys)]
-        (state/pub-event! [:graph/merge-remote-changes graph changes])))))
+        (state/pub-event! [:graph/merge-remote-changes graph changes event])))))
 
 (defn- get-page-blocks-uuids [db page-id]
   (->> (d/datoms db :avet :block/page page-id)
@@ -92,12 +88,13 @@
                    (if (and (map? f)
                             (= 1 (count f))
                             (:db/id f))
-                     (let [block-uuid (:block/uuid (or (d/entity (:db-before tx-report) (:db/id f))
-                                                       (d/entity (:db-after tx-report) (:db/id f))))]
+                     (let [block-uuid (or (:block/uuid (d/entity (:db-before tx-report) (:db/id f)))
+                                          (:block/uuid (d/entity (:db-after tx-report) (:db/id f))))]
                        (if block-uuid
                          [:block/uuid block-uuid]
                          (throw (ex-info "Can't resolve entity in both db-before and db-after"
-                                         {:block block}))))
+                                         {:block block
+                                          :f f}))))
                      f))
                  block))
 
@@ -113,7 +110,6 @@
            (if (:db/deleted? block)
              (.delete ymap k)
              ;; FIXME: construct a Y.Map from `block`
-             ;; replace :db/id with :block/uuid
              (let [block (->> (dissoc block :db/id)
                               (replace-db-id-with-block-uuid tx-report))
                    value (pr-str block)]
@@ -179,7 +175,7 @@
 
 (defn debug-sync!
   []
-  (let [server-address "ws://localhost:1234"]
+  (let [server-address "ws://192.168.2.179:1234"]
     (setup-sync-server! server-address (frontend.state/get-current-repo)
                         (str (random-uuid)))))
 

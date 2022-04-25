@@ -37,15 +37,20 @@
         r (db-outliner/get-by-id c (outliner-u/->block-lookup-ref id))]
     (when r (->Block r))))
 
-(defn- get-by-parent-&-left
+(defn get-by-parent-&-left
   [parent-uuid left-uuid]
   (let [parent-id (:db/id (db/entity [:block/uuid parent-uuid]))
         left-id (:db/id (db/entity [:block/uuid left-uuid]))]
     (some->
-     (db-model/get-by-parent-&-left (conn/get-db) parent-id left-id)
-     :db/id
-     db/pull
-     block)))
+     (db-model/get-by-parent-&-left (conn/get-db) parent-id left-id))))
+
+(defn- get-node-by-parent-&-left
+  [parent-uuid left-uuid]
+  (some->
+   (get-by-parent-&-left parent-uuid left-uuid)
+   :db/id
+   db/pull
+   block))
 
 (defn- block-with-timestamps
   [block]
@@ -123,11 +128,11 @@
   (-get-right [this]
     (let [left-id (tree/-get-id this)
           parent-id (tree/-get-parent-id this)]
-      (get-by-parent-&-left parent-id left-id)))
+      (get-node-by-parent-&-left parent-id left-id)))
 
   (-get-down [this]
     (let [parent-id (tree/-get-id this)]
-      (get-by-parent-&-left parent-id parent-id)))
+      (get-node-by-parent-&-left parent-id parent-id)))
 
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
@@ -136,7 +141,10 @@
                 (dissoc :block/children :block/meta :block/top? :block/bottom?
                         :block/title :block/body :block/level)
                 (util/remove-nils))
-          m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
+          m (if (or (state/enable-block-timestamps?)
+                    (db/db-only?))
+              (block-with-timestamps m)
+              m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))
           block-entity (db/entity id)
