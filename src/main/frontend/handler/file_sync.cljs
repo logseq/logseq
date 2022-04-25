@@ -9,14 +9,15 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]))
+            [frontend.util.persist-var :as persist-var]
+            [frontend.handler.user :as user]))
 
 (def hiding-login&file-sync (not config/dev?))
 (def refresh-file-sync-component (atom false))
 
 (defn graph-txid-exists?
   []
-  (let [[graph-uuid _txid] @sync/graphs-txid]
+  (let [[_user-uuid graph-uuid _txid] @sync/graphs-txid]
     (some? graph-uuid)))
 
 
@@ -28,8 +29,7 @@
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
         (do
-          (persist-var/-reset-value! sync/graphs-txid [r 0] (state/get-current-repo))
-          (persist-var/persist-save sync/graphs-txid)
+          (sync/update-graphs-txid! 0 r (user/user-uuid) (state/get-current-repo))
           (swap! refresh-file-sync-component not))
         (if (= 404 (get-in (ex-data r) [:err :status]))
           (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
@@ -42,15 +42,18 @@
     (let [r (<! (sync/delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
         (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
-        (notification/show! (str "Graph deleted") :success)))))
+        (let [[_ local-graph-uuid _] @sync/graphs-txid]
+          (when (= graph-uuid local-graph-uuid)
+            (sync/clear-graphs-txid! (state/get-current-repo))
+            (swap! refresh-file-sync-component not))
+          (notification/show! (str "Graph deleted") :success))))))
 
 (defn list-graphs
   []
   (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
 
 (defn switch-graph [graph-uuid]
-  (persist-var/-reset-value! sync/graphs-txid [graph-uuid 0] (state/get-current-repo))
-  (persist-var/persist-save sync/graphs-txid)
+  (sync/update-graphs-txid! 0 graph-uuid (user/user-uuid) (state/get-current-repo))
   (swap! refresh-file-sync-component not))
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
@@ -90,4 +93,4 @@
                                        (util/time-ago (tc/from-string (:CreateTime version)))]]))]
                                 :success false)))))))
 
-(defn get-current-graph-uuid [] (first @sync/graphs-txid))
+(defn get-current-graph-uuid [] (second @sync/graphs-txid))
