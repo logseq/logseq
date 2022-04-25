@@ -1,12 +1,15 @@
 (ns frontend.handler.block
-  (:require [clojure.set :as set]
-            [clojure.walk :as walk]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
-            [frontend.state :as state]
-            [frontend.format.block :as block]
-            [frontend.util :as util]))
+  (:require
+   [clojure.set :as set]
+   [clojure.walk :as walk]
+   [frontend.db :as db]
+   [frontend.db.model :as db-model]
+   [frontend.db.react :as react]
+   [frontend.format.block :as block]
+   [frontend.modules.outliner.core :as outliner-core]
+   [frontend.modules.outliner.transaction :as outliner-tx]
+   [frontend.state :as state]
+   [frontend.util :as util]))
 
 
 ;;  Fns
@@ -114,3 +117,9 @@
                             (fn [result]
                               (->> (concat result more-data)
                                    (util/distinct-by :db/id))))))
+
+(defn indent-outdent-block!
+  [block direction]
+  (outliner-tx/transact!
+   {:outliner-op :move-blocks}
+   (outliner-core/indent-outdent-blocks! [block] (= direction :right))))

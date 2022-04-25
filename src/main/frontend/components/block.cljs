@@ -1883,36 +1883,49 @@
   (let [touch (aget (.-touches event) 0)
         x (.-clientX touch)
         y (.-clientY touch)]
-    (reset! swipe {:x x :y y})))
+    (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y})))
 
 (defn- on-touch-move
   [event uuid]
-  (let [{:keys [x y]} @swipe
+  (let [{:keys [x0 xi]} @swipe
         touch (aget (.-touches event) 0)
         tx (.-clientX touch)
-        ty (.-clientY touch)
-        dx (- tx x)
-        dy (- ty y)]
+        ty (.-clientY touch)]
     (swap! swipe #(-> %
                       (assoc :tx tx)
-                      (assoc :ty ty)))
-    (when-not (or (> (. js/Math abs dy) 5)
-                  (< (. js/Math abs dx) 3))
-      (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
-            right (.querySelector js/document (str "#block-right-menu-" uuid))]
-        (if (> dx 0)
-          (set! (.. left -style -width) (str dx "px"))
-          (set! (.. right -style -width) (str (- dx) "px")))))))
+                      (assoc :ty ty)
+                      (assoc :xi tx)
+                      (assoc :yi ty)))
+    (when (< (* (- xi x0) (- tx xi)) 0)
+      (swap! swipe #(-> %
+                        (assoc :x0 tx)
+                        (assoc :y0 ty))))
+    (prn :swipe @swipe)
+    (let [{:keys [x0 y0]} @swipe
+          dx (- tx x0)
+          dy (- ty y0)]
+      (prn :dx dx :dy dy)
+      (when-not (or (> (. js/Math abs dy) 5)
+                    (< (. js/Math abs dx) 3))
+        (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
+              right (.querySelector js/document (str "#block-right-menu-" uuid))]
+
+          (if (> dx 0)
+            (do
+              (set! (.. right -style -width) "0px")
+              (set! (.. left -style -width) (str dx "px")))
+            (do
+              (set! (.. left -style -width) "0px")
+              (set! (.. right -style -width) (str (- dx) "px")))))))))
 
 (defn- on-touch-end
   [_event block uuid]
-  (let [{:keys [x tx]} @swipe
-        dx (- tx x)]
-    (prn :tx tx :x x)
+  (let [{:keys [x0 tx]} @swipe
+        dx (- tx x0)]
     (when (> (. js/Math abs dx) 10)
       (cond
         (> dx 50)
-        (prn "indent")
+        (block-handler/indent-outdent-block! block :right)
 
         (< dx -50)
         (editor-handler/delete-block-aux! block true)
