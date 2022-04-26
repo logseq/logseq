@@ -96,6 +96,7 @@
         target (state/sub :favorites/dragging)]
     [:li.favorite-item
      {:key name
+      :title name
       :data-ref name
       :class (if (and target @dragging-over (not= target @dragging-over))
                "dragging-target"
@@ -163,6 +164,7 @@
         (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
           [:li.recent-item.select-none
            {:key name
+            :title name
             :data-ref name}
            (page-name name (get-page-icon entity))]))])))
 
