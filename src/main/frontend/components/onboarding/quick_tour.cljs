@@ -6,6 +6,7 @@
             [frontend.date :as date]
             [frontend.util :as util]
             [frontend.handler.route :as router-handler]
+            [frontend.handler.command-palette :as command-palette]
             [hiccups.runtime :as h]
             [dommy.core :as d]))
 
@@ -136,6 +137,10 @@
 
 (defn init []
   (prn "[debug] hello onboarding quick tour :)")
+
+  (command-palette/register {:id     :document/quick-tour
+                             :desc   "Quick tour for onboarding"
+                             :action #(start)})
 
   (when should-guide?
     (p/then (load-base-assets$) start)))
