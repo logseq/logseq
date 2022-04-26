@@ -26,13 +26,24 @@
     position: fixed;
     bottom: 100px;
     left: 5%;
-    height: 80px;
+    height: 70px;
     width: 90%;
     background-color: var(--ls-secondary-background-color);
     display: flex;
     justify-content: space-around;
     border-radius: 10px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+    
+    .ti {
+        color: var(--ls-primary-text-color);
+        opacity: 50%;
+    }
+
+    .description {
+        color: var(--ls-primary-text-color);
+        font-size: 14px;
+        opacity: 60%;
+    }
 
     button {
         padding: 7px 10px;
