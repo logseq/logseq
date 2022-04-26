@@ -189,21 +189,23 @@
     overflow: hidden;
     max-width: 50px;
     text-align: center;
-    margin: auto 0
+    margin: auto 0;
+    background-color: var(--ls-secondary-background-color);
 }
 
 .block-right-menu {
     overflow: hidden;
-    max-width: 60px;
+    max-width: 80px;
     text-align: center;
     margin: auto 0;
+    background-color: var(--ls-secondary-background-color);
 
     .indent {
-        margin: 0 7px;
+        margin: 0 12px;
     }
 
     .more {
-        margin: 0 7px;
+        margin: 0 12px;
     }
 }
 

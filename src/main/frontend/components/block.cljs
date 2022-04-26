@@ -1924,7 +1924,7 @@
             (= direction :left)
             (if (< dx 0)
               (set! (.. right -style -width) (str (- dx) "px"))
-              (set! (.. right -style -width) (str (- 50 dx) "px")))
+              (set! (.. right -style -width) (str (- 80 dx) "px")))
 
             :else
             nil))))))
@@ -2305,14 +2305,14 @@
 
 (rum/defc block-left-menu < rum/reactive
   [config {:block/keys [uuid] :as block}]
-  [:div.bg-red-100.flex
+  [:div.flex.bg-base-2
    [:div.block-left-menu.w-0
     {:id (str "block-left-menu-" uuid)}
     (ui/icon "arrow-bar-right")]])
 
 (rum/defc block-right-menu < rum/reactive
   [config {:block/keys [uuid] :as block}]
-  [:div.bg-red-100.flex
+  [:div.flex.bg-base-2
    [:div.block-right-menu.w-0.flex.flew-col
     {:id (str "block-right-menu-" uuid)}
     [:div.indent (ui/icon "arrow-bar-left")]
