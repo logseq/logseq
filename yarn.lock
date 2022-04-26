@@ -559,6 +559,10 @@
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-1.0.6.tgz#b837585e6b5d48dc705ee89e49cc7c6aeb8874ec"
   integrity sha512-8xqUbDZFGBMhgqoBSn9wEd9OBPdHIRegQ9zCCZcpHNf3FFAIby1ck+aDFnoq+Da49xhD6ks1SKCBSxz/26qWTw==
 
+"@capacitor/haptics@^1.1.4":
+  version "1.1.4"
+  integrity sha512-+pJIb5X7xAcbrWj6rJaV+cwBlv8aFwB1/Ob6EV4atydThuuVSSsAL4hI4ZYlPNOxM6H5s+ZDLj7Pa2os4eFmtg==
+
 "@capacitor/ios@3.2.2":
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-3.2.2.tgz#0417cf89df23f651c6a1e20a8fb98294a918ce1f"
@@ -6791,11 +6795,6 @@ react-grid-layout@0.16.6:
     react-draggable "3.x"
     react-resizable "1.x"
 
-react-icon-base@2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
-  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
-
 react-icon-base@^2.1.2:
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.2.tgz#a17101dad9c1192652356096860a9ab43a0766c7"
@@ -6805,6 +6804,8 @@ react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.13.1, react-is@^16.3.1, react-is@^16.7.0:
   version "16.13.1"
