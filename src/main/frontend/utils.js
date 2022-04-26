@@ -253,26 +253,33 @@ export const writeClipboard = (text, isHtml) => {
     navigator.permissions.query({
         name: "clipboard-write"
     }).then((result) => {
-        if (typeof ClipboardItem === 'undefined' || (result.state != "granted" && result.state != "prompt")){
+        if (result.state != "granted" && result.state != "prompt"){
             console.debug("Copy without `clipboard-write` permission:", text)
             return
         }
-        let blob = new Blob([text], {
+        let promise_written = null
+        if (typeof ClipboardItem !== 'undefined') {
+            let blob = new Blob([text], {
             type: ["text/plain"]
-        });
-        let data = [new ClipboardItem({
-            ["text/plain"]: blob
-        })];
-        if (isHtml) {
-            blob = new Blob([text], {
-                type: ["text/plain", "text/html"]
-            })
-            data = [new ClipboardItem({
-                ["text/plain"]: blob,
-                ["text/html"]: blob
+            });
+            let data = [new ClipboardItem({
+                ["text/plain"]: blob
             })];
+            if (isHtml) {
+                blob = new Blob([text], {
+                    type: ["text/plain", "text/html"]
+                })
+                data = [new ClipboardItem({
+                    ["text/plain"]: blob,
+                    ["text/html"]: blob
+                })];
+            }
+            promise_written = navigator.clipboard.write(data)
+        } else {
+            console.debug("Degraded copy without `ClipboardItem` support:", text)
+            promise_written = navigator.clipboard.writeText(text)
         }
-        navigator.clipboard.write(data).then(() => {
+        promise_written.then(() => {
             /* success */
         }).catch(e => {
             console.log(e, "fail")
