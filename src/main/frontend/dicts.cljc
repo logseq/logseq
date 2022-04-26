@@ -324,6 +324,7 @@
         :select.graph/add-graph "Yes, add another graph"
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
+        :file-sync/graph-deleted "Current remote graph has been deleted"
         }
 
    :de {:help/about "Über Logseq"
@@ -599,7 +600,9 @@
         :user/delete-account "Konto löschen"
         :user/delete-your-account "Ihr Konto löschen"
 
-        :file-sync/other-user-graph "Aktuelle lokale Grafik ist an das Remote-Graph des anderen Benutzers gebunden. Kann also nicht mit der Synchronisierung beginnen."}
+        :file-sync/other-user-graph "Aktuelle lokale Grafik ist an das Remote-Graph des anderen Benutzers gebunden. Kann also nicht mit der Synchronisierung beginnen."
+        :file-sync/graph-deleted "Das aktuelle Ferndiagramm wurde gelöscht"
+        }
 
    :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
@@ -737,7 +740,8 @@
         :dark "Foncé"
         :remove-background "Retirer le fond"
 
-        :file-sync/other-user-graph "Le graphique local actuel est lié à l'autre graphique à distance de l'utilisateur. Alors ne peut pas commencer à la synchroniser."}
+        :file-sync/other-user-graph "Le graphique local actuel est lié à l'autre graphique à distance de l'utilisateur. Alors ne peut pas commencer à la synchroniser."
+        :file-sync/graph-deleted "Le graphe distant actuel a été supprimé"}
 
    :zh-CN {:on-boarding/demo-graph "这是一个图谱的样例，在上面做的修改不会被保存，除非打开本地文件夹"
            :on-boarding/add-graph "添加图谱"
@@ -1041,7 +1045,8 @@
 
            :command-palette/prompt "输入指令"
 
-           :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"}
+           :file-sync/other-user-graph "当前本地 graph 绑定在其他用户的远程 graph 上。因此无法启动同步。"
+           :file-sync/graph-deleted "当前远程 graph 已经删除"}
 
    :zh-Hant {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
              :on-boarding/add-graph "Add a graph"
@@ -1205,7 +1210,8 @@
              :pdf/copy-text "復製文本"
              :pdf/linked-ref "轉到註解"
 
-             :file-sync/other-user-graph "當前本地 graph 綁定到其他用戶的遠程 graph 上。因此無法啟動同步。"}
+             :file-sync/other-user-graph "當前本地 graph 綁定到其他用戶的遠程 graph 上。因此無法啟動同步。"
+             :file-sync/graph-deleted "當前遠程 graph 已被刪除"}
 
    :af {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
         :on-boarding/add-graph "Add a graph"
@@ -1347,7 +1353,8 @@
         :white "Wit"
         :dark "Swart"
 
-        :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."}
+        :file-sync/other-user-graph "Huidige plaaslike grafiek is gebonde aan ander gebruiker se afgeleë grafiek. So kan nie begin om te sinkroniseer nie."
+        :file-sync/graph-deleted "Huidige afstandgrafiek is geskrap"}
 
    :es {:on-boarding/add-graph "Añade un grafo"
         :help/about "Acerca de Logseq"
@@ -1547,7 +1554,8 @@
         :select.graph/prompt "Seleccione un grafo"
         :select.graph/empty-placeholder-description "No encontramos un grafo. Queries añadir otro?"
         :select.graph/add-graph "Si, añadame otro grafo"
-        :file-sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"}
+        :file-sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"
+        :file-sync/graph-deleted "El gráfico remoto actual se ha eliminado"}
 
    :nb-NO {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
            :on-boarding/add-graph "Add a graph"
@@ -1845,7 +1853,8 @@
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :select.graph/add-graph "Ja, legg til en ny graf"
 
-           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjernkontroll. Så kan ikke begynne å synkronisere."}
+           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjernkontroll. Så kan ikke begynne å synkronisere."
+           :file-sync/graph-deleted "Nåværende fjernkontrollen er slettet"}
 
    :pt-BR {:on-boarding/demo-graph "Esse é um gráfico de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
            :on-boarding/add-graph "Adicionar gráfico"
@@ -2155,7 +2164,8 @@
            :settings-page/plugin-system "Sistema de Plugins"
            :settings-page/network-proxy "Proxy de Rede"
 
-           :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."}
+           :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
+           :file-sync/graph-deleted "O gráfico remoto atual foi excluído"}
 
    :pt-PT {:on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
@@ -2447,7 +2457,8 @@
         :select.graph/empty-placeholder-description "Sem grafos correspondentes. Quer adicionar outro?"
         :select.graph/add-graph "Sim, adicionar outro grafo"
 
-        :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."}
+        :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
+        :file-sync/graph-deleted "O gráfico remoto atual foi excluído"}
 
    :ru {:on-boarding/demo-graph "Это демонстрационный граф, изменения не будут сохранены, пока вы не откроете локальный файл."
         :on-boarding/add-graph "Добавить новый граф"
@@ -2724,7 +2735,8 @@
 
         :command-palette/prompt "Набери команду"
 
-        :file-sync/other-user-graph "Текущий локальный график привязан к удаленному диаграмму другого пользователя. Так что не могу начать синхронизирование"}
+        :file-sync/other-user-graph "Текущий локальный график привязан к удаленному диаграмму другого пользователя. Так что не могу начать синхронизирование"
+        :file-sync/graph-deleted "Текущий удаленный график был удален"}
 
    :ja {:tutorial/text #?(:cljs (rc/inline "tutorial-ja.md")
                                 :default "tutorial-ja.md")
@@ -3027,7 +3039,8 @@
         :select.graph/empty-placeholder-description "マッチするグラフがありません。新しいグラフを追加しますか？"
         :select.graph/add-graph "はい、新規グラフを追加します。"
 
-        :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"}
+        :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"
+        :file-sync/graph-deleted "現在のリモートグラフが削除されました"}
 
    :tongue/fallback :en})
 
