@@ -3,7 +3,6 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.encrypt :as encrypt]
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
@@ -48,9 +47,7 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (= type "unlink"))
-                 (not (encrypt/content-encrypted? content))
-                 (not (:encryption/graph-parsing? @state/state)))
+      (when (or content (= type "unlink"))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))

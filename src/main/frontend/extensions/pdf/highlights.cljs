@@ -1084,9 +1084,19 @@
             "MissingPDFException"
             (do
               (notification/show!
-                (str (.-message error) " Is this the correct path?")
-                :error
-                false)
+               (str (.-message error) " Is this the correct path?")
+               :error
+               false)
+              (state/set-state! :pdf/current nil))
+
+            "InvalidPDFException"
+            (do
+              (notification/show!
+               (str (.-message error) "\n"
+                    "Is this .pdf file corrupted?\n"
+                    "Please confirm with external pdf viewer.")
+               :error
+               false)
               (state/set-state! :pdf/current nil))))
         #())
       [(:error state)])

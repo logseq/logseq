@@ -61,18 +61,6 @@
     (if dev? path
         (str asset-domain path))))
 
-(goog-define GITHUB_APP_NAME "logseq-test")
-
-(def github-app-name (if dev? GITHUB_APP_NAME "logseq"))
-
-(defn git-pull-secs
-  []
-  (or 60 (get-in @state/state [:config :git-pull-secs])))
-
-(defn git-push-secs
-  []
-  (or 10 (get-in @state/state [:config :git-push-secs])))
-
 (defn text-formats
   []
   (let [config-formats (some->> (get-in @state/state [:config :text-formats])
@@ -293,7 +281,6 @@
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def custom-js-file "custom.js")
-(def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
@@ -389,13 +376,6 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
-
-(defn get-metadata-path
-  ([]
-   (get-metadata-path (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (get-file-path repo (str app-name "/" metadata-file)))))
 
 (defn get-pages-metadata-path
   ([]

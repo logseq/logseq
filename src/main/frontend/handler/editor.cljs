@@ -24,7 +24,6 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.image :as image]
             [frontend.idb :as idb]
@@ -398,7 +397,7 @@
         (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
-  [repo block value {}]
+  [block value {}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -414,9 +413,7 @@
            (when (and (:block/pre-block? block)
                       (not (string/blank? title))
                       (not= (util/page-name-sanity-lc title) old-page-name))
-             (state/pub-event! [:page/title-property-changed old-page-name title]))))))
-
-    (repo-handler/push-if-auto-enabled! repo)))
+             (state/pub-event! [:page/title-property-changed old-page-name title]))))))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -439,12 +436,12 @@
         :error)
 
        force?
-       (save-block-inner! repo block value opts)
+       (save-block-inner! block value opts)
 
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when (and content-changed? page)
-           (save-block-inner! repo block value opts)))))))
+           (save-block-inner! block value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value pos]
@@ -555,6 +552,7 @@
          :pos pos}))))
 
 (defn insert-new-block!
+  "Won't save previous block content - remember to save!"
   ([state]
    (insert-new-block! state nil))
   ([_state block-value]
@@ -1271,9 +1269,10 @@
      (save-block-aux! block value {}))))
 
 (defn save-current-block!
+  "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
    (save-current-block! {}))
-  ([{:keys [force?] :as opts}]
+  ([{:keys [force? skip-properties?] :as opts}]
    ;; non English input method
    (when-not (state/editor-in-composition?)
      (when (state/get-current-repo)
@@ -1298,6 +1297,11 @@
              (cond
                force?
                (save-block-aux! db-block value opts)
+
+               (and skip-properties?
+                    (db-model/top-block? block)
+                    (when elem (thingatpt/properties-at-point elem)))
+               nil
 
                (and block value db-content-without-heading
                     (not= (string/trim db-content-without-heading)
@@ -1797,26 +1801,22 @@
 
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
-  [e block id]
+  [e _block id]
   (let [value (util/evalue e)
         repo (state/get-current-repo)]
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
-    (when-not
-     (and
-      (= (:db/id (:block/parent block))
-         (:db/id (:block/page block)))            ; don't auto-save for page's properties block
-      (get-in block [:block/properties :title]))
-      (reset! *auto-save-timeout
-              (js/setTimeout
-               (fn []
-                 (when (state/input-idle? repo)
-                   (state/set-editor-op! :auto-save)
-                   (save-current-block! {})
-                   (state/set-editor-op! nil)))
-               500)))))
+    (reset! *auto-save-timeout
+            (js/setTimeout
+             (fn []
+               (when (state/input-idle? repo)
+                 (state/set-editor-op! :auto-save)
+                 ; don't auto-save for page's properties block
+                 (save-current-block! {:skip-properties? true})
+                 (state/set-editor-op! nil)))
+             500))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)
@@ -2054,6 +2054,7 @@
                 "END"
                 (do
                   (cursor/move-cursor-to-end input)
+                  (save-current-block!)
                   (insert-new-block! state))
                 ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
                 (if (property/property-key-exist? format content property-key)
@@ -2290,7 +2291,8 @@
             :else
             (profile
              "Insert block"
-             (insert-new-block! state))))))))
+             (do (save-current-block!)
+                 (insert-new-block! state)))))))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/doc-mode-enter-for-new-line?)

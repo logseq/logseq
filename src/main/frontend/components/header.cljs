@@ -4,7 +4,6 @@
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
-            [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -274,8 +273,6 @@
 
       (when-not (mobile-util/is-native-platform?)
         (new-block-mode))
-
-      (repo/sync-status current-repo)
 
       (when show-open-folder?
         [:a.text-sm.font-medium.button.add-graph-btn.flex.items-center

@@ -1,34 +1,6 @@
 (ns frontend.components.svg
   (:require [rum.core :as rum]))
 
-(rum/defc arrow-down
-  []
-  [:svg
-   {:aria-hidden "true"
-    :height      "16"
-    :width       "10"
-    :version     "1.1"
-    :view-box    "0 0 10 16"
-    :fill        "currentColor"
-    :display     "inline-block"}
-   [:path
-    {:d         "M5 11L0 6l1.5-1.5L5 8.25 8.5 4.5 10 6l-5 5z"
-     :fill-rule "evenodd"}]])
-
-(rum/defc arrow-right-2
-  []
-  [:svg
-   {:aria-hidden "true"
-    :height      "16"
-    :width       "10"
-    :version     "1.1"
-    :view-box    "0 0 10 16"
-    :fill        "currentColor"
-    :display     "inline-block"}
-   [:path
-    {:d         "M7.5 8l-5 5L1 11.5 4.75 8 1 4.5 2.5 3l5 5z"
-     :fill-rule "evenodd"}]])
-
 (defonce arrow-right-v2
          [:svg.h-3.w-3
           {:version  "1.1"

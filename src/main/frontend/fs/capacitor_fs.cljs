@@ -7,7 +7,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.encrypt :as encrypt]
+            [rum.core :as rum]
             [frontend.state :as state]
             [frontend.db :as db]))
 
@@ -101,10 +101,7 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
@@ -139,8 +136,7 @@
          (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
-        (p/let [disk-content (encrypt/decrypt disk-content)]
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
         (->
@@ -148,10 +144,7 @@
                                                          :data content
                                                          :encoding (.-UTF8 Encoding)
                                                          :recursive true}))]
-           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                             (encrypt/decrypt content)
-                             content)]
-             (db/set-file-content! repo (js/decodeURI path) content))
+           (db/set-file-content! repo (js/decodeURI path) content)
            (when ok-handler
              (ok-handler repo path result))
            result)
@@ -177,6 +170,33 @@
     (if (mobile-util/native-ios?)
       (js/encodeURI (js/decodeURI path))
       path)))
+
+(defn- local-container-path?
+  "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
+  [path localDocumentsPath]
+  (string/includes? path localDocumentsPath))
+
+(defn- iCloud-container-path?
+  "Check whether `path' is logseq's iCloud container path on iOS"
+  [path]
+  (string/includes? path "iCloud~com~logseq~logseq"))
+
+(rum/defc instruction
+  []
+  [:div.instruction
+   [:h1.title "Please choose a valid directory!"]
+   [:p.leading-6 "Logseq app can only save or access your graphs stored in a specific directory with a "
+    [:strong "Logseq icon"]
+    " inside, located either in \"iCloud Drive\", \"On My iPhone\" or \"On My iPad\"."]
+   [:p.leading-6 "Please watch the following short instruction video. "
+    [:small.text-gray-500 "(may take few seconds to load...)"]]
+   [:iframe
+    {:src "https://www.loom.com/embed/dae612ae5fd94e508bd0acdf02efb888"
+     :frame-border "0"
+     :position "relative"
+     :allow-full-screen "allowfullscreen"
+     :webkit-allow-full-screen "webkitallowfullscreen"
+     :height "100%"}]])
 
 (defrecord Capacitorfs []
   protocol/Fs
@@ -249,11 +269,19 @@
         result)))
   (open-dir [_this _ok-handler]
     (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
-            path (p/chain
-                  (.pickFolder mobile-util/folder-picker)
-                  #(js->clj % :keywordize-keys true)
-                  :path)
-            _ (when (mobile-util/native-ios?) (mobile-util/sync-icloud-repo path))
+            {:keys [path localDocumentsPath]} (p/chain
+                                               (.pickFolder mobile-util/folder-picker)
+                                               #(js->clj % :keywordize-keys true))
+            _ (when (mobile-util/native-ios?)
+                (cond
+                  (not (or (local-container-path? path localDocumentsPath)
+                           (iCloud-container-path? path)))
+                  (state/pub-event! [:modal/show-instruction])
+
+                  (iCloud-container-path? path)
+                  (mobile-util/sync-icloud-repo path)
+
+                  :else nil))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))

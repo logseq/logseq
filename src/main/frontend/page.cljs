@@ -97,7 +97,7 @@
   (when-let [route-match (state/sub :route-match)]
     (let [route-name (get-in route-match [:data :name])]
       (when-let [view (:view (:data route-match))]
-        (ui/catch-error
+        (ui/catch-error-and-notify
          (helpful-default-error-screen)
          (if (= :draw route-name)
            (view route-match)

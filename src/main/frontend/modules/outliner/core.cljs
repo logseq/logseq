@@ -449,9 +449,11 @@
         move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
         keep-uuid? (if move? true keep-uuid?)
         replace-empty-target? (if (and (some? replace-empty-target?)
+                                       (:block/content target-block')
                                        (string/blank? (:block/content target-block')))
                                 replace-empty-target?
                                 (and sibling?
+                                     (:block/content target-block')
                                      (string/blank? (:block/content target-block'))
                                      (> (count blocks) 1)
                                      (not move?)))
@@ -587,7 +589,8 @@
                                                                     :outliner-op (or outliner-op :move-blocks)})]
           (when (seq tx-data)
             (let [first-block-page (:db/id (:block/page first-block))
-                  target-page (:db/id (:block/page target-block))
+                  target-page (or (:db/id (:block/page target-block))
+                                  (:db/id target-block))
                   not-same-page? (not= first-block-page target-page)
                   move-blocks-next-tx [(build-move-blocks-next-tx blocks)]
                   children-page-tx (when not-same-page?

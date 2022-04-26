@@ -34,26 +34,21 @@
 <script>window.__LSP__HOST__ = true</script>
 <script src="/static/js/magic_portal.js"></script>
 <script>let worker = new Worker('/static/js/worker.js')
-const portal = new MagicPortal(worker);
-(async () => {
-  const git = await portal.get('git')
-  window.git = git
-  const fs = await portal.get('fs')
-  window.fs = fs
-  const pfs = await portal.get('pfs')
-  window.pfs = pfs
-  const gitHttp = await portal.get('gitHttp')
-  window.gitHttp = gitHttp
-  const workerThread = await portal.get('workerThread')
-  window.workerThread = workerThread
-})()
+  const portal = new MagicPortal(worker);
+  (async () => {
+    const fs = await portal.get('fs')
+    window.fs = fs
+    const pfs = await portal.get('pfs')
+    window.pfs = pfs
+    const workerThread = await portal.get('workerThread')
+    window.workerThread = workerThread
+  })()
 </script>
 <script defer src="/static/js/highlight.min.js"></script>
 <script defer src="/static/js/interact.min.js"></script>
 <script defer src="/static/js/lsplugin.core.js"></script>
 <script defer src="/static/js/main.js"></script>
 <script defer src="/static/js/code-editor.js"></script>
-<script defer src="/static/js/age-encryption.js"></script>
 <script defer src="/static/js/excalidraw.js"></script>
 <script>
   /*!

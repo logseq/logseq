@@ -5276,10 +5276,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.3.2:
-  version "1.3.2"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.3.2.tgz#d08bb6bd7a6ea6ae27cb02f4d5b4c8f7c95d31ba"
-  integrity sha512-yK/IfRwLpNEyFyU61wISho3ik2en/VVtY4wxZFfyasOX5xBvxcI/FBAqXmO4hV7V6paH8Ko9APgAW3AcX+CiOQ==
+mldoc@1.3.3:
+  version "1.3.3"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.3.3.tgz#b7f39b48eb0ef3558619d3e3522265977bd78fe3"
+  integrity sha512-TzW06GBltdKxwWAxOvflPmIVedu6bzl9T4YoYqnDUyZ3kELFMllEgiYCh65PPW3xsRMA/5OcRQqqGZGiKEJEug==
   dependencies:
     yargs "^12.0.2"
 
@@ -6804,8 +6804,6 @@ react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
-  dependencies:
-    react-icon-base "2.1.0"
 
 react-is@^16.13.1, react-is@^16.3.1, react-is@^16.7.0:
   version "16.13.1"

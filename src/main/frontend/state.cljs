@@ -1,7 +1,5 @@
 (ns frontend.state
   (:require [cljs-bean.core :as bean]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
             [cljs.core.async :as async]
             [clojure.string :as string]
             [cljs.spec.alpha :as s]
@@ -13,7 +11,6 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
@@ -32,10 +29,7 @@
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
-     :repo/cloning?                         false
-     ;; :repo/loading-files? is only for GitHub repos
      :repo/loading-files?                   {}
-     :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
      :instrument/disabled?                  (storage/get "instrument-disabled")
@@ -44,7 +38,6 @@
      :indexeddb/support?                    true
      :me                                    nil
      :git/current-repo                      current-graph
-     :git/status                            {}
      :format/loading                        {}
      :draw?                                 false
      :db/restoring?                         nil
@@ -99,7 +92,6 @@
 
      :document/mode?                        document-mode?
 
-     :github/contents                       {}
      :config                                {}
      :block/component-editing-mode?         false
      :editor/draw-mode?                     false
@@ -203,10 +195,6 @@
      :command-palette/commands              []
 
      :view/components                       {}
-
-     :debug/write-acks                      {}
-
-     :encryption/graph-parsing?             false
 
      :favorites/dragging                    nil
 
@@ -368,11 +356,6 @@
   []
   (not (false? (:export/heading-to-list?
                  (get (sub-config) (get-current-repo))))))
-
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption?
-    (get (sub-config) repo)))
 
 (defn enable-git-auto-push?
   [repo]
@@ -592,10 +575,6 @@
   [range]
   (set-state! :cursor-range range))
 
-(defn set-cloning!
-  [value]
-  (set-state! :repo/cloning? value))
-
 (defn set-q!
   [value]
   (set-state! :search/q value))
@@ -755,38 +734,6 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
-
-(defn set-github-installation-tokens!
-  [tokens]
-  (when (seq tokens)
-    (let [tokens (medley/index-by :installation_id tokens)
-          repos (get-repos)]
-      (when (seq repos)
-        (let [set-token-f
-              (fn [{:keys [installation_id] :as repo}]
-                (let [{:keys [token] :as m} (get tokens installation_id)]
-                  (if (string? token)
-                    ;; GitHub API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
-                    ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
-                    ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
-                    (let [formatter (tf/formatters :date-time-no-ms)
-                          expires-at (->> (t/plus (t/now) (t/minutes 40))
-                                          (tf/unparse formatter))]
-                      (merge repo {:token token :expires_at expires-at}))
-                    (do
-                      (when (and
-                              (:url repo)
-                              (string/starts-with? (:url repo) "https://"))
-                        (log/error :token/cannot-set-token {:repo-m repo :token-m m}))
-                      repo))))
-              repos (mapv set-token-f repos)]
-          (swap! state assoc-in [:me :repos] repos))))))
-
-(defn get-github-token
-  [repo]
-  (when repo
-    (let [repos (get-repos)]
-      (some #(when (= repo (:url %)) %) repos))))
 
 (defn toggle-sidebar-open?!
   []
@@ -1054,10 +1001,6 @@
     (get-in @state [:me :settings :date-formatter])
     "MMM do, yyyy"))
 
-(defn set-git-status!
-  [repo-url value]
-  (swap! state assoc-in [:git/status repo-url] value))
-
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
 
@@ -1065,36 +1008,14 @@
   []
   (:me @state))
 
-(defn github-authed?
-  []
-  (:github-authed? (get-me)))
-
-(defn get-name
-  []
-  (:name (get-me)))
-
 (defn deprecated-logged?
   "Whether the user has logged in."
   []
-  (some? (get-name)))
-
-(defn in-draw-mode?
-  []
-  (:draw? @state))
+  false)
 
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
-
-(defn get-default-branch
-  [repo-url]
-  (or
-    (some->> (get-repos)
-             (filter (fn [m]
-                       (= (:url m) repo-url)))
-             (first)
-             :branch)
-    "master"))
 
 (defn set-indexedb-support!
   [value]
@@ -1262,16 +1183,6 @@
 (defn set-config!
   [repo-url value]
   (set-state! [:config repo-url] value))
-
-(defn get-git-auto-push?
-  ([]
-   (get-git-auto-push? (get-current-repo)))
-  ([repo]
-   (true? (:git-auto-push (get-config repo)))))
-
-(defn set-changed-files!
-  [repo changed-files]
-  (set-state! [:repo/changed-files repo] changed-files))
 
 (defn get-wide-mode?
   []
@@ -1498,8 +1409,6 @@
   [payload]
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
-
-(defonce diffs (atom nil))
 
 (defn get-copied-blocks
   []

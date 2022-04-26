@@ -63,9 +63,11 @@
   (when-let [macro (thing-at-point ["{{embed" "}}"] input)]
     (assoc macro :type "macro")))
 
+;; TODO support markdown YAML front matter
+;; TODO support using org style properties in markdown
 (defn properties-at-point [& [input]]
   (when-let [properties
-             (case (state/get-preferred-format)
+             (case (state/get-preferred-format) ;; TODO fix me to block's format
                :org (thing-at-point
                      [property-util/properties-start
                       property-util/properties-end]
@@ -75,10 +77,12 @@
                    line)))]
     (assoc properties :type "properties-drawer")))
 
+;; TODO support markdown YAML front matter
+;; TODO support using org style properties in markdown
 (defn property-key-at-point [& [input]]
   (when (properties-at-point input)
     (let [property
-          (case (state/get-preferred-format)
+          (case (state/get-preferred-format) ;; TODO fix me to block's format
             :org (thing-at-point ":" input "\n")
             (when-let [line (:raw-content (line-at-point input))]
               (let [key (first (string/split line "::"))
@@ -109,7 +113,7 @@
                :ordered (int? bullet))))))
 
 (defn- get-markup-at-point [& [input]]
-  (let [format (state/get-preferred-format)]
+  (let [format (state/get-preferred-format)] ;; TODO fix me to block's format
    (or (thing-at-point (config/get-hr format) input)
        (thing-at-point (config/get-bold format) input)
        (thing-at-point (config/get-italic format) input)
