@@ -26,14 +26,11 @@ test('favorite item and recent item test', async ({ page }) => {
   // remove fav
   await page.click('.ui__dropdown-trigger')
   await page.locator("text=Unfavorite page").click()
-  await page.waitForTimeout(1000)
-  favs = await page.$$('.favorite-item a')
-  expect(favs.length).toEqual(previous_fav_count)
+  await expect(page.locator('.favorite-item a')).toHaveCount(previous_fav_count)
 
   // click from fav page
-  page.click(':nth-match(.recent-item a, 2)')
-  await page.waitForNavigation()
-  expect(await page.innerText('.page-title .title')).toBe(another_page_name)
+  await page.click(':nth-match(.recent-item a, 2)')
+  await expect(page.locator('.page-title .title')).toHaveText(another_page_name)
 })
 
 
