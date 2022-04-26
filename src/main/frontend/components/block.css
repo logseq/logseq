@@ -194,9 +194,17 @@
 
 .block-right-menu {
     overflow: hidden;
-    max-width: 50px;
+    max-width: 60px;
     text-align: center;
-    margin: auto 0
+    margin: auto 0;
+
+    .indent {
+        margin: 0 7px;
+    }
+
+    .more {
+        margin: 0 7px;
+    }
 }
 
 html.is-mobile,

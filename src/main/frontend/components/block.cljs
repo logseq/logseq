@@ -1935,7 +1935,7 @@
         right-menu (.querySelector js/document (str "#block-right-menu-" uuid))
         {:keys [x0 tx]} @swipe
         dx (- tx x0)]
-    
+
     (when (> (. js/Math abs dx) 5)
       (try
         (cond
@@ -1948,16 +1948,25 @@
             (block-handler/indent-outdent-block! block :right)
             :light)
 
-          (>= (or (some-> (.. right-menu -style -width)
-                          (string/replace "px" "")
-                          util/safe-parse-int)
-                  0)
-              50)
-          ;; (editor-handler/delete-block-aux! block true)
+          (<= 40 (or (some-> (.. right-menu -style -width)
+                             (string/replace "px" "")
+                             util/safe-parse-int)
+                     0)
+              80)
           (haptics/with-haptics-impact
             (block-handler/indent-outdent-block! block :left)
             :light)
 
+          (> (or (some-> (.. right-menu -style -width)
+                         (string/replace "px" "")
+                         util/safe-parse-int)
+                 0)
+             80)
+          (haptics/with-haptics-impact
+            (do (state/set-state! :mobile/show-action-bar? true)
+                (state/set-state! :mobile/actioned-block block))
+            :light)
+          
           :else
           nil)
         (catch js/Error e
@@ -2298,17 +2307,16 @@
   [config {:block/keys [uuid] :as block}]
   [:div.bg-red-100.flex
    [:div.block-left-menu.w-0
-    {:id (str "block-left-menu-" uuid)
-     :style {:overflow "hidden"}}
+    {:id (str "block-left-menu-" uuid)}
     (ui/icon "arrow-bar-right")]])
 
 (rum/defc block-right-menu < rum/reactive
   [config {:block/keys [uuid] :as block}]
   [:div.bg-red-100.flex
-   [:div.block-right-menu.w-0
-    {:id (str "block-right-menu-" uuid)
-     :style {:overflow "hidden"}}
-    (ui/icon "arrow-bar-left")]])
+   [:div.block-right-menu.w-0.flex.flew-col
+    {:id (str "block-right-menu-" uuid)}
+    [:div.indent (ui/icon "arrow-bar-left")]
+    [:div.more (ui/icon "dots-circle-horizontal")]]])
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]

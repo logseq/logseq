@@ -34,7 +34,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.components.onboarding :as onboarding]
-            [frontend.mobile.footer :as footer]))
+            [frontend.mobile.footer :as footer]
+            [frontend.mobile.action-sheet :as action-sheet]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -527,7 +528,10 @@
         (when (and (mobile-util/is-native-platform?)
                    current-repo
                    (not (state/sub :modal/show?)))
-          (footer/footer))]
+          (footer/footer))
+
+        (when (state/sub :mobile/show-action-bar?)
+          (action-sheet/action-bar))]
 
        (right-sidebar/sidebar)
 

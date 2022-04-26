@@ -22,6 +22,24 @@
     }
 }
 
+.action-bar {
+    position: fixed;
+    bottom: 100px;
+    left: 5%;
+    height: 80px;
+    width: 90%;
+    background-color: var(--ls-secondary-background-color);
+    display: flex;
+    justify-content: space-around;
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+
+    button {
+        padding: 7px 10px;
+        border: 10px;
+    }
+}
+
 html.is-native-ipad {
     .cp__footer {
         height: 55px;

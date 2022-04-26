@@ -145,6 +145,9 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -168,7 +171,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
