@@ -2,6 +2,7 @@
   (:require
    [frontend.extensions.srs :as srs]
    [frontend.handler.editor :as editor-handler]
+   [frontend.mixins :as mixins]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [rum.core :as rum]))
@@ -9,6 +10,13 @@
 (defonce font-size 23)
 
 (rum/defcs action-bar < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn []
+                 (state/set-state! :mobile/show-action-bar? false)))))
+  [state]
   (when-let [block (state/sub :mobile/actioned-block)]
     (let [block-id   (:block/uuid block)
           properties (:block/properties block)
