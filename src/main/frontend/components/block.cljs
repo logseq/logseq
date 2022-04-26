@@ -1964,9 +1964,10 @@
              80)
           (haptics/with-haptics-impact
             (do (state/set-state! :mobile/show-action-bar? true)
-                (state/set-state! :mobile/actioned-block block))
+                (state/set-state! :mobile/actioned-block block)
+                (editor-handler/select-block! uuid))
             :light)
-          
+
           :else
           nil)
         (catch js/Error e
