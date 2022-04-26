@@ -17,7 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.7.7'
+  BABASHKA_VERSION: '0.8.1'
 
 jobs:
 
@@ -111,6 +111,9 @@ jobs:
 
       - name: Lint datalog rules
         run: scripts/lint_rules.clj
+
+      - name: Load nbb compatible namespaces
+        run: bb test:load-nbb-compatible-namespaces
 
   e2e-test:
     runs-on: ubuntu-latest
