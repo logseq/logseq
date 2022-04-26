@@ -187,14 +187,14 @@
 
 .block-left-menu {
     overflow: hidden;
-    max-width: 30px;
+    max-width: 50px;
     text-align: center;
     margin: auto 0
 }
 
 .block-right-menu {
     overflow: hidden;
-    max-width: 30px;
+    max-width: 50px;
     text-align: center;
     margin: auto 0
 }

@@ -1883,59 +1883,84 @@
   (let [touch (aget (.-touches event) 0)
         x (.-clientX touch)
         y (.-clientY touch)]
-    (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y})))
+    (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))
 
 (defn- on-touch-move
   [event uuid]
-  (let [{:keys [x0 xi]} @swipe
+  (let [{:keys [x0 xi direction]} @swipe
         touch (aget (.-touches event) 0)
         tx (.-clientX touch)
-        ty (.-clientY touch)]
+        ty (.-clientY touch)
+        direction (if (nil? direction)
+                    (if (> tx x0)
+                      :right
+                      :left)
+                    direction)]
     (swap! swipe #(-> %
                       (assoc :tx tx)
                       (assoc :ty ty)
                       (assoc :xi tx)
-                      (assoc :yi ty)))
+                      (assoc :yi ty)
+                      (assoc :direction direction)))
     (when (< (* (- xi x0) (- tx xi)) 0)
       (swap! swipe #(-> %
                         (assoc :x0 tx)
                         (assoc :y0 ty))))
-    (prn :swipe @swipe)
     (let [{:keys [x0 y0]} @swipe
           dx (- tx x0)
           dy (- ty y0)]
-      (prn :dx dx :dy dy)
-      (when-not (or (> (. js/Math abs dy) 5)
+      (when-not (or (> (. js/Math abs dy) 10)
                     (< (. js/Math abs dx) 3))
         (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
               right (.querySelector js/document (str "#block-right-menu-" uuid))]
 
-          (if (> dx 0)
-            (do
-              (set! (.. right -style -width) "0px")
-              (set! (.. left -style -width) (str dx "px")))
-            (do
-              (set! (.. left -style -width) "0px")
-              (set! (.. right -style -width) (str (- dx) "px")))))))))
+          (cond
+            (= direction :right)
+            (if (> dx 0)
+              (set! (.. left -style -width) (str dx "px"))
+              (set! (.. left -style -width) (str (+ 50 dx) "px")))
+
+            (= direction :left)
+            (if (< dx 0)
+              (set! (.. right -style -width) (str (- dx) "px"))
+              (set! (.. right -style -width) (str (- 50 dx) "px")))
+
+            :else
+            nil))))))
 
 (defn- on-touch-end
   [_event block uuid]
-  (let [{:keys [x0 tx]} @swipe
+  (let [left-menu (.querySelector js/document (str "#block-left-menu-" uuid))
+        right-menu (.querySelector js/document (str "#block-right-menu-" uuid))
+        {:keys [x0 tx]} @swipe
         dx (- tx x0)]
-    (when (> (. js/Math abs dx) 10)
-      (cond
-        (> dx 50)
-        (block-handler/indent-outdent-block! block :right)
+    
+    (when (> (. js/Math abs dx) 5)
+      (try
+        (cond
+          (>= (or (some-> (.. left-menu -style -width)
+                          (string/replace "px" "")
+                          util/safe-parse-int)
+                  0)
+              50)
+          (block-handler/indent-outdent-block! block :right)
 
-        (< dx -50)
-        (editor-handler/delete-block-aux! block true)
+          (>= (or (some-> (.. right-menu -style -width)
+                          (string/replace "px" "")
+                          util/safe-parse-int)
+                  0)
+              50)
+          ;; (editor-handler/delete-block-aux! block true)
+          ;; (block-handler/indent-outdent-block! block :left)
+          (action-sheet/show-actions)
 
-        :else
-        nil)
-      (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
-            right (.querySelector js/document (str "#block-right-menu-" uuid))]
-        (set! (.. right -style -width) "0px")
-        (set! (.. left -style -width) "0px")))))
+          :else
+          nil)
+        (catch js/Error e
+          (js/console.error e))
+        (finally
+          (set! (.. left-menu -style -width) "0px")
+          (set! (.. right-menu -style -width) "0px"))))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -2031,6 +2056,9 @@
                       :block-ref
                       {:block block}))}
         block-refs-count]])))
+
+(declare block-left-menu)
+(declare block-right-menu)
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -2276,7 +2304,7 @@
    [:div.block-right-menu.w-0
     {:id (str "block-right-menu-" uuid)
      :style {:overflow "hidden"}}
-    (ui/icon "trash")]])
+    (ui/icon "arrow-bar-left")]])
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
