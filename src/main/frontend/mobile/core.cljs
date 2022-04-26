@@ -48,7 +48,11 @@
                          (js/window.history.back))))))
 
   (when (mobile-util/native-ios?)
-    (ios-init))
+    (ios-init)
+    (.removeAllListeners mobile-util/file-sync)
+    (.addListener mobile-util/file-sync "debug"
+                  (fn [event]
+                    (js/console.log "🔄" event))))
 
   (when (mobile-util/is-native-platform?)
     (.addListener mobile-util/fs-watcher "watcher"
