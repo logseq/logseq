@@ -45,11 +45,19 @@
           _      (action)
           _      (p/delay time)]))
 
+(defn- inject-steps-indicator
+  [current total]
+
+  (h/render-html
+    [:div.steps
+     [:strong (str "STEP " current)]
+     [:ul (for [i (range total)] [:li {:class (when (= current (inc i)) "active")} i])]]))
+
 (defn- create-steps! [^js jsTour]
   [
    ;; step 1
    {:id                "nav-help"
-    :text              (h/render-html [:section [:h2 "❓  Help"]
+    :text              (h/render-html [:section [:h2 "❓ Help"]
                                        [:p "You can always click here for help and other information about Logseq."]])
     :attachTo          {:element ".cp__sidebar-help-btn" :on "top"}
     :beforeShowPromise #(if (state/sub :ui/sidebar-open?)
@@ -119,6 +127,7 @@
                         :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
                                              :scrollTo false}}))
         steps      (create-steps! jsTour)
+        steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
         [show-skip! hide-skip!] (make-skip-fns jsTour)]
 
     ;; events

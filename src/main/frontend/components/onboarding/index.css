@@ -367,6 +367,7 @@ body[data-page=import] {
       color: var(--ls-secondary-text-color);
       flex: 1;
       padding: 8px 10px;
+      position: relative;
 
       h2 {
         font-size: 18px;
@@ -378,6 +379,41 @@ body[data-page=import] {
 
       p {
         color: var(--ls-secondary-text-color);
+      }
+
+      .steps {
+        position: absolute;
+        bottom: -28px;
+        left: 10px;
+        font-size: 12px;
+
+        strong {
+          opacity: .5;
+          font-size: 11px;
+        }
+
+        ul {
+          display: flex;
+          list-style: none;
+          align-items: center;
+          margin: 0;
+          padding-left: 1px;
+          padding-top: 2px;
+
+          li {
+            padding: 0;
+            width: 5px;
+            height: 5px;
+            margin: 0 5px 0 0;
+            background-color: rgba(0, 0, 0, .2);
+            border-radius: 100%;
+            font-size: 0;
+
+            &.active {
+              background-color: var(--ls-primary-text-color);
+            }
+          }
+        }
       }
     }
 
