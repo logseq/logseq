@@ -69,6 +69,7 @@
         "@capacitor/clipboard": "^1.0.8",
         "@capacitor/core": "3.2.2",
         "@capacitor/filesystem": "1.0.6",
+        "@capacitor/haptics": "^1.1.4",
         "@capacitor/ios": "3.2.2",
         "@capacitor/keyboard": "^1.2.0",
         "@capacitor/splash-screen": "1.1.3",

@@ -41,6 +41,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -1943,7 +1944,9 @@
                           util/safe-parse-int)
                   0)
               50)
-          (block-handler/indent-outdent-block! block :right)
+          (haptics/with-haptics-impact
+            (block-handler/indent-outdent-block! block :right)
+            :light)
 
           (>= (or (some-> (.. right-menu -style -width)
                           (string/replace "px" "")
@@ -1951,8 +1954,9 @@
                   0)
               50)
           ;; (editor-handler/delete-block-aux! block true)
-          ;; (block-handler/indent-outdent-block! block :left)
-          (action-sheet/show-actions)
+          (haptics/with-haptics-impact
+            (block-handler/indent-outdent-block! block :left)
+            :light)
 
           :else
           nil)
