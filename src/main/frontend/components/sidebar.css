@@ -375,14 +375,15 @@ html[data-theme='dark'] {
   }
 
   &-btn {
-    @apply font-bold fixed bottom-4
-    rounded-full h-8 w-8 flex items-center justify-center font-bold
-    opacity-70 hover:opacity-100;
+    @apply fixed bottom-4 right-8;
 
-    user-select: none;
-    cursor: help;
-    right: 24px;
-    background-color: var(--ls-secondary-background-color);
+    > .inner {
+      @apply font-bold
+      rounded-full h-8 w-8 flex items-center justify-center font-bold
+      opacity-70 hover:opacity-100 select-none cursor-help;
+
+      background-color: var(--ls-secondary-background-color);
+    }
   }
 }
 

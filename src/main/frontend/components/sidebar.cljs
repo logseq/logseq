@@ -437,10 +437,11 @@
   []
   (when-not (state/sub :ui/sidebar-open?)
     [:div.cp__sidebar-help-btn
-     {:title (t :help-shortcut-title)
-      :on-click (fn []
-                  (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-     "?"]))
+     [:div.inner
+      {:title    (t :help-shortcut-title)
+       :on-click (fn []
+                   (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+      "?"]]))
 
 (defn- hide-context-menu-and-clear-selection
   [e]

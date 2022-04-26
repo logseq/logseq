@@ -446,7 +446,6 @@ body[data-page=import] {
   .nav-content-item-inner {
     background-color: var(--ls-secondary-background-color);
     overflow: hidden;
-    padding-bottom: 6px;
 
     .header {
       padding: 4px 10px !important;
@@ -458,6 +457,39 @@ body[data-page=import] {
       }
     }
   }
+
+  &.page-title {
+    background-color: rgba(0, 0, 0, .4);
+
+    > h1 {
+      background-color: var(--ls-primary-background-color);
+      border-radius: 12px;
+    }
+  }
+
+  &.cp__sidebar-help-btn {
+    background-color: rgba(0, 0, 0, .4);
+
+    > .inner {
+      opacity: 1;
+    }
+  }
+
+  &.cp__header-left-menu {
+    background-color: rgba(0, 0, 0, .4);
+    border-radius: 0;
+    opacity: 1 !important;
+    transition: none;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, .4);
+    }
+
+    > .inner {
+      border-radius: 100%;
+      background-color: var(--ls-primary-background-color);
+    }
+  }
 }
 
 .shepherd-element {
@@ -467,6 +499,14 @@ body[data-page=import] {
 
   &[data-popper-placement^=top] > .shepherd-arrow {
     bottom: -4px !important;
+  }
+
+  &[data-popper-placement^=left] > .shepherd-arrow {
+    right: -4px !important;
+  }
+
+  &[data-popper-placement^=bottom] > .shepherd-arrow {
+    top: -4px !important;
   }
 }
 
