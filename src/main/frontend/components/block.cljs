@@ -2305,14 +2305,14 @@
           (str (:block/uuid block)))))
 
 (rum/defc block-left-menu < rum/reactive
-  [config {:block/keys [uuid] :as block}]
+  [_config {:block/keys [uuid] :as _block}]
   [:div.flex.bg-base-2
    [:div.block-left-menu.w-0
     {:id (str "block-left-menu-" uuid)}
     (ui/icon "arrow-bar-right")]])
 
 (rum/defc block-right-menu < rum/reactive
-  [config {:block/keys [uuid] :as block}]
+  [_config {:block/keys [uuid] :as _block}]
   [:div.flex.bg-base-2
    [:div.block-right-menu.w-0.flex.flew-col
     {:id (str "block-right-menu-" uuid)}
