@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, systemModifier, IsMac, getIsWebAPIClipboardSupported, captureConsoleWithPrefix } from './utils'
+import { createRandomPage, enterNextBlock, systemModifier, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -144,8 +144,6 @@ test(
 
 test('copy & paste block ref and replace its content', async ({ page, block }) => {
     await createRandomPage(page)
-    let IsWebAPIClipboardSupported = await getIsWebAPIClipboardSupported(page)
-    let promise_capture: Promise<string> = null
 
     await block.mustFill('Some random text')
     // FIXME: copy instantly will make content disappear
@@ -164,10 +162,10 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     }
     await page.keyboard.press('Enter')
 
-    const blockRef$ = page.locator('.block-ref >> text="Some random text"');
+    const blockRef = page.locator('.block-ref >> text="Some random text"');
 
     // Check if the newly created block-ref has the same referenced content
-    await expect(blockRef$).toHaveCount(1);
+    await expect(blockRef).toHaveCount(1);
 
     // Move cursor into the block ref
     for (let i = 0; i < 4; i++) {

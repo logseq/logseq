@@ -31,7 +31,8 @@ test('favorite item and recent item test', async ({ page }) => {
   expect(favs.length).toEqual(previous_fav_count)
 
   // click from fav page
-  await page.click(':nth-match(.recent-item a, 2)')
+  page.click(':nth-match(.recent-item a, 2)')
+  await page.waitForNavigation()
   expect(await page.innerText('.page-title .title')).toBe(another_page_name)
 })
 
