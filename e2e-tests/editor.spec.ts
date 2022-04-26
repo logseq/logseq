@@ -150,9 +150,6 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     await block.mustFill('Some random text')
     // FIXME: copy instantly will make content disappear
     await page.waitForTimeout(1000)
-    if (!IsWebAPIClipboardSupported){
-        promise_capture = captureConsoleWithPrefix(page, "Copy without `clipboard-write` permission:")
-    }
     if (IsMac) {
         await page.keyboard.press('Meta+c')
     } else {
@@ -160,14 +157,10 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     }
 
     await page.press('textarea >> nth=0', 'Enter')
-    if (IsWebAPIClipboardSupported){
-        if (IsMac) {
-            await page.keyboard.press('Meta+v')
-        } else {
-            await page.keyboard.press('Control+v')
-        }
+    if (IsMac) {
+        await page.keyboard.press('Meta+v')
     } else {
-        await block.mustFill(await promise_capture)
+        await page.keyboard.press('Control+v')
     }
     await page.keyboard.press('Enter')
 
