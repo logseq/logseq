@@ -549,7 +549,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   setBlockCollapsed: (
     uuid: BlockUUID,
-    opts?: { flag: boolean | 'toggle' }
+    opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
 
   getPage: (
