@@ -188,18 +188,22 @@
 .block-left-menu {
     background-color: var(--ls-secondary-background-color);
     background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
-
+    
     .commands-button {
         overflow: hidden;
         max-width: 50px;
         text-align: center;
         margin: auto 0;
+
+        .indent {
+            opacity: 30%;
+        }
     }
 }
 
 .block-right-menu {
     background-color: var(--ls-secondary-background-color);
-    background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
 
     .commands-button {
         overflow: hidden;
@@ -209,10 +213,12 @@
 
         .outdent {
             margin: 0 12px;
+            opacity: 30%;
         }
 
         .more {
             margin: 0 12px;
+            opacity: 30%;
         }
     }
 }

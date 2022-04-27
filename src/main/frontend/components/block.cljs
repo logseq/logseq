@@ -1879,6 +1879,13 @@
 
 (def swipe (atom nil))
 
+(defn- get-element-width
+  [^js element]
+  (or (some-> (.. element -style -width)
+              (string/replace "px" "")
+              util/safe-parse-int)
+      0))
+
 (defn- on-touch-start
   [event]
   (let [touch (aget (.-touches event) 0)
@@ -1910,21 +1917,39 @@
     (let [{:keys [x0 y0]} @swipe
           dx (- tx x0)
           dy (- ty y0)]
-      (when-not (or (> (. js/Math abs dy) 10)
+      (when-not (or (> (. js/Math abs dy) 15)
                     (< (. js/Math abs dx) 3))
         (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
               right (.querySelector js/document (str "#block-right-menu-" uuid))]
 
           (cond
             (= direction :right)
-            (if (> dx 0)
-              (set! (.. left -style -width) (str dx "px"))
-              (set! (.. left -style -width) (str (+ 50 dx) "px")))
+            (do
+              (if (> dx 0)
+                (set! (.. left -style -width) (str dx "px"))
+                (set! (.. left -style -width) (str (+ 50 dx) "px")))
 
+              (if (>= (get-element-width left) 50)
+                (set! (.. left -style -opacity) "100%")
+                (set! (.. left -style -opacity) "30%")))
+            
             (= direction :left)
-            (if (< dx 0)
-              (set! (.. right -style -width) (str (- dx) "px"))
-              (set! (.. right -style -width) (str (- 80 dx) "px")))
+            (do
+              (if (< dx 0)
+                (set! (.. right -style -width) (str (- dx) "px"))
+                (set! (.. right -style -width) (str (- 80 dx) "px")))
+
+              (let [outdent (.querySelector right ".outdent")
+                    more (.querySelector right ".more")]
+
+                (if (and (>= (get-element-width right) 40)
+                         (< (get-element-width right) 80))
+                  (set! (.. outdent -style -opacity) "100%")
+                  (set! (.. outdent -style -opacity) "30%"))
+
+                (if (>= (get-element-width right) 80)
+                  (set! (.. more -style -opacity) "100%")
+                  (set! (.. more -style -opacity) "30%"))))
 
             :else
             nil))))))
@@ -1939,29 +1964,17 @@
     (try
       (when (> (. js/Math abs dx) 5)
         (cond
-          (>= (or (some-> (.. left-menu -style -width)
-                          (string/replace "px" "")
-                          util/safe-parse-int)
-                  0)
-              50)
+          (>= (get-element-width left-menu) 50)
           (haptics/with-haptics-impact
             (block-handler/indent-outdent-block! block :right)
             :light)
 
-          (<= 40 (or (some-> (.. right-menu -style -width)
-                             (string/replace "px" "")
-                             util/safe-parse-int)
-                     0)
-              80)
+          (<= 40 (get-element-width right-menu) 80)
           (haptics/with-haptics-impact
             (block-handler/indent-outdent-block! block :left)
             :light)
 
-          (> (or (some-> (.. right-menu -style -width)
-                         (string/replace "px" "")
-                         util/safe-parse-int)
-                 0)
-             80)
+          (> (get-element-width right-menu) 80)
           (haptics/with-haptics-impact
             (do (state/set-state! :mobile/show-action-bar? true)
                 (state/set-state! :mobile/actioned-block block)
@@ -2071,8 +2084,20 @@
                       {:block block}))}
         block-refs-count]])))
 
-(declare block-left-menu)
-(declare block-right-menu)
+(rum/defc block-left-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
+   [:div.commands-button.w-0.rounded-r-md
+    {:id (str "block-left-menu-" uuid)}
+    [:indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+
+(rum/defc block-right-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
+   [:div.commands-button.w-0.flex.flew-col.rounded-md
+    {:id (str "block-right-menu-" uuid)}
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]]])
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
@@ -2303,21 +2328,6 @@
        (util/collapsed? block)
        (= (:id config)
           (str (:block/uuid block)))))
-
-(rum/defc block-left-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
-  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
-   [:div.commands-button.w-0.rounded-r-md
-    {:id (str "block-left-menu-" uuid)}
-    [:indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
-
-(rum/defc block-right-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
-  [:div.block-right-menu.flex.bg-base-2.rounded-l-md.ml-1
-   [:div.commands-button.w-0.flex.flew-col.rounded-l-md
-    {:id (str "block-right-menu-" uuid)}
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
-    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]]])
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
