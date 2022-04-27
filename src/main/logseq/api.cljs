@@ -543,13 +543,15 @@
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
     (when-let [block (db-model/get-block-by-uuid block-uuid)]
-      (let [{:keys [flag]} (bean/->clj opts)
+      (let [opts       (bean/->clj opts)
+            opts       (if (or (string? opts) (boolean? opts)) {:flag opts} opts)
+            {:keys [flag]} opts
             block-uuid (uuid block-uuid)
-            flag (if (= "toggle" flag)
-                   (not (util/collapsed? block))
-                   (boolean flag))]
+            flag       (if (= "toggle" flag)
+                         (not (util/collapsed? block))
+                         (boolean flag))]
         (if flag (editor-handler/collapse-block! block-uuid)
-                 (editor-handler/expand-block! block-uuid))
+          (editor-handler/expand-block! block-uuid))
         nil))))
 
 (def ^:export upsert_block_property
