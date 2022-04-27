@@ -15,31 +15,35 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn []
-                 (state/set-state! :mobile/show-action-bar? false)))))
+                 (state/set-state! :mobile/show-action-bar? false)
+                 (editor-handler/clear-selection!)))))
   [state]
   (when-let [block (state/sub :mobile/actioned-block)]
     (let [block-id   (:block/uuid block)
           properties (:block/properties block)
-          heading?   (true? (:heading properties))]
+          heading?   (true? (:heading properties))
+          callback   (fn []
+                       (state/set-state! :mobile/show-action-bar? false)
+                       (editor-handler/clear-selection!))]
      [:div.fixed.action-bar
       [:button.bottom-action.flex-row
        {:on-click (fn [_event]
                     (editor-handler/delete-block-aux! block true)
-                    (state/set-state! :mobile/show-action-bar? false))}
+                    (callback))}
        (ui/icon "trash" {:style {:fontSize font-size}})
        [:div.description "Delete"]]
       
       [:button.bottom-action.flex-row
        {:on-click (fn [_event]
                     (editor-handler/copy-selection-blocks)
-                    (state/set-state! :mobile/show-action-bar? false))}
+                    (callback))}
        (ui/icon "copy" {:style {:fontSize font-size}})
        [:div.description "Copy"]]
       
       [:button.bottom-action.flex-row
        {:on-click (fn [_event]
                     (srs/make-block-a-card! (:block/uuid block))
-                    (state/set-state! :mobile/show-action-bar? false))}
+                    (callback))}
        (ui/icon "infinity" {:style {:fontSize font-size}})
        [:div.description "Card"]]
       
@@ -48,6 +52,6 @@
                     (if heading?
                       (editor-handler/remove-block-property! block-id :heading)
                       (editor-handler/set-block-property! block-id :heading true))
-                    (state/set-state! :mobile/show-action-bar? false))}
-       (ui/icon "replace" {:style {:fontSize font-size}})
+                    (callback))}
+       (ui/icon "heading" {:style {:fontSize font-size}})
        [:div.description "Heading"]]])))
