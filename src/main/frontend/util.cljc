@@ -189,21 +189,6 @@
            (string/trim)))
 
 #?(:cljs
-   (defn fetch-raw
-     ([url on-ok on-failed]
-      (fetch-raw url {} on-ok on-failed))
-     ([url opts on-ok on-failed]
-      (-> (js/fetch url (bean/->js opts))
-          (.then (fn [resp]
-                   (if (>= (.-status resp) 400)
-                     (on-failed resp)
-                     (if (.-ok resp)
-                       (-> (.text resp)
-                           (.then bean/->clj)
-                           (.then #(on-ok %)))
-                       (on-failed resp)))))))))
-
-#?(:cljs
    (defn fetch
      ([url on-ok on-failed]
       (fetch url {} on-ok on-failed))
@@ -238,14 +223,6 @@
      (fetch url {:method "post"
                  :headers {:Content-Type "application/json"}
                  :body (js/JSON.stringify (clj->js body))}
-            on-ok
-            on-failed)))
-
-#?(:cljs
-   (defn delete
-     [url on-ok on-failed]
-     (fetch url {:method "delete"
-                 :headers {:Content-Type "application/json"}}
             on-ok
             on-failed)))
 
@@ -367,6 +344,11 @@
   [input]
   (when input
     (.-selectionEnd input)))
+
+(defn get-selection-direction
+  [input]
+  (when input
+    (.-selectionDirection input)))
 
 (defn get-first-or-last-line-pos
   [input]
@@ -749,14 +731,6 @@
            :down)))))
 
 #?(:cljs
-   (defn rec-get-block-node
-     [node]
-     (if (and node (d/has-class? node "ls-block"))
-       node
-       (and node
-            (rec-get-block-node (gobj/get node "parentNode"))))))
-
-#?(:cljs
    (defn rec-get-blocks-container
      [node]
      (if (and node (d/has-class? node "blocks-container"))
@@ -781,29 +755,6 @@
    (defn remove-embeded-blocks [blocks]
      (->> blocks
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
-
-;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
-;; FIXME: Note that it might not works for IE.
-#?(:cljs
-   (defn get-selected-nodes
-     [class-name]
-     (try
-       (when (gobj/get js/window "getSelection")
-         (let [selection (js/window.getSelection)
-               range (.getRangeAt selection 0)
-               container (-> (gobj/get range "commonAncestorContainer")
-                             (rec-get-blocks-container))
-               start-node (gobj/get range "startContainer")
-               container-nodes (array-seq (selection/getSelectedNodes container start-node))]
-           (map
-            (fn [node]
-              (if (or (= 3 (gobj/get node "nodeType"))
-                      (not (d/has-class? node class-name))) ;textnode
-                (rec-get-block-node node)
-                node))
-            container-nodes)))
-       (catch js/Error _e
-         nil))))
 
 #?(:cljs
    (defn get-selected-text
@@ -1308,7 +1259,7 @@
              #(if (map? %)
                 (for [[k v] %]
                   (when v (name k)))
-                (name %))
+                [(name %)])
              args)))
 
 #?(:cljs

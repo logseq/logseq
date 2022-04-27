@@ -26,6 +26,10 @@
 
  :feature/enable-block-timestamps? false
 
+ ;; Specify the date on which the week starts.
+ ;; Goes from 0 to 6 (Monday to Sunday), default to 6
+ :start-of-week 6
+
  ;; Specify a custom CSS import
  ;; This option take precedence over your local `logseq/custom.css` file
  ;; You may find a list of awesome logseq themes here:

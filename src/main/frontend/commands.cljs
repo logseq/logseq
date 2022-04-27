@@ -108,18 +108,6 @@
                                     :backward-pos 4}]
    [:editor/search-block :embed]])
 
-;; Stop now!!
-;; (def commands-plugins
-;;   {"Encrypt text" {:steps [[:editor/input (str slash "encrypt")]
-;;                            [:editor/show-input [{:id :hint
-;;                                                  :placeholder "Hint"}
-;;                                                 {:id :password
-;;                                                  :type "password"}]]]
-;;                    :insert-fn (fn [hint password]
-;;                                 (util/format "{{{encrypt %s}}}"
-;;                                              (pr-str {:hint hint
-;;                                                       :content content})))}})
-
 (defn get-preferred-workflow
   []
   (let [workflow (state/get-preferred-workflow)]
@@ -248,7 +236,8 @@
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
 
        (state/deprecated-logged?)
-       ["Upload an image" [[:editor/click-hidden-file-input :id]]])]
+       ["Upload an image" [[:editor/click-hidden-file-input :id]]]
+       )]
 
     (markdown-headings)
 

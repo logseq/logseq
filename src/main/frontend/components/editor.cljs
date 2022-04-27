@@ -301,8 +301,8 @@
         sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2
      [:div.toolbar-commands
-      (mobile-bar-indent-outdent true "arrow-bar-right")
       (mobile-bar-indent-outdent false "arrow-bar-left")
+      (mobile-bar-indent-outdent true "arrow-bar-right")
       (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
       (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
       (mobile-bar-command #(if (state/sub :document/mode?)
@@ -387,7 +387,6 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        ;; FIXME: for translateY layer
         x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
                          (let [delta-width (- vw-width (+ (:left rect) left))]
                            (< delta-width (* max-width 0.5))))
@@ -408,9 +407,11 @@
                :z-index    11}
               (when set-default-width?
                 {:width max-width})
-              (if config/mobile?
-                {:left 0}
-                {:left (if (and y-diff (= y-diff 0)) left 0)}))}
+              (let [^js/HTMLElement textarea
+                    (js/document.querySelector "textarea")]
+                (if (<= (.-clientWidth textarea) (+ left (if set-default-width? max-width 500)))
+                  {:right 0}
+                  {:left (if (and y-diff (= y-diff 0)) left 0)})))}
      cp]))
 
 (rum/defc transition-cp < rum/reactive

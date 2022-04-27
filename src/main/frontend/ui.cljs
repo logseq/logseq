@@ -727,6 +727,19 @@
     error-view
     view))
 
+(rum/defcs catch-error-and-notify
+  < {:did-catch
+     (fn [state error _info]
+       (log/error :exception error)
+       (notification-handler/show!
+        (str "Error caught by UI!\n " error)
+        :error)
+       (assoc state ::error error))}
+  [{error ::error, c :rum/react-component} error-view view]
+  (if (some? error)
+    error-view
+    view))
+
 (rum/defc block-error
   "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
@@ -884,3 +897,21 @@
         :arrow       true}
        content)
       content)))
+
+(rum/defc progress-bar
+  [width]
+  {:pre (integer? width)}
+  [:div.w-full.bg-indigo-200.rounded-full.h-2.5
+   [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
+                                           :transition "width 1s"}]])
+
+(rum/defc progress-bar-with-label
+  [width label-left label-right]
+  {:pre (integer? width)}
+  [:div
+   [:div.flex.justify-between.mb-1
+    [:span.text-base
+     label-left]
+    [:span.text-sm.font-medium
+     label-right]]
+   (progress-bar width)])

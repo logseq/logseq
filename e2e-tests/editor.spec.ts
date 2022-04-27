@@ -1,44 +1,8 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, editFirstBlock, IsMac } from './utils'
+import { createRandomPage, enterNextBlock, systemModifier, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
-
-test(
-  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
-  "but dont trigger RIME #3440 ",
-  // cases should trigger [[]] #3251
-  async ({ page, block }) => {
-    for (let [idx, events] of [
-      kb_events.win10_pinyin_left_full_square_bracket,
-      kb_events.macos_pinyin_left_full_square_bracket
-      // TODO: support #3741
-      // kb_events.win10_legacy_pinyin_left_full_square_bracket,
-    ].entries()) {
-      await createRandomPage(page)
-      let check_text = "#3251 test " + idx
-      await block.mustFill(check_text + "【")
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
-      await block.mustFill(check_text + "【【")
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
-    };
-
-    // dont trigger RIME #3440
-    for (let [idx, events] of [
-      kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
-      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
-    ].entries()) {
-      await createRandomPage(page)
-      let check_text = "#3440 test " + idx
-      await block.mustFill(check_text)
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
-      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
-      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
-    }
-  })
 
 test('hashtag and quare brackets in same line #4178', async ({ page }) => {
   await createRandomPage(page)
@@ -89,6 +53,22 @@ test('disappeared children #4814', async ({ page, block }) => {
   await expect(page.locator('.editor-inner')).toHaveCount(0, { timeout: 500 })
 })
 
+test('create new page from bracketing text #4971', async ({ page, block }) => {
+  let title = 'Page not Exists yet'
+  await createRandomPage(page)
+
+  await block.mustType(`[[${title}]]`)
+
+  await page.keyboard.press(systemModifier('Control+o'))
+
+  // Check page title equals to `title`
+  await page.waitForTimeout(100)
+  expect(await page.locator('h1.title').innerText()).toContain(title)
+
+  // Check there're linked references
+  await page.waitForSelector(`.references .ls-block >> nth=1`, { state: 'detached', timeout: 100 })
+})
+
 test.skip('backspace and cursor position #4897', async ({ page, block }) => {
   await createRandomPage(page)
 
@@ -126,45 +106,76 @@ test.skip('next block and cursor position', async ({ page, block }) => {
   await expect(locator).toHaveText('`12345`', { timeout: 1000 })
 })
 
+test(
+  "Press CJK Left Black Lenticular Bracket `【` by 2 times #3251 should trigger [[]], " +
+  "but dont trigger RIME #3440 ",
+  // cases should trigger [[]] #3251
+  async ({ page, block }) => {
+    for (let [idx, events] of [
+      kb_events.win10_pinyin_left_full_square_bracket,
+      kb_events.macos_pinyin_left_full_square_bracket
+      // TODO: support #3741
+      // kb_events.win10_legacy_pinyin_left_full_square_bracket,
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3251 test " + idx
+      await block.mustFill(check_text + "【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '【')
+      await block.mustFill(check_text + "【【")
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text + '[[]]')
+    };
 
-// FIXME: ClipboardItem is not defined when running with this test
-// test('copy & paste block ref and replace its content', async ({ page }) => {
-//   await createRandomPage(page)
+    // dont trigger RIME #3440
+    for (let [idx, events] of [
+      kb_events.macos_pinyin_selecting_candidate_double_left_square_bracket,
+      kb_events.win10_RIME_selecting_candidate_double_left_square_bracket
+    ].entries()) {
+      await createRandomPage(page)
+      let check_text = "#3440 test " + idx
+      await block.mustFill(check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+      await dispatch_kb_events(page, ':nth-match(textarea, 1)', events)
+      expect(await page.inputValue(':nth-match(textarea, 1)')).toBe(check_text)
+    }
+  })
 
-//   await page.type('textarea >> nth=0', 'Some random text')
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+c')
-//   } else {
-//     await page.keyboard.press('Control+c')
-//   }
+test('copy & paste block ref and replace its content', async ({ page, block }) => {
+    await createRandomPage(page)
 
-//   await page.pause()
+    await block.mustFill('Some random text')
+    // FIXME: copy instantly will make content disappear
+    await page.waitForTimeout(1000)
+    if (IsMac) {
+        await page.keyboard.press('Meta+c')
+    } else {
+        await page.keyboard.press('Control+c')
+    }
 
-//   await page.press('textarea >> nth=0', 'Enter')
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+v')
-//   } else {
-//     await page.keyboard.press('Control+v')
-//   }
-//   await page.keyboard.press('Escape')
+    await page.press('textarea >> nth=0', 'Enter')
+    if (IsMac) {
+        await page.keyboard.press('Meta+v')
+    } else {
+        await page.keyboard.press('Control+v')
+    }
+    await page.keyboard.press('Enter')
 
-//   const blockRef$ = page.locator('.block-ref >> text="Some random text"');
+    const blockRef = page.locator('.block-ref >> text="Some random text"');
 
-//   // Check if the newly created block-ref has the same referenced content
-//   await expect(blockRef$).toHaveCount(1);
+    // Check if the newly created block-ref has the same referenced content
+    await expect(blockRef).toHaveCount(1);
 
-//   // Edit the last block
-//   await blockRef$.press('Enter')
+    // Move cursor into the block ref
+    for (let i = 0; i < 4; i++) {
+        await page.press('textarea >> nth=0', 'ArrowLeft')
+}
 
-//   // Move cursor into the block ref
-//   for (let i = 0; i < 4; i++) {
-//     await page.press('textarea >> nth=0', 'ArrowLeft')
-//   }
-
-//   // Trigger replace-block-reference-with-content-at-point
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+Shift+r')
-//   } else {
-//     await page.keyboard.press('Control+Shift+v')
-//   }
-// })
+    // Trigger replace-block-reference-with-content-at-point
+    if (IsMac) {
+        await page.keyboard.press('Meta+Shift+r')
+    } else {
+        await page.keyboard.press('Control+Shift+v')
+    }
+})

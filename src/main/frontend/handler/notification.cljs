@@ -9,10 +9,12 @@
 
 (defn show!
   ([content status]
-   (show! content status true nil))
+   (show! content status true nil 1500))
   ([content status clear?]
-   (show! content status clear? nil))
+   (show! content status clear? nil 1500))
   ([content status clear? uid]
+   (show! content status clear? uid 1500))
+  ([content status clear? uid timeout]
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
      (state/set-state! :notification/contents (assoc contents
@@ -20,6 +22,6 @@
                                                           :status status}))
 
      (when (and clear? (not= status :error))
-       (js/setTimeout #(clear! uid) 1500))
+       (js/setTimeout #(clear! uid) (or timeout 1500)))
 
      uid)))

@@ -26,19 +26,19 @@
   get-repo-name
   get-short-repo-name
   datascript-db
-  get-conn
+  get-db
   me-tx
   remove-conn!]
 
  [frontend.db.utils
   date->int db->json db->edn-str db->string get-max-tx-id get-tx-id
-  group-by-page seq-flatten sort-by-pos
+  group-by-page seq-flatten
   string->db
 
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
+  blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
@@ -52,8 +52,8 @@
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
-  journal-page? mark-repo-as-cloned! page-alias-set pull-block
-  set-file-last-modified-at! transact-files-db! page-empty? page-empty-or-dummy? get-alias-source-page
+  journal-page? page-alias-set pull-block
+  set-file-last-modified-at! transact-files-db! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
  [frontend.db.react
@@ -88,10 +88,9 @@
 ;; persisting DBs between page reloads
 (defn persist! [repo]
   (let [key (datascript-db repo)
-        conn (get-conn repo false)]
-    (when conn
-      (let [db (d/db conn)
-            db-str (if db (db->string db) "")]
+        db (get-db repo)]
+    (when db
+      (let [db-str (if db (db->string db) "")]
         (p/let [_ (db-persist/save-graph! key db-str)])))))
 
 (defonce persistent-jobs (atom {}))
@@ -150,7 +149,7 @@
 
 (defn listen-and-persist!
   [repo]
-  (when-let [conn (get-conn repo false)]
+  (when-let [conn (get-db repo false)]
     (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
@@ -168,8 +167,7 @@
           db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
           stored (db-persist/get-serialized-graph db-name)
-          logged? (:name me)
-          _ (if stored
+          _ (when stored
               (let [stored-db (try (string->db stored)
                                    (catch js/Error _e
                                      (js/console.warn "Invalid graph cache")
@@ -180,9 +178,7 @@
                     db (if (old-schema? attached-db)
                          (db-migrate/migrate attached-db)
                          attached-db)]
-                (conn/reset-conn! db-conn db))
-              (when logged?
-                (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+                (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn restore!

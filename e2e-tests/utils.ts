@@ -1,13 +1,27 @@
 import { Page, Locator } from 'playwright'
-import { expect } from '@playwright/test'
+import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
+import { Block } from './types'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
 export const IsWindows = process.platform === 'win32'
+export const IsCI = process.env.CI === 'true'
 
 export function randomString(length: number) {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+  let result = '';
+  const charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+
+  return result;
+}
+
+export function randomLowerString(length: number) {
+  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
   let result = '';
   const charactersLength = characters.length;
@@ -204,4 +218,59 @@ export async function activateNewPage(page: Page) {
 
 export async function editFirstBlock(page: Page) {
   await page.click('.ls-block .block-content >> nth=0')
+}
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+export function randomBoolean(): boolean {
+  return Math.random() < 0.5;
+}
+
+export function systemModifier(shortcut: string): string {
+  if (IsMac) {
+    return shortcut.replace('Control', 'Meta')
+  } else {
+    return shortcut
+  }
+}
+
+export async function captureConsoleWithPrefix(page: Page, prefix: string, timeout: number=3000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let console_handler = (msg: ConsoleMessage) => {
+      let text = msg.text()
+      if (text.startsWith(prefix)) {
+        page.removeListener('console', console_handler)
+        resolve(text.substring(prefix.length))
+      }
+    }
+    page.on('console', console_handler)
+    setTimeout(reject.bind("timeout"), timeout)
+  })
+}
+
+export async function queryPermission(page: Page, permission: PermissionName): Promise<boolean> {
+  // Check if WebAPI clipboard supported
+  return await page.evaluate(async (eval_permission: PermissionName): Promise<boolean> => {
+    if (typeof navigator.permissions == "undefined")
+        return Promise.resolve(false);
+    return navigator.permissions.query({
+      name: eval_permission 
+    }).then((result: PermissionStatus): boolean => {
+      return (result.state == "granted" || result.state == "prompt")
+   })
+  }, permission)
+}
+
+export async function doesClipboardItemExists(page: Page): Promise<boolean> {
+  // Check if WebAPI clipboard supported
+  return await page.evaluate((): boolean => {
+    return typeof ClipboardItem !== "undefined"
+  })
+}
+
+export async function getIsWebAPIClipboardSupported(page: Page): Promise<boolean> {
+  // @ts-ignore "clipboard-write" is not included in TS's type definition for permissionName
+  return await queryPermission(page, "clipboard-write") && await doesClipboardItemExists(page)
 }

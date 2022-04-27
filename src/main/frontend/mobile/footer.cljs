@@ -58,11 +58,10 @@
              block (editor-handler/api-insert-new-block!
                     ""
                     {:page page
-                     :reuse-last-block? true})]
+                     :replace-empty-target? true})]
          (js/setTimeout
           (fn [] (editor-handler/edit-block!
                   block
                   :max
                   (:block/uuid block))) 100))
       "edit")]))
-

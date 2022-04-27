@@ -76,25 +76,29 @@
                      ;;  :page-name : the original-name of the page.
                      ;;  :block-id : uuid.
                      (fn [data]
-                       (let [{:keys [page-name block-id]} (bean/->clj data)]
+                       (let [{:keys [page-name block-id file]} (bean/->clj data)]
                          (cond
                            page-name
                            (let [db-page-name (db-model/get-redirect-page-name page-name)]
                              ;; No error handling required, as a page name is always valid
                              ;; Open new page if the page does not exist
-                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name)
-                             (route-handler/redirect-to-page! db-page-name))
+                             (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
 
                            block-id
                            (if (db-model/get-block-by-uuid block-id)
                              (route-handler/redirect-to-page! block-id)
-                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))))))
+                             (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
+
+                           file
+                           (if-let [db-page-name (db-model/get-file-page file false)]
+                             (route-handler/redirect-to-page! db-page-name)
+                             (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 
   (js/window.apis.on "dbsync"
                      (fn [data]
                        (let [{:keys [graph tx-data]} (bean/->clj data)
                              tx-data (db/string->db (:data tx-data))]
-                         (when-let [conn (db/get-conn graph false)]
+                         (when-let [conn (db/get-db graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
                          (ui-handler/re-render-root!))))
 

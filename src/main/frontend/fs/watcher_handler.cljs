@@ -3,7 +3,6 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
-            [frontend.encrypt :as encrypt]
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
@@ -48,9 +47,7 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (= type "unlink"))
-                 (not (encrypt/content-encrypted? content))
-                 (not (:encryption/graph-parsing? @state/state)))
+      (when (or content (= type "unlink"))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
@@ -92,7 +89,7 @@
           (and (contains? #{"add"} type)
                (= path pages-metadata-path))
           (p/do! (repo-handler/update-pages-metadata! repo content true))
-          
+
           ;; Change is triggered by external changes, so update to the db
           ;; Don't forced update when db is online, but resolving conflicts
           (and (contains? #{"change"} type)

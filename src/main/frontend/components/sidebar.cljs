@@ -283,6 +283,7 @@
   [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
+                                  (not config/publishing?)
                                   (= :home route-name))]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
@@ -292,7 +293,7 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
-      
+
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -327,6 +328,20 @@
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
 
+(rum/defc parsing-progress < rum/static
+  [state]
+  (let [finished (or (:finished state) 0)
+        total (:total state)
+        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        left-label [:div.flex.flex-row.font-bold
+                    (t :parsing-files)
+                    [:div.hidden.md:flex.flex-row
+                     [:span.mr-1 ": "]
+                     [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                      (util/node-path.basename
+                       (:current-parsing-file state))]]]]
+    (ui/progress-bar-with-label width left-label (str finished "/" total))))
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -346,36 +361,42 @@
            state)}
   []
   (let [default-home (get-default-home-if-valid)
-        parsing? (state/sub :repo/parsing-files?)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
-    [:div
-     (cond
-       (and default-home
-            (= :home (state/get-current-route))
-            (not (state/route-has-p?))
-            (:page default-home))
-       (route-handler/redirect-to-page! (:page default-home))
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
+    (cond
+      (or
+       (:graph-loading? graph-parsing-state)
+       (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
+      [:div.flex.items-center.justify-center.full-height-without-header
+       [:div.flex-1
+        (parsing-progress graph-parsing-state)]]
 
-       (and config/publishing?
-            (not default-home)
-            (empty? latest-journals))
-       (route-handler/redirect! {:to :all-pages})
+      :else
+      [:div
+       (cond
+         (and default-home
+              (= :home (state/get-current-route))
+              (not (state/route-has-p?))
+              (:page default-home))
+         (route-handler/redirect-to-page! (:page default-home))
 
-       parsing?
-       (ui/loading (t :parsing-files))
+         (and config/publishing?
+              (not default-home)
+              (empty? latest-journals))
+         (route-handler/redirect! {:to :all-pages})
 
-       loading-files?
-       (ui/loading (t :loading-files))
+         loading-files?
+         (ui/loading (t :loading-files))
 
-       (seq latest-journals)
-       (journal/journals latest-journals)
+         (seq latest-journals)
+         (journal/journals latest-journals)
 
-       ;; FIXME: why will this happen?
-       :else
-       [:div])]))
+         ;; FIXME: why will this happen?
+         :else
+         [:div "bingo"])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
@@ -507,7 +528,7 @@
                    current-repo
                    (not (state/sub :modal/show?)))
           (footer/footer))]
-       
+
        (right-sidebar/sidebar)
 
        [:div#app-single-container]]

@@ -82,8 +82,8 @@
 (rum/defc dummy-block
   [page-name]
   (let [handler-fn (fn []
-                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
-                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))]
+                     (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
+                       (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))]
     [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
      [:div.flex.flex-row
       [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
@@ -100,9 +100,7 @@
 (rum/defc add-button
   [args]
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-   {:on-click (fn []
-                (when-let [block (editor-handler/api-insert-new-block! "" args)]
-                  (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
+   {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
                          :width       20
@@ -196,8 +194,8 @@
                        (let [new-page-name (string/trim @*title-value)
                              merge? (and (not= (util/page-name-sanity-lc page-name)
                                                (util/page-name-sanity-lc @*title-value))
-                                         (page-handler/page-exists? page-name)
-                                         (page-handler/page-exists? @*title-value))]
+                                         (db/page-exists? page-name)
+                                         (db/page-exists? @*title-value))]
                          (ui/make-confirm-modal
                           {:title         (if merge?
                                             (str "Page “" @*title-value "” already exists, merge to it?")

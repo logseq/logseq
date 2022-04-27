@@ -553,7 +553,7 @@ last-modified-at:: 1609084800002"}]]
    '[:find (pull ?b [*])
      :where
      [?b :block/name]]
-   (frontend.db/get-conn test-db)))
+   (frontend.db/get-db test-db)))
 
  ;; (or (priority a) (not (priority a)))
  ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
@@ -565,4 +565,4 @@ last-modified-at:: 1609084800002"}]]
      (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
          (not [?b :block/priority #{"A"}]
               [(contains? #{"A"} ?priority)]))]
-   (frontend.db/get-conn test-db))))
+   (frontend.db/get-db test-db))))

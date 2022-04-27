@@ -18,9 +18,3 @@
 (defn del-block
   [conn id-or-look-ref]
   (d/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))
-
-(defn del-blocks
-  [ids-or-look-refs]
-  (mapv (fn [id-or-look-ref]
-         [:db.fn/retractEntity id-or-look-ref])
-    ids-or-look-refs))

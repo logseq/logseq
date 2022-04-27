@@ -127,7 +127,7 @@
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                           ["main.js" "code-editor.js" "excalidraw.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
@@ -179,8 +179,22 @@
          (.removeHandler ipcMain call-app-channel)
          (.removeHandler ipcMain call-win-channel))))
 
-(defn main
-  []
+(defn- setup-deeplink! []
+  ;; Works for Deeplink v1.0.9
+  ;; :mainWindow is only used for handeling window restoring on second-instance,
+  ;; But we already handle window restoring without deeplink.
+  ;; https://github.com/glawson/electron-deeplink/blob/73d58edcde3d0e80b1819cd68a0c6e837a9c9258/src/index.ts#L150-L155
+  (-> (Deeplink. #js
+                  {:app app
+                   :mainWindow nil
+                   :protocol LSP_SCHEME
+                   :isDev dev?})
+      (.on "received"
+           (fn [url]
+             (when-let [win @*win]
+               (open-url-handler win url))))))
+
+(defn main []
   (if-not (.requestSingleInstanceLock app)
     (do
       (search/close!)
@@ -194,12 +208,13 @@
                               :privileges privileges}
                              {:scheme     FILE_LSP_SCHEME
                               :privileges privileges}]))
+
+      (setup-deeplink!)
+
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
-             (when-let [win @*win]
-               (when (.isMinimized ^object win)
-                 (.restore win))
-               (.focus win))))
+             (when-let [window @*win]
+               (win/switch-to-window! window))))
 
       (.on app "window-all-closed" (fn []
                                      (try
@@ -214,12 +229,6 @@
                    ^js win (win/create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
-
-               (Deeplink. #js
-                           {:app app
-                            :mainWindow win
-                            :protocol LSP_SCHEME
-                            :isDev dev?})
 
                (restore-user-fetch-agent)
 
@@ -242,10 +251,6 @@
                                      #(doseq [f [t0 t1 t2 t3 tt]]
                                         (and f (f)))))))
 
-               (.on app "open-url"
-                    (fn [_event url]
-                      (open-url-handler win url)))
-
                ;; setup effects
                (@*setup-fn)
 
@@ -260,7 +265,7 @@
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
                                         (if (or @win/*quitting? (not mac?))
-                                          ;; only cmd+q quitting will trigger actual closing on mac
+                                          ;; MacOS: only cmd+q quitting will trigger actual closing
                                           ;; otherwise, it's just hiding - don't do any actuall closing in that case
                                           ;; except saving transit
                                           (when-let [win @*win]
@@ -268,6 +273,7 @@
                                               (handler/close-watcher-when-orphaned! win dir))
                                             (state/close-window! win)
                                             (win/destroy-window! win)
+                                            ;; FIXME: what happens when closing main window on Windows?
                                             (reset! *win nil))
                                           ;; Just hiding - don't do any actuall closing operation
                                           (do (.preventDefault ^js/Event e)

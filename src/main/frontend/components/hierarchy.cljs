@@ -40,7 +40,7 @@
   [page]
   (let [namespaces (get-relation page)]
     (when (seq namespaces)
-      [:div.page-hierachy.mt-6
+      [:div.page-hierarchy.mt-6
        (ui/foldable
         [:h2.font-bold.opacity-30 "Hierarchy"]
         [:ul.namespaces {:style {:margin "12px 24px"}}

@@ -9,7 +9,6 @@
             [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
@@ -25,7 +24,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.db :as db]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -48,11 +48,28 @@
 
       [:div.mt-1.sm:mt-0.sm:col-span-2
        {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
-       [:div (ui/button
-               (if update-pending? "Checking ..." "Check for updates")
-               :class "text-sm p-1 mr-1"
-               :disabled update-pending?
-               :on-click #(js/window.apis.checkForUpdates false))]
+       [:div (cond
+               (mobile-util/native-android?)
+               (ui/button
+                "Check for updates"
+                :class "text-sm p-1 mr-1"
+                :href "https://github.com/logseq/logseq/releases" )
+
+               (mobile-util/native-ios?)
+               (ui/button
+                "Check for updates"
+                :class "text-sm p-1 mr-1"
+                :href "https://apps.apple.com/app/logseq/id1601013908" )
+
+               (util/electron?)
+               (ui/button
+                (if update-pending? "Checking ..." "Check for updates")
+                :class "text-sm p-1 mr-1"
+                :disabled update-pending?
+                :on-click #(js/window.apis.checkForUpdates false))
+
+               :else
+               nil)]
 
        [:div.text-sm.opacity-50 (str "Version " version)]]]
 
@@ -340,7 +357,7 @@
         (config-handler/set-config! :default-home new-home)
         (notification/show! "Home default page updated successfully!" :success))
 
-      (page-handler/page-exists? (string/lower-case value))
+      (db/page-exists? value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)
@@ -372,14 +389,6 @@
 ;;           (fn []
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
-
-(defn encryption-row [t enable-encryption?]
-  (toggle "enable_encryption"
-          (t :settings-page/enable-encryption)
-          enable-encryption?
-          #(let [value (not enable-encryption?)]
-             (config-handler/set-config! :feature/enable-encryption? value))
-          [:div.text-sm.opacity-50 "⚠️ This feature is experimental"]))
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
@@ -521,8 +530,7 @@
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")]
     [:div.panel-wrap.is-general
-     (when-not (mobile-util/is-native-platform?)
-       (version-row t version))
+     (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
      (when current-repo (edit-config-edn))
@@ -536,7 +544,6 @@
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
         enable-journals? (state/enable-journals? current-repo)
-        enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -571,7 +578,6 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
      (auto-push-row t current-repo enable-git-auto-push?)]))
@@ -600,9 +606,7 @@
   [_state]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
-        cors-proxy (state/sub [:me :cors_proxy])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
-        logged? (state/deprecated-logged?)]
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -613,36 +617,7 @@
 
      (ui/admonition
        :warning
-       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
-
-     (when logged?
-       [:div
-        [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-         [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
-          {:for "cors"}
-          (t :settings-page/custom-cors-proxy-server)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
-           [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
-            {:default-value cors-proxy
-             :on-blur       (fn [event]
-                              (when-let [server (util/evalue event)]
-                                (user-handler/set-cors! server)
-                                (notification/show! "Custom CORS proxy updated successfully!" :success)))
-             :on-key-press  (fn [event]
-                              (let [k (gobj/get event "key")]
-                                (when (= "Enter" k)
-                                  (when-let [server (util/evalue event)]
-                                    (user-handler/set-cors! server)
-                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-        (ui/admonition
-          :important
-          [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-           [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                :target "_blank"}
-            "https://github.com/isomorphic-git/cors-proxy"]])])
-
-     ]))
+       [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])]))
 
 (rum/defcs settings
   < (rum/local [:general :general] ::active)

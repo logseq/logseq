@@ -13,11 +13,9 @@
             [frontend.db.conn :as conn]
             [frontend.format.block :as block]
             [frontend.fs :as fs]
-            [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -34,7 +32,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [goog.functions :refer [debounce]]))
 
 (defn- get-directory
   [journal?]
@@ -64,18 +63,38 @@
       (util/format "\"%s\"" original-name)
       original-name)))
 
+(defn default-properties-block
+  ([title format page]
+   (default-properties-block title format page {}))
+  ([title format page properties]
+   (let [p (common-handler/get-page-default-properties title)
+         ps (merge p properties)
+         content (page-property/insert-properties format "" ps)
+         refs (block/get-page-refs-from-properties properties)]
+     {:block/uuid (db/new-block-id)
+      :block/properties ps
+      :block/properties-order (keys ps)
+      :block/refs refs
+      :block/left page
+      :block/format format
+      :block/content content
+      :block/parent page
+      :block/page page})))
+
+(defn- create-title-property?
+  [journal? page-name]
+  (and (not journal?)
+       (util/create-title-property? page-name)))
+
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title-property? (and (not journal?)
-                                      (util/create-title-property? (:block/name page)))
+          create-title? (create-title-property? journal? (:block/name page))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
-        (and (seq properties) create-title-property?)
-        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
-
-        create-title-property?
-        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
+        create-title?
+        [page
+         (default-properties-block (build-title page) format page-entity properties)]
 
         (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
@@ -94,8 +113,9 @@
                   split-namespace?    true}}]
    (let [title (string/trim title)
          title (util/remove-boundary-slashes title)
-         page-name (util/page-name-sanity-lc title)]
-     (when-not (db/entity [:block/name page-name])
+         page-name (util/page-name-sanity-lc title)
+         repo (state/get-current-repo)]
+     (when-not (db/page-exists? page-name)
        (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
@@ -103,7 +123,7 @@
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
-                           pages)
+                        pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
@@ -111,19 +131,17 @@
                            (remove nil?))
              last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
+         (db/transact! txs)))
 
-         ;; (util/pprint txs)
-         (db/transact! txs)
+     (when create-first-block?
+       (when (or
+              (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+              (create-title-property? journal? page-name))
+         (editor-handler/api-insert-new-block! "" {:page page-name})))
 
-         (when create-first-block?
-           (editor-handler/insert-first-page-block-if-not-exists! page-name))
-
-         (when-let [page (db/entity [:block/name page-name])]
-           (outliner-file/sync-to-file page))
-
-         (when redirect?
-           (route-handler/redirect-to-page! page-name))
-         page-name)))))
+     (when redirect?
+       (route-handler/redirect-to-page! page-name))
+     page-name)))
 
 (defn delete-file!
   [repo page-name]
@@ -133,14 +151,10 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (->
-       (p/let [_ (or (config/local-db? repo)
-                     (git/remove-file repo file-path))
-               _ (and (config/local-db? repo)
+       (p/let [_ (and (config/local-db? repo)
                       (mobile-util/is-native-platform?)
                       (fs/delete-file! repo file-path file-path {}))
-               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
-         (common-handler/check-changed-files-status)
-         (repo-handler/push-if-auto-enabled! repo))
+               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
        (p/catch (fn [err]
                   (js/console.error "error: " err)))))))
 
@@ -163,10 +177,7 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo old-path new-path)
-             _ (when-not (config/local-db? repo)
-                 (git/rename repo old-path new-path))]
-       (common-handler/check-changed-files-status)
+     (p/let [_ (fs/rename! repo old-path new-path)]
        (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
@@ -374,7 +385,7 @@
                                   :block/original-name new-name}]
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
-        (d/transact! (db/get-conn repo false) page-txs)
+        (d/transact! (db/get-db repo false) page-txs)
 
         ;; If page name changed after sanitization
         (when (or (util/create-title-property? new-page-name)
@@ -393,8 +404,6 @@
         (route-handler/redirect! {:to          :page
                                   :push        false
                                   :path-params {:name new-page-name}}))
-
-      (repo-handler/push-if-auto-enabled! repo)
 
       (when (favorited? old-page-name)
         (p/do!
@@ -452,16 +461,11 @@
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
-(defn page-exists?
-  [page-name]
-  (when page-name
-    (db/entity [:block/name (util/page-name-sanity-lc page-name)])))
-
 (defn merge-pages!
   "Only accepts sanitized page names"
   [from-page-name to-page-name]
-  (when (and (page-exists? from-page-name)
-             (page-exists? to-page-name)
+  (when (and (db/page-exists? from-page-name)
+             (db/page-exists? to-page-name)
              (not= from-page-name to-page-name))
     (let [to-page (db/entity [:block/name to-page-name])
           to-id (:db/id to-page)
@@ -471,9 +475,9 @@
                                     (outliner-core/block)
                                     (outliner-tree/-get-down)
                                     (outliner-core/get-data))
-          to-last-direct-child-id (model/get-block-last-direct-child (db/get-conn) to-id)
+          to-last-direct-child-id (model/get-block-last-direct-child (db/get-db) to-id false)
           repo (state/get-current-repo)
-          conn (conn/get-conn repo false)
+          conn (conn/get-db repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
           blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
@@ -598,6 +602,9 @@
   []
   (commands/init-commands! get-page-ref-text))
 
+(def rebuild-slash-commands-list!
+  (debounce init-commands! 1500))
+
 (defn template-exists?
   [title]
   (when title
@@ -708,8 +715,7 @@
     (when (and (state/enable-journals? repo)
                (not (state/loading-files? repo)))
       (state/set-today! (date/today))
-      (when (or (db/cloned? repo)
-                (config/local-db? repo)
+      (when (or (config/local-db? repo)
                 (and (= "local" repo) (not (mobile-util/is-native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
@@ -737,9 +743,7 @@
                   (editor-handler/insert-template!
                    nil
                    template
-                   {:get-pos-fn (fn []
-                                  [page false false false])
-                    :page-block page})))
+                   {:target page})))
               (ui-handler/re-render-root!))))))))
 
 (defn open-today-in-sidebar

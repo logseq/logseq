@@ -1,7 +1,5 @@
 (ns frontend.state
   (:require [cljs-bean.core :as bean]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
             [cljs.core.async :as async]
             [clojure.string :as string]
             [cljs.spec.alpha :as s]
@@ -13,7 +11,6 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
@@ -32,11 +29,7 @@
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
-     :repo/cloning?                         false
-     ;; :repo/loading-files? is only for github repos
      :repo/loading-files?                   {}
-     :repo/parsing-files?                   nil
-     :repo/changed-files                    nil
      :nfs/user-granted?                     {}
      :nfs/refreshing?                       nil
      :instrument/disabled?                  (storage/get "instrument-disabled")
@@ -45,7 +38,6 @@
      :indexeddb/support?                    true
      :me                                    nil
      :git/current-repo                      current-graph
-     :git/status                            {}
      :format/loading                        {}
      :draw?                                 false
      :db/restoring?                         nil
@@ -101,7 +93,6 @@
 
      :document/mode?                        document-mode?
 
-     :github/contents                       {}
      :config                                {}
      :block/component-editing-mode?         false
      :editor/draw-mode?                     false
@@ -127,13 +118,14 @@
 
      ;; for audio record
      :editor/record-status                  "NONE"
-     
+
      :db/last-transact-time                 {}
      ;; whether database is persisted
      :db/persisted?                         {}
      :cursor-range                          nil
 
      :selection/mode                        false
+     ;; Warning: blocks order is determined when setting this attribute
      :selection/blocks                      []
      :selection/start-block                 nil
      ;; either :up or :down, defaults to down
@@ -161,8 +153,10 @@
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
-     :plugin/installed-commands             {}
+     :plugin/installed-slash-commands       {}
      :plugin/installed-ui-items             {}
+     :plugin/installed-resources            {}
+     :plugin/installed-hooks                {}
      :plugin/simple-commands                {}
      :plugin/selected-theme                 nil
      :plugin/selected-unpacked-pkg          nil
@@ -184,9 +178,11 @@
      ;; all notification contents as k-v pairs
      :notification/contents                 {}
      :graph/syncing?                        false
+     ;; graph -> state
+     :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-tree nil}
+     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -200,10 +196,6 @@
      :command-palette/commands              []
 
      :view/components                       {}
-
-     :debug/write-acks                      {}
-
-     :encryption/graph-parsing?             false
 
      :favorites/dragging                    nil
 
@@ -365,11 +357,6 @@
   []
   (not (false? (:export/heading-to-list?
                  (get (sub-config) (get-current-repo))))))
-
-(defn enable-encryption?
-  [repo]
-  (:feature/enable-encryption?
-    (get (sub-config) repo)))
 
 (defn enable-git-auto-push?
   [repo]
@@ -589,10 +576,6 @@
   [range]
   (set-state! :cursor-range range))
 
-(defn set-cloning!
-  [value]
-  (set-state! :repo/cloning? value))
-
 (defn set-q!
   [value]
   (set-state! :search/q value))
@@ -683,10 +666,11 @@
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (swap! state assoc
-            :selection/mode true
-            :selection/blocks blocks
-            :selection/direction direction))))
+     (let [blocks (util/sort-by-height blocks)]
+       (swap! state assoc
+             :selection/mode true
+             :selection/blocks blocks
+             :selection/direction direction)))))
 
 (defn into-selection-mode!
   []
@@ -701,7 +685,14 @@
 
 (defn get-selection-blocks
   []
-  (util/sort-by-height (:selection/blocks @state)))
+  (:selection/blocks @state))
+
+(defn get-selection-block-ids
+  []
+  (->> (sub :selection/blocks)
+       (keep #(when-let [id (dom/attr % "blockid")]
+                (uuid id)))
+       (distinct)))
 
 (defn in-selection-mode?
   []
@@ -717,7 +708,8 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (conj (vec (:selection/blocks @state)) block)
+         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+                               (util/sort-by-height))
          :selection/direction direction))
 
 (defn drop-last-selection-block!
@@ -743,38 +735,6 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
-
-(defn set-github-installation-tokens!
-  [tokens]
-  (when (seq tokens)
-    (let [tokens (medley/index-by :installation_id tokens)
-          repos (get-repos)]
-      (when (seq repos)
-        (let [set-token-f
-              (fn [{:keys [installation_id] :as repo}]
-                (let [{:keys [token] :as m} (get tokens installation_id)]
-                  (if (string? token)
-                    ;; GitHub API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
-                    ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
-                    ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
-                    (let [formatter (tf/formatters :date-time-no-ms)
-                          expires-at (->> (t/plus (t/now) (t/minutes 40))
-                                          (tf/unparse formatter))]
-                      (merge repo {:token token :expires_at expires-at}))
-                    (do
-                      (when (and
-                              (:url repo)
-                              (string/starts-with? (:url repo) "https://"))
-                        (log/error :token/cannot-set-token {:repo-m repo :token-m m}))
-                      repo))))
-              repos (mapv set-token-f repos)]
-          (swap! state assoc-in [:me :repos] repos))))))
-
-(defn get-github-token
-  [repo]
-  (when repo
-    (let [repos (get-repos)]
-      (some #(when (= repo (:url %)) %) repos))))
 
 (defn toggle-sidebar-open?!
   []
@@ -826,10 +786,6 @@
   []
   (get @state :editor/block))
 
-(defn get-last-edit-block
-  []
-  (:editor/last-edit-block @state))
-
 (defn get-current-edit-block-and-position
   []
   (let [edit-input-id (get-edit-input-id)
@@ -874,7 +830,6 @@
                     (assoc
                      :editor/block block
                      :editor/editing? {edit-input-id true}
-                     :editor/last-edit-block block
                      :editor/last-key-code nil
                      :cursor-range cursor-range))))
        (when-let [input (gdom/getElement edit-input-id)]
@@ -903,7 +858,7 @@
 
 (defn set-editor-last-pos!
   [new-pos]
-  (set-state! :editor/last-saved-cursor new-pos))
+  (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
 
 (defn clear-editor-last-pos!
   []
@@ -911,13 +866,13 @@
 
 (defn get-editor-last-pos
   []
-  (:editor/last-saved-cursor @state))
+  (get-in @state [:editor/last-saved-cursor (:block/uuid (get-edit-block))]))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (set-state! :editor/last-saved-cursor new-pos)))
+    (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
 (defn set-theme!
   [theme]
@@ -1054,10 +1009,6 @@
     (get-in @state [:me :settings :date-formatter])
     "MMM do, yyyy"))
 
-(defn set-git-status!
-  [repo-url value]
-  (swap! state assoc-in [:git/status repo-url] value))
-
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
 
@@ -1065,36 +1016,14 @@
   []
   (:me @state))
 
-(defn github-authed?
-  []
-  (:github-authed? (get-me)))
-
-(defn get-name
-  []
-  (:name (get-me)))
-
 (defn deprecated-logged?
   "Whether the user has logged in."
   []
-  (some? (get-name)))
-
-(defn in-draw-mode?
-  []
-  (:draw? @state))
+  false)
 
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
-
-(defn get-default-branch
-  [repo-url]
-  (or
-    (some->> (get-repos)
-             (filter (fn [m]
-                       (= (:url m) repo-url)))
-             (first)
-             :branch)
-    "master"))
 
 (defn set-indexedb-support!
   [value]
@@ -1263,16 +1192,6 @@
   [repo-url value]
   (set-state! [:config repo-url] value))
 
-(defn get-git-auto-push?
-  ([]
-   (get-git-auto-push? (get-current-repo)))
-  ([repo]
-   (true? (:git-auto-push (get-config repo)))))
-
-(defn set-changed-files!
-  [repo changed-files]
-  (set-state! [:repo/changed-files repo] changed-files))
-
 (defn get-wide-mode?
   []
   (:ui/wide-mode? @state))
@@ -1291,7 +1210,7 @@
 
 (defn get-plugins-commands
   []
-  (mapcat seq (flatten (vals (:plugin/installed-commands @state)))))
+  (mapcat seq (flatten (vals (:plugin/installed-slash-commands @state)))))
 
 (defn get-plugins-commands-with-type
   [type]
@@ -1302,6 +1221,43 @@
   [type]
   (filterv #(= (keyword (first %)) (keyword type))
            (apply concat (vals (:plugin/installed-ui-items @state)))))
+
+(defn get-plugin-resources-with-type
+  [pid type]
+  (when-let [pid (and type (keyword pid))]
+    (get-in @state [:plugin/installed-resources pid (keyword type)])))
+
+(defn get-plugin-resource
+  [pid type key]
+  (when-let [resources (get-plugin-resources-with-type pid type)]
+    (get resources key)))
+
+(defn upt-plugin-resource
+  [pid type key attr val]
+  (when-let [resource (get-plugin-resource pid type key)]
+    (let [resource (assoc resource (keyword attr) val)]
+      (set-state!
+        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+      resource)))
+
+(defn install-plugin-hook
+  [pid hook]
+  (when-let [pid (keyword pid)]
+    (set-state!
+      [:plugin/installed-hooks hook]
+      (conj
+        ((fnil identity #{}) (get-in @state [:plugin/installed-hooks hook]))
+        pid)) true))
+
+(defn uninstall-plugin-hook
+  [pid hook-or-all]
+  (when-let [pid (keyword pid)]
+    (if (nil? hook-or-all)
+      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
+        (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
+    true))
+
 
 (defn get-scheduled-future-days
   []
@@ -1328,10 +1284,6 @@
 (defn loading-files?
   [repo]
   (get-in @state [:repo/loading-files? repo]))
-
-(defn set-parsing-files!
-  [value]
-  (set-state! :repo/parsing-files? value))
 
 (defn set-editor-last-input-time!
   [repo time]
@@ -1466,15 +1418,24 @@
   (let [chan (get-events-chan)]
     (async/put! chan payload)))
 
-(defonce diffs (atom nil))
-
 (defn get-copied-blocks
   []
   (:copy/blocks @state))
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/block-ids ids
+                            :copy/full-blocks nil}))
+
+(defn set-copied-full-blocks
+  [content blocks]
+  (set-state! :copy/blocks {:copy/content content
+                            :copy/full-blocks blocks}))
+
+(defn set-copied-full-blocks!
+  [blocks]
+  (set-state! [:copy/blocks :copy/full-blocks] blocks))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -1540,11 +1501,8 @@
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
   ([blocks direction]
-   (util/select-unhighlight! (dom/by-class "selected"))
-   (clear-selection!)
    (clear-edit!)
-   (set-selection-blocks! blocks direction)
-   (util/select-highlight! blocks)))
+   (set-selection-blocks! blocks direction)))
 
 (defn remove-watch-state [key]
   (remove-watch state key))
@@ -1586,6 +1544,9 @@
 (defn lsp-enabled?-or-theme
   []
   (:plugin/enabled @state))
+
+(def lsp-enabled?
+  (lsp-enabled?-or-theme))
 
 (defn consume-updates-coming-plugin
   [payload updated?]
@@ -1694,3 +1655,13 @@
   (:file-sync/sync-manager @state))
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-parsing-state!
+  []
+  (set-state! [:graph/parsing-state (get-current-repo)] {}))
+
+(defn set-parsing-state!
+  [m]
+  (update-state! [:graph/parsing-state (get-current-repo)]
+                 (if (fn? m) m
+                   (fn [old-value] (merge old-value m)))))

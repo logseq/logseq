@@ -178,26 +178,28 @@
   (let [size (get state ::size)]
     (ui/resize-provider
      (ui/resize-consumer
-      (cond->
-       {:className "resize image-resize"
-        :onSizeChanged (fn [value]
-                         (when (and (not @*resizing-image?)
-                                    (some? @size)
-                                    (not= value @size))
-                           (reset! *resizing-image? true))
-                         (reset! size value))
-        :onMouseUp (fn []
-                     (when (and @size @*resizing-image?)
-                       (when-let [block-id (:block/uuid config)]
-                         (let [size (bean/->clj @size)]
-                           (editor-handler/resize-image! block-id metadata full_text size))))
-                     (when @*resizing-image?
-                        ;; TODO: need a better way to prevent the clicking to edit current block
-                       (js/setTimeout #(reset! *resizing-image? false) 200)))
-        :onClick (fn [e]
-                   (when @*resizing-image? (util/stop e)))}
-        (and (:width metadata) (not (util/mobile?)))
-        (assoc :style {:width (:width metadata)}))
+      (if-not (mobile-util/native-ios?)
+        (cond->
+            {:className "resize image-resize"
+             :onSizeChanged (fn [value]
+                              (when (and (not @*resizing-image?)
+                                         (some? @size)
+                                         (not= value @size))
+                                (reset! *resizing-image? true))
+                              (reset! size value))
+             :onMouseUp (fn []
+                          (when (and @size @*resizing-image?)
+                            (when-let [block-id (:block/uuid config)]
+                              (let [size (bean/->clj @size)]
+                                (editor-handler/resize-image! block-id metadata full_text size))))
+                          (when @*resizing-image?
+                            ;; TODO: need a better way to prevent the clicking to edit current block
+                            (js/setTimeout #(reset! *resizing-image? false) 200)))
+             :onClick (fn [e]
+                        (when @*resizing-image? (util/stop e)))}
+            (and (:width metadata) (not (util/mobile?)))
+            (assoc :style {:width (:width metadata)}))
+        {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
         (merge
@@ -259,7 +261,7 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-    
+
     (when @src
       (let [ext (util/get-file-ext @src)]
         (if (contains? (set (map name config/audio-formats)) ext)
@@ -387,21 +389,14 @@
       :on-mouse-down
       (fn [e]
         (util/stop e)
-        (let [create-first-block! (fn []
-                                    (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
-                                      (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
-          (if (gobj/get e "shiftKey")
-            (do
-              (js/setTimeout create-first-block! 310)
-              (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                (state/sidebar-add-block!
-                 (state/get-current-repo)
-                 (:db/id page-entity)
-                 :page
-                 {:page page-entity})))
-            (do
-              (create-first-block!)
-              (route-handler/redirect-to-page! redirect-page-name))))
+        (if (gobj/get e "shiftKey")
+          (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+            (state/sidebar-add-block!
+             (state/get-current-repo)
+             (:db/id page-entity)
+             :page
+             {:page page-entity}))
+          (state/pub-event! [:page/create redirect-page-name]))
         (when (and contents-page?
                    (util/mobile?)
                    (state/get-left-sidebar-open?))
@@ -459,7 +454,7 @@
                                                        [:span.text-sm.mr-2 "Alias:"]
                                                        page-original-name])])
                            (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
-                             (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                             (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
                              (when-let [f (state/get-page-blocks-cp)]
                                (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
     (if (or (not manual?) open?)
@@ -1088,7 +1083,7 @@
               :height (max 500 height)}]))))))
 
 (defn- macro-else-cp
-  [config arguments]
+  [name config arguments]
   (if-let [block-uuid (:block/uuid config)]
     (let [format (get-in config [:block :block/format] :markdown)
           macro-content (or
@@ -1247,7 +1242,7 @@
       ((get @macro/macros name) config options)
 
       :else
-      (macro-else-cp config arguments))))
+      (macro-else-cp name config arguments))))
 
 (defn- emphasis-cp
   [config kind data]
@@ -1293,7 +1288,7 @@
          ["Email" address]
          (let [{:keys [local_part domain]} address
                address (str local_part "@" domain)]
-           [:a {:href (str "mainto:" address)} address])
+           [:a {:href (str "mailto:" address)} address])
 
          ["Nested_link" link]
          (nested-link config html-export? link)
@@ -1311,7 +1306,7 @@
          (when (not html-export?)
            [:span {:dangerouslySetInnerHTML
                    {:__html s}}])
-         
+
          ["Inline_Hiccup" s] ;; String to hiccup
          (ui/catch-error
           [:div.warning {:title "Invalid hiccup"} s]
@@ -1377,7 +1372,6 @@
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
-  (state/clear-selection!)
   (reset! *dragging? true)
   (reset! *dragging-block block))
 
@@ -1991,7 +1985,8 @@
                      :on-hide (fn [value event]
                                 (when (= event :esc)
                                   (editor-handler/save-block! (editor-handler/get-state) value)
-                                  (editor-handler/escape-editing)))}
+                                  (let [select? (not (string/includes? value "```"))]
+                                    (editor-handler/escape-editing select?))))}
                     edit-input-id
                     config))]
       [:div.flex.flex-row.block-content-wrapper
@@ -2116,12 +2111,14 @@
   (reset! *move-to nil))
 
 (defn- block-drop
-  [event uuid block *move-to]
+  [event uuid target-block *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (dnd/move-block event @*dragging-block
-                    block
-                    @*move-to))
+    (let [block-uuids (state/get-selection-block-ids)
+          lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+          selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
+          blocks (if (seq selected) selected [@*dragging-block])]
+      (dnd/move-blocks event blocks target-block @*move-to)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
   (reset! *drag-to-block nil)
@@ -2206,19 +2203,19 @@
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
              (cond
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
                (:ref? config)
                (state/set-collapsed-block! block-id
                                            (editor-handler/block-default-collapsed? block config))
-
-               (root-block? config block)
-               (state/set-collapsed-block! block-id false)
 
                :else
                nil)
              (assoc state ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs]
+                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
                           config-compare-keys [:show-cloze?]
                           b1 (second (:rum/args old-state))
                           b2 (second (:rum/args new-state))
@@ -2275,7 +2272,8 @@
         :data-collapsed (and collapsed? has-child?)
         :class (str uuid
                     (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl"))
+                    (when (and card? (not review-cards?)) " shadow-xl")
+                    (when (:ui/selected? block) " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
 
@@ -2563,7 +2561,12 @@
        (when-not (and built-in? (empty? result))
          (ui/foldable
           [:div.custom-query-title
-           [:span.title-text title]
+           [:span.title-text (cond
+                               (vector? title) title
+                               (string? title) (inline-text config
+                                                            (get-in config [:block :block/format] :markdown)
+                                                            title)
+                               :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
           (fn []
@@ -2873,7 +2876,10 @@
               [:sup.fn (str name "↩︎")]])]])
 
         ["Src" options]
-        (src-cp config options html-export?)
+        [:div.cp__fenced-code-block
+         (if-let [opts (plugin-handler/hook-fenced-code-by-type (util/safe-lower-case (:language options)))]
+           (plugins/hook-ui-fenced-code (string/join "" (:lines options)) opts)
+           (src-cp config options html-export?))]
 
         :else
         "")
@@ -2917,6 +2923,11 @@
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
   (let [db-id (:db/id config)
+        selected-blocks (set (state/get-selection-block-ids))
+        flat-blocks (if (seq selected-blocks)
+                      (map (fn [b]
+                             (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
+                      flat-blocks)
         blocks (blocks->vec-tree flat-blocks)]
     (if-not db-id
       (block-list config blocks)
@@ -2926,7 +2937,7 @@
                                (load-more-blocks! config flat-blocks)))
             has-more? (and
                        (> (count flat-blocks) model/initial-blocks-length)
-                       (some? (model/get-next-open-block (db/get-conn) (last flat-blocks) db-id)))
+                       (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}
          (ui/infinite-list

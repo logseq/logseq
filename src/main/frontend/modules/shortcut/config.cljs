@@ -174,11 +174,17 @@
    :editor/open-edit               {:binding "enter"
                                     :fn      (partial editor-handler/open-selected-block! :right)}
 
-   :editor/select-block-up         {:binding "shift+up"
+   :editor/select-block-up         {:binding "alt+up"
                                     :fn      (editor-handler/on-select-block :up)}
 
-   :editor/select-block-down       {:binding "shift+down"
+   :editor/select-block-down       {:binding "alt+down"
                                     :fn      (editor-handler/on-select-block :down)}
+
+   :editor/select-up               {:binding "shift+up"
+                                    :fn      (editor-handler/shortcut-select-up-down :up)}
+
+   :editor/select-down             {:binding "shift+down"
+                                    :fn      (editor-handler/shortcut-select-up-down :down)}
 
    :editor/delete-selection        {:binding ["backspace" "delete"]
                                     :fn      editor-handler/delete-selection}
@@ -338,11 +344,11 @@
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app {:binding false
+   :editor/open-file-in-default-app {:binding "mod+d mod+a"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-default-app}
 
-   :editor/open-file-in-directory   {:binding false
+   :editor/open-file-in-directory   {:binding "mod+d mod+i"
                                      :inactive (not (util/electron?))
                                      :fn      page-handler/open-file-in-directory}
 
@@ -451,6 +457,8 @@
                           :editor/down
                           :editor/left
                           :editor/right
+                          :editor/select-up
+                          :editor/select-down
                           :editor/move-block-up
                           :editor/move-block-down
                           :editor/open-edit
@@ -592,7 +600,9 @@
     :editor/forward-kill-word
     :editor/backward-kill-word
     :editor/replace-block-reference-at-point
-    :editor/paste-text-in-one-block-at-point]
+    :editor/paste-text-in-one-block-at-point
+    :editor/select-up
+    :editor/select-down]
 
    :shortcut.category/block-selection
    [:editor/open-edit
@@ -628,6 +638,8 @@
     :sidebar/open-today-page
     :search/re-index
     :editor/insert-youtube-timestamp
+    :editor/open-file-in-default-app
+    :editor/open-file-in-directory
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
