@@ -142,14 +142,20 @@
 
     (.start jsTour)))
 
-(def should-guide? true)
+(defn- ready
+  [callback]
+  (p/then
+    (if (nil? js/window.Shepherd)
+      (load-base-assets$) (p/resolved true))
+    callback))
+
+(def should-guide? false)
 
 (defn init []
-  (prn "[debug] hello onboarding quick tour :)")
-
   (command-palette/register {:id     :document/quick-tour
                              :desc   "Quick tour for onboarding"
-                             :action #(start)})
+                             :action #(ready start)})
 
+  ;; TODO: fix logic
   (when should-guide?
-    (p/then (load-base-assets$) start)))
+    (ready start)))

@@ -88,7 +88,8 @@
 
   a.item {
     user-select: none;
-    transition: none;
+    transition: background-color .3s;
+    margin-bottom: 2px;
 
     > .ti {
       font-size: 16px;
@@ -98,7 +99,7 @@
       top: -1px;
     }
 
-    &.active {
+    &.active, &:active {
       background-color: var(--ls-quaternary-background-color);
     }
 

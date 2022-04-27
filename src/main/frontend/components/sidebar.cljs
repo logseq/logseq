@@ -172,9 +172,11 @@
   {:did-mount (fn [state]
                 (srs/update-cards-due-count!)
                 state)}
-  [state]
+  [_state srs-open?]
   (let [num (state/sub :srs/cards-due-count)]
-    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
+    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+     {:class (util/classnames [{:active srs-open?}])
+      :on-click #(state/pub-event! [:modal/show-cards])}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
      (when (and num (not (zero? num)))
@@ -208,7 +210,7 @@
     [:span.flex-1 title]]])
 
 (rum/defc sidebar-nav
-  [route-match close-modal-fn left-sidebar-open?]
+  [route-match close-modal-fn left-sidebar-open? srs-open?]
   (let [default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])]
 
@@ -228,31 +230,34 @@
               {:class            "home-nav"
                :title            page
                :on-click-handler route-handler/redirect-to-home!
-               :active           (and (= route-name :page) (= page (get-in route-match [:path-params :name])))
+               :active           (and (not srs-open?)
+                                   (= route-name :page)
+                                   (= page (get-in route-match [:path-params :name])))
                :icon             "home"}))
           (sidebar-item
             {:class            "journals-nav"
-             :active           (or (= route-name :all-journals) (= route-name :home))
+             :active           (and (not srs-open?)
+                                 (or (= route-name :all-journals) (= route-name :home)))
              :title            (t :left-side-bar/journals)
              :on-click-handler route-handler/go-to-journals!
              :icon             "calendar"}))
 
         [:div.flashcards-nav
-         (flashcards)]
+         (flashcards srs-open?)]
 
         (sidebar-item
-         {:class "graph-view-nav"
-          :title (t :right-side-bar/graph-view)
-          :href  (rfe/href :graph)
-          :active (= route-name :graph)
-          :icon  "hierarchy"})
+          {:class  "graph-view-nav"
+           :title  (t :right-side-bar/graph-view)
+           :href   (rfe/href :graph)
+           :active (and (not srs-open?) (= route-name :graph))
+           :icon   "hierarchy"})
 
         (sidebar-item
-         {:class "all-pages-nav"
-          :title (t :right-side-bar/all-pages)
-          :href  (rfe/href :all-pages)
-          :active (= route-name :all-pages)
-          :icon  "files"})]]
+          {:class  "all-pages-nav"
+           :title  (t :right-side-bar/all-pages)
+           :href   (rfe/href :all-pages)
+           :active (and (not srs-open?) (= route-name :all-pages))
+           :icon   "files"})]]
 
       (favorites t)
 
@@ -271,12 +276,13 @@
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
-  (let [close-fn #(state/set-left-sidebar-open! false)]
+  (let [close-fn #(state/set-left-sidebar-open! false)
+        srs-open? (= :srs (state/sub :modal/id))]
     [:div#left-sidebar.cp__sidebar-left-layout
      {:class (util/classnames [{:is-open left-sidebar-open?}])}
 
      ;; sidebar contents
-     (sidebar-nav route-match close-fn left-sidebar-open?)
+     (sidebar-nav route-match close-fn left-sidebar-open? srs-open?)
      [:span.shade-mask {:on-click close-fn}]]))
 
 (rum/defc main <
