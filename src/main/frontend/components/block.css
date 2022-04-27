@@ -186,26 +186,34 @@
 }
 
 .block-left-menu {
-    overflow: hidden;
-    max-width: 50px;
-    text-align: center;
-    margin: auto 0;
     background-color: var(--ls-secondary-background-color);
+    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+
+    .commands-button {
+        overflow: hidden;
+        max-width: 50px;
+        text-align: center;
+        margin: auto 0;
+    }
 }
 
 .block-right-menu {
-    overflow: hidden;
-    max-width: 80px;
-    text-align: center;
-    margin: auto 0;
     background-color: var(--ls-secondary-background-color);
+    background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
 
-    .indent {
-        margin: 0 12px;
-    }
+    .commands-button {
+        overflow: hidden;
+        max-width: 80px;
+        text-align: center;
+        margin: auto 0;
 
-    .more {
-        margin: 0 12px;
+        .outdent {
+            margin: 0 12px;
+        }
+
+        .more {
+            margin: 0 12px;
+        }
     }
 }
 

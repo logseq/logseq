@@ -1935,9 +1935,9 @@
         right-menu (.querySelector js/document (str "#block-right-menu-" uuid))
         {:keys [x0 tx]} @swipe
         dx (- tx x0)]
-
-    (when (> (. js/Math abs dx) 5)
-      (try
+    
+    (try
+      (when (> (. js/Math abs dx) 5)
         (cond
           (>= (or (some-> (.. left-menu -style -width)
                           (string/replace "px" "")
@@ -1969,12 +1969,12 @@
             :light)
 
           :else
-          nil)
-        (catch js/Error e
-          (js/console.error e))
-        (finally
-          (set! (.. left-menu -style -width) "0px")
-          (set! (.. right-menu -style -width) "0px"))))))
+          nil))
+      (catch js/Error e
+        (js/console.error e))
+      (finally
+        (set! (.. left-menu -style -width) "0px")
+        (set! (.. right-menu -style -width) "0px")))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -2306,18 +2306,18 @@
 
 (rum/defc block-left-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
-  [:div.flex.bg-base-2
-   [:div.block-left-menu.w-0
+  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
+   [:div.commands-button.w-0.rounded-r-md
     {:id (str "block-left-menu-" uuid)}
-    (ui/icon "arrow-bar-right")]])
+    [:indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
 
 (rum/defc block-right-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
-  [:div.flex.bg-base-2
-   [:div.block-right-menu.w-0.flex.flew-col
+  [:div.block-right-menu.flex.bg-base-2.rounded-l-md.ml-1
+   [:div.commands-button.w-0.flex.flew-col.rounded-l-md
     {:id (str "block-right-menu-" uuid)}
-    [:div.indent (ui/icon "arrow-bar-left")]
-    [:div.more (ui/icon "dots-circle-horizontal")]]])
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]]])
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
   {:init (fn [state]
