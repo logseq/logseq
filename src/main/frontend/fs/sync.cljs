@@ -22,7 +22,7 @@
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
 ;; - logseq/graphs-txid.edn
-;;   this file contains graph-uuid & transaction-id
+;;   this file contains [user-uuid graph-uuid transaction-id]
 ;;   graph-uuid: the unique identifier of the graph on the server
 ;;   transaction-id: sync progress of local files
 ;; - logseq/version-files
@@ -107,8 +107,12 @@
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
-(defn- update-graphs-txid! [latest-txid graph-uuid repo]
-  (persist-var/-reset-value! graphs-txid [graph-uuid latest-txid] repo)
+(defn update-graphs-txid! [latest-txid graph-uuid user-uuid repo]
+  (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
+  (persist-var/persist-save graphs-txid))
+
+(defn clear-graphs-txid! [repo]
+  (persist-var/-reset-value! graphs-txid nil repo)
   (persist-var/persist-save graphs-txid))
 
 (defn- ws-stop! [*ws]
@@ -143,7 +147,7 @@
     remote-changes-chan))
 
 (defn- get-json-body [body]
-  (or (and (map? body) body)
+  (or (and (not (string? body)) body)
       (or (string/blank? body) nil)
       (js->clj (js/JSON.parse body) :keywordize-keys true)))
 
@@ -555,7 +559,7 @@
                                       (js/decodeURIComponent (:FilePath %))
                                       (:LastModified %)
                                       true nil))
-                (:Files r))))))
+                r)))))
 
   (get-remote-graph [this graph-name-opt graph-uuid-opt]
     {:pre [(or graph-name-opt graph-uuid-opt)]}
@@ -622,7 +626,7 @@
 
 (defn- apply-filetxns-partitions
   "won't call update-graph-txid! when *txid is nil"
-  [*sync-state graph-uuid base-path filetxns-partitions repo *txid *stopped]
+  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped]
   (go-loop [filetxns-partitions* filetxns-partitions]
     (if @*stopped
       {:stop true}
@@ -637,7 +641,7 @@
             (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
               (when *txid
                 (reset! *txid latest-txid)
-                (update-graphs-txid! latest-txid graph-uuid repo))
+                (update-graphs-txid! latest-txid graph-uuid user-uuid repo))
               (recur (next filetxns-partitions*)))))))))
 
 (defmulti need-sync-remote? (fn [v] (cond
@@ -732,22 +736,21 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(defrecord Remote->LocalSyncer [graph-uuid base-path repo *txid *sync-state
+(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state
                               ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
   (sync-files-remote->local!
     [_ relative-filepaths latest-txid]
     (go
-      (if-let [user-uuid (user/user-uuid)]
-        (let [partitioned-filetxns
+      (let [partitioned-filetxns
               (sequence (filepaths->partitioned-filetxns 10 graph-uuid user-uuid)
                         relative-filepaths)
               r
               (if (empty? (flatten partitioned-filetxns))
                 {:succ true}
                 (<! (apply-filetxns-partitions
-                     *sync-state graph-uuid base-path partitioned-filetxns repo
+                     *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
                      nil *stopped)))]
           (cond
             (instance? ExceptionInfo r)
@@ -757,11 +760,9 @@
             {:stop true}
 
             :else
-            (do (update-graphs-txid! latest-txid graph-uuid repo)
+            (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
                 (reset! *txid latest-txid)
-                {:succ true})))
-        ;; not found user-uuid
-        {:unknown (ex-info "user-uuid not found" {})})))
+                {:succ true})))))
 
   IRemote->LocalSync
   (stop-remote->local! [_] (vreset! *stopped true))
@@ -772,7 +773,8 @@
               (if (instance? ExceptionInfo diff-r)
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
-                  (if (> (dec min-txid) @*txid) ;; if min-txid-1 > @*txid, need to remote->local-full-sync
+                  (if (or (nil? min-txid)             ;; if min-txid is nil(not found any diff txn)
+                          (> (dec min-txid) @*txid))  ;; or min-txid-1 > @*txid, need to remote->local-full-sync
                     (do (println "min-txid" min-txid "request-txid" @*txid)
                         {:need-remote->local-full-sync true})
 
@@ -785,11 +787,11 @@
 
                         ;; TODO: precheck etag
                         (if (empty? (flatten partitioned-filetxns))
-                          (do (update-graphs-txid! latest-txid graph-uuid repo)
+                          (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
                               (reset! *txid latest-txid)
                               {:succ true})
                           (<! (apply-filetxns-partitions
-                               *sync-state graph-uuid base-path partitioned-filetxns repo *txid *stopped)))))))))]
+                               *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo *txid *stopped)))))))))]
         (cond
           (instance? ExceptionInfo r)
           {:unknown r}
@@ -853,7 +855,6 @@
 
          ("add" "change")
          (let [path (relative-path e)]
-           (println "debug " path basepath)
            (when (and (<! (local-file-exists? path basepath))
                       (<! (file-changed? graph-uuid path basepath)))
              (>! result e))))
@@ -862,7 +863,7 @@
 
 
 (defrecord ^:large-vars/cleanup-todo
-    Local->RemoteSyncer [graph-uuid base-path repo *sync-state
+    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state
                          ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
     Object
     (filter-file-change-events-fn [this]
@@ -950,7 +951,7 @@
                   (do
                     (println "sync-local->remote! update txid" r*)
                     ;; persist txid
-                    (update-graphs-txid! r* graph-uuid repo)
+                    (update-graphs-txid! r* graph-uuid user-uuid repo)
                     (reset! *txid r*)
                     {:succ true})
 
@@ -1196,15 +1197,15 @@
       (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
       (swap! *sync-state sync-state--update-state ::stop))))
 
-(defn sync-manager [graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
+(defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
                     remote->local-sync-chan local->remote-sync-chan local-changes-chan]
   (let [*txid (atom txid)
-        local->remote-syncer (->Local->RemoteSyncer graph-uuid
+        local->remote-syncer (->Local->RemoteSyncer user-uuid graph-uuid
                                                     base-path
                                                     repo *sync-state
                                                     20000
                                                     *txid nil (chan) false)
-        remote->local-syncer (->Remote->LocalSyncer graph-uuid
+        remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid
                                                     base-path
                                                     repo *txid *sync-state nil (volatile! false))]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
@@ -1225,52 +1226,66 @@
 
 
 (defn- check-graph-belong-to-current-user
-  [graph-uuid]
+  [current-user-uuid graph-user-uuid]
+  (let [result (= current-user-uuid graph-user-uuid)]
+    (when-not result
+      (notification/show! (t :file-sync/other-user-graph) :warning false))
+    result))
+
+(defn check-remote-graph-exists
+  [local-graph-uuid]
   (go
     (let [result (->> (<! (list-remote-graphs remoteapi))
                       :Graphs
                       (mapv :GraphUUID)
                       set
-                      (#(contains? % graph-uuid)))]
+                      (#(contains? % local-graph-uuid)))]
       (when-not result
-        (notification/show! (t :file-sync/other-user-graph) :warning false))
+        (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
 (defn sync-start []
-  (let [graph-uuid (first @graphs-txid)
-        txid (second @graphs-txid)
+  (let [[user-uuid graph-uuid txid] @graphs-txid
         *sync-state (atom (sync-state))
-        sm (sync-manager graph-uuid
-                         (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
+        current-user-uuid (user/user-uuid)
+        repo (state/get-current-repo)
+        sm (sync-manager current-user-uuid graph-uuid
+                         (config/get-repo-dir repo) repo
                          txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                          local-changes-chan)]
-    ;; check this graph belong to current logged-in user
     (go
-      (when (<! (check-graph-belong-to-current-user graph-uuid))
-        ;; set-env
-        (set-env rsapi config/FILE-SYNC-PROD?)
+      ;; 1. if remote graph has been deleted, clear graphs-txid.edn
+      ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
+      (if (not= 3 (count @graphs-txid))
+        (clear-graphs-txid! repo)
+        (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+          (if-not (<! (check-remote-graph-exists graph-uuid))
+            (clear-graphs-txid! repo)
+            (do
+              ;; set-env
+              (set-env rsapi config/FILE-SYNC-PROD?)
 
-        ;; drain `local-changes-chan`
-        (->> (repeatedly #(poll! local-changes-chan))
-             (take-while identity))
-        (poll! stop-sync-chan)
-        ;; update global state when *sync-state changes
-        (add-watch *sync-state ::update-global-state
-                   (fn [_ _ _ n]
-                     (state/set-file-sync-state n)))
-        (.start sm)
+              ;; drain `local-changes-chan`
+              (->> (repeatedly #(poll! local-changes-chan))
+                   (take-while identity))
+              (poll! stop-sync-chan)
+              ;; update global state when *sync-state changes
+              (add-watch *sync-state ::update-global-state
+                         (fn [_ _ _ n]
+                           (state/set-file-sync-state n)))
+              (.start sm)
 
-        (state/set-file-sync-manager sm)
+              (state/set-file-sync-manager sm)
 
-        (offer! full-sync-chan true)
+              (offer! full-sync-chan true)
 
-        ;; watch :network/online?
-        (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-                   (fn [_k _r _o n]
-                     (when (false? n)
-                       (sync-stop))))
-        ;; watch :auth/id-token
-        (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-                   (fn [_k _r _o n]
-                     (when (nil? n)
-                       (sync-stop))))))))
+              ;; watch :network/online?
+              (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+                         (fn [_k _r _o n]
+                           (when (false? n)
+                             (sync-stop))))
+              ;; watch :auth/id-token
+              (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+                         (fn [_k _r _o n]
+                           (when (nil? n)
+                             (sync-stop)))))))))))

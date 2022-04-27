@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createPage, newBlock, newInnerBlock, randomString, lastBlock } from './utils'
+import { IsMac, createPage, randomLowerString, newBlock, newInnerBlock, randomString, lastBlock } from './utils'
 
 /***
  * Test rename feature
@@ -35,4 +35,29 @@ async function page_rename_test(page, original_page_name: string, new_page_name:
 test('page rename test', async ({ page }) => {
   await page_rename_test(page, "abcd", "a.b.c.d")
   await page_rename_test(page, "abcd", "a/b/c/d")
+})
+
+// TODO introduce more samples when #4722 is fixed
+test('page title property test', async ({ page }) => {
+  // Edit Title Property and Double Enter (ETPDE)
+  // exit editing via insert new block
+  let rand = randomLowerString(10)
+  let original_name = "etpde old" + rand
+  let new_name = "etpde new" + rand
+  await createPage(page, original_name)
+   // add some spaces to test if it is trimmed
+  await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name + "     ")
+  await page.press(':nth-match(textarea, 1)', 'Enter') // DWIM property mode creates new line
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  expect(await page.innerText('.page-title .title')).toBe(new_name)
+
+  // Edit Title Property and Esc (ETPE)
+  // exit editing via moving out focus
+  rand = randomLowerString(10)
+  original_name = "etpe old " + rand
+  new_name = "etpe new " + rand
+  await createPage(page, original_name)
+  await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name)
+  await page.press(':nth-match(textarea, 1)', 'Escape')
+  expect(await page.innerText('.page-title .title')).toBe(new_name)
 })

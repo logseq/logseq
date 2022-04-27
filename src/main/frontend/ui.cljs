@@ -721,6 +721,19 @@
     error-view
     view))
 
+(rum/defcs catch-error-and-notify
+  < {:did-catch
+     (fn [state error _info]
+       (log/error :exception error)
+       (notification-handler/show!
+        (str "Error caught by UI!\n " error)
+        :error)
+       (assoc state ::error error))}
+  [{error ::error, c :rum/react-component} error-view view]
+  (if (some? error)
+    error-view
+    view))
+
 (rum/defc block-error
   "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]

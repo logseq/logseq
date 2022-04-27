@@ -1,6 +1,8 @@
 import path from 'path/path.js'
+
+// TODO split the capacitor abilities to a separate file for capacitor APIs
 import { StatusBar, Style } from '@capacitor/status-bar'
-import { Clipboard } from '@capacitor/clipboard';
+import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -242,38 +244,47 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
+// TODO split the capacitor clipboard to a separate file for capacitor APIs
 export const writeClipboard = (text, isHtml) => {
-    if (typeof navigator.permissions !== "undefined") {
-        let blob = new Blob([text], {
+    if (typeof navigator.permissions == "undefined") {
+        CapacitorClipboard.write({ string: text });
+        return
+    }
+    navigator.permissions.query({
+        name: "clipboard-write"
+    }).then((result) => {
+        if (result.state != "granted" && result.state != "prompt"){
+            console.debug("Copy without `clipboard-write` permission:", text)
+            return
+        }
+        let promise_written = null
+        if (typeof ClipboardItem !== 'undefined') {
+            let blob = new Blob([text], {
             type: ["text/plain"]
-        });
-        let data = [new ClipboardItem({
-            ["text/plain"]: blob
-        })];
-        if (isHtml) {
-            blob = new Blob([text], {
-                type: ["text/plain", "text/html"]
-            })
-            data = [new ClipboardItem({
-                ["text/plain"]: blob,
-                ["text/html"]: blob
-            })];
-        }
-        navigator.permissions.query({
-            name: "clipboard-write"
-        }).then((result) => {
-            if (result.state == "granted" || result.state == "prompt") {
-                navigator.clipboard.write(data).then(() => {
-                    /* success */
-                }).catch(e => {
-                    console.log(e, "fail")
-                })
-            }
-        })} else {
-            Clipboard.write({
-                string: text
             });
+            let data = [new ClipboardItem({
+                ["text/plain"]: blob
+            })];
+            if (isHtml) {
+                blob = new Blob([text], {
+                    type: ["text/plain", "text/html"]
+                })
+                data = [new ClipboardItem({
+                    ["text/plain"]: blob,
+                    ["text/html"]: blob
+                })];
+            }
+            promise_written = navigator.clipboard.write(data)
+        } else {
+            console.debug("Degraded copy without `ClipboardItem` support:", text)
+            promise_written = navigator.clipboard.writeText(text)
         }
+        promise_written.then(() => {
+            /* success */
+        }).catch(e => {
+            console.log(e, "fail")
+        })
+    })
 }
 
 export const toPosixPath = (input) => {

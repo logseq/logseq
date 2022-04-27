@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, enterNextBlock, systemModifier } from './utils'
+import { createRandomPage, enterNextBlock, systemModifier, IsMac } from './utils'
 import { dispatch_kb_events } from './util/keyboard-events'
 import * as kb_events from './util/keyboard-events'
 
@@ -142,44 +142,40 @@ test(
     }
   })
 
-// FIXME: ClipboardItem is not defined when running with this test
-// test('copy & paste block ref and replace its content', async ({ page }) => {
-//   await createRandomPage(page)
+test('copy & paste block ref and replace its content', async ({ page, block }) => {
+    await createRandomPage(page)
 
-//   await page.type('textarea >> nth=0', 'Some random text')
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+c')
-//   } else {
-//     await page.keyboard.press('Control+c')
-//   }
+    await block.mustFill('Some random text')
+    // FIXME: copy instantly will make content disappear
+    await page.waitForTimeout(1000)
+    if (IsMac) {
+        await page.keyboard.press('Meta+c')
+    } else {
+        await page.keyboard.press('Control+c')
+    }
 
-//   await page.pause()
+    await page.press('textarea >> nth=0', 'Enter')
+    if (IsMac) {
+        await page.keyboard.press('Meta+v')
+    } else {
+        await page.keyboard.press('Control+v')
+    }
+    await page.keyboard.press('Enter')
 
-//   await page.press('textarea >> nth=0', 'Enter')
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+v')
-//   } else {
-//     await page.keyboard.press('Control+v')
-//   }
-//   await page.keyboard.press('Escape')
+    const blockRef = page.locator('.block-ref >> text="Some random text"');
 
-//   const blockRef$ = page.locator('.block-ref >> text="Some random text"');
+    // Check if the newly created block-ref has the same referenced content
+    await expect(blockRef).toHaveCount(1);
 
-//   // Check if the newly created block-ref has the same referenced content
-//   await expect(blockRef$).toHaveCount(1);
+    // Move cursor into the block ref
+    for (let i = 0; i < 4; i++) {
+        await page.press('textarea >> nth=0', 'ArrowLeft')
+}
 
-//   // Edit the last block
-//   await blockRef$.press('Enter')
-
-//   // Move cursor into the block ref
-//   for (let i = 0; i < 4; i++) {
-//     await page.press('textarea >> nth=0', 'ArrowLeft')
-//   }
-
-//   // Trigger replace-block-reference-with-content-at-point
-//   if (IsMac) {
-//     await page.keyboard.press('Meta+Shift+r')
-//   } else {
-//     await page.keyboard.press('Control+Shift+v')
-//   }
-// })
+    // Trigger replace-block-reference-with-content-at-point
+    if (IsMac) {
+        await page.keyboard.press('Meta+Shift+r')
+    } else {
+        await page.keyboard.press('Control+Shift+v')
+    }
+})
