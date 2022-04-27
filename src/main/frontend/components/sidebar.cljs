@@ -231,11 +231,11 @@
                :active           (and (= route-name :page) (= page (get-in route-match [:path-params :name])))
                :icon             "home"}))
           (sidebar-item
-           {:class            "journals-nav"
-            :active           (= route-name :home)
-            :title            (t :left-side-bar/journals)
-            :on-click-handler route-handler/go-to-journals!
-            :icon             "calendar"}))
+            {:class            "journals-nav"
+             :active           (or (= route-name :all-journals) (= route-name :home))
+             :title            (t :left-side-bar/journals)
+             :on-click-handler route-handler/go-to-journals!
+             :icon             "calendar"}))
 
         [:div.flashcards-nav
          (flashcards)]
