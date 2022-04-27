@@ -1148,7 +1148,7 @@ class LSPluginCore
     },
     externals: [],
   }
-  private _registeredThemes = new Map<PluginLocalIdentity, Array<Theme>>()
+  private _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
   private _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
   private _currentTheme: {
     pid: PluginLocalIdentity
@@ -1493,7 +1493,7 @@ class LSPluginCore
     return this._isRegistering
   }
 
-  get themes(): Map<PluginLocalIdentity, Array<Theme>> {
+  get themes(): Map<PluginLocalIdentity, Theme[]> {
     return this._registeredThemes
   }
 
@@ -1501,7 +1501,7 @@ class LSPluginCore
     debug('Register theme #', id, opt)
 
     if (!id) return
-    let themes: Array<Theme> = this._registeredThemes.get(id)!
+    let themes: Theme[] = this._registeredThemes.get(id)!
     if (!themes) {
       this._registeredThemes.set(id, (themes = []))
     }

@@ -70,7 +70,7 @@ export interface LSPluginPkgConfig {
   entry: string // alias of main
   title: string
   mode: 'shadow' | 'iframe'
-  themes: Array<Theme>
+  themes: Theme[]
   icon: string
 
   [key: string]: any
@@ -725,7 +725,7 @@ export interface IAssetsProxy {
 }
 
 export interface ILSPluginThemeManager extends EventEmitter {
-  themes: Map<PluginLocalIdentity, Array<Theme>>
+  themes: Map<PluginLocalIdentity, Theme[]>
 
   registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void>
 
