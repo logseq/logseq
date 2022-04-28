@@ -41,7 +41,7 @@
           (fn []
             (p/finally
               (p/all (when-let [enhancers (and lsp-enabled? (seq (hook-extensions-enhancer-by-type :katex)))]
-                       (for [f enhancers]
+                       (for [{f :enhancer} enhancers]
                          (when (fn? f) (f js/window.katex)))))
               (fn []
                 (reset! *loading? false)
