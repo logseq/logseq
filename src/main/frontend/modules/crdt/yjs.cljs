@@ -106,7 +106,8 @@
     (.transact ydoc
      (fn []
        (doseq [block (util/distinct-by-last-wins :block/uuid (concat pages blocks))]
-         (let [k (str (:block/uuid block))]
+         (let [block (dissoc block :block/created-at :block/updated-at)
+               k (str (:block/uuid block))]
            (if (:db/deleted? block)
              (.delete ymap k)
              ;; FIXME: construct a Y.Map from `block`
@@ -172,6 +173,10 @@
 (defn server-connected? []
   (and (some? @*server-conn)
        (.-wsconnected ^js @*server-conn)))
+
+(defn doc->binary
+  [ydoc]
+  ((gobj/get y "encodeStateAsUpdate") ydoc))
 
 (defn debug-sync!
   []

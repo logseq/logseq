@@ -18,7 +18,7 @@
     (reset! react/query-state {})
     r))
 
-(defn- reset-datascript
+(defn reset-datascript
   [repo]
   (let [db-name (conn/datascript-db repo)
         db-conn (d/create-conn db-schema/schema)]

@@ -4,15 +4,16 @@
             [frontend.config :as config]
             [frontend.storage :as storage]
             [goog.object :as gobj]
-            [promesa.core :as p]))
-
+            [promesa.core :as p]
+            [frontend.util :as util]))
 
 ;; offline db
 
 ;; To maintain backward compatibility
 
-
-(defonce store (Store. "localforage" "keyvaluepairs" 2))
+(if util/node-test?
+  (def store nil)
+  (defonce store (Store. "localforage" "keyvaluepairs" 2)))
 
 (defn clear-idb!
   []

@@ -117,6 +117,7 @@
         "send-intent": "3.0.11",
         "threads": "1.6.5",
         "url": "^0.11.0",
+        "ws": "^8.5.0",
         "y-websocket": "^1.4.3",
         "yargs-parser": "20.2.4",
         "yjs": "^13.5.35"
