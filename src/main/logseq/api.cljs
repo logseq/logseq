@@ -783,7 +783,7 @@
 (defn ^:export exper_register_fenced_code_renderer
   [pid type ^js opts]
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
-    (plugin-handler/register_fenced_code_renderer
+    (plugin-handler/register-fenced-code-renderer
       (keyword pid) type (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                  [:edit :before :subs :render]))))
 

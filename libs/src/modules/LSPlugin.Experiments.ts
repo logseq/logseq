@@ -63,7 +63,18 @@ export class LSPluginExperiments {
     type: 'katex',
     enhancer: (v: T) => Promise<any>
   ) {
-    return this.ensureHostScope().logseq.api.exper_register_extensions_enhancer(
+    const host = this.ensureHostScope()
+
+    switch (type) {
+      case 'katex':
+        if (host.katex) {
+          enhancer(host.katex).catch(console.error)
+        }
+        break
+      default:
+    }
+
+    return host.logseq.api.exper_register_extensions_enhancer(
       this.ctx.baseInfo.id,
       type, enhancer
     )
