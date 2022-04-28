@@ -112,6 +112,12 @@ export interface AppUserInfo {
   [key: string]: any
 }
 
+export interface AppInfo {
+  version: string
+
+  [key: string]: any
+}
+
 /**
  * User's app configurations
  */
@@ -271,7 +277,12 @@ export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
  * App level APIs
  */
 export interface IAppProxy {
-  // base
+  /**
+   * @add 0.0.4
+   * @param key
+   */
+  getInfo: (key?: keyof AppInfo) => Promise<AppInfo | any>
+
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
 
