@@ -160,7 +160,7 @@
         (:block/uuid config)
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               content (:block/content block)
-              {:keys [start_pos end_pos]} (:pos_meta (last (:rum/args state)))
+              {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
               offset (if (:block/pre-block? block) 0 2)
               raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
               prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
@@ -272,29 +272,25 @@
 
 (defn- load-and-render!
   [state]
-  (let [editor-atom (:editor-atom state)
-        editor (render! state)]
-    (reset! editor-atom editor)))
+  (let [editor-atom (:editor-atom state)]
+    (when-not @editor-atom
+      (let [editor (render! state)]
+        (reset! editor-atom editor)))))
 
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
-           (let [[_ _ _ code _] (:rum/args state)]
-             (assoc state :editor-atom (atom nil) :calc-atom (atom (calc/eval-lines code)))))
+           (let [[_ _ _ code _ options] (:rum/args state)]
+             (assoc state
+                    :editor-atom (atom nil)
+                    :calc-atom (atom (calc/eval-lines code))
+                    :code-options (atom options))))
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
-   :will-update (fn [state]
-                  (when-let [editor @(:editor-atom state)]
-                    (.toTextArea ^js editor)
-                    (let [[_ _ _ code _] (:rum/args state)]
-                      (when-let [textarea (rum/ref-node state textarea-ref-name)]
-                        (gobj/set textarea "defaultValue" code)
-                        (gobj/set textarea "value" code))))
-                  state)
-   ;; codemirror need to be re-rendered to get the new pos_meta
    :did-update (fn [state]
-                 (load-and-render! state)
-                 state)}
+                 (reset! (:code-options state) (last (:rum/args state)))
+                 state)
+   }
   [state _config id attr code _theme _options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
