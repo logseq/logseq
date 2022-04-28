@@ -278,7 +278,7 @@ export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
  */
 export interface IAppProxy {
   /**
-   * @add 0.0.4
+   * @added 0.0.4
    * @param key
    */
   getInfo: (key?: keyof AppInfo) => Promise<AppInfo | any>
@@ -653,6 +653,8 @@ export interface IDBProxy {
 
   /**
    * Hook all transaction data of DB
+   *
+   * @added 0.0.2
    */
   onChanged: IUserHook<{
     blocks: Array<BlockEntity>
@@ -662,6 +664,8 @@ export interface IDBProxy {
 
   /**
    * Subscribe a specific block changed event
+   *
+   * @added 0.0.2
    */
   onBlockChanged(
     uuid: BlockUUID,
@@ -711,6 +715,10 @@ export interface IUIProxy {
  * Assets related APIs
  */
 export interface IAssetsProxy {
+  /**
+   * @added 0.0.2
+   * @param exts
+   */
   listFilesOfCurrentGraph(
     exts: string | string[]
   ): Promise<{

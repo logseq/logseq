@@ -787,6 +787,12 @@
       (keyword pid) type (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                  [:edit :before :subs :render]))))
 
+(defn ^:export exper_register_extensions_enhancer
+  [pid type enhancer]
+  (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]
+    (plugin-handler/register-extensions-enhancer
+      (keyword pid) type {:enhancer enhancer})))
+
 ;; helpers
 (defn ^:export query_element_by_id
   [id]
