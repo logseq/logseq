@@ -32,6 +32,7 @@ import {
   BlockEntity,
   IDatom,
   IAssetsProxy,
+  AppInfo,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -85,7 +86,18 @@ function registerSimpleCommand(
   })
 }
 
+let _appBaseInfo: AppInfo = null
 const app: Partial<IAppProxy> = {
+  async getInfo(
+    this: LSPluginUser,
+    key
+  ) {
+    if (!_appBaseInfo) {
+      _appBaseInfo = await this._execCallableAPIAsync('get-app-info')
+    }
+    return typeof key === 'string' ? _appBaseInfo[key] : _appBaseInfo
+  },
+
   registerCommand: registerSimpleCommand,
 
   registerCommandPalette(
@@ -166,7 +178,7 @@ const app: Partial<IAppProxy> = {
     } else {
       flag ? sf(true) : sf()
     }
-  },
+  }
 }
 
 let registeredCmdUid = 0
@@ -556,7 +568,7 @@ export class LSPluginUser
         return function (this: any, ...args: any) {
           if (origMethod) {
             const ret = origMethod.apply(that, args.concat(tag))
-            if (ret !== PROXY_CONTINUE) return
+            if (ret !== PROXY_CONTINUE) return ret
           }
 
           // Handle hook

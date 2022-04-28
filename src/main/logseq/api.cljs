@@ -36,6 +36,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
+            [frontend.version :as fv]
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]))
 
@@ -81,6 +82,13 @@
                  (subs % 1)
                  (keyword %)))
          (get-in @state/state))))
+
+(defn ^:export get_app_info
+  ;; get app base info
+  []
+  (bean/->js
+    (normalize-keyword-for-json
+      {:version fv/version})))
 
 (def ^:export get_user_configs
   (fn []
