@@ -53,6 +53,7 @@
     (if (state/get-edit-block)
       (state/append-current-edit-content! values)
       (editor-handler/api-insert-new-block! values {:page page
+                                                    :edit-block? false
                                                     :replace-empty-target? true}))))
 
 (defn- embed-asset-file [url format]
@@ -99,6 +100,7 @@
     (if (state/get-edit-block)
       (state/append-current-edit-content! content)
       (editor-handler/api-insert-new-block! content {:page page
+                                                     :edit-block? false
                                                      :replace-empty-target? true}))))
 
 (defn- handle-received-application [result]
@@ -124,6 +126,7 @@
     (if (state/get-edit-block)
       (state/append-current-edit-content! content)
       (editor-handler/api-insert-new-block! content {:page page
+                                                     :edit-block? false
                                                      :replace-empty-target? true}))))
 
 (defn decode-received-result [m]
