@@ -650,7 +650,10 @@
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
             (when edit-block?
-              (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10))
+              (if (and replace-empty-target?
+                       (string/blank? (:block/content last-block)))
+                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 10)
+                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
