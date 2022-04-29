@@ -360,10 +360,18 @@ export interface IAppProxy {
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
+  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
+
+  /**
+   * @deprecated
+   * @param content
+   * @param status
+   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string
   ) => void
+  
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
