@@ -586,22 +586,21 @@ export class LSPluginUser
               const handler = args[0]
               caller[f](type, handler)
 
-  const unlisten = () => {
-    caller.off(type, handler)
-    if (!caller.listenerCount(type)) {
-      that.App._uninstallPluginHook(pid, type)
-    }
-  }
-  
-  if (!isOff) {
-    that.App._installPluginHook(pid, type)
-  } else {
-    unlisten()
-    return
-  }
-
-  return unlisten
+              const unlisten = () => {
+                caller.off(type, handler)
+                if (!caller.listenerCount(type)) {
+                  that.App._uninstallPluginHook(pid, type)
+                }
               }
+
+              if (!isOff) {
+                that.App._installPluginHook(pid, type)
+              } else {
+                unlisten()
+                return
+              }
+
+              return unlisten
             }
           }
 
