@@ -843,6 +843,7 @@
              (cursor/move-cursor-to input pos))
 
            (when (or (util/mobile?) (mobile-util/is-native-platform?))
+             (set-state! :mobile/show-action-bar? false)
              (util/make-el-center-if-near-top input))))))))
 
 (defn clear-edit!
