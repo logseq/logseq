@@ -2264,6 +2264,7 @@
 
 (defn- keydown-new-block
   [state]
+  (println "keydown-new-block")
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
@@ -2323,6 +2324,7 @@
                  (insert-new-block! state)))))))))
 
 (defn keydown-new-block-handler [state e]
+  (println "keydown-new-block-handler")
   (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-line)
     (do
@@ -2330,6 +2332,7 @@
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
+  (println "keydown-new-line-handler")
   (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-block state)
     (do

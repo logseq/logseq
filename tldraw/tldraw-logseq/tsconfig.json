@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "exclude": ["node_modules", "dist", "docs"],
+  "compilerOptions": {
+    "outDir": "./dist/types",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "~*": ["src/*"]
+    }
+  },
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/react" },
+    { "path": "../../packages/utils/vec" },
+    { "path": "../../packages/utils/intersect" }
+  ]
+}

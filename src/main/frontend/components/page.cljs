@@ -15,6 +15,8 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.format.block :as format-block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
@@ -69,7 +71,13 @@
 
 (rum/defc page-blocks-inner <
   {:did-mount  open-first-block!
-   :did-update open-first-block!}
+   :did-update open-first-block!
+   :should-update (fn [prev-state state]
+                    (let [[old-page-name _ old-hiccup _ old-block-uuid] (:rum/args prev-state)
+                          [page-name _ hiccup _ block-uuid] (:rum/args state)]
+                      (or (not= page-name old-page-name)
+                          (not= hiccup old-hiccup)
+                          (not= block-uuid old-block-uuid))))}
   [page-name _blocks hiccup sidebar? _block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
@@ -305,6 +313,7 @@
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
+                                (gobj/get option "pageId")
                                 (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)

@@ -26,6 +26,8 @@
        (property/remove-built-in-properties format)))
 
 (defn search
+  ([q]
+   (search (state/get-current-repo) q))
   ([repo q]
    (search repo q {:limit 20}))
   ([repo q {:keys [page-db-id limit more?]

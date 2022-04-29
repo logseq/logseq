@@ -70,7 +70,7 @@
     (set/union
      config-formats
      #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-       :excalidraw})))
+       :excalidraw :tldraw})))
 
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})

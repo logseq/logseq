@@ -821,6 +821,7 @@
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
+   (println "set-editing!")
    (when (and edit-input-id block
               (or
                 (publishing-enable-editing?)
@@ -854,6 +855,7 @@
 
 (defn clear-edit!
   []
+  (println "clear-edit!")
   (swap! state merge {:editor/editing? nil
                       :editor/block    nil
                       :cursor-range    nil

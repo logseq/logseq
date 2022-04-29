@@ -1,0 +1,279 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500&display=swap');
+
+:root {
+  --color-panel: #ffffff;
+  --color-text: #000000;
+  --color-hover: #00000011;
+  --color-selectedStroke: rgb(42, 123, 253);
+  --color-selectedFill: rgba(66, 133, 244);
+  --color-selectedContrast: #ffffff;
+  --shadow-medium: 0px 0px 16px -1px rgba(0, 0, 0, 0.05), 0px 0px 16px -8px rgba(0, 0, 0, 0.09),
+    0px 0px 16px -12px rgba(0, 0, 0, 0.2);
+}
+
+.logseq-tldraw-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.logseq-tldraw label {
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+}
+
+.logseq-tldraw button {
+  font-size: 13px;
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 4px 8px;
+}
+
+.logseq-tldraw .toolbar {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  color: black;
+  z-index: 100000;
+  user-select: none;
+  background: white;
+  border-bottom: 1px solid black;
+  font-size: inherit;
+}
+
+.logseq-tldraw .contextbar {
+  pointer-events: all;
+  position: relative;
+  background-color: var(--color-panel);
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 14px;
+  will-change: transform, contents;
+  box-shadow: var(--shadow-medium);
+  z-index: 1000;
+}
+
+.logseq-tldraw .statusbar {
+  position: absolute;
+  bottom: 0;
+  grid-row: 3;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  color: black;
+  z-index: 100000;
+  user-select: none;
+  background: white;
+  border-top: 1px solid black;
+}
+
+.logseq-tldraw .input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.logseq-tldraw .number-input {
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+}
+
+.logseq-tldraw .color-input {
+  height: 24px;
+  padding: 0 2px;
+  background: none;
+  border-radius: 2px;
+}
+
+.logseq-tldraw .text-input {
+  height: 24px;
+  padding: 4px;
+  background: none;
+  border: 1px solid black;
+  border-radius: 2px;
+}
+
+.logseq-tldraw .input > label {
+  font-size: 10px;
+}
+
+.logseq-tldraw .primary-tools {
+  display: flex;
+  position: absolute;
+  bottom: 48px;
+  width: 100%;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  gap: 8px;
+  z-index: 10000;
+}
+
+.logseq-tldraw .panel {
+  background-color: var(--color-panel);
+  box-shadow: var(--shadow-medium);
+  pointer-events: all;
+}
+
+.floating-button {
+  background-color: var(--color-panel);
+  height: 32px;
+  width: 32px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-medium);
+  overflow: hidden;
+}
+
+.logseq-tldraw .primary-tools .floating-panel {
+  display: flex;
+  border-radius: 128px;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.logseq-tldraw .floating-panel > :nth-child(1) {
+  border-top-left-radius: 20px;
+  border-bottom-left-radius: 20px;
+}
+
+.logseq-tldraw .floating-panel > :nth-last-child(1) {
+  border-top-right-radius: 20px;
+  border-bottom-right-radius: 20px;
+}
+
+.logseq-tldraw .primary-tools .button {
+  position: relative;
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.logseq-tldraw .primary-tools .button:hover {
+  background-color: var(--color-hover);
+}
+
+.logseq-tldraw .primary-tools .button[data-selected='true'] {
+  background-color: var(--color-selectedFill);
+  color: var(--color-selectedContrast);
+}
+
+.logseq-tldraw .floating-panel[data-tool-locked='true'] > .button[data-selected='true']::after {
+  content: '';
+  display: block;
+  height: 6px;
+  width: 6px;
+  border: 2px solid var(--color-selectedContrast);
+  background-color: var(--color-selectedFill);
+  position: absolute;
+  bottom: -4px;
+  left: calc(50% - 5px);
+  border-radius: 100%;
+}
+
+.logseq-tldraw .text-shape-wrapper {
+  position: absolute;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  width: auto;
+  border: 1px solid transparent;
+  margin: 0px;
+  padding: 0px;
+  z-index: 9999;
+  user-select: none;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  min-height: 1;
+  min-width: 1;
+  line-height: 1;
+  outline: 0;
+  backface-visibility: hidden;
+  user-select: none;
+  pointer-events: all;
+  vertical-align: baseline;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.logseq-tldraw .text-shape-content {
+  z-index: 1;
+  width: fit-content;
+  height: fit-content;
+  border: none;
+  resize: none;
+  margin: 0;
+  padding: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-variant: inherit;
+  text-align: inherit;
+  min-height: inherit;
+  min-width: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  outline: 0;
+  white-space: inherit;
+  overflow-wrap: inherit;
+  font-weight: inherit;
+  overflow: hidden;
+  backface-visibility: hidden;
+  display: inline-block;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.logseq-tldraw .text-shape-content[data-isediting='true'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.logseq-tldraw .text-shape-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  resize: none;
+  padding: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-variant: inherit;
+  text-align: inherit;
+  min-height: inherit;
+  min-width: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  outline: 0;
+  white-space: inherit;
+  overflow-wrap: inherit;
+  font-weight: inherit;
+  overflow: hidden;
+  backface-visibility: hidden;
+  display: inline-block;
+  pointer-events: all;
+  user-select: text;
+  -webkit-user-select: text;
+}

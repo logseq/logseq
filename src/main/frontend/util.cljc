@@ -327,10 +327,12 @@
 
 #?(:cljs
    (defn stop [e]
+     (println "event stop" e)
      (when e (doto e (.preventDefault) (.stopPropagation)))))
 
 #?(:cljs
    (defn stop-propagation [e]
+     (println "event stop-propagation" e)
      (when e (.stopPropagation e))))
 
 #?(:cljs

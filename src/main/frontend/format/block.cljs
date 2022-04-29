@@ -72,7 +72,7 @@
                                 (not (util/starts-with? value "https:"))
                                 (not (util/starts-with? value "file:"))
                                 (not (gp-config/local-asset? value))
-                                (or (= ext :excalidraw)
+                                (or (some #{ext} [:excalidraw :tldraw])
                                     (not (contains? (config/supported-formats) ext))))
                        value)))
 

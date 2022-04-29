@@ -4,7 +4,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.utils :as db-util]
-            [frontend.handler.draw :as draw]
+            [frontend.handler.draw :as draw-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.extensions.video.youtube :as youtube]
@@ -18,8 +18,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [promesa.core :as p]))
+            [goog.object :as gobj]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -274,13 +273,8 @@
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
-     ["Draw" (fn []
-               (let [file (draw/file-name)
-                     path (str gp-config/default-draw-directory "/" file)
-                     text (util/format "[[%s]]" path)]
-                 (p/let [_ (draw/create-draw-with-default-content path)]
-                   (println "draw file created, " path))
-                 text)) "Draw a graph with Excalidraw"]
+     ["draw" (draw-handler/initialize-excalidarw-file) "Draw a graph with Excalidraw"]
+     ["tldraw" (draw-handler/initialize-tldraw-file) "Draw a graph with tldraw"]
 
      (when (util/zh-CN-supported?)
        ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)

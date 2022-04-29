@@ -9,6 +9,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.onboarding.setups :as setups]
+            [frontend.extensions.tldraw :as tldraw]
             [frontend.extensions.zotero :as zotero]))
 
 ;; http://localhost:3000/#?anchor=fn.1
@@ -20,6 +21,10 @@
    ["/graphs"
     {:name :repos
      :view repo/repos}]
+
+   ["/whiteboard"
+    {:name :whiteboard
+     :view #(tldraw/draw {:file "draws/2022-05-15-01-47-49.tldr"})}]
 
    ["/repo/add"
     {:name :repo-add

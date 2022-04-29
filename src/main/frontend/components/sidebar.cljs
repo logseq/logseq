@@ -241,6 +241,12 @@
          {:class "all-pages-nav"
           :title (t :right-side-bar/all-pages)
           :href  (rfe/href :all-pages)
+          :icon  "files"})
+        
+        (sidebar-item
+         {:class "whiteboard"
+          :title "Whiteboard"
+          :href  (rfe/href :whiteboard)
           :icon  "files"})]]
 
       (favorites t)
@@ -279,7 +285,7 @@
                               (let [format (:block/format (state/get-edit-block))]
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
-  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -294,8 +300,8 @@
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
       [:div.cp__sidebar-main-content
-       {:data-is-global-graph-pages global-graph-pages?
-        :data-is-full-width         (or global-graph-pages?
+       {:data-is-margin-less-pages margin-less-pages?
+        :data-is-full-width        (or margin-less-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
        (when (and (not (mobile-util/is-native-platform?))
@@ -312,9 +318,9 @@
            (ui/loading (t :loading))]]
 
          :else
-         [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
+         [:div {:class (if margin-less-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
                 :style {:margin-bottom (cond
-                                         global-graph-pages? 0
+                                         margin-less-pages? 0
                                          onboarding-and-home? -48
                                          :else 120)
                         :padding-bottom (when (mobile-util/native-iphone?) "7rem")}}
@@ -472,7 +478,7 @@
         wide-mode? (state/sub :ui/wide-mode?)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        global-graph-pages? (= :graph route-name)
+        margin-less-pages? (#{:graph :whiteboard} route-name)
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
@@ -514,7 +520,7 @@
                         :new-block-mode new-block-mode})
 
         (main {:route-match         route-match
-               :global-graph-pages? global-graph-pages?
+               :margin-less-pages?  margin-less-pages?
                :logged?             logged?
                :home?               home?
                :route-name          route-name

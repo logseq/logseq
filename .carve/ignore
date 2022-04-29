@@ -22,6 +22,8 @@ frontend.extensions.age-encryption/encrypt-with-user-passphrase
 frontend.extensions.age-encryption/decrypt-with-user-passphrase
 ;; Lazily loaded
 frontend.extensions.excalidraw/draw
+;; Lazily loaded
+frontend.extensions.tldraw/draw
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
 ;; For repl
