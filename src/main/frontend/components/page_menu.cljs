@@ -84,7 +84,7 @@
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
 
-          (when-not (mobile-util/is-native-platform?)
+          (when-not (mobile-util/native-platform?)
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!

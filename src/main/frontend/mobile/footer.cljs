@@ -1,12 +1,12 @@
 (ns frontend.mobile.footer
-  (:require [frontend.ui :as ui]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.mobile.record :as record]
-            [frontend.util :as util]
+  (:require [clojure.string :as string]
+            [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [clojure.string :as string]
-            [frontend.date :as date]))
+            [frontend.mobile.record :as record]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [rum.core :as rum]))
 
 (rum/defc mobile-bar-command [command-handler icon]
   [:div
@@ -46,9 +46,7 @@
 
 (rum/defc footer < rum/reactive
   []
-  (when-not (or (state/sub :editor/editing?)
-                (state/sub :block/component-editing-mode?)
-                (state/sub :editor/editing-page-title?))
+  (when (state/sub :mobile/show-tabbar?)
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
      (mobile-bar-command #(state/toggle-document-mode!) "notes")

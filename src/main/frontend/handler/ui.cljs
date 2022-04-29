@@ -135,7 +135,7 @@
 
 (defn exec-js-if-exists-&-allowed!
   [t]
-  (when-not (mobile/is-native-platform?)
+  (when-not (mobile/native-platform?)
     (when-let [href (or
                      (state/get-custom-js-link)
                      (config/get-custom-js-path))]

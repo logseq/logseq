@@ -228,7 +228,7 @@
         show-open-folder? (and (nfs/supported?)
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
-                               (not (mobile-util/is-native-platform?))
+                               (not (mobile-util/native-platform?))
                                (not config/publishing?))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
@@ -271,7 +271,7 @@
                 (mobile-util/native-ios?))
         (back-and-forward))
 
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         (new-block-mode))
 
       (when show-open-folder?

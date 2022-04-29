@@ -350,7 +350,7 @@
        [:div.relative
         (when (and (not sidebar?) (not block?))
           [:div.flex.flex-row.space-between
-           (when (or (mobile-util/is-native-platform?) (util/mobile?))
+           (when (or (mobile-util/native-platform?) (util/mobile?))
              [:div.flex.flex-row.pr-2
               {:style {:margin-left -15}
                :on-mouse-over (fn [e]

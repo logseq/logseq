@@ -13,7 +13,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
-            [frontend.mobile.util :refer [is-native-platform?]]
+            [frontend.mobile.util :refer [native-platform? native-ios?]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -82,7 +82,7 @@
 
 #?(:cljs
    (def nfs? (and (not (electron?))
-                  (not (is-native-platform?)))))
+                  (not (native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -1338,42 +1338,50 @@
             (catch js/Error _e
               false)))))
 
+(def keyboard-height (atom nil))
 #?(:cljs
-   (defn make-el-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+   (defn scroll-editor-cursor
+     [^js/HTMLElement el & {:keys [to-vw-one-quarter? to-vw-center?]}]
+     (when (and el (native-platform?))
+       (let [box-rect    (.getBoundingClientRect el)
+             box-top     (.-top box-rect)
+             box-bottom  (.-bottom box-rect)
 
-#?(:cljs
-   (defn make-el-cursor-position-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (let [main-node (gdom/getElement "main-content-container")
-             pos (get-selection-start el)
-             cursor-top (some-> (gdom/getElement "mock-text")
-                                gdom/getChildren
-                                array-seq
-                                (nth-safe pos)
-                                .-offsetTop)
-             box-caret (.getBoundingClientRect el)
-             box-top (.-top box-caret)
-             box-bottom (.-bottom box-caret)
-             vw-height (or (.-height js/window.visualViewport)
-                           (.-clientHeight js/document.documentElement))
-             scroll-top (.-scrollTop main-node)
-             cursor-y (if cursor-top (+ cursor-top box-top) box-bottom)
-             scroll (- cursor-y (/ vw-height 2))]
-         (when (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top scroll)))))))
+             main-node   (app-scroll-container-node)
+             scroll-top  (.-scrollTop main-node)
 
-#?(:cljs
-   (defn make-el-center-if-near-top
-     ([^js/HTMLElement el]
-      (make-el-center-if-near-top el 80))
-     ([^js/HTMLElement el offset]
-      (let [target-top (.-top (.getBoundingClientRect el))]
-        (when (<= target-top (or (safe-parse-int offset) 0))
-          (make-el-into-center-viewport el))))))
+             current-pos (get-selection-start el)
+             cursor-top  (some-> (gdom/getElement "mock-text")
+                                 gdom/getChildren
+                                 array-seq
+                                 (nth-safe current-pos)
+                                 .-offsetTop)
+
+             cursor-y    (if cursor-top (+ cursor-top box-top) box-bottom)
+             vw-height   (or (.-height js/window.visualViewport)
+                             (.-clientHeight js/document.documentElement))
+             scroll      (- cursor-y (- vw-height (+ @keyboard-height 40)))]
+         (cond
+           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
+           (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
+
+           (and to-vw-center? (> cursor-y (/ vw-height 2)))
+           (.scrollBy main-node (bean/->js {:top (- cursor-y (/ vw-height 2))}))
+
+           (and (< cursor-y 86) (>= cursor-y 62))
+           (.scrollBy main-node (bean/->js {:top -24}))
+
+           (< cursor-y 56)
+           (let [_ (.scrollIntoView el true)
+                 main-node (app-scroll-container-node)
+                 scroll-top (.-scrollTop main-node)]
+             (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
+
+           (> scroll 0)
+           (set! (.-scrollTop main-node) (+ scroll-top 24))
+
+           :else
+           nil)))))
 
 #?(:cljs
    (defn sm-breakpoint?

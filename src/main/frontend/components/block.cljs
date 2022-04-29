@@ -259,7 +259,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
+    (when (or granted? (util/electron?) (mobile-util/native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
@@ -1467,7 +1467,7 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (or (mobile-util/is-native-platform?)
+         (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
               (not doc-mode?))
          bullet

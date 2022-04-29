@@ -2,6 +2,7 @@
   (:require [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
+            ["@capacitor/keyboard" :refer [^js Keyboard]]
             ;; ["@capacitor/keyboard" :refer [^js Keyboard]]
             #_:clj-kondo/ignore
             ["@capacitor/status-bar" :refer [^js StatusBar]]
@@ -19,9 +20,7 @@
   ;; Keyboard watcher
   ;; (.addListener Keyboard "keyboardWillShow"
   ;;               #(state/pub-event! [:mobile/keyboard-will-show]))
-  ;; (.addListener Keyboard "keyboardDidShow"
-  ;;               #(state/pub-event! [:mobile/keyboard-did-show]))
-  )
+)
 
 (defn init!
   []
@@ -50,7 +49,7 @@
   (when (mobile-util/native-ios?)
     (ios-init))
 
-  (when (mobile-util/is-native-platform?)
+  (when (mobile-util/native-platform?)
     (.addListener mobile-util/fs-watcher "watcher"
                   (fn [event]
                     (state/pub-event! [:file-watcher/changed event])))
@@ -65,5 +64,14 @@
                         (when is-active?
                           (editor-handler/save-current-block!))))))
 
+    (.addListener Keyboard "keyboardWillShow"
+                  (fn [^js info]
+                    (let [keyboard-height (.-keyboardHeight info)]
+                      (state/pub-event! [:mobile/keyboard-will-show keyboard-height]))))
+
+    (.addListener Keyboard "keyboardWillHide"
+                  (fn []
+                    (state/pub-event! [:mobile/keyboard-will-hide])))
+    
     (.addEventListener js/window "sendIntentReceived"
                        #(intent/handle-received))))

@@ -71,10 +71,10 @@
       [:section.a
        [:strong "Let’s get you set up."]
        [:small (str "Where on your " DEVICE " do you want to save your work?")
-        (when (mobile-util/is-native-platform?)
+        (when (mobile-util/native-platform?)
           (mobile-intro))]
 
-       (if (or (nfs/supported?) (mobile-util/is-native-platform?))
+       (if (or (nfs/supported?) (mobile-util/native-platform?))
          [:div.choose.flex.flex-col.items-center
           {:on-click #(page-handler/ls-dir-files!
                        (fn []
