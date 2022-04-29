@@ -796,8 +796,13 @@
 ;; helpers
 (defn ^:export query_element_by_id
   [id]
-  (let [^js el (gdom/getElement id)]
+  (when-let [^js el (gdom/getElement id)]
     (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export query_element_rect
+  [selector]
+  (when-let [^js el (js/document.querySelector selector)]
+    (bean/->js (.toJSON (.getBoundingClientRect el)))))
 
 (defn ^:export set_focused_settings
   [pid]
