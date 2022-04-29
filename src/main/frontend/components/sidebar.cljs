@@ -1,40 +1,44 @@
 (ns frontend.components.sidebar
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.command-palette :as command-palette]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
+            [frontend.components.onboarding :as onboarding]
+            [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.select :as select]
+            [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.plugins :as plugins]
-            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.srs :as srs]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
+            [frontend.handler.history :as history]
+            [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.footer :as footer]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]
-            [frontend.extensions.srs :as srs]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.mobile.swipe :as swipe]
-            [frontend.components.onboarding :as onboarding]
-            [frontend.mobile.footer :as footer]))
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -524,7 +528,7 @@
                :db-restoring?       db-restoring?
                :main-content        main-content})
 
-        (when (and (mobile-util/is-native-platform?)
+        (when (and (mobile-util/native-platform?)
                    current-repo
                    (not (state/sub :modal/show?)))
           (footer/footer))]

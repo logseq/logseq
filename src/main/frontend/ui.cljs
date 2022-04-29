@@ -44,7 +44,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 23 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -675,7 +675,7 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        (when-not (mobile-util/is-native-platform?)
+        (when-not (mobile-util/native-platform?)
           [:a.block-control.opacity-50.hover:opacity-100.mr-2
            (cond->
             {:style    {:width       14

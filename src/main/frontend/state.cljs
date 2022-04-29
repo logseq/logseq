@@ -58,12 +58,13 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+     
      ;; right sidebar
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
+     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/native-platform?) "light" "dark"))
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
@@ -144,6 +145,10 @@
      :electron/updater-pending?             false
      :electron/updater                      {}
      :electron/user-cfgs                    nil
+
+     ;; mobile
+     :mobile/show-toolbar?                  false
+     :mobile/show-tabbar?                   true
 
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
@@ -280,7 +285,7 @@
 (defn get-current-repo
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         "local")))
 
 (defn get-config
@@ -837,10 +842,7 @@
              (util/set-change-value input content))
 
            (when move-cursor?
-             (cursor/move-cursor-to input pos))
-
-           (when (or (util/mobile?) (mobile-util/is-native-platform?))
-             (util/make-el-center-if-near-top input))))))))
+             (cursor/move-cursor-to input pos))))))))
 
 (defn clear-edit!
   []
@@ -1168,7 +1170,7 @@
 
 (defn enable-tooltip?
   []
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+  (if (or (util/mobile?) (mobile-util/native-platform?))
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?

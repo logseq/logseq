@@ -152,7 +152,7 @@
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (->
        (p/let [_ (and (config/local-db? repo)
-                      (mobile-util/is-native-platform?)
+                      (mobile-util/native-platform?)
                       (fs/delete-file! repo file-path file-path {}))
                _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
        (p/catch (fn [err]
@@ -582,7 +582,7 @@
                      page)
         (let [journal? (date/valid-journal-title? page)
               ref-file-path (str
-                             (if (or (util/electron?) (mobile-util/is-native-platform?))
+                             (if (or (util/electron?) (mobile-util/native-platform?))
                                (-> (config/get-repo-dir (state/get-current-repo))
                                    js/decodeURI
                                    (string/replace #"/+$" "")
@@ -716,7 +716,7 @@
                (not (state/loading-files? repo)))
       (state/set-today! (date/today))
       (when (or (config/local-db? repo)
-                (and (= "local" repo) (not (mobile-util/is-native-platform?))))
+                (and (= "local" repo) (not (mobile-util/native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               template (state/get-default-journal-template)

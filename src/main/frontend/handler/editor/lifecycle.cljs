@@ -3,7 +3,6 @@
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.mobile.util :as mobile-util]
             [goog.dom :as gdom]))
 
 (defn did-mount!
@@ -20,10 +19,8 @@
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
     (when-let [element (gdom/getElement id)]
-      (.focus element)
-      (when (or (mobile-util/is-native-platform?)
-                (util/mobile?))
-        (util/make-el-cursor-position-into-center-viewport element))))
+      (util/scroll-editor-cursor element :to-vw-center? true)
+      (.focus element)))
   state)
 
 (defn did-remount!

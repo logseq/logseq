@@ -221,7 +221,9 @@ html.is-native-iphone-without-notch,
 html.is-native-ipad {
 
      #main-container {
-        padding-top: 0px;
+         padding-top: 0px;
+         display: flex;
+         flex-direction: column;
     }
 
      #main-content-container {

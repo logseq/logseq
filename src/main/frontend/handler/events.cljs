@@ -135,7 +135,7 @@
   [repo]
   (when
    (and (not (util/electron?))
-        (not (mobile-util/is-native-platform?)))
+        (not (mobile-util/native-platform?)))
     (fn [close-fn]
       [:div
        [:p
@@ -280,15 +280,24 @@
     (reset! st/*inited? true)
     (st/consume-pending-shortcuts!)))
 
+(defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
+  (let [main-node (util/app-scroll-container-node)]
+    (state/set-state! :mobile/show-tabbar? false)
+    (state/set-state! :mobile/show-toolbar? true)
+    (when (mobile-util/native-ios?)
+      (reset! util/keyboard-height keyboard-height)
+      (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (js/setTimeout (fn []
+                       (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+                         (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
+                     100))))
 
-(defmethod handle :mobile/keyboard-will-show [[_]]
-  (when (and (state/get-left-sidebar-open?)
-             (state/editing?))
-    (state/set-left-sidebar-open! false)))
-
-(defmethod handle :mobile/keyboard-did-show [[_]]
-  (when-let [input (state/get-input)]
-    (util/make-el-cursor-position-into-center-viewport input)))
+(defmethod handle :mobile/keyboard-will-hide [[_]]
+  (let [main-node (util/app-scroll-container-node)]
+    (state/set-state! :mobile/show-toolbar? false)
+    (state/set-state! :mobile/show-tabbar? true)
+    (when (mobile-util/native-ios?)
+     (set! (.. main-node -style -marginBottom) "0px"))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
