@@ -231,88 +231,6 @@
                            template)
             :class       "black"}))))))
 
-(rum/defc mobile-bar-indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(def ^:private mobile-bar-icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
-   :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
-
-(def ^:private mobile-bar-commands-stats
-  (atom (into {}
-              (mapv (fn [name] [name {:counts 0}])
-                    mobile-bar-icons-keywords))))
-
-(defn set-command-stats [icon]
-  (let [key (keyword icon)
-        counts (get-in @mobile-bar-commands-stats [key :counts])]
-    (swap! mobile-bar-commands-stats
-           assoc-in [key :counts] (inc counts))
-    (config-handler/set-config!
-     :mobile/toolbar-stats @mobile-bar-commands-stats)))
-
-(rum/defc mobile-bar-command
-  [command-handler icon & [count? event?]]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (when count?
-                        (set-command-stats icon))
-                      (if event?
-                        (command-handler e)
-                        (command-handler)))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(defn mobile-bar-commands
-  [_parent-state parent-id]
-  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/make-el-cursor-position-into-center-viewport input)
-                             (.focus input)))]
-    (zipmap mobile-bar-icons-keywords
-     [(mobile-bar-command editor-handler/cycle-todo! "checkbox" true)
-      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets" true)
-      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses" true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
-      (mobile-bar-command editor-handler/cycle-priority! "a-b" true)
-      (mobile-bar-command editor-handler/toggle-list! "list" true)
-      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera" true)
-      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube" true)
-      (mobile-bar-command editor-handler/html-link-format! "link" true)
-      (mobile-bar-command history/undo! "rotate" true true)
-      (mobile-bar-command history/redo! "rotate-clockwise" true true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code" true)
-      (mobile-bar-command editor-handler/bold-format! "bold" true)
-      (mobile-bar-command editor-handler/italics-format! "italic" true)
-      (mobile-bar-command editor-handler/strike-through-format! "strikethrough" true)
-      (mobile-bar-command editor-handler/highlight-format! "paint" true)])))
-
-(rum/defc mobile-bar < rum/reactive
-  [parent-state parent-id]
-  (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
-   (reset! mobile-bar-commands-stats config-toolbar-stats))
-  (let [commands (mobile-bar-commands parent-state parent-id)
-        sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
-    [:div#mobile-editor-toolbar.bg-base-2
-     [:div.toolbar-commands
-      (mobile-bar-indent-outdent false "arrow-bar-left")
-      (mobile-bar-indent-outdent true "arrow-bar-right")
-      (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
-      (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
-      (mobile-bar-command #(if (state/sub :document/mode?)
-                             (editor-handler/insert-new-block! nil)
-                             (commands/simple-insert! parent-id "\n" {})) "arrow-back")
-      (for [command sorted-commands]
-        ((first command) commands))]
-     [:div.toolbar-hide-keyboard
-      (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
-
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -614,11 +532,6 @@
      (when (= (state/sub :editor/record-status) "RECORDING")
        [:div#audio-record-toolbar
         (footer/audio-record-cp)])
-
-     (when (and (or (mobile-util/is-native-platform?)
-                    config/mobile?)
-                (not (:review-cards? config)))
-       (mobile-bar state id))
      
      (ui/ls-textarea
       {:id                id
