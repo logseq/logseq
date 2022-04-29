@@ -360,6 +360,11 @@ export interface IAppProxy {
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
+
+  /**
+   * @added 0.0.5
+   * @param selector
+   */
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
 
   /**
@@ -566,6 +571,16 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * @example
+   *
+   * ```ts
+   *  logseq.Editor.setBlockCollapsed('uuid', true)
+   *  logseq.Editor.setBlockCollapsed('uuid', 'toggle')
+   * ```
+   * @param uuid
+   * @param opts
+   */
   setBlockCollapsed: (
     uuid: BlockUUID,
     opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
@@ -690,6 +705,7 @@ export interface IDBProxy {
  */
 export interface IGitProxy {
   /**
+   * @added 0.0.2
    * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
    * @param args
    */
@@ -710,6 +726,13 @@ export type UIMsgOptions = {
 export type UIMsgKey = UIMsgOptions['key']
 
 export interface IUIProxy {
+  /**
+   * @added 0.0.2
+   *
+   * @param content
+   * @param status
+   * @param opts
+   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string,
