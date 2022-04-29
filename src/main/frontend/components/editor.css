@@ -1,11 +1,14 @@
 #mobile-editor-toolbar {
   position: fixed;
   bottom: 0;
+  transition: bottom 260ms;
+  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
+  /* transition-timing-function: steps(10, jump-end); */
+  /* transition-timing-function: steps(5, end); */
+  transition-timing-function: ease-out;
   left: 0;
   width: 100%;
-  /* height: 2.5rem; */
   z-index: 9999;
-  transition: none;
   display: flex;
   justify-content: space-between;
 
