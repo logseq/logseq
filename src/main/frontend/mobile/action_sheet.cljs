@@ -1,13 +1,23 @@
-(ns frontend.mobile.action-sheet 
-  (:require
-   [frontend.extensions.srs :as srs]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.mixins :as mixins]
-   [frontend.state :as state]
-   [frontend.ui :as ui]
-   [rum.core :as rum]))
+(ns frontend.mobile.action-sheet
+  (:require [frontend.extensions.srs :as srs]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.mixins :as mixins]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [rum.core :as rum]))
 
-(defonce font-size 23)
+(defn- action-command
+  [icon description command-handler]
+  (let [callback
+        (fn []
+          (state/set-state! :mobile/show-action-bar? false)
+          (editor-handler/clear-selection!))]
+    [:button.bottom-action.flex-row
+     {:on-click (fn [_event]
+                  (command-handler)
+                  (callback))}
+     (ui/icon icon {:style {:fontSize 23}})
+     [:div.description description]]))
 
 (rum/defcs action-bar < rum/reactive
   (mixins/event-mixin
@@ -19,54 +29,19 @@
                  (editor-handler/clear-selection!)))))
   [state]
   (when-let [block (state/sub :mobile/actioned-block)]
-    (let [block-id   (:block/uuid block)
-          properties (:block/properties block)
-          heading?   (true? (:heading properties))
-          callback   (fn []
-                       (state/set-state! :mobile/show-action-bar? false)
-                       (editor-handler/clear-selection!))]
+    (let [block-id   (:block/uuid block)]
       [:div.fixed.action-bar
        (when-not (= (:block/format block) :org)
-         [:button.bottom-action.flex-row
-          {:on-click (fn [_event]
-                       (if heading?
-                         (editor-handler/remove-block-property! block-id :heading)
-                         (editor-handler/set-block-property! block-id :heading true))
-                       (callback))}
-          (ui/icon "heading" {:style {:fontSize font-size}})
-          [:div.description "Heading"]])
+         (action-command "heading" "Heading"
+                         #(let [properties (:block/properties block)
+                                heading?   (true? (:heading properties))]
+                            (if heading?
+                              (editor-handler/remove-block-property! block-id :heading)
+                              (editor-handler/set-block-property! block-id :heading true)))))
 
-       [:button.bottom-action.flex-row
-        {:on-click (fn [_event]
-                     (srs/make-block-a-card! (:block/uuid block))
-                     (callback))}
-        (ui/icon "infinity" {:style {:fontSize font-size}})
-        [:div.description "Card"]]
-
-       [:button.bottom-action.flex-row
-        {:on-click (fn [_event]
-                     (editor-handler/copy-selection-blocks)
-                     (callback))}
-        (ui/icon "copy" {:style {:fontSize font-size}})
-        [:div.description "Copy"]]
-
-       [:button.bottom-action.flex-row
-        {:on-click (fn [_event]
-                     (editor-handler/copy-block-ref! block-id #(str "((" % "))"))
-                     (callback))}
-        (ui/icon "registered" {:style {:fontSize font-size}})
-        [:div.description "Copy ref"]]
-
-       [:button.bottom-action.flex-row
-        {:on-click (fn [_event]
-                     (editor-handler/cut-selection-blocks true)
-                     (callback))}
-        (ui/icon "cut" {:style {:fontSize font-size}})
-        [:div.description "Cut"]]
-
-       [:button.bottom-action.flex-row
-        {:on-click (fn [_event]
-                     (editor-handler/delete-block-aux! block true)
-                     (callback))}
-        (ui/icon "trash" {:style {:fontSize font-size}})
-        [:div.description "Delete"]]])))
+       (action-command "infinity" "Card" #(srs/make-block-a-card! (:block/uuid block)))
+       (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks))
+       (action-command "registered" "Copy ref"
+                       (fn [_event] (editor-handler/copy-block-ref! block-id #(str "((" % "))"))))
+       (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
+       (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))])))
