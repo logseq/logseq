@@ -1,6 +1,6 @@
 (ns frontend.modules.crdt.yjs
   (:require ["yjs" :as y]
-            ["y-websocket" :as y-ws]
+            ["@logseq/y-websocket" :as y-ws]
             [goog.object :as gobj]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -13,8 +13,22 @@
             [clojure.edn :as edn]
             [clojure.walk :as walk]))
 
-;; TODO: Replace Y.Map with Y.Array because Y.Map has large metadata overhead
-;; https://discuss.yjs.dev/t/map-metadata-overhead/492
+(defonce *server-conn (atom nil))
+
+;;; TODO:
+;; 1. persistence
+;; Use IndexedDB because it's supported on both Electron and Web.
+;; Need a custom implementation for subdocs support
+
+;; 2. end-to-end encryption
+
+;;; Some tricky cases that need more thoughts
+;; 1. A page has different uuid in two clients (same page name), how to merge their contents
+;;    if both are just default content from the same template?
+;; 2. Client A inserted some blocks after the block A, client B deleted the block
+;;    concurrently, what should be the result?
+
+;; `map` will be pages and those pages' corresponding subdocuments.
 ;; {graph {:local {:doc Y.Doc :map Y.Map}
 ;;         :remote {:doc Y.Doc :map Y.Map}}}
 (defonce *state (atom {}))
@@ -61,20 +75,37 @@
   (let [ym (get-local-map graph)]
     (.observe ym f)))
 
+(declare handle-local-updates!)
+(defn- load-and-observe-page-blocks-doc!
+  [graph ^js doc ^js doc-map]
+  ;; Load it first
+  (.load doc)
+  (.on doc
+       "synced"
+       (fn []
+         (prn "synced" doc)
+         (js/console.dir doc)))
+  ;; (.observe doc-map (handle-local-updates! graph))
+  )
+
 (defn handle-local-updates!
   [graph]
   (fn [event]
     (when-not (.-local (.-transaction event)) ; ignore local changes
       (let [ym (get-local-map graph)
             changed-keys (.-keysChanged event)
-            changes (map
+            changes (keep
                       (fn [uuid-str item]
-                        (let [v (.get ym uuid-str)]
-                          (if v
-                            {:action :upsert
-                             :block (edn/read-string v)}
-                            {:action :delete
-                             :block-id (uuid uuid-str)})))
+                        (let [v ^js (.get ym uuid-str)]
+                          (when-not (string? v) ; yjs subdoc
+                            (let [doc-map (.getMap v)]
+                              (load-and-observe-page-blocks-doc! graph v doc-map)))
+                          (when (string? v)
+                            (if v
+                              {:action :upsert
+                               :block (edn/read-string v)}
+                              {:action :delete
+                               :block-id (uuid uuid-str)}))))
                       changed-keys)]
         (state/pub-event! [:graph/merge-remote-changes graph changes event])))))
 
@@ -98,28 +129,52 @@
                      f))
                  block))
 
+;; TODO: merge pages, page names are same but with different uuids
 (defn- transact-blocks!
   [tx-report graph pages blocks]
   (let [ydoc (get-local-doc graph)
         ymap (get-local-map graph)]
     ;; bundle changes to minimize numbers of messages sent
-    (.transact ydoc
+    (.transact
+     ydoc
      (fn []
-       (doseq [block (util/distinct-by-last-wins :block/uuid (concat pages blocks))]
-         (let [block (dissoc block :block/created-at :block/updated-at)
-               k (str (:block/uuid block))]
-           (if (:db/deleted? block)
-             (.delete ymap k)
-             ;; FIXME: construct a Y.Map from `block`
-             (let [block (->> (dissoc block :db/id)
-                              (replace-db-id-with-block-uuid tx-report))
-                   value (pr-str block)]
-               (.set ymap k value)))))
        (doseq [page pages]
-         (when (:db/deleted? page)
-           (let [block-uuids (get-page-blocks-uuids (:db-before tx-report) (:db/id page))]
-             (doseq [block-uuid block-uuids]
-               (.delete ymap (str block-uuid))))))))))
+         (let [k (str (:block/uuid page))
+               page (dissoc page :db/id)]
+           (if (:db/deleted? page)
+             (do
+               (.unobserve ymap (handle-local-updates! graph))
+               (.delete ymap k)
+               (when-let [page-blocks-doc (.get ymap (str (:block/uuid page) "-blocks"))]
+                 (.destroy page-blocks-doc)))
+             (.set ymap k (pr-str page)))))
+       (doseq [block (util/distinct-by-last-wins :block/uuid (concat pages blocks))]
+         (when (:block/page block)
+           (let [block' (->> (dissoc block :db/id)
+                             (replace-db-id-with-block-uuid tx-report))
+                 k (str (:block/uuid block'))]
+             (when-let [page (:block/page block')]
+               (let [k' (str (second page) "-blocks")
+                     blocks-doc (.get ymap k')
+                     blocks-ymap (if blocks-doc
+                                   (.getMap ^js blocks-doc)
+                                   (let [doc ^js (new YDoc)
+                                         _ (gobj/set doc "id" k')
+                                         _ (.set ymap k' doc)
+                                         blocks-ymap (.getMap doc)]
+                                     (prn "create new subdoc: " (.-guid doc))
+                                     (.on doc "update" (y-ws/getSubDocUpdateHandler @*server-conn (.-guid doc)))
+                                     (load-and-observe-page-blocks-doc! graph doc blocks-ymap)
+                                     blocks-ymap))]
+                 (if (:db/deleted? block')
+                   (.delete blocks-ymap k)
+                   ;; FIXME: construct a Y.Map from `block`
+                   (let [block-value (pr-str block')]
+                     (when page
+                       (prn "set subdocs: " {:subdoc-key k'
+                                             :block-key k
+                                             :block-value block'})
+                       (.set blocks-ymap k block-value)))))))))))))
 
 (defn save-db-changes-to-yjs!
   "Save datascript changes to yjs."
@@ -154,8 +209,6 @@
 ;; doc map for each graph
 ;; {block-uuid {:block/uuid :block/name :block/parent :block/left :block/content}}
 
-(defonce *server-conn (atom nil))
-
 (defn setup-sync-server! [server-address graph user]
   (when (and (not (string/blank? server-address))
              (not (string/blank? graph))
@@ -189,6 +242,12 @@
     (setup-sync-server! server-address (frontend.state/get-current-repo)
                         (str (random-uuid)))))
 
+(debug-sync!)
+
 (comment
   (frontend.db/set-key-value (state/get-current-repo) :db-type :db-only)
+
+  (defn- get-yjs-map-keys
+    []
+    (keys (cljs-bean.core/->clj (.toJSON (get-local-map (state/get-current-repo))))))
   )

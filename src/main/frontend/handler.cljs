@@ -203,7 +203,8 @@
       (el/listen!))
     (persist-var/load-vars)
     (user-handler/refresh-tokens-loop)
-    (js/setTimeout instrument! (* 60 1000))))
+    (js/setTimeout instrument! (* 60 1000))
+    ))
 
 (defn stop! []
   (prn "stop!"))
