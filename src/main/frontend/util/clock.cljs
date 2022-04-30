@@ -84,30 +84,21 @@
   [body string?]
   (when-let [logbook (drawer/get-logbook body)]
     (when-let [logbook-lines (last logbook)]
-      (when-let [clock-lines (filter #(string/starts-with? % "CLOCK:") logbook-lines)]
-        (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
-              hours-coll (map #(int (first (string/split % ":"))) times)
-              minutes-coll (map #(int (second (string/split % ":"))) times)
-              seconds-coll (map #(int (nth (string/split % ":") 2 0)) times)
-              reduced-seconds (reduce + seconds-coll)
-              reduced-minutes (reduce + minutes-coll)
-              reduced-hours (reduce + hours-coll)
-              seconds (mod reduced-seconds 60)
-              minutes (mod (+ reduced-minutes (quot reduced-seconds 60)) 60)
-              hours (+ reduced-hours
-                       (quot (+ reduced-minutes (quot reduced-seconds 60)) 60))]
+      (when-let [clock-lines (seq (filter #(string/starts-with? % "CLOCK:") logbook-lines))]
+        (let [[hours minutes seconds] (apply map + (->> clock-lines
+                                                        (map #(string/split (string/trim (last (string/split % "=>"))) ":"))
+                                                        (map #(map int %))))
+              duration (t/period :hours hours
+                                 :minutes minutes
+                                 :seconds seconds)
+              zero-minutes? (zero? (+ (* hours 60) minutes (quot seconds 60)))]
           (if string?
-            (util/format "%s%s%s"
-                         (if (>= hours 1)
-                           (when hours (str hours "h"))
-                           "")
-                         (if (zero? minutes)
-                           ""
-                           (str minutes "m"))
-                         (if (zero? seconds)
-                           ""
-                           (str seconds "s")))
-            (let [minutes (+ (* hours 60) minutes)]
-              (if (zero? minutes)
-                seconds
-                minutes))))))))
+            (if zero-minutes?
+              (str seconds "s")
+              (-> (tf/unparse-duration duration)
+                  (string/replace #"\s+days?\s+" "d")
+                  (string/replace #"\s+hours?\s+" "h")
+                  (string/replace #"\s+minutes?$" "m")))
+            (if zero-minutes?
+              seconds
+              (+ (* hours 60) minutes))))))))
