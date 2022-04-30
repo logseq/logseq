@@ -41,7 +41,7 @@
 
     .description {
         color: var(--ls-primary-text-color);
-        font-size: 14px;
+        font-size: 12px;
         opacity: 60%;
     }
 

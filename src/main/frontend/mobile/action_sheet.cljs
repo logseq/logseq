@@ -25,33 +25,48 @@
           callback   (fn []
                        (state/set-state! :mobile/show-action-bar? false)
                        (editor-handler/clear-selection!))]
-     [:div.fixed.action-bar
-      [:button.bottom-action.flex-row
-       {:on-click (fn [_event]
-                    (editor-handler/delete-block-aux! block true)
-                    (callback))}
-       (ui/icon "trash" {:style {:fontSize font-size}})
-       [:div.description "Delete"]]
-      
-      [:button.bottom-action.flex-row
-       {:on-click (fn [_event]
-                    (editor-handler/copy-selection-blocks)
-                    (callback))}
-       (ui/icon "copy" {:style {:fontSize font-size}})
-       [:div.description "Copy"]]
-      
-      [:button.bottom-action.flex-row
-       {:on-click (fn [_event]
-                    (srs/make-block-a-card! (:block/uuid block))
-                    (callback))}
-       (ui/icon "infinity" {:style {:fontSize font-size}})
-       [:div.description "Card"]]
-      
-      [:button.bottom-action.flex-row
-       {:on-click (fn [_event]
-                    (if heading?
-                      (editor-handler/remove-block-property! block-id :heading)
-                      (editor-handler/set-block-property! block-id :heading true))
-                    (callback))}
-       (ui/icon "heading" {:style {:fontSize font-size}})
-       [:div.description "Heading"]]])))
+      [:div.fixed.action-bar
+       (when-not (= (:block/format block) :org)
+         [:button.bottom-action.flex-row
+          {:on-click (fn [_event]
+                       (if heading?
+                         (editor-handler/remove-block-property! block-id :heading)
+                         (editor-handler/set-block-property! block-id :heading true))
+                       (callback))}
+          (ui/icon "heading" {:style {:fontSize font-size}})
+          [:div.description "Heading"]])
+
+       [:button.bottom-action.flex-row
+        {:on-click (fn [_event]
+                     (srs/make-block-a-card! (:block/uuid block))
+                     (callback))}
+        (ui/icon "infinity" {:style {:fontSize font-size}})
+        [:div.description "Card"]]
+
+       [:button.bottom-action.flex-row
+        {:on-click (fn [_event]
+                     (editor-handler/copy-selection-blocks)
+                     (callback))}
+        (ui/icon "copy" {:style {:fontSize font-size}})
+        [:div.description "Copy"]]
+
+       [:button.bottom-action.flex-row
+        {:on-click (fn [_event]
+                     (editor-handler/copy-block-ref! block-id #(str "((" % "))"))
+                     (callback))}
+        (ui/icon "registered" {:style {:fontSize font-size}})
+        [:div.description "Copy ref"]]
+
+       [:button.bottom-action.flex-row
+        {:on-click (fn [_event]
+                     (editor-handler/cut-selection-blocks true)
+                     (callback))}
+        (ui/icon "cut" {:style {:fontSize font-size}})
+        [:div.description "Cut"]]
+
+       [:button.bottom-action.flex-row
+        {:on-click (fn [_event]
+                     (editor-handler/delete-block-aux! block true)
+                     (callback))}
+        (ui/icon "trash" {:style {:fontSize font-size}})
+        [:div.description "Delete"]]])))
