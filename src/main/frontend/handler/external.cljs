@@ -90,6 +90,6 @@
                                         [page-block false]))]
         (editor/paste-blocks
          parsed-blocks
-         {:target target-block
+         {:target-block target-block
           :sibling? sibling?})
         (finished-ok-handler [page-name])))))

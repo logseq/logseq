@@ -36,6 +36,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
+            [frontend.version :as fv]
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]))
 
@@ -81,6 +82,13 @@
                  (subs % 1)
                  (keyword %)))
          (get-in @state/state))))
+
+(defn ^:export get_app_info
+  ;; get app base info
+  []
+  (bean/->js
+    (normalize-keyword-for-json
+      {:version fv/version})))
 
 (def ^:export get_user_configs
   (fn []
@@ -543,13 +551,15 @@
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
     (when-let [block (db-model/get-block-by-uuid block-uuid)]
-      (let [{:keys [flag]} (bean/->clj opts)
+      (let [opts       (bean/->clj opts)
+            opts       (if (or (string? opts) (boolean? opts)) {:flag opts} opts)
+            {:keys [flag]} opts
             block-uuid (uuid block-uuid)
-            flag (if (= "toggle" flag)
-                   (not (util/collapsed? block))
-                   (boolean flag))]
+            flag       (if (= "toggle" flag)
+                         (not (util/collapsed? block))
+                         (boolean flag))]
         (if flag (editor-handler/collapse-block! block-uuid)
-                 (editor-handler/expand-block! block-uuid))
+          (editor-handler/expand-block! block-uuid))
         nil))))
 
 (def ^:export upsert_block_property
@@ -729,6 +739,7 @@
 ;; ui
 (defn ^:export show_msg
   ([content] (show_msg content :success nil))
+  ([content status] (show_msg content status nil))
   ([content status ^js opts]
    (let [{:keys [key timeout]} (bean/->clj opts)
          hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
@@ -772,15 +783,26 @@
 (defn ^:export exper_register_fenced_code_renderer
   [pid type ^js opts]
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
-    (plugin-handler/register_fenced_code_renderer
+    (plugin-handler/register-fenced-code-renderer
       (keyword pid) type (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                  [:edit :before :subs :render]))))
+
+(defn ^:export exper_register_extensions_enhancer
+  [pid type enhancer]
+  (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]
+    (plugin-handler/register-extensions-enhancer
+      (keyword pid) type {:enhancer enhancer})))
 
 ;; helpers
 (defn ^:export query_element_by_id
   [id]
-  (let [^js el (gdom/getElement id)]
+  (when-let [^js el (gdom/getElement id)]
     (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export query_element_rect
+  [selector]
+  (when-let [^js el (js/document.querySelector selector)]
+    (bean/->js (.toJSON (.getBoundingClientRect el)))))
 
 (defn ^:export set_focused_settings
   [pid]

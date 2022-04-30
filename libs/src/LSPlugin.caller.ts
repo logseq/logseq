@@ -159,7 +159,7 @@ class LSPluginCaller extends EventEmitter {
             payload._sync = tag
 
             actor.setTag(`async call #${tag}`)
-            debug('async call #', tag)
+            debug(`async call #${tag}`)
           }
 
           refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })

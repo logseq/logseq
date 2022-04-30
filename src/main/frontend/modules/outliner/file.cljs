@@ -38,18 +38,15 @@
   [pages]
   (when (seq pages)
     (when-not config/publishing?
-      (if (state/input-idle? (state/get-current-repo))
-        (doseq [[repo page-id] (set pages)]
-          (try (do-write-file! repo page-id)
-               (catch js/Error e
-                 (notification/show!
-                  [:div
-                   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                   "Error: " (str (gobj/get e "stack"))]
-                  :error)
-                 (log/error :file/write-file-error {:error e}))))
-        (doseq [page pages]
-          (async/put! write-chan page))))))
+      (doseq [[repo page-id] (set pages)]
+        (try (do-write-file! repo page-id)
+             (catch js/Error e
+               (notification/show!
+                [:div
+                 [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                 "Error: " (str (gobj/get e "stack"))]
+                :error)
+               (log/error :file/write-file-error {:error e})))))))
 
 (defn sync-to-file
   [{page-db-id :db/id}]

@@ -118,6 +118,12 @@ export interface AppUserInfo {
   [key: string]: any
 }
 
+export interface AppInfo {
+  version: string
+
+  [key: string]: any
+}
+
 /**
  * User's app configurations
  */
@@ -277,7 +283,12 @@ export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
  * App level APIs
  */
 export interface IAppProxy {
-  // base
+  /**
+   * @added 0.0.4
+   * @param key
+   */
+  getInfo: (key?: keyof AppInfo) => Promise<AppInfo | any>
+
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
 
@@ -355,10 +366,23 @@ export interface IAppProxy {
 
   // ui
   queryElementById: (id: string) => Promise<string | boolean>
+
+  /**
+   * @added 0.0.5
+   * @param selector
+   */
+  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
+
+  /**
+   * @deprecated
+   * @param content
+   * @param status
+   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string
   ) => void
+  
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -553,9 +577,19 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * @example
+   *
+   * ```ts
+   *  logseq.Editor.setBlockCollapsed('uuid', true)
+   *  logseq.Editor.setBlockCollapsed('uuid', 'toggle')
+   * ```
+   * @param uuid
+   * @param opts
+   */
   setBlockCollapsed: (
     uuid: BlockUUID,
-    opts?: { flag: boolean | 'toggle' }
+    opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
 
   getPage: (
@@ -656,6 +690,8 @@ export interface IDBProxy {
 
   /**
    * Hook all transaction data of DB
+   *
+   * @added 0.0.2
    */
   onChanged: IUserHook<{
     blocks: Array<BlockEntity>
@@ -665,6 +701,8 @@ export interface IDBProxy {
 
   /**
    * Subscribe a specific block changed event
+   *
+   * @added 0.0.2
    */
   onBlockChanged(
     uuid: BlockUUID,
@@ -681,6 +719,7 @@ export interface IDBProxy {
  */
 export interface IGitProxy {
   /**
+   * @added 0.0.2
    * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
    * @param args
    */
@@ -701,6 +740,13 @@ export type UIMsgOptions = {
 export type UIMsgKey = UIMsgOptions['key']
 
 export interface IUIProxy {
+  /**
+   * @added 0.0.2
+   *
+   * @param content
+   * @param status
+   * @param opts
+   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string,
@@ -714,7 +760,13 @@ export interface IUIProxy {
  * Assets related APIs
  */
 export interface IAssetsProxy {
-  listFilesOfCurrentGraph(exts: string | string[]): Promise<{
+  /**
+   * @added 0.0.2
+   * @param exts
+   */
+  listFilesOfCurrentGraph(
+    exts: string | string[]
+  ): Promise<{
     path: string
     size: number
     accessTime: number

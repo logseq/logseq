@@ -1947,10 +1947,12 @@
    Block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format]
   (let [blocks (block-tree->blocks tree-vec format)
-        target-block (db/pull target-block-id)]
+        target-block (db/pull target-block-id)
+        page-id (:db/id (:block/page target-block))
+        blocks (block/with-parent-and-left page-id blocks)]
     (paste-blocks
      blocks
-     {:target target-block
+     {:target-block target-block
       :sibling? sibling?})))
 
 (defn insert-template!

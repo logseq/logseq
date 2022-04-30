@@ -224,8 +224,8 @@ export function setupInjectedUI(
     float = true
   }
 
-  const id = `${ui.key}-${slot}-${pl.id}`
-  const key = `${ui.key}--${pl.id}`
+  const id = `${pl.id}--${ui.key}`
+  const key = id
 
   const target = float
     ? document.body
