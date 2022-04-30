@@ -91,7 +91,8 @@
               duration (t/period :hours hours
                                  :minutes minutes
                                  :seconds seconds)
-              zero-minutes? (zero? (+ (* hours 60) minutes (quot seconds 60)))]
+              duration-in-minutes (t/in-minutes duration)
+              zero-minutes? (zero? duration-in-minutes)]
           (if string?
             (if zero-minutes?
               (str seconds "s")
@@ -101,4 +102,4 @@
                   (string/replace #"\s+minutes?$" "m")))
             (if zero-minutes?
               seconds
-              (+ (* hours 60) minutes))))))))
+              duration-in-minutes)))))))
