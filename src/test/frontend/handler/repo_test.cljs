@@ -1,13 +1,12 @@
 (ns frontend.handler.repo-test
-  (:require [cljs.test :refer [deftest use-fixtures is]]
+  (:require [cljs.test :refer [deftest use-fixtures is testing]]
             [clojure.string :as string]
             ["fs" :as fs]
             ["child_process" :as child-process]
             [frontend.handler.repo :as repo-handler]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.conn :as conn]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -44,18 +43,29 @@
 (deftest ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (clone-docs-repo-if-not-exists graph-dir)
-        files (build-graph-files graph-dir)]
-    (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
-    (let [db-pages (map first (db-utils/q '[:find (pull ?b [* {:block/file [:file/path]}]) :where [?b :block/name] [?b :block/file]]))]
-      (is (= 206 (count files)) "Correct file count")
-      (is (= 40888 (count (d/datoms (conn/get-db test-helper/test-db) :eavt)))
-          "Correct datoms count")
+        files (build-graph-files graph-dir)
+        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
+        db (conn/get-db test-helper/test-db)]
 
+    (testing "Counts"
+      (is (= 206 (count files)) "Correct file count")
+      (is (= 40888 (count (d/datoms db :eavt))) "Correct datoms count")
+
+      (is (= 3597
+             (count (d/q '[:find (pull ?b [*]) :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+          "Correct referenced blocks count"))
+
+    (testing "Queries"
       (is (= (set (map :file/path files))
-             (set (map #(get-in % [:block/file :file/path]) db-pages)))
+             (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
+                         :where [?b :block/name] [?b :block/file]]
+                       db)
+                  (map (comp #(get-in % [:block/file :file/path]) first))
+                  set))
           "Journal and pages files on disk should equal ones in db")
+
       (is (= #{"term" "setting" "book" "templates" "Query" "Query/table" "page"}
-             (->> (db-utils/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]])
+             (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                   (map (comp :block/original-name first))
                   set))
           "Has correct namespaces"))))
