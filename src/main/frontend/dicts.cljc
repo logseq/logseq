@@ -2778,7 +2778,7 @@
         :more "詳細"
         :search/result-for "Search result for "
         :search/items "items"
-        :search/page-names "Search page names"
+        :search/page-names "ページ名で検索"
         :help/context-menu "ブロックのコンテキストメニュー"
         :help/fold-unfold "ブロックの折りたたみ／展開 （編集モードでないとき）"
         :help/markdown-syntax "マークダウン文法"
@@ -3040,7 +3040,7 @@
         :pdf/copy-ref "参照をコピー"
         :pdf/copy-text "テキストをコピー"
         :pdf/linked-ref "リンクありの参照元"
-        :pdf/toggle-dashed "Dashed style for area highlight"
+        :pdf/toggle-dashed "破線で Area highlight"
 
         :updater/new-version-install "新しいバージョンがダウンロードされました。"
         :updater/quit-and-install "インストールのためアプリを再起動してください。"
