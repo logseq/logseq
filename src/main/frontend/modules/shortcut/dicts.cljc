@@ -1,12 +1,10 @@
 (ns ^:bb-compatible frontend.modules.shortcut.dicts
   "Provides dictionary entries for shortcuts"
   (:require [medley.core :as medley]))
-
 (defn- decorate-namespace [k]
   (let [n (name k)
         ns (namespace k)]
     (keyword (str "command." ns) n)))
-
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         "Date picker: Choose selected day"
    :date-picker/prev-day         "Date picker: Select previous day"
@@ -115,7 +113,6 @@
    :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
    :ui/toggle-cards                 "Toggle cards"
    :git/commit                      "Git commit message"})
-
 (def category
   {:shortcut.category/basics "Basics"
    :shortcut.category/formatting "Formatting"
@@ -125,7 +122,6 @@
    :shortcut.category/block-selection "Block selection (press Esc to quit selection)"
    :shortcut.category/toggle "Toggle"
    :shortcut.category/others "Others"})
-
 (def ^:large-vars/data-var dicts
   {:en (merge
         ;; Dynamically add this ns since command descriptions have to
@@ -198,7 +194,6 @@
              :command.editor/open-edit                "编辑选中块"
              :command.editor/delete-selection         "删除选中块"
              :command.editor/toggle-open-blocks       "切换折叠/展开所有块（非编辑状态）"}
-
    :zh-Hant {:command.editor/indent                  "縮進塊標簽"
              :command.editor/outdent                 "取消縮進塊"
              :command.editor/move-block-up           "向上移動塊"
@@ -221,7 +216,6 @@
              :command.ui/toggle-theme                "“在暗色/亮色主題之間切換”"
              :command.ui/toggle-right-sidebar        "啟用/關閉右側欄"
              :command.go/journals                    "跳轉到日記"}
-
    :de      {:shortcut.category/formatting           "Formatierung"
              :command.editor/indent                  "Block einrücken"
              :command.editor/outdent                 "Block ausrücken"
@@ -245,7 +239,6 @@
              :command.git/commit                     "Git Commit-Nachricht"
              :command.editor/select-block-down       "Block unterhalb auswählen"
              :command.editor/select-all-blocks       "Alle Blöcke auswählen"}
-
    :fr      {:shortcut.category/formatting           "Formats"
              :command.editor/indent                  "Indenter un Bloc vers la droite"
              :command.editor/outdent                 "Indenter un Bloc vers la gauche"
@@ -269,7 +262,6 @@
              :command.ui/toggle-theme                "Intervertir le thème foncé/clair"
              :command.ui/toggle-right-sidebar        "Afficher/cacher la barre latérale"
              :command.go/journals                    "Aller au Journal"}
-
    :af      {:shortcut.category/formatting           "Formatering"
              :command.editor/indent                  "Ingekeepte blok oortjie"
              :command.editor/outdent                 "Oningekeepte blok"
@@ -293,7 +285,6 @@
              :command.go/journals                    "Spring na joernale"
              :command.ui/toggle-theme                "Wissel tussen donker/lig temas"
              :command.ui/toggle-right-sidebar        "Wissel regter sybalk"}
-
    :es      {:shortcut.category/formatting            "Formato"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegación"
@@ -357,7 +348,6 @@
              :command.editor/open-edit                "Editar bloque seleccionado"
              :command.editor/delete-selection         "Eliminar bloques seleccionados"
              :command.editor/toggle-open-blocks       "Alternar bloques abieros, (colapsar o expandir todos)"}
-
    :ru      {:shortcut.category/formatting            "Форматирование"
              :shortcut.category/basics                "Базовые"
              :shortcut.category/navigating            "Навигация"
@@ -421,7 +411,6 @@
              :command.editor/open-edit                "Редактировать выбранный блок"
              :command.editor/delete-selection         "Удалить выбранные блоки"
              :command.editor/toggle-open-blocks       "Переключить открытые блоки (свернуть или развернуть все)"}
-
    :nb-NO   {:shortcut.category/formatting            "Formatering"
              :shortcut.category/basics                "Basis"
              :shortcut.category/navigating            "Navigasjon"
@@ -486,7 +475,6 @@
              :command.editor/open-edit                "Rediger valgt blokk"
              :command.editor/delete-selection         "Slett valgte blokker"
              :command.editor/toggle-open-blocks       "Veksle åpne blokker (slå sammen eller utvid alle blokker)"}
-
    :pt-PT   {:shortcut.category/formatting            "Formatação"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegação"
@@ -550,7 +538,6 @@
              :command.editor/open-edit                "Editar bloco selecionado"
              :command.editor/delete-selection         "Eliminar blocos selecionados"
              :command.editor/toggle-open-blocks       "Alternar blocos abertos (colapsar ou expandir todos)"}
-
    :pt-BR   {:shortcut.category/formatting            "Formatação"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegação"
@@ -664,7 +651,6 @@
              :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
              :command.ui/goto-plugins                 "Ir para o painel de plugins"
              :command.ui/open-new-window              "Abra uma nova janela"}
-
    :ja      {:shortcut.category/formatting                "フォーマット"
              :shortcut.category/basics                "基本操作"
              :shortcut.category/navigating            "ナビゲーション"
@@ -776,5 +762,122 @@
              :command.editor/strike-through                   "打ち消し線"
              :command.misc/copy                               "コピー"
              :command.ui/goto-plugins                         "プラグインへ"
-             :command.ui/select-theme-color                   "利用可能なテーマ色を選択"
-             }})
+             :command.ui/select-theme-color                   "利用可能なテーマ色を選択"}
+
+   :it      {:date-picker/complete         "Selettore data: scegli il giorno selezionato"
+             :date-picker/prev-day         "Selettore data: Seleziona il giorno precedente"
+             :date-picker/next-day         "Selettore data: Seleziona il giorno successivo"
+             :date-picker/prev-week        "Selettore data: Seleziona la settimana precedente"
+             :date-picker/next-week        "Selettore data: Seleziona la settimana successiva"
+             :pdf/previous-page            "Pagina precedente del pdf corrente"
+             :pdf/next-page                "Pagina successiva del pdf corrente"
+             :auto-complete/complete       "Auto completamento: Scegli l'oggetto selezionato"
+             :auto-complete/prev           "Auto completamento: Seleziona l'oggetto precedente"
+             :auto-complete/next           "Auto completamento: Seleziona l'oggetto successivo"
+             :auto-complete/shift-complete "Auto completamento: Apri l'oggetto selezionato nella barra laterale"
+             :auto-complete/open-link      "Auto completamento: Apri l'oggetto selezionato nel browser"
+             :cards/toggle-answers         "Carte: mostra/nascondi risposte/chiusure"
+             :cards/next-card              "Carte: prossima carta"
+             :cards/forgotten              "Carte: dimenticato"
+             :cards/remembered             "Carte: ricordato"
+             :cards/recall                 "Carte: ci ho messo un pò a ricordarlo"
+             :editor/escape-editing        "Esci dalla modifica"
+             :editor/backspace             "Tasto Backspace / Cancella all'indietro"
+             :editor/delete                "Tasto Delete / Cancella avanti"
+             :editor/new-block             "Crea un nuovo blocco"
+             :editor/new-line              "Nuova riga accapo nel blocco attuale"
+             :editor/follow-link           "Segui il link sotto al cursore"
+             :editor/open-link-in-sidebar  "Apri il link nella barra laterale"
+             :editor/bold                  "Grassetto"
+             :editor/italics               "Corsivo"
+             :editor/highlight             "Evidenzia"
+             :editor/strike-through        "Barrato"
+             :editor/clear-block           "Elimina l'intero contenuto del blocco"
+             :editor/kill-line-before      "Cancella la riga prima della posizione del cursore"
+             :editor/kill-line-after       "Cancella la riga dopo la posizione del cursore"
+             :editor/beginning-of-block    "Muovi il cursore all'inizio di un blocco"
+             :editor/end-of-block          "Muovi il cursore alla fine di un blocco"
+             :editor/forward-word          "Muovi il cursore in avanti di una parola"
+             :editor/backward-word         "Muovi il cursore all'indietro di una parola"
+             :editor/forward-kill-word     "Elimina una parola in avanti"
+             :editor/backward-kill-word    "Elimina una parola all'indietro"
+             :editor/replace-block-reference-at-point "Sostituisci il riferimento di blocco con il suo contenuto al punto"
+             :editor/paste-text-in-one-block-at-point "Incolla testo in un blocco al punto"
+             :editor/insert-youtube-timestamp         "Inserisci marca temporale di youtube"
+             :editor/cycle-todo              "Cicla lo stato TODO dell'elemento corrente"
+             :editor/up                      "Muovi il cursore sopra / Seleziona sopra"
+             :editor/down                    "Muovi il cursore sotto / Seleziona sotto"
+             :editor/left                    "Muovi il cursore a sinistra / Apri il blocco selezionato all'inizio"
+             :editor/right                   "Muovi il cursore a destra / Apri il blocco selezionato all'inizio"
+             :editor/select-up               "Seleziona il contenuto sopra"
+             :editor/select-down             "Seleziona il contenuto sotto"
+             :editor/move-block-up           "Muovi il blocco sopra"
+             :editor/move-block-down         "Muovi il blocco sotto"
+             :editor/open-edit               "Modifica il blocco selezionato"
+             :editor/select-block-up         "Seleziona blocco sopra"
+             :editor/select-block-down       "Seleziona blocco sotto"
+             :editor/delete-selection        "Elimina i blocchi selezionati"
+             :editor/expand-block-children   "Espandi"
+             :editor/collapse-block-children "Collassa"
+             :editor/indent                  "Rientra blocco"
+             :editor/outdent                 "Annulla il rientro blocco"
+             :editor/copy                    "Copia (copia una selezione o un riferimento di blocco)"
+             :editor/cut                     "Taglia"
+             :editor/undo                    "Annulla"
+             :editor/redo                    "Rifai"
+             :editor/insert-link             "Link HTML"
+             :editor/select-all-blocks       "Seleziona tutti i blocchi"
+             :editor/zoom-in                 "Ingrandisci blocco di modifica / Avanti altrimenti"
+             :editor/zoom-out                "Rimpicciolisci il blocco di modifica / Indietro altrimenti"
+             :ui/toggle-brackets             "Selezionare se visualizzare le parentesi"
+             :go/search-in-page              "Cerca nella pagina attuale"
+             :go/search                      "Ricerca testo completo"
+             :go/journals                    "Vai ai diari"
+             :go/backward                    "Indietro"
+             :go/forward                     "Avanti"
+             :search/re-index                "Ricostruisci indice di ricerca"
+             :sidebar/open-today-page        "Apri la pagina di oggi nella barra laterale destra"
+             :sidebar/clear                  "Pulisci tutto nella barra laterale destra"
+             :misc/copy                      "mod+c"
+             :command-palette/toggle         "Attiva/disattiva tavolozza comandi"
+             :graph/open                     "Seleziona il diagramma da aprire"
+             :graph/remove                   "Rimuovi un diagramma"
+             :graph/add                      "Aggiungi un diagramma"
+             :graph/save                     "Salva il diagramma corrente su disco"
+             :command/run                    "Esegui comando git"
+             :go/home                        "Vai all'inizio"
+             :go/all-pages                   "Vai a tutte le pagine"
+             :go/graph-view                  "Vai alla visualizzazione diagramma"
+             :go/keyboard-shortcuts          "Vai alle scorciatoie da tastiera"
+             :go/tomorrow                    "Vai a domani"
+             :go/next-journal                "Vai al prossimo diario"
+             :go/prev-journal                "Vai al diario precedente"
+             :go/flashcards                  "Attiva/disattiva carte flash"
+             :ui/toggle-document-mode        "Attiva/disattiva modalità documento"
+             :ui/toggle-settings             "Attiva/disattiva impostazioni"
+             :ui/toggle-right-sidebar        "Attiva/disattiva barra laterale destra"
+             :ui/toggle-left-sidebar         "Attiva/disattiva barra laterale sinistra"
+             :ui/toggle-help                 "Attiva/disattiva aiuto"
+             :ui/toggle-theme                "Passa dal tema scuro a quello chiaro"
+             :ui/toggle-contents             "Attiva/disattiva i contenuti nella barra laterale"
+             :ui/open-new-window             "Apri un'altra finestra"
+             :command/toggle-favorite        "Aggiungi a/rimuovi dai preferiti"
+             :editor/open-file-in-default-app "Apri file nell'app predefinita"
+             :editor/open-file-in-directory   "Apri file nella directory principale"
+             :editor/copy-current-file        "Copia file corrente"
+             :ui/toggle-wide-mode             "Attiva/disattiva modalità ampia"
+             :ui/select-theme-color           "Seleziona i colori del tema disponibili"
+             :ui/goto-plugins                 "Vai alla dashboard dei plugin"
+             :editor/toggle-open-blocks       "Attiva/disattiva i blocchi aperti (comprimi o espandi tutti i blocchi)"
+             :ui/toggle-cards                 "Attiva/disattiva le carte"
+             :git/commit                      "Git messaggio di commit"
+             :shortcut.category/basics        "Nozioni di base"
+             :shortcut.category/formatting    "Formattazione"
+             :shortcut.category/navigating    "Navigazione"
+             :shortcut.category/block-editing "Modiifica blocco generale"
+             :shortcut.category/block-command-editing "Modifica comandi blocco"
+             :shortcut.category/block-selection "Selezione blocco (premi Esc per uscire dalla selezione)"
+             :shortcut.category/toggle        "Attiva/disattiva"
+             :shortcut.category/others        "Altri"
+
+   }})
