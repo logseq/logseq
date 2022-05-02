@@ -408,7 +408,7 @@
               (when set-default-width?
                 {:width max-width})
               (let [^js/HTMLElement textarea
-                    (js/document.querySelector "textarea")]
+                    (js/document.querySelector "textarea.ls-textarea")]
                 (if (<= (.-clientWidth textarea) (+ left (if set-default-width? max-width 500)))
                   {:right 0}
                   {:left (if (and y-diff (= y-diff 0)) left 0)})))}
@@ -476,6 +476,7 @@
   (let [content (if content (str content) "")]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
+     "ls-textarea "
      (if (or (> (.-length content) 1000)
              (string/includes? content "\n"))
        "multiline-block"
