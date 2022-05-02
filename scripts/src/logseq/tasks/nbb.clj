@@ -1,5 +1,7 @@
 (ns logseq.tasks.nbb
-  (:require [pod.borkdude.clj-kondo :as clj-kondo]))
+  (:require [pod.borkdude.clj-kondo :as clj-kondo]
+            [babashka.tasks :refer [shell]]
+            [clojure.string :as str]))
 
 (defn- fetch-meta-namespaces
   "Return namespaces with metadata"
@@ -17,8 +19,13 @@
     matches))
 
 (defn load-compatible-namespaces
+  "Check nbb-compatible namespaces can be required by nbb-logseq"
   []
-  (let [namespaces (filter #(get-in % [:meta :nbb-compatible])
-                           (fetch-meta-namespaces ["src/main"]))]
-    (assert (seq namespaces)
-            "There must be some nbb-compatible namespaces")))
+  (let [namespaces (map :ns
+                        (filter #(get-in % [:meta :nbb-compatible])
+                                (fetch-meta-namespaces ["src/main"])))]
+    (assert (seq namespaces) "There must be some nbb namespaces to check")
+    (doseq [n namespaces]
+      (println "Requiring" n "...")
+      (shell "yarn nbb-logseq -cp src/main -e" (format "(require '[%s])" n)))
+    (println "Success!")))

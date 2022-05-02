@@ -74,6 +74,10 @@ jobs:
           yarn cljs:test
           node static/tests.js
 
+      # In this job because it depends on an npm package
+      - name: Load nbb compatible namespaces
+        run: bb test:load-nbb-compatible-namespaces
+
   lint:
     runs-on: ubuntu-latest
 
@@ -111,9 +115,6 @@ jobs:
 
       - name: Lint datalog rules
         run: scripts/lint_rules.clj
-
-      - name: Load nbb compatible namespaces
-        run: bb test:load-nbb-compatible-namespaces
 
   e2e-test:
     runs-on: ubuntu-latest
