@@ -1138,8 +1138,8 @@ class LSPluginCore
 {
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
-  private _hostMountedActor: DeferredActor = deferred()
-  private _userPreferences: UserPreferences = {
+  private readonly _hostMountedActor: DeferredActor = deferred()
+  private readonly _userPreferences: UserPreferences = {
     theme: null,
     themes: {
       mode: 'light',
@@ -1148,8 +1148,8 @@ class LSPluginCore
     },
     externals: [],
   }
-  private _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
-  private _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
+  private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
+  private readonly _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1370,7 +1370,7 @@ class LSPluginCore
       this.emit('unregistered', identity)
     }
 
-    let externals = this._userPreferences.externals
+    const externals = this._userPreferences.externals
     if (externals.length && unregisteredExternals.length) {
       await this.saveUserPreferences({
         externals: externals.filter((it) => {
