@@ -39,6 +39,31 @@
     (sh ["git" "clone" "--depth" "1" "-b" "v0.6.7" "-c" "advice.detachedHead=false"
          "https://github.com/logseq/docs" dir] {})))
 
+(defn- get-top-block-properties
+  [db]
+  (->> (d/q '[:find (pull ?b [*])
+              :where
+              [?b :block/properties]
+              [(missing? $ ?b :block/name)]]
+            db)
+       (map first)
+       (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
+       (apply merge-with +)
+       (filter #(>= (val %) 5))
+       (into {})))
+
+(defn- get-all-page-properties
+  [db]
+  (->> (d/q '[:find (pull ?b [*])
+              :where
+              [?b :block/properties]
+              [?b :block/name]]
+            db)
+       (map first)
+       (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
+       (apply merge-with +)
+       (into {})))
+
 ;; Integration test that test parsing a large graph like docs
 (deftest ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
@@ -109,31 +134,14 @@
               :card-last-score 6 :card-repeats 6 :card-next-schedule 6
               :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
               :alias 6}
-             (->> (d/q '[:find (pull ?b [*])
-                         :where
-                         [?b :block/properties]
-                         [(missing? $ ?b :block/name)]]
-                       db)
-                  (map first)
-                  (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
-                  (apply merge-with +)
-                  (filter #(>= (val %) 5))
-                  (into {})))
+             (get-top-block-properties db))
           "Counts for top block properties")
 
       (is (= {:title 98
               :alias 6
               :tags 2 :permalink 2
               :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
-             (->> (d/q '[:find (pull ?b [*])
-                         :where
-                         [?b :block/properties]
-                         [?b :block/name]]
-                       db)
-                  (map first)
-                  (map (fn [m] (zipmap (keys (:block/properties m)) (repeat 1))))
-                  (apply merge-with +)
-                  (into {})))
+             (get-all-page-properties db))
           "Counts for all page properties")
 
       (is (= {:block/scheduled 2
