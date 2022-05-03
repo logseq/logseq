@@ -1,7 +1,6 @@
 (ns logseq.tasks.nbb
   (:require [pod.borkdude.clj-kondo :as clj-kondo]
-            [babashka.tasks :refer [shell]]
-            [clojure.string :as str]))
+            [babashka.tasks :refer [shell]]))
 
 (defn- fetch-meta-namespaces
   "Return namespaces with metadata"
