@@ -1,7 +1,7 @@
 (ns frontend.modules.instrumentation.sentry
   (:require [frontend.version :refer [version]]
             [frontend.util :as util]
-            [frontend.config :as cfg]
+            [frontend.config :as config]
             ["@sentry/react" :as Sentry]
             ["@sentry/tracing" :refer [BrowserTracing]]
             ["posthog-js" :as posthog]
@@ -14,16 +14,16 @@
                                          (mobile-util/native-ios?) "-ios"
                                          :else "")
                          version)
-   :environment (if cfg/dev? "development" "production")
+   :environment (if config/dev? "development" "production")
    :initialScope {:tags
                   {:platform (cond
                                (util/electron?) "electron"
                                (mobile-util/is-native-platform?) "mobile"
                                :else "web")
-                   :publishing cfg/publishing?}}
+                   :publishing config/publishing?}}
    :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
                   (new BrowserTracing)]
-   :debug cfg/dev?
+   :debug config/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]
                  (try
@@ -43,6 +43,6 @@
                  event)})
 
 (defn init []
-  (when-not cfg/dev?
+  (when-not config/dev?
     (let [config (clj->js config)]
      (Sentry/init config))))
