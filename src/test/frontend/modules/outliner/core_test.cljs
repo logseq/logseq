@@ -390,7 +390,7 @@
               (recur (conj result next) next)))
           result)))))
 
-(deftest random-inserts
+(deftest ^:generative random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -402,7 +402,7 @@
       (let [total (get-blocks-count)]
         (is (= total (+ c1 @*random-count)))))))
 
-(deftest random-deletes
+(deftest ^:generative random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
     (dotimes [_i 100]
@@ -412,7 +412,7 @@
           (outliner-tx/transact! {:graph test-db}
             (outliner-core/delete-blocks! blocks {})))))))
 
-(deftest random-moves
+(deftest ^:generative random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -429,7 +429,7 @@
               (let [total (get-blocks-count)]
                 (is (= total (+ c1 @*random-count)))))))))))
 
-(deftest random-move-up-down
+(deftest ^:generative random-move-up-down
   (testing "Random move up down"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -445,7 +445,7 @@
             (let [total (get-blocks-count)]
               (is (= total (+ c1 @*random-count))))))))))
 
-(deftest random-indent-outdent
+(deftest ^:generative random-indent-outdent
   (testing "Random indent and outdent"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -461,7 +461,7 @@
             (let [total (get-blocks-count)]
               (is (= total (+ c1 @*random-count))))))))))
 
-(deftest random-mixed-ops
+(deftest ^:generative random-mixed-ops
   (testing "Random mixed operations"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
