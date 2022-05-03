@@ -18,6 +18,8 @@
    :auto-complete/complete       "Auto-complete: Choose selected item"
    :auto-complete/prev           "Auto-complete: Select previous item"
    :auto-complete/next           "Auto-complete: Select next item"
+   :auto-complete/ctrl-prev      "Auto-complete: Select previous item"
+   :auto-complete/ctrl-next      "Auto-complete: Select next item"
    :auto-complete/shift-complete "Auto-complete: Open selected item in sidebar"
    :auto-complete/open-link      "Auto-complete: Open selected item in browser"
    :cards/toggle-answers         "Cards: show/hide answers/clozes"
