@@ -45,6 +45,8 @@
 
 (defn sync-doc [local remote]
   (.on remote "update" (fn [update]
+                         ;; TODO: applyupdate here doesn't work for subdocs
+                         ((gobj/get y "logUpdate") update)
                          (y/applyUpdate local update)))
   (.on local "update" (fn [update]
                         (y/applyUpdate remote update))))
@@ -73,41 +75,54 @@
 (defn observe-local-map!
   [graph f]
   (let [ym (get-local-map graph)]
-    (.observe ym f)))
+    ;; Note: observeDeep not working for subdoc changes
+    (.observeDeep ym f)))
 
 (declare handle-local-updates!)
+;; TODO: DRY
+(defn- observe!
+  [graph ^js doc-local]
+  (let [ymap (.getMap doc-local)]
+    (prn "observe local map")
+    (.observeDeep ymap (handle-local-updates! graph ymap))))
+
+(defn- merge-sync-and-observe!
+  [graph doc-local doc-remote]
+  (merge-doc doc-local doc-remote)
+  (sync-doc doc-local doc-remote)
+
+  (observe! graph doc-local))
+
 (defn- load-and-observe-page-blocks-doc!
-  [graph ^js doc ^js doc-map]
+  [graph ^js doc-local]
   ;; Load it first
-  (.load doc)
-  (.on doc
-       "synced"
-       (fn []
-         (prn "synced" doc)
-         (js/console.dir doc)))
-  ;; (.observe doc-map (handle-local-updates! graph))
-  )
+  (.load doc-local)
+  (when-let [doc-remote (.getSubDoc ^js @*server-conn (.-guid doc-local))]
+    (prn {:doc-remote doc-remote})
+    (merge-sync-and-observe! graph doc-local doc-remote)))
 
 (defn handle-local-updates!
-  [graph]
-  (fn [event]
-    (when-not (.-local (.-transaction event)) ; ignore local changes
-      (let [ym (get-local-map graph)
-            changed-keys (.-keysChanged event)
-            changes (keep
-                      (fn [uuid-str item]
-                        (let [v ^js (.get ym uuid-str)]
-                          (when-not (string? v) ; yjs subdoc
-                            (let [doc-map (.getMap v)]
-                              (load-and-observe-page-blocks-doc! graph v doc-map)))
-                          (when (string? v)
-                            (if v
-                              {:action :upsert
-                               :block (edn/read-string v)}
-                              {:action :delete
-                               :block-id (uuid uuid-str)}))))
-                      changed-keys)]
-        (state/pub-event! [:graph/merge-remote-changes graph changes event])))))
+  [graph ymap]
+  (fn [events]
+    (prn "handle-local-updates! root-map?" (= ymap (get-local-map graph)))
+    (js/console.dir events)
+    (doseq [event events]
+      (when-not (.-local (.-transaction event)) ; ignore local changes
+        (let [changed-keys (.-keysChanged event)
+              changes (keep
+                       (fn [uuid-str _item]
+                         (when-let [v ^js (.get ymap uuid-str)]
+                           (when-not (string? v) ; yjs subdoc
+                             (load-and-observe-page-blocks-doc! graph v))
+                           (when (string? v)
+                             (if v
+                               {:action :upsert
+                                :block (edn/read-string v)}
+                               {:action :delete
+                                :block-id (uuid uuid-str)}))))
+                       changed-keys)]
+          (prn {:changes changes})
+          (state/pub-event! [:graph/merge-remote-changes graph changes event]))))))
 
 (defn- get-page-blocks-uuids [db page-id]
   (->> (d/datoms db :avet :block/page page-id)
@@ -143,49 +158,48 @@
                page (dissoc page :db/id)]
            (if (:db/deleted? page)
              (do
-               (.unobserve ymap (handle-local-updates! graph))
+               (.unobserve ymap (handle-local-updates! graph ymap))
                (.delete ymap k)
                (when-let [page-blocks-doc (.get ymap (str (:block/uuid page) "-blocks"))]
                  (.destroy page-blocks-doc)))
              (.set ymap k (pr-str page)))))
        (doseq [block (util/distinct-by-last-wins :block/uuid (concat pages blocks))]
-         (when (:block/page block)
-           (let [block' (->> (dissoc block :db/id)
-                             (replace-db-id-with-block-uuid tx-report))
-                 k (str (:block/uuid block'))]
-             (when-let [page (:block/page block')]
-               (let [k' (str (second page) "-blocks")
-                     blocks-doc (.get ymap k')
-                     blocks-ymap (if blocks-doc
-                                   (.getMap ^js blocks-doc)
-                                   (let [doc ^js (new YDoc)
-                                         _ (gobj/set doc "id" k')
-                                         _ (.set ymap k' doc)
-                                         blocks-ymap (.getMap doc)]
-                                     (prn "create new subdoc: " (.-guid doc))
-                                     (.on doc "update" (y-ws/getSubDocUpdateHandler @*server-conn (.-guid doc)))
-                                     (load-and-observe-page-blocks-doc! graph doc blocks-ymap)
-                                     blocks-ymap))]
-                 (if (:db/deleted? block')
-                   (.delete blocks-ymap k)
-                   ;; FIXME: construct a Y.Map from `block`
-                   (let [block-value (pr-str block')]
-                     (when page
-                       (prn "set subdocs: " {:subdoc-key k'
-                                             :block-key k
-                                             :block-value block'})
-                       (.set blocks-ymap k block-value)))))))))))))
+         (let [block' (->> (dissoc block :db/id)
+                           (replace-db-id-with-block-uuid tx-report))
+               k (str (:block/uuid block'))]
+           (when-let [page (:block/page block')]
+             (let [k' (str (second page) "-blocks")
+                   blocks-doc (.get ymap k')
+                   blocks-ymap (if blocks-doc
+                                 (.getMap ^js blocks-doc)
+                                 (let [doc ^js (new YDoc
+                                                    ;; #js {:autoLoad true}
+                                                    )
+                                       _ (.set ymap k' doc)
+                                       blocks-ymap (.getMap doc)]
+                                   (load-and-observe-page-blocks-doc! graph doc)
+                                   blocks-ymap))]
+               (if (:db/deleted? block')
+                 ;; delete non-page block
+                 (.delete blocks-ymap k)
+                 ;; FIXME: construct a Y.Map from `block`
+                 ;; e.g. rich text editor
+                 (let [block-value (pr-str block')]
+                   (.set blocks-ymap k block-value)))))))))))
 
 (defn save-db-changes-to-yjs!
   "Save datascript changes to yjs."
   [graph {:keys [pages blocks tx-report]}]
   ;; TODO: core.async batch updates
-  (when-not (:skip-remote-sync? (:tx-meta tx-report))
-    (transact-blocks! tx-report graph pages blocks)))
+  (try
+    (when-not (:skip-remote-sync? (:tx-meta tx-report))
+      (transact-blocks! tx-report graph pages blocks))
+    (catch :default e
+      (js/console.error e))))
 
 (defn register-db-listener!
   []
-  (outliner-pipeline/register-listener! :sync-crdt-with-db save-db-changes-to-yjs!))
+  (outliner-pipeline/register-listener! :save-db-changes-to-yjs save-db-changes-to-yjs!))
 
 (defn start-yjs-docs! [graph]
   (let [{:keys [local remote]} @*state]
@@ -193,7 +207,9 @@
       (.destroy doc-remote))
     (when-let [doc-local (:doc local)]
       (.destroy doc-local))
-    (unobserve-local-map! graph (handle-local-updates! graph))
+
+    (unobserve-local-map! graph (handle-local-updates! graph
+                                                       (get-local-map graph)))
 
     (let [doc-local (new YDoc)
           doc-remote (new YDoc)]
@@ -204,7 +220,8 @@
       (register-db-listener!)
       (merge-doc doc-local doc-remote)
       (sync-doc doc-local doc-remote)
-      (observe-local-map! graph (handle-local-updates! graph)))))
+      (observe-local-map! graph (handle-local-updates! graph
+                                                       (get-local-map graph))))))
 
 ;; doc map for each graph
 ;; {block-uuid {:block/uuid :block/name :block/parent :block/left :block/content}}
@@ -227,15 +244,15 @@
   (and (some? @*server-conn)
        (.-wsconnected ^js @*server-conn)))
 
-(defn doc->binary
+(defn serialize
   [ydoc]
   ((gobj/get y "encodeStateAsUpdate") ydoc))
 
 (defn debug-sync!
   []
-  ;; 1. install and run y-websocket
-  ;;     npm i y-websocket
-  ;;     HOST=localhost PORT=1234 npx y-websocket
+  ;; 1. start websocket server
+  ;;    git clone git@github.com:logseq/y-websocket
+  ;;    cd y-websocket && node bin/server.js
   ;; 2. change localhost to your local ip address to test concurrent edits
   ;; on both pc and mobile :)
   (let [server-address "ws://localhost:1234"]

@@ -49,8 +49,6 @@
   "Merge remote changes from either the server or clients.
   Notice that `:db/id` need to be changed to `:block/uuid` in `changes`."
   [graph changes yjs-event]
-  (prn {:graph graph
-        :changes changes})
   (let [tx (keep
             (fn [{:keys [action] :as data}]
               (let [ent (db/entity graph [:block/uuid (:block-id data)])]
@@ -70,4 +68,4 @@
             changes)
         tx' (ensure-no-parent-left-conflicts graph tx)
         skip-remote-sync? (= tx tx')]
-    (db/transact! graph tx {:skip-remote-sync? skip-remote-sync?})))
+    (db/transact! graph tx' {:skip-remote-sync? skip-remote-sync?})))

@@ -115,7 +115,7 @@
                   (<! (timeout 15000))
 
                   (let [doc (yjs/get-local-doc test-db)
-                        binary (yjs/doc->binary doc)]
+                        binary (yjs/serialize doc)]
                     (write-ydoc-json! id binary))
 
                   (<! (timeout 15000))

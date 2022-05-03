@@ -163,12 +163,12 @@
                                       db-schema/retract-attributes)))))
 
         (when-let [e (:block/page block-entity)]
-          (let [m {:db/id (:db/id e)
-                   :block/updated-at (util/time-ms)}
-                m (if (:block/created-at e)
-                    m
-                    (assoc m :block/created-at (util/time-ms)))]
-            (swap! txs-state conj m))
+          ;; (let [m {:db/id (:db/id e)
+          ;;          :block/updated-at (util/time-ms)}
+          ;;       m (if (:block/created-at e)
+          ;;           m
+          ;;           (assoc m :block/created-at (util/time-ms)))]
+          ;;   (swap! txs-state conj m))
           (remove-orphaned-page-refs! (:db/id block-entity) txs-state old-refs new-refs)))
 
       (swap! txs-state conj (dissoc m :db/other-tx))
