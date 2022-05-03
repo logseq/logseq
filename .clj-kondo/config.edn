@@ -19,7 +19,8 @@
              frontend.db.react react
              frontend.db.query-react query-react
              frontend.util util
-             frontend.config config}}}
+             frontend.config config
+             logseq.graph-parser.util gp-util}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}

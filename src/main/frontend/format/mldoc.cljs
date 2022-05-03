@@ -9,6 +9,7 @@
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.config :as config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
@@ -138,7 +139,7 @@
                    (->>
                     (map
                      (fn [[_ v]]
-                       (let [[k v] (util/split-first " " v)]
+                       (let [[k v] (gp-util/split-first " " v)]
                          (mapv
                           string/trim
                           [k v])))

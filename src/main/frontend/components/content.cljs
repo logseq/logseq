@@ -21,6 +21,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -364,7 +365,7 @@
                            e
                            (custom-context-menu-content))
 
-                          (and block-id (util/uuid-string? block-id))
+                          (and block-id (gp-util/uuid-string? block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
                               (util/select-highlight! [block]))

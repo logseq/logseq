@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
@@ -29,7 +30,7 @@
                                     (string? title)
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (util/split-last "." file-name))]
+                        (let [result (first (gp-util/split-last "." file-name))]
                           (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
                             (string/replace result "." "/")
                             result)))]
@@ -90,10 +91,10 @@
                                        aliases)
                                      (remove nil?))]
                         (cond->
-                          (util/remove-nils
+                          (gp-util/remove-nils
                            (assoc
                             (block/page-name->map page false)
-                            :block/file {:file/path (util/path-normalize file)}))
+                            :block/file {:file/path (gp-util/path-normalize file)}))
                           (seq properties)
                           (assoc :block/properties properties)
 

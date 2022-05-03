@@ -33,6 +33,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
+            [logseq.graph-parser.util :as gp-util]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -625,7 +626,7 @@
   (->> (db/get-all-pages repo)
        (remove (fn [p]
                  (let [name (:block/name p)]
-                   (or (util/uuid-string? name)
+                   (or (gp-util/uuid-string? name)
                        (config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
@@ -679,7 +680,7 @@
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
-              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
+              chosen (if (and (gp-util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)

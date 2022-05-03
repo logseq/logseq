@@ -10,6 +10,7 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.text :as text]))
 
 (defonce all-refed-uids (atom #{}))
@@ -39,7 +40,7 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
-                                       (let [[name arg] (util/split-first ":" text)]
+                                       (let [[name arg] (gp-util/split-first ":" text)]
                                          (if name
                                            ;; TODO: Why unresolved var
                                            #_:clj-kondo/ignore

@@ -11,6 +11,7 @@
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.util.property :as property]
+            [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]))
@@ -136,7 +137,7 @@
                         :else
                         nil)]
     (when (and block-id
-               (util/uuid-string? block-id))
+               (gp-util/uuid-string? block-id))
       block-id)))
 
 (defn paragraph-block?
@@ -265,7 +266,7 @@
             {}
             {:block/uuid (db/new-block-id)}))
         (when namespace?
-          (let [namespace (first (util/split-last "/" original-page-name))]
+          (let [namespace (first (gp-util/split-last "/" original-page-name))]
             (when-not (string/blank? namespace)
               {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}})))
         (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
@@ -302,7 +303,7 @@
            (swap! refs conj page))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
-             (when (util/tag-valid? tag)
+             (when (gp-util/tag-valid? tag)
                (swap! refs conj tag))))
          form))
      (concat title body))
@@ -333,7 +334,7 @@
        form)
      (concat title body))
     (let [ref-blocks (->> @ref-blocks
-                          (filter util/uuid-string?))
+                          (filter gp-util/uuid-string?))
           ref-blocks (map
                        (fn [id]
                          [:block/uuid (medley/uuid id)])
@@ -354,7 +355,7 @@
   [blocks]
   (map (fn [block]
          (if (map? block)
-           (block-keywordize (util/remove-nils block))
+           (block-keywordize (gp-util/remove-nils block))
            block))
        blocks))
 
@@ -437,7 +438,7 @@
                                (get-in properties [:properties :custom_id])
                                (get-in properties [:properties :id]))]
         (let [custom-id (and (string? custom-id) (string/trim custom-id))]
-          (when (and custom-id (util/uuid-string? custom-id))
+          (when (and custom-id (gp-util/uuid-string? custom-id))
             (uuid custom-id))))
       (db/new-block-id)))
 

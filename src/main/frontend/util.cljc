@@ -14,6 +14,7 @@
             [cljs-time.core :as t]
             [dommy.core :as d]
             [frontend.mobile.util :refer [is-native-platform?]]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -52,20 +53,11 @@
        (and (string/includes? ua "webkit")
             (not (string/includes? ua "chrome"))))))
 
-(defn safe-re-find
-  [pattern s]
-  #?(:cljs
-     (when-not (string? s)
-       ;; TODO: sentry
-       (js/console.trace)))
-  (when (string? s)
-    (re-find pattern s)))
-
 #?(:cljs
    (defn mobile?
      []
      (when-not node-test?
-       (safe-re-find #"Mobi" js/navigator.userAgent))))
+       (gp-util/safe-re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
    (defn electron?
@@ -161,16 +153,6 @@
         (if kebab?
           (cske/transform-keys csk/->kebab-case-keyword m)
           m)))))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
 
 (defn remove-nils-non-nested
   [nm]
@@ -381,7 +363,7 @@
 #?(:cljs
    (defn scroll-to-element
      [elem-id]
-     (when-not (safe-re-find #"^/\d+$" elem-id)
+     (when-not (gp-util/safe-re-find #"^/\d+$" elem-id)
        (when elem-id
          (when-let [elem (gdom/getElement elem-id)]
            (.scroll (app-scroll-container-node)
@@ -524,16 +506,6 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
-
-(defn split-first [pattern s]
-  (when-let [first-index (string/index-of s pattern)]
-    [(subs s 0 first-index)
-     (subs s (+ first-index (count pattern)) (count s))]))
-
-(defn split-last [pattern s]
-  (when-let [last-index (string/last-index-of s pattern)]
-    [(subs s 0 last-index)
-     (subs s (+ last-index (count pattern)) (count s))]))
 
 (defn trim-safe
   [s]
@@ -770,12 +742,6 @@
      ([s html?]
       (utils/writeClipboard s html?))))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-(defn uuid-string?
-  [s]
-  (safe-re-find exactly-uuid-pattern s))
-
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
 
@@ -882,11 +848,6 @@
   []
   (str (rand-str 6) (rand-str 3)))
 
-(defn tag-valid?
-  [tag-name]
-  (when (string? tag-name)
-    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
-
 (defn pp-str [x]
   #_:clj-kondo/ignore
   (with-out-str (clojure.pprint/pprint x)))
@@ -905,8 +866,8 @@
      []
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
-       (and (safe-re-find #"Chrome" user-agent)
-            (safe-re-find #"Google Inc" vendor)))))
+       (and (gp-util/safe-re-find #"Chrome" user-agent)
+            (gp-util/safe-re-find #"Google Inc" vendor)))))
 
 #?(:cljs
    (defn indexeddb-check?
@@ -947,24 +908,26 @@
      [block-id]
      (when block-id
        (let [block-id (str block-id)]
-         (when (uuid-string? block-id)
+         (when (gp-util/uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
-(defn include-windows-reserved-chars?
-  [s]
-  (safe-re-find windows-reserved-chars s))
+#?(:cljs
+   (do
+     (defn include-windows-reserved-chars?
+      [s]
+       (gp-util/safe-re-find windows-reserved-chars s))
 
-(defn create-title-property?
-  [s]
-  (and (string? s)
-       (or (include-windows-reserved-chars? s)
-           (string/includes? s "_")
-           (string/includes? s "/")
-           (string/includes? s ".")
-           (string/includes? s "%")
-           (string/includes? s "#"))))
+     (defn create-title-property?
+       [s]
+       (and (string? s)
+            (or (include-windows-reserved-chars? s)
+                (string/includes? s "_")
+                (string/includes? s "/")
+                (string/includes? s ".")
+                (string/includes? s "%")
+                (string/includes? s "#"))))))
 
 (defn remove-boundary-slashes
   [s]
@@ -977,10 +940,6 @@
         s))))
 
 (defn normalize
-  [s]
-  (.normalize s "NFC"))
-(defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)"
   [s]
   (.normalize s "NFC"))
 

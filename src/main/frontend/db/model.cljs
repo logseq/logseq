@@ -15,6 +15,7 @@
             [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
@@ -61,7 +62,7 @@
    (db-utils/transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
    (when-not config/publishing?
-     (let [tx-data (->> (util/remove-nils tx-data)
+     (let [tx-data (->> (gp-util/remove-nils tx-data)
                         (remove nil?)
                         (map #(dissoc % :file/handle :file/type)))]
        (when (seq tx-data)
@@ -894,7 +895,7 @@
 
 (defn get-page
   [page-name]
-  (if (util/uuid-string? page-name)
+  (if (gp-util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
@@ -1252,7 +1253,7 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (util/uuid-string? (str page-name-or-block-uuid))
+  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
     (let [id (uuid page-name-or-block-uuid)]
       (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))

@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
 
@@ -77,7 +78,7 @@
     "Create a new page"
     :page
     (let [name (:name path-params)
-          block? (util/uuid-string? name)]
+          block? (gp-util/uuid-string? name)]
       (if block?
         (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)

@@ -4,6 +4,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [hickory.core :as hickory]))
 
 (defonce *inside-pre? (atom false))
@@ -74,7 +75,7 @@
                                 :h6 (block-transform 6 children)
                                 :a (let [href (:href attrs)
                                          label (map-join children)
-                                         has-img-tag? (util/safe-re-find #"\[:img" (str x))]
+                                         has-img-tag? (gp-util/safe-re-find #"\[:img" (str x))]
                                      (if has-img-tag?
                                        (export-hiccup x)
                                        (case format

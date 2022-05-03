@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [shadow.resource :as rc]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
@@ -105,7 +106,7 @@
 
 (def mobile?
   (when-not util/node-test?
-    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
+    (gp-util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 
@@ -301,7 +302,7 @@
 
 (defn local-asset?
   [s]
-  (util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+  (gp-util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defn get-local-asset-absolute-path
   [s]
@@ -368,7 +369,7 @@
 
                  :else
                  relative-path)]
-      (util/path-normalize path))))
+      (gp-util/path-normalize path))))
 
 (defn get-config-path
   ([]
