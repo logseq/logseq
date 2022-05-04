@@ -3378,5 +3378,5 @@
                 {:label "Português (Brasileiro)" :value :pt-BR}
                 {:label "Português (Europeu)" :value :pt-PT}
                 {:label "Русский" :value :ru}
-                {:label "日本語" :value :ja}])
-                {:label "Italiano" :value :it}
+                {:label "日本語" :value :ja}
+                {:label "Italiano" :value :it}])
