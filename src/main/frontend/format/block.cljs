@@ -12,6 +12,7 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]))
@@ -54,8 +55,8 @@
                   (and
                    (= typ "Page_ref")
                    (and (string? value)
-                        (not (or (config/local-asset? value)
-                                 (config/draw? value))))
+                        (not (or (gp-config/local-asset? value)
+                                 (gp-config/draw? value))))
                    value)
 
                   (and
@@ -70,7 +71,7 @@
                      (when (and (not (util/starts-with? value "http:"))
                                 (not (util/starts-with? value "https:"))
                                 (not (util/starts-with? value "file:"))
-                                (not (config/local-asset? value))
+                                (not (gp-config/local-asset? value))
                                 (or (= ext :excalidraw)
                                     (not (contains? (config/supported-formats) ext))))
                        value)))

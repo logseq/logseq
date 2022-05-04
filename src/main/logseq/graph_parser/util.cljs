@@ -1,4 +1,4 @@
-(ns logseq.graph-parser.util
+(ns ^:nbb-compatible logseq.graph-parser.util
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]
@@ -48,3 +48,17 @@
   [tag-name]
   (when (string? tag-name)
     (not (safe-re-find #"[# \t\r\n]+" tag-name))))
+
+(defn safe-subs
+  ([s start]
+   (let [c (count s)]
+     (safe-subs s start c)))
+  ([s start end]
+   (let [c (count s)]
+     (subs s (min c start) (min c end)))))
+
+(defn json->clj
+  [json-string]
+  (-> json-string
+      (js/JSON.parse)
+      (js->clj :keywordize-keys true)))

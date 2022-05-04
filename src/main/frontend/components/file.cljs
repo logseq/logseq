@@ -13,6 +13,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.config :as gp-config]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -43,8 +44,8 @@
            (let [file-id file]
              [:tr {:key file-id}
               [:td
-               (let [href (if (config/draw? file)
-                            (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
+               (let [href (if (gp-config/draw? file)
+                            (rfe/href :draw nil {:file (string/replace file (str gp-config/default-draw-directory "/") "")})
                             (rfe/href :file {:path file-id}))]
                  [:a {:href href}
                   file])]

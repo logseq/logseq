@@ -7,8 +7,6 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
-            [camel-snake-kebab.core :as csk]
-            [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -141,18 +139,6 @@
 ;; (defn format
 ;;   [fmt & args]
 ;;   (apply gstring/format fmt args))
-
-#?(:cljs
-   (defn json->clj
-     ([json-string]
-      (json->clj json-string false))
-     ([json-string kebab?]
-      (let [m (-> json-string
-                  (js/JSON.parse)
-                  (js->clj :keywordize-keys true))]
-        (if kebab?
-          (cske/transform-keys csk/->kebab-case-keyword m)
-          m)))))
 
 (defn remove-nils-non-nested
   [nm]
@@ -669,14 +655,6 @@
           (> end (count xs)))
     []
     (subvec xs start end)))
-
-(defn safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
 
 #?(:cljs
    (defn get-nodes-between-two-nodes

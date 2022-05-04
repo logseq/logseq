@@ -1293,7 +1293,7 @@
                  elem (and input-id (gdom/getElement input-id))
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
-                                                 (util/safe-subs db-content (:block/level db-block)))
+                                                 (gp-util/safe-subs db-content (:block/level db-block)))
                  value (and elem (gobj/get elem "value"))]
              (cond
                force?
@@ -1760,7 +1760,7 @@
             edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
-         (util/safe-subs edit-content pos current-pos))))))
+         (gp-util/safe-subs edit-content pos current-pos))))))
 
 (defn close-autocomplete-if-outside
   [input]
@@ -1773,7 +1773,7 @@
       (let [value (gobj/get input "value")
             pos (state/get-editor-last-pos)
             current-pos (cursor/pos input)
-            between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
+            between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
         (when (and between
                    (or
                     (string/includes? between "[")

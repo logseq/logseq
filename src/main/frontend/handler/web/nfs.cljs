@@ -21,6 +21,7 @@
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [clojure.core.async :as async]))
 
 (defn remove-ignore-files
@@ -156,7 +157,7 @@
                                                                         (string/replace-first path (str dir-name "/") ""))
                                                              (let [last-part (last (string/split path "/"))]
                                                                (contains? #{config/app-name
-                                                                            config/default-draw-directory
+                                                                            gp-config/default-draw-directory
                                                                             (config/get-journals-directory)
                                                                             (config/get-pages-directory)}
                                                                           last-part)))))

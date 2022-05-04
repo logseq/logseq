@@ -255,7 +255,6 @@
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
-(defonce default-draw-directory "draws")
 
 (defn get-pages-directory
   []
@@ -265,10 +264,6 @@
   []
   (or (state/get-journals-directory) default-journals-directory))
 
-(defn draw?
-  [path]
-  (util/starts-with? path default-draw-directory))
-
 (defonce local-repo "local")
 
 (defn demo-graph?
@@ -277,7 +272,6 @@
   ([graph]
    (= graph local-repo)))
 
-(defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
@@ -299,10 +293,6 @@
   [s]
   (and (string? s)
        (string/starts-with? s local-db-prefix)))
-
-(defn local-asset?
-  [s]
-  (gp-util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defn get-local-asset-absolute-path
   [s]

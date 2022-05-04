@@ -1,4 +1,6 @@
 (ns frontend.external.roam
+  ;; TODO: Convert this ns and upstream dependents to .cljs. .clj was only for tests
+  ;; and those tests have been removed
   (:require #?(:cljs [cljs-bean.core :as bean]
                :clj [cheshire.core :as json])
             ;; TODO: clj-kondo incorrectly thinks these requires are unused
@@ -40,6 +42,8 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
+                                       ;; Disable clj warning since clj is unused
+                                       #_:clj-kondo/ignore
                                        (let [[name arg] (gp-util/split-first ":" text)]
                                          (if name
                                            ;; TODO: Why unresolved var

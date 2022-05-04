@@ -51,6 +51,7 @@
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -282,7 +283,7 @@
         title (second (first label))]
     (ui/catch-error
      [:span.warning full_text]
-     (if (and (config/local-asset? href)
+     (if (and (gp-config/local-asset? href)
               (config/local-db? (state/get-current-repo)))
        (asset-link config title href metadata full_text)
        (let [href (cond
@@ -764,7 +765,7 @@
        (and
         (nil? metadata-show)
         (or
-         (config/local-asset? s)
+         (gp-config/local-asset? s)
          (text/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
@@ -786,7 +787,7 @@
 
 (rum/defc audio-link
   [config url href _label metadata full_text]
-  (if (and (config/local-asset? href)
+  (if (and (gp-config/local-asset? href)
            (config/local-db? (state/get-current-repo)))
     (asset-link config nil href metadata full_text)
     (let [href (cond

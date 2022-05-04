@@ -34,6 +34,7 @@
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -48,7 +49,7 @@
                  (date/journal-title->default title)
                  (util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
-    (util/safe-subs s 0 200)))
+    (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
@@ -627,7 +628,7 @@
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (gp-util/uuid-string? name)
-                       (config/draw? name)
+                       (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 
@@ -670,13 +671,13 @@
         q (or
            @editor-handler/*selected-text
            (when (state/sub :editor/show-page-search-hashtag?)
-             (util/safe-subs edit-content pos current-pos))
+             (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (util/safe-subs edit-content pos current-pos)))]
+             (gp-util/safe-subs edit-content pos current-pos)))]
     (if (state/sub :editor/show-page-search-hashtag?)
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+        (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)

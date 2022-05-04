@@ -3,14 +3,13 @@
             [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.utf8 :as utf8]
-            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.config :as config]))
+            [logseq.graph-parser.config :as gp-config]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -93,8 +92,8 @@
   (let [lines (string/split-lines s)
         [f & r] lines
         body (map (fn [line]
-                    (if (string/blank? (util/safe-subs line 0 level))
-                      (util/safe-subs line level)
+                    (if (string/blank? (gp-util/safe-subs line 0 level))
+                      (gp-util/safe-subs line level)
                       line))
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
@@ -203,7 +202,7 @@
         []
         (-> content
             (parse-json config)
-            (util/json->clj)
+            (gp-util/json->clj)
             (update-src-full-content content)
             (collect-page-properties parse-property)))
       (catch js/Error e
@@ -216,7 +215,7 @@
   (try
     (if (string/blank? content)
       {}
-      (let [[headers blocks] (-> content (parse-opml) (util/json->clj))]
+      (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
         [headers (collect-page-properties blocks parse-property)]))
     (catch js/Error e
       (log/error :edn/convert-failed e)
@@ -229,7 +228,7 @@
       {}
       (-> text
           (inline-parse-json config)
-          (util/json->clj)))
+          (gp-util/json->clj)))
     (catch js/Error _e
       [])))
 
@@ -274,7 +273,7 @@
             (and (contains? #{"Page_ref"} ref-type)
                  (or
                   ;; 2. excalidraw link
-                  (config/draw? ref-value)
+                  (gp-config/draw? ref-value)
 
                   ;; 3. local asset link
-                  (boolean (config/local-asset? ref-value)))))))))
+                  (boolean (gp-config/local-asset? ref-value)))))))))
