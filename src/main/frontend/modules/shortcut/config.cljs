@@ -52,16 +52,10 @@
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
-   :auto-complete/prev           {:binding "up"
+   :auto-complete/prev           {:binding ["up" "ctrl+p"]
                                   :fn      ui-handler/auto-complete-prev}
 
-   :auto-complete/next           {:binding "down"
-                                  :fn      ui-handler/auto-complete-next}
-
-   :auto-complete/ctrl-prev      {:binding "ctrl+p"
-                                  :fn      ui-handler/auto-complete-prev}
-
-   :auto-complete/ctrl-next      {:binding "ctrl+n"
+   :auto-complete/next           {:binding ["down" "ctrl+n"]
                                   :fn      ui-handler/auto-complete-next}
 
    :auto-complete/shift-complete {:binding "shift+enter"
@@ -412,8 +406,6 @@
     (build-category-map [:auto-complete/complete
                          :auto-complete/prev
                          :auto-complete/next
-                         :auto-complete/ctrl-prev
-                         :auto-complete/ctrl-next
                          :auto-complete/shift-complete
                          :auto-complete/open-link])
 
@@ -650,8 +642,6 @@
     :editor/open-file-in-directory
     :auto-complete/prev
     :auto-complete/next
-    :auto-complete/ctrl-prev
-    :auto-complete/ctrl-next
     :auto-complete/complete
     :auto-complete/shift-complete
     :auto-complete/open-link
