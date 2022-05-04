@@ -29,100 +29,49 @@
 ;;    concurrently, what should be the result?
 
 ;; `map` will be pages and those pages' corresponding subdocuments.
-;; {graph {:local {:doc Y.Doc :map Y.Map}
-;;         :remote {:doc Y.Doc :map Y.Map}}}
+;; {graph {:doc Y.Doc :map Y.Map}}
 (defonce *state (atom {}))
 
 (defonce YDoc (gobj/get y "Doc"))
 
-(defn merge-doc [doc1 doc2]
-  (let [s1 (y/encodeStateVector doc1)
-        s2 (y/encodeStateVector doc2)
-        d1 (y/encodeStateAsUpdate doc1 s2)
-        d2 (y/encodeStateAsUpdate doc2 s1)]
-    (y/applyUpdate doc1 d2)
-    (y/applyUpdate doc2 d1)))
-
-(defn sync-doc [local remote]
-  (.on remote "update" (fn [update]
-                         ;; TODO: applyupdate here doesn't work for subdocs
-                         ((gobj/get y "logUpdate") update)
-                         (y/applyUpdate local update)))
-  (.on local "update" (fn [update]
-                        (y/applyUpdate remote update))))
-
-(defn get-local-doc
+(defn get-graph-doc
   [graph]
-  (get-in @*state [graph :local :doc]))
+  (get-in @*state [graph :doc]))
 
-(defn get-local-map
+(defn get-graph-map
   [graph]
-  (get-in @*state [graph :local :map]))
+  (get-in @*state [graph :map]))
 
-(defn get-remote-doc
-  [graph]
-  (get-in @*state [graph :remote :doc]))
-
-(defn get-remote-map
-  [graph]
-  (get-in @*state [graph :remote :map]))
-
-(defn unobserve-local-map!
+(defn unobserve-graph-map!
   [graph f]
-  (when-let [ym (get-local-map graph)]
+  (when-let [ym (get-graph-map graph)]
     (.unobserve ym f)))
 
-(defn observe-local-map!
+(defn observe-graph-map!
   [graph f]
-  (let [ym (get-local-map graph)]
+  (let [ym (get-graph-map graph)]
     ;; Note: observeDeep not working for subdoc changes
-    (.observeDeep ym f)))
-
-(declare handle-local-updates!)
-;; TODO: DRY
-(defn- observe!
-  [graph ^js doc-local]
-  (let [ymap (.getMap doc-local)]
-    (prn "observe local map")
-    (.observeDeep ymap (handle-local-updates! graph ymap))))
-
-(defn- merge-sync-and-observe!
-  [graph doc-local doc-remote]
-  (merge-doc doc-local doc-remote)
-  (sync-doc doc-local doc-remote)
-
-  (observe! graph doc-local))
-
-(defn- load-and-observe-page-blocks-doc!
-  [graph ^js doc-local]
-  ;; Load it first
-  (.load doc-local)
-  (when-let [doc-remote (.getSubDoc ^js @*server-conn (.-guid doc-local))]
-    (prn {:doc-remote doc-remote})
-    (merge-sync-and-observe! graph doc-local doc-remote)))
+    (.observe ym f)))
 
 (defn handle-local-updates!
   [graph ymap]
-  (fn [events]
-    (prn "handle-local-updates! root-map?" (= ymap (get-local-map graph)))
-    (js/console.dir events)
-    (doseq [event events]
-      (when-not (.-local (.-transaction event)) ; ignore local changes
-        (let [changed-keys (.-keysChanged event)
-              changes (keep
-                       (fn [uuid-str _item]
-                         (when-let [v ^js (.get ymap uuid-str)]
-                           (when-not (string? v) ; yjs subdoc
-                             (load-and-observe-page-blocks-doc! graph v))
-                           (when (string? v)
-                             (if v
-                               {:action :upsert
-                                :block (edn/read-string v)}
-                               {:action :delete
-                                :block-id (uuid uuid-str)}))))
-                       changed-keys)]
-          (prn {:changes changes})
-          (state/pub-event! [:graph/merge-remote-changes graph changes event]))))))
+  (fn [event]
+    (prn "handle-local-updates! root-map?" (= ymap (get-graph-map graph)))
+    (when-not (.-local (.-transaction event)) ; ignore local changes
+      (let [changed-keys (.-keysChanged event)
+            changes (keep
+                     (fn [uuid-str _item]
+                       (when-let [v ^js (.get ymap uuid-str)]
+                         (when-not (string? v) ; yjs subdoc
+                           (.load v))
+                         (when (string? v)
+                           (if v
+                             {:action :upsert
+                              :block (edn/read-string v)}
+                             {:action :delete
+                              :block-id (uuid uuid-str)}))))
+                     changed-keys)]
+        (state/pub-event! [:graph/merge-remote-changes graph changes event])))))
 
 (defn- get-page-blocks-uuids [db page-id]
   (->> (d/datoms db :avet :block/page page-id)
@@ -147,8 +96,8 @@
 ;; TODO: merge pages, page names are same but with different uuids
 (defn- transact-blocks!
   [tx-report graph pages blocks]
-  (let [ydoc (get-local-doc graph)
-        ymap (get-local-map graph)]
+  (let [ydoc (get-graph-doc graph)
+        ymap (get-graph-map graph)]
     ;; bundle changes to minimize numbers of messages sent
     (.transact
      ydoc
@@ -172,12 +121,9 @@
                    blocks-doc (.get ymap k')
                    blocks-ymap (if blocks-doc
                                  (.getMap ^js blocks-doc)
-                                 (let [doc ^js (new YDoc
-                                                    ;; #js {:autoLoad true}
-                                                    )
+                                 (let [doc ^js (new YDoc)
                                        _ (.set ymap k' doc)
                                        blocks-ymap (.getMap doc)]
-                                   (load-and-observe-page-blocks-doc! graph doc)
                                    blocks-ymap))]
                (if (:db/deleted? block')
                  ;; delete non-page block
@@ -201,27 +147,20 @@
   []
   (outliner-pipeline/register-listener! :save-db-changes-to-yjs save-db-changes-to-yjs!))
 
-(defn start-yjs-docs! [graph]
-  (let [{:keys [local remote]} @*state]
-    (when-let [doc-remote (:doc local)]
-      (.destroy doc-remote))
-    (when-let [doc-local (:doc local)]
-      (.destroy doc-local))
+(defn destroy-yjs-doc! [graph]
+  (when-let [doc (get-graph-doc graph)]
+    (.destroy doc)
+    (unobserve-graph-map! graph (handle-local-updates! graph
+                                                       (get-graph-map graph)))))
 
-    (unobserve-local-map! graph (handle-local-updates! graph
-                                                       (get-local-map graph)))
-
-    (let [doc-local (new YDoc)
-          doc-remote (new YDoc)]
-      (reset! *state {graph {:local {:doc doc-local
-                                     :map (.getMap doc-local graph)}
-                             :remote {:doc doc-remote
-                                      :map (.getMap doc-remote graph)}}})
-      (register-db-listener!)
-      (merge-doc doc-local doc-remote)
-      (sync-doc doc-local doc-remote)
-      (observe-local-map! graph (handle-local-updates! graph
-                                                       (get-local-map graph))))))
+(defn start-yjs-doc! [graph]
+  (destroy-yjs-doc! graph)
+  (let [doc (new YDoc)]
+    (reset! *state {graph {:doc doc
+                           :map (.getMap doc graph)}})
+    (register-db-listener!)
+    (observe-graph-map! graph (handle-local-updates! graph
+                                                     (get-graph-map graph)))))
 
 ;; doc map for each graph
 ;; {block-uuid {:block/uuid :block/name :block/parent :block/left :block/content}}
@@ -236,9 +175,10 @@
     (when @*server-conn
       (.disconnect @*server-conn))
 
-    (start-yjs-docs! graph)
+    (start-yjs-doc! graph)
 
-    (reset! *server-conn (y-ws/WebsocketProvider. server-address graph (get-remote-doc graph)))))
+    (let [doc (get-graph-doc graph)]
+      (reset! *server-conn (y-ws/WebsocketProvider. server-address graph doc)))))
 
 (defn server-connected? []
   (and (some? @*server-conn)
@@ -266,5 +206,5 @@
 
   (defn- get-yjs-map-keys
     []
-    (keys (cljs-bean.core/->clj (.toJSON (get-local-map (state/get-current-repo))))))
+    (keys (cljs-bean.core/->clj (.toJSON (get-graph-map (state/get-current-repo))))))
   )
