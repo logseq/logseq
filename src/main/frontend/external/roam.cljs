@@ -1,12 +1,6 @@
 (ns frontend.external.roam
-  ;; TODO: Convert this ns and upstream dependents to .cljs. .clj was only for tests
-  ;; and those tests have been removed
-  (:require #?(:cljs [cljs-bean.core :as bean]
-               :clj [cheshire.core :as json])
-            ;; TODO: clj-kondo incorrectly thinks these requires are unused
-            #_:clj-kondo/ignore
+  (:require [cljs-bean.core :as bean]
             [frontend.external.protocol :as protocol]
-            #_:clj-kondo/ignore
             [frontend.date :as date]
             [medley.core :as medley]
             [clojure.walk :as walk]
@@ -42,12 +36,8 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
-                                       ;; Disable clj warning since clj is unused
-                                       #_:clj-kondo/ignore
                                        (let [[name arg] (gp-util/split-first ":" text)]
                                          (if name
-                                           ;; TODO: Why unresolved var
-                                           #_:clj-kondo/ignore
                                            (let [name (text/page-ref-un-brackets! name)]
                                              (util/format "{{%s %s}}" name arg))
                                            original)))))
@@ -109,48 +99,45 @@
 
 (defn json->edn
   [raw-string]
-  #?(:cljs (-> raw-string js/JSON.parse bean/->clj)
-     :clj (-> raw-string json/parse-string clojure.walk/keywordize-keys)))
+  (-> raw-string js/JSON.parse bean/->clj))
 
-#?(:cljs
-   (do
-     (defn ->file
-      [page-data]
-      (let [{:keys [create-time title children edit-time]} page-data
-            initial-level 1
-            text (when (seq children)
-                   (when-let [text (children->text children (dec initial-level))]
-                     (let [journal? (date/valid-journal-title? title)
-                           front-matter (if journal?
-                                          ""
-                                          (util/format "---\ntitle: %s\n---\n\n" title))]
-                       (str front-matter (transform text)))))]
-        (when (and (not (string/blank? title))
-                   text)
-          {:title title
-           :created-at create-time
-           :last-modified-at edit-time
-           :text text})))
+(defn ->file
+  [page-data]
+  (let [{:keys [create-time title children edit-time]} page-data
+        initial-level 1
+        text (when (seq children)
+               (when-let [text (children->text children (dec initial-level))]
+                 (let [journal? (date/valid-journal-title? title)
+                       front-matter (if journal?
+                                      ""
+                                      (util/format "---\ntitle: %s\n---\n\n" title))]
+                   (str front-matter (transform text)))))]
+    (when (and (not (string/blank? title))
+               text)
+      {:title title
+       :created-at create-time
+       :last-modified-at edit-time
+       :text text})))
 
-     (defn ->files
-       [edn-data]
-       (load-all-refed-uids! edn-data)
-       (let [files (map ->file edn-data)
-             files (remove #(nil? (:title %)) files)
-             files (group-by (fn [f] (string/lower-case (:title f)))
-                             files)]
-         (map
-          (fn [[_ [fst & others]]]
-            (assoc fst :text
-                   (->> (map :text (cons fst others))
-                        (interpose "\n")
-                        (apply str))))
-          files)))
+(defn ->files
+  [edn-data]
+  (load-all-refed-uids! edn-data)
+  (let [files (map ->file edn-data)
+        files (remove #(nil? (:title %)) files)
+        files (group-by (fn [f] (string/lower-case (:title f)))
+                        files)]
+    (map
+     (fn [[_ [fst & others]]]
+       (assoc fst :text
+              (->> (map :text (cons fst others))
+                   (interpose "\n")
+                   (apply str))))
+     files)))
 
-     (defrecord Roam []
-       protocol/External
-       (toMarkdownFiles [_this content _config]
-                        (-> content json->edn ->files)))))
+(defrecord Roam []
+  protocol/External
+  (toMarkdownFiles [_this content _config]
+                   (-> content json->edn ->files)))
 
 (comment
   (defonce test-roam-json (frontend.db/get-file "same.json"))
