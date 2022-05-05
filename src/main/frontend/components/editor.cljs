@@ -7,9 +7,6 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
-            [frontend.mobile.camera :as mobile-camera]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
@@ -26,9 +23,7 @@
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.history :as history]
-            [frontend.mobile.footer :as footer]
-            [frontend.handler.config :as config-handler]))
+            [frontend.mobile.footer :as footer]))
 
 (rum/defc commands < rum/reactive
   [id format]
