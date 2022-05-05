@@ -16,6 +16,7 @@
   user-select: none;
   line-height: 1;
   white-space: nowrap;
+  background-color: var(--ls-primary-background-color);
 
   > .l {
     width: var(--ls-left-sidebar-width);
