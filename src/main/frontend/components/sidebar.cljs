@@ -314,7 +314,7 @@
 (defn mobile-bar-commands
   [parent-id]
   (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/scroll-editor-cursor input :move-to-one-quarter? true)
+                             (util/scroll-editor-cursor input :to-vw-one-quarter? true)
                              (.focus input)))]
     (zipmap mobile-bar-icons-keywords
             [(mobile-bar-command editor-handler/cycle-todo! "checkbox" true)
