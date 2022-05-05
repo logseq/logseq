@@ -1681,7 +1681,8 @@
             (move-nodes blocks))
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
-              (.focus input))))
+              (.focus input)
+              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)

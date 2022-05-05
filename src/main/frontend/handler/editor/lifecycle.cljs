@@ -19,8 +19,8 @@
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
     (when-let [element (gdom/getElement id)]
-      (util/scroll-editor-cursor element :to-vw-center? true)
-      (.focus element)))
+      (.focus element)
+      (js/setTimeout #(util/scroll-editor-cursor element) 50)))
   state)
 
 (defn did-remount!
