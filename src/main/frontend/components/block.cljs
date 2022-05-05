@@ -2017,13 +2017,10 @@
                                     (not (string/includes? content "```"))
                                     (not (gobj/get e "shiftKey")))
                                ;; clear highlighted text
-                               (util/clear-selection!)))
-              :on-touch-start on-touch-start
-              :on-touch-move (fn [event] (on-touch-move event uuid))
-              :on-touch-end (fn [event] (on-touch-end event block uuid))}
+                               (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-
+     
      [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
@@ -2330,6 +2327,8 @@
           (str (:block/uuid block)))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
+  (rum/local false ::show-block-left-menu?)
+  (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
@@ -2376,6 +2375,8 @@
                      :else
                      db-collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
+        *show-left-menu? (::show-block-left-menu? state)
+        *show-right-menu? (::show-block-right-menu? state)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
         doc-mode? (:document/mode? config)
@@ -2433,6 +2434,11 @@
 
      [:div.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+       :on-touch-start block-handler/on-touch-start
+       :on-touch-move (fn [event]
+                        (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
@@ -2440,10 +2446,10 @@
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
 
-      (when (mobile-util/is-native-platform?)
+      (when @*show-left-menu?
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
-      (when (mobile-util/is-native-platform?)
+      (when @*show-right-menu?
         (block-right-menu config block))]
 
      (block-children config children collapsed?)
