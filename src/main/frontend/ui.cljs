@@ -288,40 +288,6 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-visual-viewport-state!
-  []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
-                             (mobile-util/native-ios?))
-                         js/window.visualViewport)]
-    (let [raf-pending? (atom false)
-          set-raf-pending! #(reset! raf-pending? %)
-          on-viewport-changed
-          (fn []
-            (let [update-vw-state
-                  (debounce
-                   (fn []
-                     (state/set-visual-viewport-state {:height     (.-height vp)
-                                                       :page-top   (.-pageTop vp)
-                                                       :offset-top (.-offsetTop vp)})
-                     (state/set-state! :ui/visual-viewport-pending? false))
-                   20)]
-              (when-not @raf-pending?
-                (let [f (fn []
-                          (set-raf-pending! false)
-                          (update-vw-state))]
-                  (set-raf-pending! true)
-                  (state/set-state! :ui/visual-viewport-pending? true)
-                  (js/window.requestAnimationFrame f)))))]
-
-      (.addEventListener vp "resize" on-viewport-changed)
-      (.addEventListener vp "scroll" on-viewport-changed)
-
-      (fn []
-        (.removeEventListener vp "resize" on-viewport-changed)
-        (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil))))
-  #())
-
 (defn setup-system-theme-effect!
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
