@@ -13,7 +13,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
-            [frontend.mobile.util :refer [native-platform? native-ios?]]
+            [frontend.mobile.util :refer [native-platform?]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
