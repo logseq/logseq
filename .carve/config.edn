@@ -5,7 +5,5 @@
                   ;; Ignore b/c too many false positives
                   frontend.db
                   ;; Used for debugging
-                  frontend.db.debug
-                  ;; namespace fns are lazily loaded
-                  frontend.extensions.age-encryption]
+                  frontend.db.debug]
  :report {:format :ignore}}

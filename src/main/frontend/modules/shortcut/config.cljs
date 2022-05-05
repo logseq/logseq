@@ -37,10 +37,10 @@
    :date-picker/next-day         {:binding "right"
                                   :fn      ui-handler/shortcut-next-day}
 
-   :date-picker/prev-week        {:binding "up"
+   :date-picker/prev-week        {:binding ["up" "ctrl+p"]
                                   :fn      ui-handler/shortcut-prev-week}
 
-   :date-picker/next-week        {:binding "down"
+   :date-picker/next-week        {:binding ["down" "ctrl+n"]
                                   :fn      ui-handler/shortcut-next-week}
 
    :pdf/previous-page            {:binding "alt+p"
@@ -52,10 +52,10 @@
    :auto-complete/complete       {:binding "enter"
                                   :fn      ui-handler/auto-complete-complete}
 
-   :auto-complete/prev           {:binding "up"
+   :auto-complete/prev           {:binding ["up" "ctrl+p"]
                                   :fn      ui-handler/auto-complete-prev}
 
-   :auto-complete/next           {:binding "down"
+   :auto-complete/next           {:binding ["down" "ctrl+n"]
                                   :fn      ui-handler/auto-complete-next}
 
    :auto-complete/shift-complete {:binding "shift+enter"
@@ -152,10 +152,10 @@
    :editor/cycle-todo              {:binding "mod+enter"
                                     :fn      editor-handler/cycle-todo!}
 
-   :editor/up                      {:binding "up"
+   :editor/up                      {:binding ["up" "ctrl+p"]
                                     :fn      (editor-handler/shortcut-up-down :up)}
 
-   :editor/down                    {:binding "down"
+   :editor/down                    {:binding ["down" "ctrl+n"]
                                     :fn      (editor-handler/shortcut-up-down :down)}
 
    :editor/left                    {:binding "left"

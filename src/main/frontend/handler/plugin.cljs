@@ -330,7 +330,7 @@
 
 (def *fenced-code-providers (atom #{}))
 
-(defn register_fenced_code_renderer
+(defn register-fenced-code-renderer
   [pid type {:keys [before subs render edit] :as _opts}]
   (when-let [key (and type (keyword type))]
     (register-plugin-resources pid :fenced-code-renderers
@@ -343,6 +343,22 @@
   (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
     (first (map #(state/get-plugin-resource % :fenced-code-renderers key)
                 @*fenced-code-providers))))
+
+(def *extensions-enhancer-providers (atom #{}))
+
+(defn register-extensions-enhancer
+  [pid type {:keys [enhancer] :as _opts}]
+  (when-let [key (and type (keyword type))]
+    (register-plugin-resources pid :extensions-enhancers
+       {:key key :enhancer enhancer})
+    (swap! *extensions-enhancer-providers conj pid)
+    #(swap! *extensions-enhancer-providers disj pid)))
+
+(defn hook-extensions-enhancer-by-type
+  [type]
+  (when-let [key (and type (keyword type))]
+    (map #(state/get-plugin-resource % :extensions-enhancers key)
+         @*extensions-enhancer-providers)))
 
 (defn select-a-plugin-theme
   [pid]
