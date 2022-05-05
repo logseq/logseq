@@ -93,3 +93,14 @@ pre {
 .preview-trigger-wrapper > [data-tooltipped] {
   display: block !important;
 }
+
+#time-repeater {
+    width: 135px;
+    
+    @screen sm {
+        min-width: 300px;
+    }
+}
+
+
+

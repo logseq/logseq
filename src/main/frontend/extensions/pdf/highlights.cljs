@@ -326,8 +326,8 @@
   [^js viewer {:keys [show-ctx-tip!]}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
+        ^js cnt-el (.-container viewer)
         *el (rum/use-ref nil)
-        *cnt-el (rum/use-ref nil)
         *sta-el (rum/use-ref nil)
         *cnt-rect (rum/use-ref nil)
 
@@ -350,17 +350,17 @@
                         (rum/set-ref! *sta-el nil))
 
         calc-coords (fn [page-x page-y]
-                      (when-let [cnt-el (or (rum/deref *cnt-el)
-                                            (when-let [cnt-el (.querySelector (.closest (rum/deref *el) ".extensions__pdf-viewer-cnt") ".extensions__pdf-viewer")]
-                                              (rum/set-ref! *cnt-el cnt-el) cnt-el))]
+                      (when cnt-el
                         (let [cnt-rect (rum/deref *cnt-rect)
                               cnt-rect (or cnt-rect (bean/->clj (.toJSON (.getBoundingClientRect cnt-el))))
                               _ (rum/set-ref! *cnt-rect cnt-rect)]
 
-                          {:x (- page-x (:left cnt-rect) (.-scrollLeft cnt-el))
+                          {:x (-> page-x
+                                (- (:left cnt-rect))
+                                (+ (.-scrollLeft cnt-el)))
                            :y (-> page-y
-                                  (- (:top cnt-rect))
-                                  (+ (.-scrollTop cnt-el)))})))
+                                (- (:top cnt-rect))
+                                (+ (.-scrollTop cnt-el)))})))
 
         calc-pos (fn [start end]
                    {:left   (min (:x start) (:x end))
@@ -377,7 +377,7 @@
 
     (rum/use-effect!
       (fn []
-        (when-let [^js/HTMLElement root (.closest (rum/deref *el) ".extensions__pdf-container")]
+        (when-let [^js/HTMLElement root cnt-el]
           (let [fn-start (fn [^js/MouseEvent e]
                            (if (should-start e)
                              (do

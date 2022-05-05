@@ -3,7 +3,9 @@ import { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../helpers'
 
 /**
- * Some experiment features
+ * WARN: These are some experience features and may be adjusted at any time.
+ * These unofficial plugins that use these APIs are temporarily
+ * not supported on the Marketplace.
  */
 export class LSPluginExperiments {
   constructor(private ctx: LSPluginUser) {}
@@ -54,6 +56,27 @@ export class LSPluginExperiments {
       this.ctx.baseInfo.id,
       type,
       opts
+    )
+  }
+
+  registerExtensionsEnhancer<T = any>(
+    type: 'katex',
+    enhancer: (v: T) => Promise<any>
+  ) {
+    const host = this.ensureHostScope()
+
+    switch (type) {
+      case 'katex':
+        if (host.katex) {
+          enhancer(host.katex).catch(console.error)
+        }
+        break
+      default:
+    }
+
+    return host.logseq.api.exper_register_extensions_enhancer(
+      this.ctx.baseInfo.id,
+      type, enhancer
     )
   }
 
