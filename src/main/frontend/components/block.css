@@ -185,14 +185,6 @@
   }
 }
 
-html.is-mobile,
-html.is-native-iphone,
-html.is-native-android {
-  .references .block-control {
-    margin-left: -20px;
-  }
-}
-
 .block-ref {
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
