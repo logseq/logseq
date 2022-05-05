@@ -287,6 +287,8 @@
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
       (js/setTimeout (fn []
                        (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
@@ -297,7 +299,9 @@
     (state/set-state! :mobile/show-toolbar? false)
     (state/set-state! :mobile/show-tabbar? true)
     (when (mobile-util/native-ios?)
-     (set! (.. main-node -style -marginBottom) "0px"))))
+      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) "0px"))
+      (set! (.. main-node -style -marginBottom) "0px"))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
