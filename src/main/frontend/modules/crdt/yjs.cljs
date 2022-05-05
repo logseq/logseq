@@ -56,7 +56,6 @@
 (defn handle-local-updates!
   [graph ymap]
   (fn [event]
-    (prn "handle-local-updates! root-map?" (= ymap (get-graph-map graph)))
     (when-not (.-local (.-transaction event)) ; ignore local changes
       (let [changed-keys (.-keysChanged event)
             changes (keep
@@ -64,6 +63,8 @@
                        (when-let [v ^js (.get ymap uuid-str)]
                          (when-not (string? v) ; yjs subdoc
                            (.load v)
+                           (.on v "update"
+                                (y-ws/subDocUpdateHandler @*server-conn v))
                            (let [ymap' (.getMap v)]
                              (.observe ymap'
                                        (handle-local-updates! graph ymap'))))
@@ -75,6 +76,7 @@
                               :block-id (uuid uuid-str)}))))
                      changed-keys)]
         (when (seq changes)
+          (prn {:changes changes})
           (state/pub-event! [:graph/merge-remote-changes graph changes event]))))))
 
 (defn- get-page-blocks-uuids [db page-id]
@@ -128,8 +130,10 @@
                                  (let [doc ^js (new YDoc)
                                        _ (.set ymap k' doc)
                                        blocks-ymap (.getMap doc)]
-                                   ;; (.on doc "update"
-                                   ;;      (y-ws/getSubDocUpdateHandler @*server-conn doc))
+                                   (.on doc "update"
+                                        (y-ws/subDocUpdateHandler @*server-conn doc))
+                                   (.observe blocks-ymap
+                                             (handle-local-updates! graph blocks-ymap))
                                    blocks-ymap))]
                (prn "Create new subdoc: " k')
                (if (:db/deleted? block')
