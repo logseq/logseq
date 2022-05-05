@@ -1,9 +1,10 @@
 .cp__footer {
     position: absolute;
     bottom: 0px;
+    left: 0px;
     padding: 10px 20px;
     background-color: var(--ls-primary-background-color);
-    z-index: 1000;
+    z-index: 10;
     display: flex;
     flex: 0 0 auto;
     white-space: nowrap;

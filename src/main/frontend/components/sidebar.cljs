@@ -389,12 +389,12 @@
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
+       (mobile-bar)
+       (footer/footer)
+
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-
-       (when (mobile-util/native-platform?)
-         (mobile-bar))
 
        (cond
          (not indexeddb-support?)
@@ -615,12 +615,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})
-
-        (when (and (mobile-util/native-platform?)
-                   current-repo
-                   (not (state/sub :modal/show?)))
-          (footer/footer))]
+               :main-content        main-content})]
 
        (right-sidebar/sidebar)
 
