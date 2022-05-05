@@ -111,7 +111,6 @@
      :editor/args                           nil
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
-     :editor/editing-page-title?            false
 
      ;; for audio record
      :editor/record-status                  "NONE"
