@@ -63,8 +63,6 @@
                        (when-let [v ^js (.get ymap uuid-str)]
                          (when-not (string? v) ; yjs subdoc
                            (.load v)
-                           (.on v "update"
-                                (y-ws/subDocUpdateHandler @*server-conn v))
                            (let [ymap' (.getMap v)]
                              (.observe ymap'
                                        (handle-local-updates! graph ymap'))))
@@ -76,7 +74,6 @@
                               :block-id (uuid uuid-str)}))))
                      changed-keys)]
         (when (seq changes)
-          (prn {:changes changes})
           (state/pub-event! [:graph/merge-remote-changes graph changes event]))))))
 
 (defn- get-page-blocks-uuids [db page-id]
@@ -135,7 +132,6 @@
                                    (.observe blocks-ymap
                                              (handle-local-updates! graph blocks-ymap))
                                    blocks-ymap))]
-               (prn "Create new subdoc: " k')
                (if (:db/deleted? block')
                  ;; delete non-page block
                  (.delete blocks-ymap k)

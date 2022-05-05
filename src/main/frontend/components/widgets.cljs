@@ -104,8 +104,9 @@
 
 (rum/defc demo-graph-alert
   []
-  (when (and (config/demo-graph?)
-             (not config/publishing?))
-    (ui/admonition
-     :warning
-     [:p (t :on-boarding/demo-graph)])))
+  ;; (when (and (config/demo-graph?)
+  ;;            (not config/publishing?))
+  ;;   (ui/admonition
+  ;;    :warning
+  ;;    [:p (t :on-boarding/demo-graph)]))
+  )
