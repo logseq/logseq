@@ -88,9 +88,6 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
-     :ui/visual-viewport-pending?           false
-     :ui/visual-viewport-state              nil
-
      :document/mode?                        document-mode?
 
      :config                                {}
@@ -1512,14 +1509,6 @@
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
-
-(defn set-visual-viewport-state
-  [input]
-  (set-state! :ui/visual-viewport-state input))
-
-(defn get-visual-viewport-state
-  []
-  (:ui/visual-viewport-state @state))
 
 (defn get-plugin-by-id
   [id]
