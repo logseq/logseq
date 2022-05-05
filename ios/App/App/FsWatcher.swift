@@ -84,6 +84,10 @@ extension URL {
         if self.lastPathComponent.starts(with: ".") {
             return true
         }
+        // NOTE: used by file-sync
+        if self.lastPathComponent == "graphs-txid.edn" {
+            return true
+        }
         let allowedPathExtensions: Set = ["md", "markdown", "org", "css", "edn", "excalidraw"]
         if allowedPathExtensions.contains(self.pathExtension.lowercased()) {
             return false
@@ -167,7 +171,7 @@ public class PollingWatcher {
     }
     
     private func tick() {
-        let startTime = DispatchTime.now()
+        // let startTime = DispatchTime.now()
         
         if let enumerator = FileManager.default.enumerator(
             at: url,
@@ -205,9 +209,9 @@ public class PollingWatcher {
             self.updateMetaDb(with: newMetaDb)
         }
         
-        let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
-        let elapsedInMs = Double(elapsedNanoseconds) / 1_000_000
-        print("debug ticker elapsed=\(elapsedInMs)ms")
+        // let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds
+        // let elapsedInMs = Double(elapsedNanoseconds) / 1_000_000
+        // print("debug ticker elapsed=\(elapsedInMs)ms")
         
         if #available(iOS 13.0, *) {
             timer?.schedule(deadline: .now().advanced(by: .seconds(2)), leeway: .milliseconds(100))

@@ -81,7 +81,8 @@
 
 (defn login-callback [code]
   (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)))]
+    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
+                             {:with-credentials? false}))]
       (if (= 200 (:status resp))
         (-> resp
               (:body)
@@ -99,7 +100,8 @@
   []
   (when-let [refresh-token (state/get-auth-refresh-token)]
     (go
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)))]
+      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
+                               {:with-credentials? false}))]
         (if (= 400 (:status resp))
           ;; invalid refresh_token
           (do
