@@ -144,7 +144,7 @@
 
      ;; mobile
      :mobile/show-toolbar?                  false
-     :mobile/show-tabbar?                   true
+     :mobile/show-tabbar?                   false
 
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
