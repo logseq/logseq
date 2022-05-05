@@ -525,7 +525,7 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id config]
+  [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
@@ -542,7 +542,6 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
-       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

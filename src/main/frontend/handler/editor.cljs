@@ -2793,12 +2793,6 @@
       (util/scroll-editor-cursor input)
       (close-autocomplete-if-outside input))))
 
-(defn editor-on-height-change!
-  [id]
-  (fn [_box-height ^js _row-height]
-    (let [input (gdom/getElement id)]
-      (util/scroll-editor-cursor input))))
-
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
