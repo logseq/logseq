@@ -573,13 +573,16 @@
 
 (defn recursive-child?
   [repo child-id parent-id]
-  (loop [node (db-utils/entity repo child-id)]
-    (if node
-      (let [parent (:block/parent node)]
-        (if (= (:db/id parent) parent-id)
-          true
-          (recur parent)))
-      false)))
+  (let [*last-node (atom nil)]
+    (loop [node (db-utils/entity repo child-id)]
+      (when-not (= @*last-node node)
+        (reset! *last-node node)
+        (if node
+          (let [parent (:block/parent node)]
+            (if (= (:db/id parent) parent-id)
+              true
+              (recur parent)))
+          false)))))
 
 (defn- get-start-id-for-pagination-query
   [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
@@ -605,7 +608,8 @@
                                    (if id
                                      (if (contains? match-ids id)
                                        id
-                                       (recur others))
+                                       (when (seq others)
+                                         (recur others)))
                                      nil)))))
                            (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
