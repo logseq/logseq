@@ -23,7 +23,9 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
   (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
-  (defonce ios-file-container (registerPlugin "FileContainer")))
+  (defonce ios-file-container (registerPlugin "FileContainer"))
+  (defonce file-sync (registerPlugin "FileSync")))
+
 ;; NOTE: both iOS and android share the same FsWatcher API
 (when (native-platform?)
   (defonce fs-watcher (registerPlugin "FsWatcher")))

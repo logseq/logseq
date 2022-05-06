@@ -354,11 +354,13 @@
          false)))))
 
 (defmethod handle :file-watcher/changed [[_ ^js event]]
-  (fs-watcher/handle-changed!
-   (.-event event)
-   (update (js->clj event :keywordize-keys true)
-           :path
-           js/decodeURI)))
+  (let [type (.-event event)
+        payload (js->clj event :keywordize-keys true)
+        payload' (-> payload
+                     (update :path js/decodeURI))]
+    (prn ::fs-watcher payload)
+    (fs-watcher/handle-changed! type payload')
+    (sync/file-watch-handler type payload')))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

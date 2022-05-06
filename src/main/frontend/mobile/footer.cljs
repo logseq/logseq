@@ -53,14 +53,10 @@
      (mobile-bar-command #(state/toggle-document-mode!) "notes")
      (mobile-bar-command
       #(let [page (or (state/get-current-page)
-                      (string/lower-case (date/journal-name)))
-             block (editor-handler/api-insert-new-block!
+                      (string/lower-case (date/journal-name)))]
+         (editor-handler/api-insert-new-block!
                     ""
                     {:page page
-                     :replace-empty-target? true})]
-         (js/setTimeout
-          (fn [] (editor-handler/edit-block!
-                  block
-                  :max
-                  (:block/uuid block))) 100))
+                     :edit-block? true
+                     :replace-empty-target? true}))
       "edit")]))

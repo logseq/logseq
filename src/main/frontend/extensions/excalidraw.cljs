@@ -35,7 +35,7 @@
 
 (defn- update-draw-content-width
   [state]
-  (let [el ^js (rum/dom-node state)]
+  (when-let [el ^js (rum/dom-node state)]
     (loop [el (.querySelector el ".draw-wrap")]
       (cond
         (or (nil? el) (undefined? el) (undefined? (.-classList el)))
