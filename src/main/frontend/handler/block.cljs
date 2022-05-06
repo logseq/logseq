@@ -151,78 +151,81 @@
 
 (defn on-touch-start
   [event]
-  (when-let [touch (aget (.-targetTouches event) 0)]
-    (let [x (.-clientX touch)
-          y (.-clientY touch)]
-      (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))
-
+  (when-let [touches (.-targetTouches event)]
+    (when (= (.-length touches) 1)
+      (let [touch (aget touches 0)
+            x (.-clientX touch)
+            y (.-clientY touch)]
+        (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))
 
 (defn on-touch-move
   [event block uuid *show-left-menu? *show-right-menu?]
-  (when-let [touch (aget (.-targetTouches event) 0)]
-    (let [{:keys [x0 xi direction]} @swipe
-          tx (.-clientX touch)
-          ty (.-clientY touch)
-          direction (if (nil? direction)
-                      (if (> tx x0)
-                        :right
-                        :left)
-                      direction)]
-      (swap! swipe #(-> %
-                        (assoc :tx tx)
-                        (assoc :ty ty)
-                        (assoc :xi tx)
-                        (assoc :yi ty)
-                        (assoc :direction direction)))
-      (when (< (* (- xi x0) (- tx xi)) 0)
-        (swap! swipe #(-> %
-                          (assoc :x0 tx)
-                          (assoc :y0 ty))))
-      (let [{:keys [x0 y0]} @swipe
-            dx (- tx x0)
-            dy (- ty y0)]
-        (when-not (or (> (. js/Math abs dy) 15)
-                      (< (. js/Math abs dx) 5))
-          (let [left (gdom/getElement (str "block-left-menu-" uuid))
-                right (gdom/getElement (str "block-right-menu-" uuid))]
+  (when-let [touches (.-targetTouches event)]
+    (when (= (.-length touches) 1)
+     (let [{:keys [x0 xi direction]} @swipe
+           touch (aget touches 0)
+           tx (.-clientX touch)
+           ty (.-clientY touch)
+           direction (if (nil? direction)
+                       (if (> tx x0)
+                         :right
+                         :left)
+                       direction)]
+       (swap! swipe #(-> %
+                         (assoc :tx tx)
+                         (assoc :ty ty)
+                         (assoc :xi tx)
+                         (assoc :yi ty)
+                         (assoc :direction direction)))
+       (when (< (* (- xi x0) (- tx xi)) 0)
+         (swap! swipe #(-> %
+                           (assoc :x0 tx)
+                           (assoc :y0 ty))))
+       (let [{:keys [x0 y0]} @swipe
+             dx (- tx x0)
+             dy (- ty y0)]
+         (when-not (or (> (. js/Math abs dy) 15)
+                       (< (. js/Math abs dx) 5))
+           (let [left (gdom/getElement (str "block-left-menu-" uuid))
+                 right (gdom/getElement (str "block-right-menu-" uuid))]
 
-            (cond
-              (= direction :right)
-              (do
-                (reset! *show-left-menu? true)
-                (when left
-                  (if (> dx 0)
-                    (set! (.. left -style -width) (str dx "px"))
-                    (set! (.. left -style -width) (str (+ 50 dx) "px")))
+             (cond
+               (= direction :right)
+               (do
+                 (reset! *show-left-menu? true)
+                 (when left
+                   (if (> dx 0)
+                     (set! (.. left -style -width) (str dx "px"))
+                     (set! (.. left -style -width) (str (+ 50 dx) "px")))
 
-                  (let [indent (gdom/getFirstElementChild left)]
-                    (when (indentable? block)
-                      (if (>= (.-clientWidth left) 50)
-                        (set! (.. indent -style -opacity) "100%")
-                        (set! (.. indent -style -opacity) "30%"))))))
+                   (let [indent (gdom/getFirstElementChild left)]
+                     (when (indentable? block)
+                       (if (>= (.-clientWidth left) 50)
+                         (set! (.. indent -style -opacity) "100%")
+                         (set! (.. indent -style -opacity) "30%"))))))
 
-              (= direction :left)
-              (do
-                (reset! *show-right-menu? true)
-                (when right
-                  (if (< dx 0)
-                    (set! (.. right -style -width) (str (- dx) "px"))
-                    (set! (.. right -style -width) (str (- 80 dx) "px")))
+               (= direction :left)
+               (do
+                 (reset! *show-right-menu? true)
+                 (when right
+                   (if (< dx 0)
+                     (set! (.. right -style -width) (str (- dx) "px"))
+                     (set! (.. right -style -width) (str (- 80 dx) "px")))
 
-                  (let [outdent (gdom/getFirstElementChild right)
-                        more (gdom/getLastElementChild right)]
+                   (let [outdent (gdom/getFirstElementChild right)
+                         more (gdom/getLastElementChild right)]
 
-                    (when (outdentable? block)
-                      (if (and (>= (.-clientWidth right) 40)
-                               (< (.-clientWidth right) 80))
-                        (set! (.. outdent -style -opacity) "100%")
-                        (set! (.. outdent -style -opacity) "30%")))
+                     (when (outdentable? block)
+                       (if (and (>= (.-clientWidth right) 40)
+                                (< (.-clientWidth right) 80))
+                         (set! (.. outdent -style -opacity) "100%")
+                         (set! (.. outdent -style -opacity) "30%")))
 
-                    (if (>= (.-clientWidth right) 80)
-                      (set! (.. more -style -opacity) "100%")
-                      (set! (.. more -style -opacity) "30%")))))
-              :else
-              nil)))))))
+                     (if (>= (.-clientWidth right) 80)
+                       (set! (.. more -style -opacity) "100%")
+                       (set! (.. more -style -opacity) "30%")))))
+               :else
+               nil))))))))
 
 (defn on-touch-end
   [_event block uuid *show-left-menu? *show-right-menu?]
