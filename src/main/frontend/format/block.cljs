@@ -264,7 +264,7 @@
          :block/original-name original-page-name}
         (when with-id?
           (if page-entity
-            {}
+            {:block/uuid (:block/uuid page-entity)}
             {:block/uuid (db/new-block-id)}))
         (when namespace?
           (let [namespace (first (gp-util/split-last "/" original-page-name))]
