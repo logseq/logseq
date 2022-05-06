@@ -1489,6 +1489,15 @@
   []
   (get-in @state [:view/components :page-blocks]))
 
+;; To avoid circular dependencies
+(defn set-component!
+  [k value]
+  (set-state! [:view/components k] value))
+
+(defn get-component
+  [k]
+  (get-in @state [:view/components k]))
+
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
