@@ -41,7 +41,6 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
@@ -1876,118 +1875,6 @@
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
                      summary]])]))))
-
-(def swipe (atom nil))
-
-(defn- get-element-width
-  [^js element]
-  (or (some-> (.. element -style -width)
-              (string/replace "px" "")
-              util/safe-parse-int)
-      0))
-
-(defn- on-touch-start
-  [event]
-  (let [touch (aget (.-touches event) 0)
-        x (.-clientX touch)
-        y (.-clientY touch)]
-    (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))
-
-(defn- on-touch-move
-  [event uuid]
-  (let [{:keys [x0 xi direction]} @swipe
-        touch (aget (.-touches event) 0)
-        tx (.-clientX touch)
-        ty (.-clientY touch)
-        direction (if (nil? direction)
-                    (if (> tx x0)
-                      :right
-                      :left)
-                    direction)]
-    (swap! swipe #(-> %
-                      (assoc :tx tx)
-                      (assoc :ty ty)
-                      (assoc :xi tx)
-                      (assoc :yi ty)
-                      (assoc :direction direction)))
-    (when (< (* (- xi x0) (- tx xi)) 0)
-      (swap! swipe #(-> %
-                        (assoc :x0 tx)
-                        (assoc :y0 ty))))
-    (let [{:keys [x0 y0]} @swipe
-          dx (- tx x0)
-          dy (- ty y0)]
-      (when-not (or (> (. js/Math abs dy) 15)
-                    (< (. js/Math abs dx) 3))
-        (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
-              right (.querySelector js/document (str "#block-right-menu-" uuid))]
-
-          (cond
-            (= direction :right)
-            (do
-              (if (> dx 0)
-                (set! (.. left -style -width) (str dx "px"))
-                (set! (.. left -style -width) (str (+ 50 dx) "px")))
-
-              (if (>= (get-element-width left) 50)
-                (set! (.. left -style -opacity) "100%")
-                (set! (.. left -style -opacity) "30%")))
-            
-            (= direction :left)
-            (do
-              (if (< dx 0)
-                (set! (.. right -style -width) (str (- dx) "px"))
-                (set! (.. right -style -width) (str (- 80 dx) "px")))
-
-              (let [outdent (.querySelector right ".outdent")
-                    more (.querySelector right ".more")]
-
-                (if (and (>= (get-element-width right) 40)
-                         (< (get-element-width right) 80))
-                  (set! (.. outdent -style -opacity) "100%")
-                  (set! (.. outdent -style -opacity) "30%"))
-
-                (if (>= (get-element-width right) 80)
-                  (set! (.. more -style -opacity) "100%")
-                  (set! (.. more -style -opacity) "30%"))))
-
-            :else
-            nil))))))
-
-(defn- on-touch-end
-  [_event block uuid]
-  (let [left-menu (.querySelector js/document (str "#block-left-menu-" uuid))
-        right-menu (.querySelector js/document (str "#block-right-menu-" uuid))
-        {:keys [x0 tx]} @swipe
-        dx (- tx x0)]
-    
-    (try
-      (when (> (. js/Math abs dx) 5)
-        (cond
-          (>= (get-element-width left-menu) 50)
-          (haptics/with-haptics-impact
-            (block-handler/indent-outdent-block! block :right)
-            :light)
-
-          (<= 40 (get-element-width right-menu) 80)
-          (haptics/with-haptics-impact
-            (block-handler/indent-outdent-block! block :left)
-            :light)
-
-          (> (get-element-width right-menu) 80)
-          (haptics/with-haptics-impact
-            (do (state/set-state! :mobile/show-action-bar? true)
-                (state/set-state! :mobile/actioned-block block)
-                (editor-handler/select-block! uuid))
-            :light)
-
-          :else
-          nil))
-      (catch js/Error e
-        (js/console.error e))
-      (finally
-        (set! (.. left-menu -style -width) "0px")
-        (set! (.. right-menu -style -width) "0px")))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]

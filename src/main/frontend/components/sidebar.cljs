@@ -484,7 +484,8 @@
         home? (= :home route-name)
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
-        logged? (user-handler/logged-in?)]
+        logged? (user-handler/logged-in?)
+        show-action-bar? (state/sub :mobile/show-action-bar?)]
     (theme/container
      {:t             t
       :theme         theme
@@ -526,15 +527,13 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})
+               :main-content        main-content
+               :show-action-bar?    show-action-bar?})
 
         (when (and (mobile-util/is-native-platform?)
                    current-repo
                    (not (state/sub :modal/show?)))
-          (footer/footer))
-
-        (when (state/sub :mobile/show-action-bar?)
-          (action-sheet/action-bar))]
+          (footer/footer))]
 
        (right-sidebar/sidebar)
 

@@ -1268,6 +1268,14 @@
      (gobj/get (.getBoundingClientRect node) "top")))
 
 #?(:cljs
+   (defn get-element-width
+     [^js element]
+     (or (some-> (.. element -style -width)
+                 (string/replace "px" "")
+                 safe-parse-int)
+         0)))
+
+#?(:cljs
    (defn sort-by-height
      [elements]
      (sort (fn [x y]

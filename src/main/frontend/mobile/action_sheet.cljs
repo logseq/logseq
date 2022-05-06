@@ -1,9 +1,12 @@
 (ns frontend.mobile.action-sheet
-  (:require [frontend.extensions.srs :as srs]
+  (:require [frontend.db :as db]
+            [frontend.extensions.srs :as srs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.object :as gobj]
             [rum.core :as rum]))
 
 (defn- action-command
@@ -25,23 +28,34 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn []
-                 (state/set-state! :mobile/show-action-bar? false)
-                 (editor-handler/clear-selection!)))))
+                 (editor-handler/clear-selection!)
+                 (state/set-state! :mobile/show-action-bar? false)))))
   [state]
   (when-let [block (state/sub :mobile/actioned-block)]
-    (let [block-id   (:block/uuid block)]
-      [:div.fixed.action-bar
+    (let [{:block/keys [uuid children]} block
+          last-child-block-id (when-not (empty? children)
+                                (-> (db/get-block-children (state/get-current-repo) uuid)
+                                    last
+                                    :block/uuid))]
+      (let [tag-id (or last-child-block-id uuid)
+            bottom-el (.querySelector js/document (str "#block-content-" tag-id))
+            bottom (gobj/get (.getBoundingClientRect bottom-el) "bottom")
+            vw-height (or (.-height js/window.visualViewport)
+                          (.-clientHeight js/document.documentElement))
+            delta (- vw-height bottom 170)]
+        (when (< delta 0)
+          (.scrollBy (util/app-scroll-container-node) #js {:top (- 10 delta)})))
+      [:div.action-bar
        (when-not (= (:block/format block) :org)
          (action-command "heading" "Heading"
                          #(let [properties (:block/properties block)
                                 heading?   (true? (:heading properties))]
                             (if heading?
-                              (editor-handler/remove-block-property! block-id :heading)
-                              (editor-handler/set-block-property! block-id :heading true)))))
-
+                              (editor-handler/remove-block-property! uuid :heading)
+                              (editor-handler/set-block-property! uuid :heading true)))))
        (action-command "infinity" "Card" #(srs/make-block-a-card! (:block/uuid block)))
        (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks))
        (action-command "registered" "Copy ref"
-                       (fn [_event] (editor-handler/copy-block-ref! block-id #(str "((" % "))"))))
+                       (fn [_event] (editor-handler/copy-block-ref! uuid #(str "((" % "))"))))
        (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
        (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))])))
