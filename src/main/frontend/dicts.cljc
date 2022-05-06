@@ -62,7 +62,7 @@
         :right-side-bar/contents "Contents"
         :right-side-bar/favorites "Favorites"
         :right-side-bar/page-graph "Page graph"
-        :right-side-bar/block-ref "Block reference"
+        :right-side-bar/block-ref "Block references"
         :right-side-bar/graph-view "Graph view"
         :right-side-bar/all-pages "All pages"
         :right-side-bar/flashcards "Flashcards"
@@ -3059,7 +3059,7 @@
 
         :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"
         :file-sync/graph-deleted "現在のリモートグラフが削除されました"}
-   
+
    :it {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
                           :default "tutorial-en.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")

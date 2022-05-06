@@ -69,7 +69,7 @@
        (let [block (:block block-data)
              block-id (:block/uuid block)
              format (:block/format block)]
-         [[:div.ml-2.mt-1
+         [[:div.ml-8.mt-1
            (block/block-parents {:id     "block-parent"
                                  :block? true} repo block-id {})]
           [:div.ml-2

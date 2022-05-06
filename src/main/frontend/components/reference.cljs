@@ -67,6 +67,23 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
+(rum/defc block-linked-references < rum/reactive db-mixins/query
+  [block-id]
+  (let [repo (state/get-current-repo)
+        refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
+    (when (seq refed-blocks-ids)
+      (let [ref-blocks (db/get-block-referenced-blocks block-id)
+            ref-hiccup (block/->hiccup ref-blocks
+                                       {:id (str block-id)
+                                        :ref? true
+                                        :breadcrumb-show? true
+                                        :group-by-page? true
+                                        :editor-box editor/box}
+                                       {})]
+        [:div.references-blocks
+         (content/content block-id
+                          {:hiccup ref-hiccup})]))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]

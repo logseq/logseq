@@ -1955,24 +1955,28 @@
         nil)]]))
 
 (rum/defc block-refs-count < rum/static
-  [block]
+  [block *hide-block-refs?]
   (let [block-refs-count (count (:block/_refs block))]
     (when (> block-refs-count 0)
       [:div
        [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
         {:title "Open block references"
          :style {:margin-top -1}
-         :on-click (fn []
-                     (state/sidebar-add-block!
-                      (state/get-current-repo)
-                      (:db/id block)
-                      :block-ref
-                      {:block block}))}
+         :on-click (fn [e]
+                     (if (gobj/get e "shiftKey")
+                       (state/sidebar-add-block!
+                        (state/get-current-repo)
+                        (:db/id block)
+                        :block-ref
+                        {:block block})
+                       (swap! *hide-block-refs? not)))}
         block-refs-count]])))
 
-(rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
-  (let [editor-box (get config :editor-box)
+(rum/defcs block-content-or-editor < rum/reactive
+  (rum/local true :hide-block-refs?)
+  [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
+  (let [*hide-block-refs? (get state :hide-block-refs?)
+        editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)]
     (if (and edit? editor-box)
@@ -1991,25 +1995,31 @@
                                     (editor-handler/escape-editing select?))))}
                     edit-input-id
                     config))]
-      [:div.flex.flex-row.block-content-wrapper
-       [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
-        (ui/catch-error
-         (ui/block-error "Block Render Error:"
-                         {:content (:block/content block)
-                          :section-attrs
-                          {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
-         (block-content config block edit-input-id block-id slide?))]
-       [:div.flex.flex-row.items-center
-        (when (and (:embed? config)
-                   (:embed-parent config))
-          [:a.opacity-30.hover:opacity-100.svg-small.inline
-           {:on-mouse-down (fn [e]
-                             (util/stop e)
-                             (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/uuid block))))}
-           svg/edit])
+      (let [refs-count (count (:block/_refs block))]
+        [:div.flex.flex-col.block-content-wrapper
+         [:div.flex.flex-row
+          [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
+           (ui/catch-error
+            (ui/block-error "Block Render Error:"
+                            {:content (:block/content block)
+                             :section-attrs
+                             {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+            (block-content config block edit-input-id block-id slide?))]
+          [:div.flex.flex-row.items-center
+           (when (and (:embed? config)
+                      (:embed-parent config))
+             [:a.opacity-30.hover:opacity-100.svg-small.inline
+              {:on-mouse-down (fn [e]
+                                (util/stop e)
+                                (when-let [block (:embed-parent config)]
+                                  (editor-handler/edit-block! block :max (:block/uuid block))))}
+              svg/edit])
 
-        (block-refs-count block)]])))
+           (block-refs-count block *hide-block-refs?)]]
+
+         (when (and (not @*hide-block-refs?) (> refs-count 0))
+           (let [refs-cp (state/get-component :block/linked-references)]
+             (refs-cp uuid)))]))))
 
 (defn non-dragging?
   [e]
