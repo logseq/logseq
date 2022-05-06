@@ -150,9 +150,13 @@
     false
     (let [handler-id    (get-group k)
           shortcut-m    (shortcut-map handler-id)
+          parse-shortcut #(try
+                           (KeyboardShortcutHandler/parseStringShortcut %)
+                           (catch js/Error e
+                             (js/console.error "[shortcut/parse-error]" (str % " - " (.-message e)))))
           bindings      (->> (shortcut-binding k)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))
           rest-bindings (->> (map key shortcut-m)
                              (remove #{k})
@@ -160,7 +164,7 @@
                              (filter vector?)
                              (mapcat identity)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))]
 
       (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))
