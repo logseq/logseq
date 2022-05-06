@@ -11,7 +11,8 @@
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
    [frontend.state :as state]
-   [frontend.util :as util]))
+   [frontend.util :as util]
+   [goog.dom :as gdom]))
 
 
 ;;  Fns
@@ -182,8 +183,8 @@
             dy (- ty y0)]
         (when-not (or (> (. js/Math abs dy) 15)
                       (< (. js/Math abs dx) 5))
-          (let [left (.querySelector js/document (str "#block-left-menu-" uuid))
-                right (.querySelector js/document (str "#block-right-menu-" uuid))]
+          (let [left (gdom/getElement (str "block-left-menu-" uuid))
+                right (gdom/getElement (str "block-right-menu-" uuid))]
 
             (cond
               (= direction :right)
@@ -194,9 +195,9 @@
                     (set! (.. left -style -width) (str dx "px"))
                     (set! (.. left -style -width) (str (+ 50 dx) "px")))
 
-                  (let [indent (.querySelector left ".indent")]
+                  (let [indent (gdom/getFirstElementChild left)]
                     (when (indentable? block)
-                      (if (>= (util/get-element-width left) 50)
+                      (if (>= (.-clientWidth left) 50)
                         (set! (.. indent -style -opacity) "100%")
                         (set! (.. indent -style -opacity) "30%"))))))
 
@@ -208,16 +209,16 @@
                     (set! (.. right -style -width) (str (- dx) "px"))
                     (set! (.. right -style -width) (str (- 80 dx) "px")))
 
-                  (let [outdent (.querySelector right ".outdent")
-                        more (.querySelector right ".more")]
+                  (let [outdent (gdom/getFirstElementChild right)
+                        more (gdom/getLastElementChild right)]
 
                     (when (outdentable? block)
-                      (if (and (>= (util/get-element-width right) 40)
-                               (< (util/get-element-width right) 80))
+                      (if (and (>= (.-clientWidth right) 40)
+                               (< (.-clientWidth right) 80))
                         (set! (.. outdent -style -opacity) "100%")
                         (set! (.. outdent -style -opacity) "30%")))
 
-                    (if (>= (util/get-element-width right) 80)
+                    (if (>= (.-clientWidth right) 80)
                       (set! (.. more -style -opacity) "100%")
                       (set! (.. more -style -opacity) "30%")))))
               :else
@@ -225,26 +226,26 @@
 
 (defn on-touch-end
   [_event block uuid *show-left-menu? *show-right-menu?]
-  (let [left-menu (.querySelector js/document (str "#block-left-menu-" uuid))
-        right-menu (.querySelector js/document (str "#block-right-menu-" uuid))
+  (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
+        right-menu (gdom/getElement (str "block-right-menu-" uuid))
         {:keys [x0 tx]} @swipe
         dx (- tx x0)]
     (try
       (when (> (. js/Math abs dx) 5)
         (cond
-          (and left-menu (>= (util/get-element-width left-menu) 50))
+          (and left-menu (>= (.-clientWidth left-menu) 50))
           (when (indentable? block)
            (haptics/with-haptics-impact
              (indent-outdent-block! block :right)
              :light))
 
-          (and right-menu (<= 40 (util/get-element-width right-menu) 80))
+          (and right-menu (< 40 (.-clientWidth right-menu) 80))
           (when (outdentable? block)
             (haptics/with-haptics-impact
               (indent-outdent-block! block :left)
               :light))
 
-          (and right-menu (> (util/get-element-width right-menu) 80))
+          (and right-menu (>= (.-clientWidth right-menu) 80))
           (haptics/with-haptics-impact
             (do (state/set-state! :mobile/show-action-bar? true)
                 (state/set-state! :mobile/actioned-block block)

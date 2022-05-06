@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
 
@@ -38,7 +39,7 @@
                                     last
                                     :block/uuid))]
       (let [tag-id (or last-child-block-id uuid)
-            bottom-el (.querySelector js/document (str "#block-content-" tag-id))
+            bottom-el (gdom/getElement (str "block-content-" tag-id))
             bottom (gobj/get (.getBoundingClientRect bottom-el) "bottom")
             vw-height (or (.-height js/window.visualViewport)
                           (.-clientHeight js/document.documentElement))

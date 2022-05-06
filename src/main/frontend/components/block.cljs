@@ -2326,6 +2326,7 @@
                         (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-cancel block-handler/on-touch-cancel 
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
