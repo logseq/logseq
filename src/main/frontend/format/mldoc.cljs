@@ -1,6 +1,5 @@
 (ns frontend.format.mldoc
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.utf8 :as utf8]
             [goog.object :as gobj]
@@ -8,61 +7,15 @@
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [linked.core :as linked]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]))
 
-(defonce parseJson (gobj/get Mldoc "parseJson"))
-(defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
-(defonce parseOPML (gobj/get Mldoc "parseOPML"))
-(defonce export (gobj/get Mldoc "export"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
+(defonce parseOPML (gobj/get Mldoc "parseOPML"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 (defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
-(defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
-
-(defn convert-export-md-remove-options [opts]
-  (->>
-   (mapv (fn [opt]
-             (case opt
-               :page-ref ["Page_ref"]
-               :emphasis ["Emphasis"]
-               []))
-         opts)
-   (remove empty?)))
-
-
-(defn default-config
-  ([format]
-   (default-config format {:export-heading-to-list? false}))
-  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
-   (let [format (string/capitalize (name (or format :markdown)))]
-     (->> {:toc false
-           :parse_outline_only (or parse_outline_only? false)
-           :heading_number false
-           :keep_line_break true
-           :format format
-           :heading_to_list (or export-heading-to-list? false)
-           :exporting_keep_properties export-keep-properties?
-           :export_md_indent_style export-md-indent-style
-           :export_md_remove_options
-           (convert-export-md-remove-options export-md-remove-options)}
-          (filter #(not(nil? (second %))))
-          (into {})
-          (bean/->js)
-          (js/JSON.stringify)))))
-
-(def default-references
-  (js/JSON.stringify
-   (clj->js {:embed_blocks []
-             :embed_pages []})))
-
-(defn parse-json
-  [content config]
-  (parseJson content config))
-
-(defn inline-parse-json
-  [text config]
-  (parseInlineJson text config))
+(defonce export (gobj/get Mldoc "export"))
 
 (defn parse-opml
   [content]
@@ -72,20 +25,14 @@
   [content config references]
   (parseAndExportMarkdown content
                           config
-                          (or references default-references)))
+                          (or references gp-mldoc/default-references)))
 
 (defn parse-export-opml
   [content config title references]
   (parseAndExportOPML content
                       config
                       title
-                      (or references default-references)))
-
-(defn ast-export-markdown
-  [ast config references]
-  (astExportMarkdown ast
-                     config
-                     (or references default-references)))
+                      (or references gp-mldoc/default-references)))
 
 (defn remove-indentation-spaces
   [s level remove-first-line?]
@@ -201,7 +148,7 @@
       (if (string/blank? content)
         []
         (-> content
-            (parse-json config)
+            (gp-mldoc/parse-json config)
             (gp-util/json->clj)
             (update-src-full-content content)
             (collect-page-properties parse-property)))
@@ -227,7 +174,7 @@
     (if (string/blank? text)
       {}
       (-> text
-          (inline-parse-json config)
+          (gp-mldoc/inline-parse-json config)
           (gp-util/json->clj)))
     (catch js/Error _e
       [])))
@@ -263,7 +210,7 @@
 (defn link?
   [format link]
   (when (string? link)
-    (let [[type link] (first (inline->edn link (default-config format)))
+    (let [[type link] (first (inline->edn link (gp-mldoc/default-config format)))
           [ref-type ref-value] (:url link)]
       (and (= "Link" type)
            (or

@@ -12,6 +12,7 @@
             [frontend.text :as text]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
@@ -142,7 +143,7 @@
     []
     (let [format (format/get-format file)
           _ (println "Parsing start: " file)
-          ast (mldoc/->edn content (mldoc/default-config format
+          ast (mldoc/->edn content (gp-mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
                                                          ))]
       (println "Parsing finished : " file)

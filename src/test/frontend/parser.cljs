@@ -1,8 +1,9 @@
 (ns frontend.parser
   (:require [cljs.test :refer [is deftest]]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.format.mldoc :as mldoc :refer [->edn]]))
 
-(def md-config (mldoc/default-config :markdown))
+(def md-config (gp-mldoc/default-config :markdown))
 
 (deftest src-test
   (is (=

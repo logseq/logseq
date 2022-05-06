@@ -3,6 +3,7 @@
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
             [frontend.text :as text]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [clojure.string :as string]))
 
 (set! mldoc/parse-property text/parse-property)
@@ -37,9 +38,9 @@
 ;; html
 (defn get-default-config
   ([format]
-   (mldoc/default-config format))
+   (gp-mldoc/default-config format))
   ([format options]
-   (mldoc/default-config format options)))
+   (gp-mldoc/default-config format options)))
 
 (defn to-html
   ([content format]
@@ -49,7 +50,7 @@
      (if (string/blank? content)
        ""
        (if-let [record (get-format-record format)]
-         (protocol/toHtml record content config mldoc/default-references)
+         (protocol/toHtml record content config gp-mldoc/default-references)
          content)))))
 
 (defn to-edn

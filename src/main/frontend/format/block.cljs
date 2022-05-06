@@ -13,6 +13,7 @@
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]))
@@ -702,7 +703,7 @@
                        (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
-         (let [ast (->> (format/to-edn content format (mldoc/default-config format))
+         (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
                         (map first))
                title (when (heading-block? (first ast))
                        (:title (second (first ast))))

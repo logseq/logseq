@@ -20,6 +20,8 @@
              frontend.db.query-react query-react
              frontend.util util
              frontend.config config
+             frontend.format.mldoc mldoc
+             logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.util gp-util
              logseq.graph-parser.config gp-config}}}
 
