@@ -44,6 +44,17 @@
          shortcut)
        (mapv mod-key)))))
 
+(defn normalize-user-keyname
+  [k]
+  (some-> k
+          (util/safe-lower-case)
+          (str/replace #";+" "semicolon")
+          (str/replace #"=+" "equals")
+          (str/replace #"~+" "dash")
+          (str/replace "[" "open-square-bracket")
+          (str/replace "]" "close-square-bracket")
+          (str/replace "'" "single-quote")))
+
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
   (let [dict (->> (vals @config/config)
