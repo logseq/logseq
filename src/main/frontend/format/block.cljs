@@ -15,8 +15,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
-            [frontend.format.mldoc :as mldoc]))
+            [medley.core :as medley]))
 
 (defn heading-block?
   [block]
@@ -166,7 +165,7 @@
                      (map last)
                      (map (fn [v]
                             (when (and (string? v)
-                                       (not (mldoc/link? format v)))
+                                       (not (gp-mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
@@ -430,7 +429,7 @@
                     (if (or (:pre-block? block)
                             (= (:format block) :org))
                       content
-                      (mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
+                      (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
       content
       (property/->new-properties content))))

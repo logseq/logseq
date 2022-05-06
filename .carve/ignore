@@ -29,7 +29,7 @@ frontend.extensions.zotero.api/item
 ;; For repl
 frontend.external.roam/reset-state!
 ;; For repl
-frontend.format.mldoc/ast-export-markdown
+logseq.graph-parser.mldoc/ast-export-markdown
 ;; Protocol fn wrapper that could be used
 frontend.fs/readdir
 ;; Referenced in TODO

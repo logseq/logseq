@@ -357,7 +357,7 @@
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
-        ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
+        ast (gp-mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         first-elem-meta (second (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
@@ -1942,7 +1942,7 @@
                     props (into [] (:properties block))
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
-                    ast (mldoc/->edn content* (gp-mldoc/default-config format))
+                    ast (gp-mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (block/extract-blocks ast content* true format)
                     fst-block (first blocks)]
                 (assert fst-block "fst-block shouldn't be nil")
@@ -2851,7 +2851,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
+                  (gp-mldoc/->edn text (gp-mldoc/default-config format)) text true format)
           blocks' (block/with-parent-and-left page-id blocks)]
       (paste-blocks blocks' {}))))
 
@@ -3169,7 +3169,7 @@
   [format content semantic?]
   (and (string/includes? content "\n")
        (if semantic?
-         (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
+         (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
                first-elem-type (first (ffirst ast))]
            (mldoc/block-with-title? first-elem-type))
          true)))

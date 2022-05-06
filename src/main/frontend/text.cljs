@@ -2,8 +2,8 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.format.mldoc :as mldoc]
             [clojure.set :as set]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [frontend.state :as state]))
 
@@ -366,7 +366,7 @@
        (contains? @non-parsing-properties (string/lower-case k))
        v
 
-       (mldoc/link? format v)
+       (gp-mldoc/link? format v)
        v
 
        :else

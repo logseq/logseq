@@ -7,7 +7,6 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.block :as block]
-            [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
@@ -143,7 +142,7 @@
     []
     (let [format (format/get-format file)
           _ (println "Parsing start: " file)
-          ast (mldoc/->edn content (gp-mldoc/default-config format
+          ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
                                                          ))]
       (println "Parsing finished : " file)

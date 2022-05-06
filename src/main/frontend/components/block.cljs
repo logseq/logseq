@@ -720,13 +720,13 @@
    (inline-text {} format v))
   ([config format v]
    (when (string? v)
-     (let [inline-list (mldoc/inline->edn v (gp-mldoc/default-config format))]
+     (let [inline-list (gp-mldoc/inline->edn v (gp-mldoc/default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
-    (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
+    (let [ast (->> (gp-mldoc/->edn macro-content (gp-mldoc/default-config format))
                    (map first))
           paragraph? (and (= 1 (count ast))
                           (= "Paragraph" (ffirst ast)))]
@@ -2708,11 +2708,11 @@
 ;;     (cond
 ;;       (= lang "quote")
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Quote" (first (mldoc/->edn content (gp-mldoc/default-config :markdown)))])
+;;         ["Quote" (first (gp-mldoc/->edn content (gp-mldoc/default-config :markdown)))])
 
 ;;       (contains? #{"query" "note" "tip" "important" "caution" "warning" "pinned"} lang)
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Custom" lang nil (first (mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
+;;         ["Custom" lang nil (first (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
 
 ;;       :else
 ;;       ["Src" options])))

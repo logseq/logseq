@@ -6,7 +6,7 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [clojure.string :as string]))
 
-(set! mldoc/parse-property text/parse-property)
+(set! gp-mldoc/parse-property text/parse-property)
 
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))
