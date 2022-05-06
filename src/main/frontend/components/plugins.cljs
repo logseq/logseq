@@ -338,6 +338,8 @@
 (rum/defc user-proxy-settings-panel
   [{:keys [protocol] :as agent-opts}]
   (let [[opts set-opts!] (rum/use-state agent-opts)
+        [testing? set-testing?!] (rum/use-state false)
+        *test-input (rum/create-ref)
         disabled? (string/blank? (:protocol opts))]
     [:div.cp__settings-network-proxy-panel
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
@@ -362,12 +364,34 @@
           :on-change #(set-opts!
                         (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
 
+      [:hr]
+      [:p.flex.items-center.space-x-2
+       [:span.w-60
+        [:input.form-input.is-small
+         {:ref *test-input
+          :placeholder "http://"
+          :on-change #(set-opts!
+                        (assoc opts :test (util/trim-safe (util/evalue %))))
+          :value (:test opts)}]]
+
+       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+         :intent "logseq" :large? false
+         :style {:margin-top 0 :padding "5px 15px"}
+         :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
+                      (when (and (not testing?) (not (string/blank? val)))
+                        (set-testing?! true)
+                        (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
+                                    _ (ipc/ipc :testProxyUrl val)])
+                          (p/catch (fn [e] (notification/show! (str e) :error)))
+                          (p/finally (fn [] (set-testing?! false)))))
+                      ))]
+
       [:p.pt-2
        (ui/button (t :save)
-                  :on-click (fn []
-                              (p/let [_ (ipc/ipc :setHttpsAgent opts)]
-                                     (state/set-state! [:electron/user-cfgs :settings/agent] opts)
-                                     (state/close-sub-modal! :https-proxy-panel))))]]]))
+         :on-click (fn []
+                     (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                       (state/set-state! [:electron/user-cfgs :settings/agent] opts)
+                       (state/close-sub-modal! :https-proxy-panel))))]]]))
 
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category

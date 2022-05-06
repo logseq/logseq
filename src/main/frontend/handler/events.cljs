@@ -270,7 +270,6 @@
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
 (defmethod handle :go/proxy-settings [[_ agent-opts]]
-  (js/console.log agent-opts)
   (state/set-sub-modal!
     (fn [_] (plugin/user-proxy-settings-panel agent-opts))
     {:id :https-proxy-panel :center? true}))
