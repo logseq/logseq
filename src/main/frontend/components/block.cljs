@@ -2086,7 +2086,7 @@
   [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
    [:div.commands-button.w-0.rounded-r-md
     {:id (str "block-left-menu-" uuid)}
-    [:indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+    [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
 
 (rum/defc block-right-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]

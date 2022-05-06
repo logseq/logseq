@@ -281,7 +281,7 @@
                               (let [format (:block/format (state/get-edit-block))]
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
-  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
+  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -295,15 +295,18 @@
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
+      (when show-action-bar?
+        (action-sheet/action-bar))
+      
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
-
+       
        (when (and (not (mobile-util/is-native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-
+       
        (cond
          (not indexeddb-support?)
          nil

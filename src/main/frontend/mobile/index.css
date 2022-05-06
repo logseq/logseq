@@ -23,16 +23,15 @@
 }
 
 .action-bar {
-    position: fixed;
+    position: absolute;
     bottom: 100px;
-    left: 5%;
     height: 70px;
-    width: 90%;
     background-color: var(--ls-secondary-background-color);
     display: flex;
     justify-content: space-around;
     border-radius: 10px;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+    z-index: 100;
     
     .ti {
         color: var(--ls-primary-text-color);
@@ -60,9 +59,19 @@ html.is-native-ipad {
         flex: 1;
         index: 0;
     }
+    
+    .action-bar {
+        width: 50%;
+    }
 }
 
 html.is-native-iphone {
+
+    .action-bar {
+        left: 5%;
+        right: 5%;
+    }
+    
     @media (orientation: landscape) {
         .cp__footer {
             height: 45px;
@@ -74,6 +83,11 @@ html.is-native-iphone-without-notch,
 html.is-native-android {
     .cp__footer {
         height: 45px;
+    }
+    
+    .action-bar {
+        left: 5%;
+        right: 5%;
     }
 }
 
