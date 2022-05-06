@@ -1,6 +1,5 @@
 (ns frontend.text
-  (:require [frontend.config :as config]
-            [frontend.util :as util]
+  (:require [frontend.util :as util]
             [clojure.string :as string]
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -187,15 +186,6 @@
      :else
      s)))
 
-(defn extract-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?"
-                   (config/get-block-pattern format))]
-      (gp-util/safe-re-find (re-pattern pattern) text))
-    ""))
-
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
   (let [pattern (util/format
@@ -207,11 +197,11 @@
     (string/replace-first text (re-pattern pattern) "")))
 
 (defn remove-level-spaces
-  ([text format]
-   (remove-level-spaces text format false true))
-  ([text format space?]
-   (remove-level-spaces text format space? true))
-  ([text format space? trim-left?]
+  ([text format block-pattern]
+   (remove-level-spaces text format block-pattern false true))
+  ([text format block-pattern space?]
+   (remove-level-spaces text format block-pattern space? true))
+  ([text format block-pattern space? trim-left?]
    (when format
      (cond
        (string/blank? text)
@@ -222,7 +212,7 @@
        text
 
        :else
-       (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
+       (remove-level-space-aux! text block-pattern space? trim-left?)))))
 
 (defn build-data-value
   [col]

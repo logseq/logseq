@@ -425,7 +425,7 @@
                   (utf8/substring utf8-content
                                   (:start_pos meta)))
         content (when content
-                  (let [content (text/remove-level-spaces content format)]
+                  (let [content (text/remove-level-spaces content format (config/get-block-pattern format))]
                     (if (or (:pre-block? block)
                             (= (:format block) :org))
                       content

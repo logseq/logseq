@@ -1,5 +1,6 @@
 (ns frontend.text-test
   (:require [cljs.test :refer [are deftest testing]]
+            [frontend.config :as config]
             [frontend.text :as text]))
 
 (deftest test-get-page-name
@@ -74,35 +75,22 @@
     "#tag1,#tag2" #{"tag1" "tag2"}
     "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
 
-(deftest extract-level-spaces
-  []
-  (testing "markdown"
-    (are [x y] (= (text/extract-level-spaces x :markdown) y)
-      "- foobar" "- "
-      "--   foobar" "-- "
-      "---------------------   foobar" "--------------------- "))
-  (testing "org mode"
-    (are [x y] (= (text/extract-level-spaces x :org) y)
-      "* foobar" "* "
-      "**   foobar" "** "
-      "*********************  foobar" "********************* ")))
-
 (deftest remove-level-spaces
   []
   (testing "markdown"
-    (are [x y] (= (text/remove-level-spaces x :markdown true) y)
+    (are [x y] (= (text/remove-level-spaces x :markdown (config/get-block-pattern :markdown) true) y)
       "- foobar" "foobar"
       " - foobar" "foobar"))
   (testing "markdown without spaces between the `#` and title"
-    (are [x y] (= (text/remove-level-spaces x :markdown) y)
+    (are [x y] (= (text/remove-level-spaces x :markdown (config/get-block-pattern :markdown)) y)
       "-foobar" "foobar"))
   (testing "org"
-    (are [x y] (= (text/remove-level-spaces x :org true) y)
+    (are [x y] (= (text/remove-level-spaces x :org (config/get-block-pattern :org) true) y)
       "* foobar" "foobar"
       "**   foobar" "foobar"
       "*********************   foobar" "foobar"))
   (testing "org without spaces between the `#` and title"
-    (are [x y] (= (text/remove-level-spaces x :org) y)
+    (are [x y] (= (text/remove-level-spaces x :org (config/get-block-pattern :org)) y)
       "*foobar" "foobar"
       "**foobar" "foobar"
       "*********************foobar" "foobar")))

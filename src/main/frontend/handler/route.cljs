@@ -1,5 +1,6 @@
 (ns frontend.handler.route
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.ui :as ui-handler]
@@ -82,7 +83,7 @@
       (if block?
         (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)
-                                                  (:block/format block))]
+                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
             (if (> (count content) 48)
               (str (subs content 0 48) "...")
               content))

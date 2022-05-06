@@ -1314,7 +1314,7 @@
 
 (defn- clean-content!
   [format content]
-  (->> (text/remove-level-spaces content format)
+  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
        (drawer/remove-logbook)
        (property/remove-properties format)
        string/trim))

@@ -1,5 +1,6 @@
 (ns frontend.handler.search
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification-handler]
             [frontend.search :as search]
@@ -21,7 +22,7 @@
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]
-  (->> (text/remove-level-spaces content format)
+  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
        (drawer/remove-logbook)
        (property/remove-built-in-properties format)))
 
