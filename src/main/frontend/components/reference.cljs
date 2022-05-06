@@ -68,8 +68,7 @@
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
-  (let [repo (state/get-current-repo)
-        refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
+  (let [refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
     (when (seq refed-blocks-ids)
       (let [ref-blocks (db/get-block-referenced-blocks block-id)
             ref-hiccup (block/->hiccup ref-blocks
