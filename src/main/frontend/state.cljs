@@ -749,12 +749,12 @@
   (swap! state assoc :ui/sidebar-open? false))
 
 (defn sidebar-add-block!
-  [repo db-id block-type block-data]
+  [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
     (when db-id
       (update-state! :sidebar/blocks (fn [blocks]
                                        (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type block-data])
+                                            (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]

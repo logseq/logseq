@@ -754,8 +754,7 @@
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
-     :page
-     page)))
+     :page)))
 
 (defn open-file-in-default-app []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]

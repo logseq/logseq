@@ -396,8 +396,7 @@
             (state/sidebar-add-block!
              (state/get-current-repo)
              (:db/id page-entity)
-             :page
-             {:page page-entity}))
+             :page))
           (state/pub-event! [:page/create redirect-page-name]))
         (when (and contents-page?
                    (util/mobile?)
@@ -642,7 +641,7 @@
 
 (declare block-content)
 (declare block-container)
-(declare block-parents)
+(declare breadcrumb)
 
 (rum/defc block-reference < rum/reactive
   db-mixins/query
@@ -684,8 +683,7 @@
                     (state/sidebar-add-block!
                      (state/get-current-repo)
                      (:db/id block)
-                     :block-ref
-                     {:block block})
+                     :block-ref)
 
                     (match [block-type (util/electron?)]
                       ;; pdf annotation
@@ -700,7 +698,7 @@
                                         {:style {:width      735
                                                  :text-align "left"
                                                  :max-height 600}}
-                                        [(block-parents config repo block-id {:indent? true})
+                                        [(breadcrumb config repo block-id {:indent? true})
                                          (blocks-container
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
@@ -1384,8 +1382,7 @@
       (state/sidebar-add-block!
        (state/get-current-repo)
        (:db/id block)
-       :block
-       block)
+       :block)
       (util/stop e))
     (route-handler/redirect-to-page! uuid)))
 
@@ -1967,8 +1964,7 @@
                        (state/sidebar-add-block!
                         (state/get-current-repo)
                         (:db/id block)
-                        :block-ref
-                        {:block block})
+                        :block-ref)
                        (swap! *hide-block-refs? not)))}
         block-refs-count]])))
 
@@ -2042,14 +2038,15 @@
                (state/sidebar-add-block!
                 (state/get-current-repo)
                 (:db/id block)
-                :block-ref
-                {:block block}))
-             (route-handler/redirect-to-page! (:block/uuid block))))}
+                :block-ref))
+
+             ;; (route-handler/redirect-to-page! (:block/uuid block))
+             ))}
      label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
-(defn block-parents
+(defn breadcrumb
   [config repo block-id {:keys [show-page? indent? level-limit]
                          :or {show-page? true
                               level-limit 3}}]
@@ -2088,7 +2085,7 @@
                                              (breadcrumb-fragment config block label))
                                            [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
-        [:div.block-parents.flex-row.flex-1
+        [:div.breadcrumb.block-parents.flex-row.flex-1
          {:class (when (seq breadcrumb)
                    (str (when-not (:search? config)
                           " my-2")
@@ -2305,8 +2302,8 @@
        (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
-       (block-parents config repo uuid {:show-page? false
-                                        :indent? true}))
+       (breadcrumb config repo uuid {:show-page? false
+                                     :indent? true}))
 
      ;; only render this for the first block in each container
      (when top?
@@ -3010,8 +3007,8 @@
                 (let [block (first blocks)]
                   [:div
                    (when (:breadcrumb-show? config)
-                     (block-parents config (state/get-current-repo) (:block/uuid block)
-                                    {:show-page? false}))
+                     (breadcrumb config (state/get-current-repo) (:block/uuid block)
+                                 {:show-page? false}))
                    (blocks-container blocks (assoc config :breadcrumb-show? false))]))
               {})])))]
 

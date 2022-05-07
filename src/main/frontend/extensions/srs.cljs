@@ -436,7 +436,7 @@
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto"))}
          (let [repo (state/get-current-repo)]
            [:div {:style {:margin-top 20}}
-            (component-block/block-parents {} repo root-block-id {})])
+            (component-block/breadcrumb {} repo root-block-id {})])
          (component-block/blocks-container
           blocks
           (merge (show-cycle-config card @phase)

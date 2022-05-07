@@ -73,8 +73,7 @@
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
-                            :page
-                            {:page page-entity}))
+                            :page))
                          (route-handler/redirect-to-page! name))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
@@ -356,7 +355,7 @@
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
                                               [page :page])]
-                     (state/sidebar-add-block! current-repo db-id block-type nil)))
+                     (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            state)}
   []
@@ -431,7 +430,7 @@
     [:div.cp__sidebar-help-btn
      {:title (t :help-shortcut-title)
       :on-click (fn []
-                  (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+                  (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
      "?"]))
 
 (defn- hide-context-menu-and-clear-selection
