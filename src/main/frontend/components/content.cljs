@@ -214,7 +214,7 @@
             :on-click (fn [_e]
                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
            "Copy block embed")
-          
+
           ;; TODO Logseq protocol mobile support
           (when (util/electron?)
             (ui/menu-link
@@ -295,12 +295,10 @@
       (ui/menu-link
        {:key "open-in-sidebar"
         :on-click (fn []
-                    (let [block (db/pull [:block/uuid block-ref-id])]
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       block-ref-id
-                       :block-ref
-                       {:block block}))                    )}
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     block-ref-id
+                     :block-ref))}
        "Open in sidebar")
       (ui/menu-link
        {:key "copy"

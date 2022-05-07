@@ -86,8 +86,7 @@
                                                 (state/sidebar-add-block!
                                                  (state/get-current-repo)
                                                  (:db/id page)
-                                                 :page
-                                                 {:page page}))
+                                                 :page))
                                               (util/stop e)))}
          original-name]])
 

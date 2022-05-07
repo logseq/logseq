@@ -48,9 +48,7 @@
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page
-                         {:page     page
-                          :journal? true}))
+                         :page))
                       (.preventDefault e)))}
        [:h1.title
         (util/capitalize-all title)]]

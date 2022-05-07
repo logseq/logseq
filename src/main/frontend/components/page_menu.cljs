@@ -90,8 +90,7 @@
                                    (state/sidebar-add-block!
                                     repo
                                     (:db/id page)
-                                    :page-presentation
-                                    {:page page}))}})
+                                    :page-presentation))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -102,7 +101,7 @@
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
-          
+
           (when (util/electron?)
             {:title   (t :page/copy-page-url)
               :options {:on-click #(util/copy-to-clipboard!

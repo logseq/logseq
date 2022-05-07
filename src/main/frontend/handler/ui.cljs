@@ -69,7 +69,7 @@
     (let [id "contents"]
       (if (state/sidebar-block-exists? id)
         (state/sidebar-remove-block! id)
-        (state/sidebar-add-block! current-repo id :contents nil)))))
+        (state/sidebar-add-block! current-repo id :contents)))))
 
 (defn toggle-help!
   []
@@ -77,7 +77,7 @@
     (let [id "help"]
       (if (state/sidebar-block-exists? id)
         (state/sidebar-remove-block! id)
-        (state/sidebar-add-block! current-repo id :help nil)))))
+        (state/sidebar-add-block! current-repo id :help)))))
 
 (defn toggle-settings-modal!
   []
