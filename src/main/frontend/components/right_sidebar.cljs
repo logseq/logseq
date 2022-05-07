@@ -49,12 +49,13 @@
      (page/contents-page contents))])
 
 (defn- block-with-breadcrumb
-  [repo block idx]
+  [repo block idx sidebar-key ref?]
   (let [block-id (:block/uuid block)
         format (:block/format block)]
-    [[:div.ml-8.mt-1
+    [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
       (block/breadcrumb {:id     "block-parent"
-                         :block? true} repo block-id {})]
+                         :block? true
+                         :sidebar-key sidebar-key} repo block-id {})]
      [:div.ml-2
       (block-cp repo idx block)]]))
 
@@ -77,13 +78,13 @@
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
        [(t :right-side-bar/block-ref)
-        (block-with-breadcrumb repo block idx)]))
+        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
       (when-let [block (db/entity repo lookup)]
-       (block-with-breadcrumb repo block idx)))
+        (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
 
     :page
     (when-let [page-name (if (integer? db-id)

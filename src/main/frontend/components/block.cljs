@@ -2026,23 +2026,29 @@
 
 (rum/defc breadcrumb-fragment
   [config block label]
-  (if (= block :page)                   ; page
-    (when label
-      (let [page (db/entity [:block/name (util/page-name-sanity-lc label)])]
-        (page-cp config page)))
-    [:a {:on-mouse-down
-         (fn [e]
-           (if (gobj/get e "shiftKey")
-             (do
-               (util/stop e)
-               (state/sidebar-add-block!
-                (state/get-current-repo)
-                (:db/id block)
-                :block-ref))
+  [:a {:on-mouse-down
+       (fn [e]
+         (cond
+           (gobj/get e "shiftKey")
+           (do
+             (util/stop e)
+             (state/sidebar-add-block!
+              (state/get-current-repo)
+              (:db/id block)
+              :block-ref))
 
-             ;; (route-handler/redirect-to-page! (:block/uuid block))
-             ))}
-     label]))
+           (some? (:sidebar-key config))
+           (do
+             (util/stop e)
+             (state/sidebar-replace-block!
+              (:sidebar-key config)
+              [(state/get-current-repo)
+               (:db/id block)
+               (if (:block/name block) :page :block)]))
+
+           :else
+           (route-handler/redirect-to-page! (:block/uuid block))))}
+   label])
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
@@ -2062,7 +2068,7 @@
         parents (if more? (take-last level-limit parents) parents)]
     (when show?
       (let [page-name-props (when show-page?
-                              [:page
+                              [page
                                (or page-original-name page-name)])
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]

@@ -769,6 +769,13 @@
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
 
+(defn sidebar-replace-block!
+  [old-sidebar-key new-sidebar-key]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (map #(if (= % old-sidebar-key)
+                                           new-sidebar-key
+                                           %) blocks))))
+
 (defn sidebar-block-exists?
   [idx]
   (some #(= (second %) idx) (:sidebar/blocks @state)))
