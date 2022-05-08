@@ -658,12 +658,12 @@
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  ([page-name]
-   (insert-first-page-block-if-not-exists! page-name {}))
-  ([page-name opts]
-   (when (and (string? page-name)
-              (not (string/blank? page-name)))
-     (state/pub-event! [:page/create page-name opts]))))
+  ([page-title]
+   (insert-first-page-block-if-not-exists! page-title {}))
+  ([page-title opts]
+   (when (and (string? page-title)
+              (not (string/blank? page-title)))
+     (state/pub-event! [:page/create page-title opts]))))
 
 (defn properties-block
   [properties format page]

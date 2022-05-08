@@ -134,7 +134,9 @@
                            ;; for namespace pages, only last page need properties
                            drop-last
                            (mapcat #(build-page-tx format nil % journal?))
-                           (remove nil?))
+                           (remove nil?)
+                           (remove (fn [m]
+                                     (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
          (when (seq txs)

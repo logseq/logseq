@@ -258,7 +258,8 @@
            [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
            namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                            (text/namespace-page? original-page-name))
-           page-entity (db/entity [:block/name page-name])]
+           page-entity (db/entity [:block/name page-name])
+           original-page-name (or (:block/original-name page-entity) original-page-name)]
        (merge
         {:block/name page-name
          :block/original-name original-page-name}

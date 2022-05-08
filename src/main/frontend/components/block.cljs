@@ -398,7 +398,7 @@
              (:db/id page-entity)
              :page
              {:page page-entity}))
-          (state/pub-event! [:page/create redirect-page-name]))
+          (state/pub-event! [:page/create page-name-in-block]))
         (when (and contents-page?
                    (util/mobile?)
                    (state/get-left-sidebar-open?))
