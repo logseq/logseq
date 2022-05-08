@@ -936,7 +936,7 @@
                       (remove-boundary-slashes)
                       (normalize))]
      (if replace-slash?
-       (string/replace page #"/" ".")
+       (string/replace page #"/" "%2A")
        page))))
 
 (defn file-name-sanity
@@ -944,11 +944,12 @@
   [page-name]
   (some-> page-name
           page-name-sanity
-          ;; Windows reserved path characters
-          (string/replace windows-reserved-chars "_")
           ;; for android filesystem compatiblity
-          (string/replace #"[\\#|%]+" "_")
-          (string/replace #"/" ".")))
+          (string/replace #"[\\#|%]+" url-encode)
+          ;; Windows reserved path characters
+          (string/replace windows-reserved-chars url-encode)
+          (string/replace #"/" url-encode)
+          (string/replace "*" "%2A")))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"
