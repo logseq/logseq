@@ -388,16 +388,6 @@
       (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
-   (defn url-encode
-     [string]
-     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -889,6 +879,16 @@
          (when (gp-util/uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
+#?(:cljs
+   (defn url-encode
+     [string]
+     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
+
+#?(:cljs
+   (defn url-decode
+     [string]
+     (some-> string str (js/decodeURIComponent))))
+
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
 #?(:cljs
@@ -939,17 +939,18 @@
        (string/replace page #"/" "%2A")
        page))))
 
-(defn file-name-sanity
-  "Sanitize page-name for file name (strict), for file writing."
-  [page-name]
-  (some-> page-name
-          page-name-sanity
-          ;; for android filesystem compatiblity
-          (string/replace #"[\\#|%]+" url-encode)
-          ;; Windows reserved path characters
-          (string/replace windows-reserved-chars url-encode)
-          (string/replace #"/" url-encode)
-          (string/replace "*" "%2A")))
+#?(:cljs
+   (defn file-name-sanity
+     "Sanitize page-name for file name (strict), for file writing."
+     [page-name]
+     (some-> page-name
+             page-name-sanity
+             ;; for android filesystem compatiblity
+             (string/replace #"[\\#|%]+" url-encode)
+             ;; Windows reserved path characters
+             (string/replace windows-reserved-chars url-encode)
+             (string/replace #"/" url-encode)
+             (string/replace "*" "%2A"))))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"

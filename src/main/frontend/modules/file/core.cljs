@@ -30,7 +30,6 @@
 (defn transform-content
   [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
-        first-block? (= left page)
         pre-block? (or pre-block?
                        (and (= page parent left) ; first block
                             (= :markdown format)
