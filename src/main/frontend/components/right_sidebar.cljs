@@ -50,8 +50,7 @@
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
-  (let [block-id (:block/uuid block)
-        format (:block/format block)]
+  (let [block-id (:block/uuid block)]
     [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
       (block/breadcrumb {:id     "block-parent"
                          :block? true

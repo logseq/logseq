@@ -2025,7 +2025,7 @@
        (not @*dragging?)))
 
 (rum/defc breadcrumb-fragment
-  [config block label]
+  [config block label opts]
   [:a {:on-mouse-down
        (fn [e]
          (cond
@@ -2036,6 +2036,11 @@
               (state/get-current-repo)
               (:db/id block)
               :block-ref))
+
+           (util/atom? (:navigating-block opts))
+           (do
+             (util/stop e)
+             (reset! (:navigating-block opts) (:block/uuid block)))
 
            (some? (:sidebar-key config))
            (do
@@ -2053,9 +2058,10 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn breadcrumb
-  [config repo block-id {:keys [show-page? indent? level-limit]
+  [config repo block-id {:keys [show-page? indent? level-limit _navigating-block]
                          :or {show-page? true
-                              level-limit 3}}]
+                              level-limit 3}
+                         :as opts}]
   (let [parents (db/get-block-parents repo block-id (inc level-limit))
         page (db/get-block-page repo block-id)
         page-name (:block/name page)
@@ -2088,7 +2094,7 @@
                             (filterv identity)
                             (map (fn [x] (if (vector? x)
                                            (let [[block label] x]
-                                             (breadcrumb-fragment config block label))
+                                             (breadcrumb-fragment config block label opts))
                                            [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.breadcrumb.block-parents.flex-row.flex-1
@@ -2227,7 +2233,9 @@
 
                :else
                nil)
-             (assoc state ::control-show? (atom false))))
+             (assoc state
+                    ::control-show? (atom false)
+                    ::navigating-block (atom (:block/uuid block)))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
                                         :block/properties :block/left :block/children :block/_refs :ui/selected?]
@@ -2240,8 +2248,20 @@
                                   (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                                         (select-keys (first (:rum/args new-state)) config-compare-keys)))]
                       (boolean result)))}
-  [state config {:block/keys [uuid children pre-block? top? refs heading-level level type format content] :as block}]
+  [state config block]
   (let [repo (state/get-current-repo)
+        *navigating-block (get state ::navigating-block)
+        navigating-block (rum/react *navigating-block)
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        block (if navigated?
+                (let [block (db/pull [:block/uuid navigating-block])
+                      blocks (db/get-paginated-blocks repo (:db/id block)
+                                                      {:scoped-block-id (:db/id block)})
+                      tree (tree/blocks->vec-tree blocks (:block/uuid (first blocks)))]
+                  (first tree))
+                block)
+        {:block/keys [uuid children pre-block? top? refs heading-level level type format content]} block
+        config (if navigated? (assoc config :id (str navigating-block)) config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2309,7 +2329,8 @@
 
      (when (and ref? breadcrumb-show?)
        (breadcrumb config repo uuid {:show-page? false
-                                     :indent? true}))
+                                     :indent? true
+                                     :navigating-block *navigating-block}))
 
      ;; only render this for the first block in each container
      (when top?
@@ -2969,7 +2990,8 @@
 
 (rum/defcs blocks-container <
   {:init (fn [state]
-           (assoc state ::init-blocks-container-id (atom nil)))}
+           (assoc state
+                  ::init-blocks-container-id (atom nil)))}
   [state blocks config]
   (let [*init-blocks-container-id (::init-blocks-container-id state)
         blocks-container-id (if @*init-blocks-container-id
@@ -2986,6 +3008,29 @@
         [:div.blocks-container.flex-1
          {:class (when doc-mode? "document-mode")}
          (lazy-blocks config flat-blocks blocks->vec-tree)]))))
+
+(rum/defcs breadcrumb-with-container < rum/reactive
+  {:init (fn [state]
+           (assoc state ::navigating-block (atom (:block/uuid (ffirst (:rum/args state))))))}
+  [state blocks config]
+  (let [repo (state/get-current-repo)
+        *navigating-block (::navigating-block state)
+        navigating-block (rum/react *navigating-block)
+        block (first blocks)
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        blocks (if navigated?
+                 (let [block (db/pull [:block/uuid navigating-block])]
+                   (db/get-paginated-blocks repo (:db/id block)
+                                           {:scoped-block-id (:db/id block)}))
+                 blocks)]
+    [:div
+     (when (:breadcrumb-show? config)
+       (breadcrumb config (state/get-current-repo) navigating-block
+                   {:show-page? false
+                    :navigating-block *navigating-block}))
+     (blocks-container blocks (assoc config
+                                     :breadcrumb-show? false
+                                     :navigating-block *navigating-block))]))
 
 ;; headers to hiccup
 (defn ->hiccup
@@ -3010,12 +3055,7 @@
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
               (for [[_parent blocks] parent-blocks]
-                (let [block (first blocks)]
-                  [:div
-                   (when (:breadcrumb-show? config)
-                     (breadcrumb config (state/get-current-repo) (:block/uuid block)
-                                 {:show-page? false}))
-                   (blocks-container blocks (assoc config :breadcrumb-show? false))]))
+                (breadcrumb-with-container blocks config))
               {})])))]
 
      (and (:group-by-page? config)
