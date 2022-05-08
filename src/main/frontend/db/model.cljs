@@ -1072,38 +1072,23 @@
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
-             query-result (if (seq aliases)
-                            (let [rules '[[(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
-                                           [?block :block/page ?alias]
-                                           [(contains? ?aliases ?alias)]]
-                                          [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
-                                           [?block :block/refs ?ref-page]
-                                           [(contains? ?pages ?ref-page)]]]]
-                              (react/q repo
-                                       [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-                                       {}
-                                       '[:find [(pull ?block ?block-attrs) ...]
-                                         :in $ % ?pages ?aliases ?block-attrs
-                                         :where
-                                         (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
-                                       rules
-                                       pages
-                                       aliases
-                                       block-attrs))
-                            (react/q repo
-                                     [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-                                     {:use-cache? false}
-                                     '[:find [(pull ?ref-block ?block-attrs) ...]
-                                       :in $ ?page ?block-attrs
-                                       :where
-                                       [?ref-block :block/refs ?page]]
-                                     page-id
-                                     block-attrs))
+             query-result (react/q repo
+                            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                            {}
+                            '[:find [(pull ?block ?block-attrs) ...]
+                              :in $ [?ref-page ...] ?block-attrs
+                              :where
+                              [?block :block/refs ?ref-page]]
+                            pages
+                            block-attrs
+                            ;; TODO: :block/_parent slow recursive query
+                            ;; (butlast block-attrs)
+                            )
              result (->> query-result
                          react
-                         (sort-by-left-recursive)
                          (remove (fn [block]
                                    (= page-id (:db/id (:block/page block)))))
+                         (sort-by-left-recursive)
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
                                 (let [k (if (contains? aliases (:db/id k))
@@ -1119,35 +1104,14 @@
   ([repo page]
    (when repo
      (when-let [db (conn/get-db repo)]
-       (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
-             pages (page-alias-set repo page)
-             aliases (set/difference pages #{page-id})
-             query-result (if (seq aliases)
-                            (let [rules '[[(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
-                                           [?block :block/page ?alias]
-                                           [(contains? ?aliases ?alias)]]
-                                          [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
-                                           [?block :block/refs ?ref-page]
-                                           [(contains? ?pages ?ref-page)]]]]
-                              (d/q
-                                '[:find ?block
-                                  :in $ % ?pages ?aliases ?block-attrs
-                                  :where
-                                  (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
-                                db
-                                rules
-                                pages
-                                aliases
-                                block-attrs))
-                            (d/q
-                              '[:find ?ref-block
-                                :in $ ?page ?block-attrs
-                                :where
-                                [?ref-block :block/refs ?page]]
-                              db
-                              page-id
-                              block-attrs))]
-         query-result)))))
+       (let [pages (page-alias-set repo page)]
+         (d/q
+           '[:find ?block
+             :in $ [?ref-page ...]
+             :where
+             [?block :block/refs ?ref-page]]
+           db
+           pages))))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
