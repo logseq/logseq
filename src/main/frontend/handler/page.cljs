@@ -366,7 +366,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/page-name-sanity new-name true)
+        new-file-name       (util/file-name-sanity new-name)
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
