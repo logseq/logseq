@@ -308,6 +308,12 @@ export interface IAppProxy {
     action: SimpleCommandCallback
   ) => void
 
+  /**
+   * Supported key names
+   * @link https://gist.github.com/xyhp915/d1a6d151a99f31647a95e59cdfbf4ddc
+   * @param keybinding
+   * @param action
+   */
   registerCommandShortcut: (
     keybinding: SimpleCommandKeybinding,
     action: SimpleCommandCallback

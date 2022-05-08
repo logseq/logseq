@@ -8,10 +8,12 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [goog.string :as gstring]
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.handler.user :as user]
             [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [frontend.handler.notification :as notification]
@@ -158,7 +160,8 @@
   (go
     (let [resp (http/post (str "https://" config/API-DOMAIN "/file-sync/" api-name)
                           {:oauth-token token
-                           :body (js/JSON.stringify (clj->js body))})]
+                           :body (js/JSON.stringify (clj->js body))
+                           :with-credentials? false})]
       {:resp (<! resp)
        :api-name api-name
        :body body})))
@@ -179,7 +182,9 @@
          (:resp resp))))))
 
 (defn- remove-dir-prefix [dir path]
-  (let [r (string/replace path (js/RegExp. (str "^" dir)) "")]
+  (let [is-mobile-url? (string/starts-with? dir "file://")
+        dir (if is-mobile-url? (gstring/urlDecode dir) dir)
+        r (string/replace path (js/RegExp. (str "^" (gstring/regExpEscape dir))) "")]
     (if (string/starts-with? r "/")
       (string/replace-first r "/" "")
       r)))
@@ -419,7 +424,7 @@
                (string/index-of (str (ex-cause r)) "operation timed out")
                (> n 0))
         (do
-          (prn (str "retry(" n ") ..."))
+          (print (str "retry(" n ") ..."))
           (recur (dec n)))
         r))))
 
@@ -490,7 +495,108 @@
          (retry-rsapi
           #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token))))))))
 
-(def rsapi (->RSAPI))
+(deftype CapacitorAPI []
+  IToken
+  (get-token [this]
+    (go
+      (or (state/get-auth-id-token)
+          (<! (.refresh-token this)))))
+  (refresh-token [_]
+    (go
+      (<! (user/refresh-id-token&access-token))
+      (state/get-auth-id-token)))
+
+  IRSAPI
+  (set-env [_ prod?]
+    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
+
+  (get-local-all-files-meta [_ _graph-uuid base-path]
+    (go
+      (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:basePath base-path}))))]
+        (if (instance? ExceptionInfo r)
+          r
+          (->> (.-result r)
+               js->clj
+               (map (fn [[path metadata]]
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
+               set)))))
+
+  (get-local-files-meta [_ _graph-uuid base-path filepaths]
+    (go
+      (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
+                                            (clj->js {:basePath base-path
+                                                      :filePaths filepaths}))))]
+        (if (instance? ExceptionInfo r)
+          r
+          (->> (.-result r)
+               js->clj
+               (map (fn [[path metadata]]
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
+               set)))))
+
+  (rename-local-file [_ _graph-uuid base-path from to]
+    (go
+      (<! (p->c (.renameLocalFile mobile-util/file-sync
+                                  (clj->js {:basePath base-path
+                                            :from from
+                                            :to to}))))))
+
+  (update-local-files [this graph-uuid base-path filepaths]
+    (go
+      (let [token (<! (get-token this))
+            r (<! (retry-rsapi
+                   #(p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
+                                                                             :basePath base-path
+                                                                             :filePaths filepaths
+                                                                             :token token})))))]
+        (when (state/developer-mode?) (check-files-exists base-path filepaths))
+        r)))
+
+  (delete-local-files [_ _graph-uuid base-path filepaths]
+    (go
+      (let [r (<! (retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
+                                                         (clj->js {:basePath base-path
+                                                                   :filePaths filepaths})))))]
+        (when (state/developer-mode?) (check-files-not-exists base-path filepaths))
+        r)))
+
+  (update-remote-file [this graph-uuid base-path filepath local-txid]
+    (update-remote-files this graph-uuid base-path [filepath] local-txid))
+
+  (update-remote-files [this graph-uuid base-path filepaths local-txid]
+    (go
+      (let [token (<! (get-token this))
+            r (<! (p->c (.updateRemoteFiles mobile-util/file-sync
+                                            (clj->js {:graphUUID graph-uuid
+                                                      :basePath base-path
+                                                      :filePaths filepaths
+                                                      :txid local-txid
+                                                      :token token}))))]
+        (prn ::debug-update-remote-files r)
+        (if (instance? ExceptionInfo r)
+          r
+          (get (js->clj r) "txid")))))
+
+  (delete-remote-files [this graph-uuid _base-path filepaths local-txid]
+    (let [token (<! (get-token this))
+          r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
+                                          (clj->js {:graphUUID graph-uuid
+                                                    :filePaths filepaths
+                                                    :txid local-txid
+                                                    :token token}))))]
+      (if (instance? ExceptionInfo r)
+        r
+        (get (js->clj r) "txid")))))
+
+(def rsapi (cond
+             (util/electron?)
+             (->RSAPI)
+
+             (mobile-util/native-ios?)
+             (->CapacitorAPI)
+
+             :else
+             nil))
 
 (deftype RemoteAPI []
   Object
@@ -713,11 +819,11 @@
 (defn file-watch-handler
   "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
-  (go
-    (when (some-> (state/get-file-sync-state)
-                  sync-state--stopped?
-                  not)
-      (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
+
+  (when (some-> (state/get-file-sync-state)
+                sync-state--stopped?
+                not)
+    (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
 
 ;;; ### remote->local syncer & local->remote syncer
 

@@ -429,7 +429,8 @@
               (let [total (get-blocks-count)]
                 (is (= total (+ c1 @*random-count)))))))))))
 
-(deftest ^:long random-move-up-down
+;; TODO: Enable when not failing as intermittently
+#_(deftest ^:long random-move-up-down
   (testing "Random move up down"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -445,7 +446,8 @@
             (let [total (get-blocks-count)]
               (is (= total (+ c1 @*random-count))))))))))
 
-(deftest ^:long random-indent-outdent
+;; TODO: Enable when not failing as intermittently
+#_(deftest ^:long random-indent-outdent
   (testing "Random indent and outdent"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)

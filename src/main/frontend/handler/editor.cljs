@@ -651,7 +651,10 @@
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
             (when edit-block?
-              (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10))
+              (if (and replace-empty-target?
+                       (string/blank? (:block/content last-block)))
+                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 10)
+                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -1888,6 +1891,16 @@
             :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
                                   (remove nil?))})))
 
+(defn- edit-last-block-after-inserted!
+  [result]
+  (js/setTimeout
+   (fn []
+     (when-let [last-block (last (:blocks result))]
+       (clear-when-saved!)
+       (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
+         (edit-block! last-block' :max (:block/uuid last-block')))))
+   0))
+
 (defn paste-blocks
   [blocks {:keys [content-update-fn
                   exclude-properties
@@ -1921,13 +1934,7 @@
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
-          (js/setTimeout
-           (fn []
-             (when-let [last-block (last (:blocks result))]
-               (clear-when-saved!)
-               (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-                 (edit-block! last-block' :max (:block/uuid last-block')))))
-           0))))))
+          (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
   [tree-vec format]
@@ -1959,11 +1966,12 @@
 (defn insert-template!
   ([element-id db-id]
    (insert-template! element-id db-id {}))
-  ([element-id db-id opts]
+  ([element-id db-id {:keys [target] :as opts}]
    (when-let [db-id (if (integer? db-id)
                       db-id
                       (:db/id (db-model/get-template-by-name (name db-id))))]
      (let [repo (state/get-current-repo)
+           target (or target (state/get-edit-block))
            block (db/entity db-id)
            format (:block/format block)
            block-uuid (:block/uuid block)
@@ -1977,20 +1985,40 @@
                     (drop 1 sorted-blocks))]
        (when element-id
          (insert-command! element-id "" format {}))
-       (let [opts (merge
-                   {:exclude-properties [:id :template :template-including-parent]
-                    :content-update-fn (fn [content]
-                                         (->> content
-                                              (property/remove-property format "template")
-                                              (property/remove-property format "template-including-parent")
-                                              template/resolve-dynamic-template!))}
-                   opts)]
-         (paste-blocks blocks opts))))))
+       (let [exclude-properties [:id :template :template-including-parent]
+             content-update-fn (fn [content]
+                                 (->> content
+                                      (property/remove-property format "template")
+                                      (property/remove-property format "template-including-parent")
+                                      template/resolve-dynamic-template!))
+             page (if (:block/name block) block
+                      (when target (:block/page (db/entity (:db/id target)))))
+             blocks' (map (fn [block]
+                            (paste-block-cleanup block page exclude-properties format content-update-fn))
+                       blocks)
+             sibling? (:sibling? opts)
+             sibling?' (cond
+                         (some? sibling?)
+                         sibling?
+
+                         (db/has-children? (:block/uuid target))
+                         false
+
+                         :else
+                         true)]
+         (outliner-tx/transact!
+           {:outliner-op :insert-blocks}
+           (save-current-block!)
+           (let [result (outliner-core/insert-blocks! blocks'
+                                                      target
+                                                      (assoc opts :sibling? sibling?'))]
+             (edit-last-block-after-inserted! result))))))))
 
 (defn template-on-chosen-handler
   [element-id]
   (fn [[_template db-id] _click?]
-    (insert-template! element-id db-id)))
+    (insert-template! element-id db-id
+                      {:replace-empty-target? true})))
 
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]

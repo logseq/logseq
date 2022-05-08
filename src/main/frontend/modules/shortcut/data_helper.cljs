@@ -44,6 +44,17 @@
          shortcut)
        (mapv mod-key)))))
 
+(defn normalize-user-keyname
+  [k]
+  (some-> k
+          (util/safe-lower-case)
+          (str/replace #";+" "semicolon")
+          (str/replace #"=+" "equals")
+          (str/replace #"~+" "dash")
+          (str/replace "[" "open-square-bracket")
+          (str/replace "]" "close-square-bracket")
+          (str/replace "'" "single-quote")))
+
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
   (let [dict (->> (vals @shortcut-config/config)
@@ -150,9 +161,13 @@
     false
     (let [handler-id    (get-group k)
           shortcut-m    (shortcut-map handler-id)
+          parse-shortcut #(try
+                           (KeyboardShortcutHandler/parseStringShortcut %)
+                           (catch js/Error e
+                             (js/console.error "[shortcut/parse-error]" (str % " - " (.-message e)))))
           bindings      (->> (shortcut-binding k)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))
           rest-bindings (->> (map key shortcut-m)
                              (remove #{k})
@@ -160,7 +175,7 @@
                              (filter vector?)
                              (mapcat identity)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))]
 
       (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))
