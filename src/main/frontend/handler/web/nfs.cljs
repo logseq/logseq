@@ -20,6 +20,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [clojure.core.async :as async]))
 
 (defn remove-ignore-files
@@ -48,7 +50,7 @@
    (cond
      mobile-native?
      (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (util/path-normalize uri)
+            {:file/path             (gp-util/path-normalize uri)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
@@ -57,7 +59,7 @@
      electron?
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
-              {:file/path             (util/path-normalize path)
+              {:file/path             (gp-util/path-normalize path)
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
@@ -71,7 +73,7 @@
                     path (-> (get-attr "webkitRelativePath")
                              (string/replace-first (str dir-name "/") ""))]
                 {:file/name             (get-attr "name")
-                 :file/path             (util/path-normalize path)
+                 :file/path             (gp-util/path-normalize path)
                  :file/last-modified-at (get-attr "lastModified")
                  :file/size             (get-attr "size")
                  :file/type             (get-attr "type")
@@ -155,7 +157,7 @@
                                                                         (string/replace-first path (str dir-name "/") ""))
                                                              (let [last-part (last (string/split path "/"))]
                                                                (contains? #{config/app-name
-                                                                            config/default-draw-directory
+                                                                            gp-config/default-draw-directory
                                                                             (config/get-journals-directory)
                                                                             (config/get-pages-directory)}
                                                                           last-part)))))

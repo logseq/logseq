@@ -10,6 +10,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
+            [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
             [clojure.core.async :as async]))
 
@@ -227,7 +228,7 @@
         affected-keys (concat
                        (mapcat
                         (fn [block-id]
-                          (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
+                          (let [block-id (if (and (string? block-id) (gp-util/uuid-string? block-id))
                                            [:block/uuid block-id]
                                            block-id)]
                             (when-let [block (db-utils/entity block-id)]

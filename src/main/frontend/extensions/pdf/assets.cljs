@@ -9,6 +9,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.config :as gp-config]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -35,8 +36,8 @@
 
               :else
               (let [full-path (string/replace full-path #"^[.\/\\]+" "")
-                    full-path (if-not (string/starts-with? full-path config/local-assets-dir)
-                                (util/node-path.join config/local-assets-dir full-path)
+                    full-path (if-not (string/starts-with? full-path gp-config/local-assets-dir)
+                                (util/node-path.join gp-config/local-assets-dir full-path)
                                 full-path)]
                 (str "file://"  ;; TODO: bfs
                      (util/node-path.join
@@ -75,7 +76,7 @@
 (defn resolve-hls-data-by-key$
   [target-key]
   ;; TODO: fuzzy match
-  (when-let [hls-file (and target-key (str config/local-assets-dir "/" target-key ".edn"))]
+  (when-let [hls-file (and target-key (str gp-config/local-assets-dir "/" target-key ".edn"))]
     (load-hls-data$ {:hls-file hls-file})))
 
 (defn area-highlight?
@@ -113,7 +114,7 @@
                                    fstamp (get-in new-hl [:content :image])
                                    old-fstamp (and old-hl (get-in old-hl [:content :image]))
                                    fname (str (:page new-hl) "_" (:id new-hl))
-                                   fdir (str config/local-assets-dir "/" key)
+                                   fdir (str gp-config/local-assets-dir "/" key)
                                    _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
                                    new-fpath (str fdir "/" fname "_" fstamp ".png")
                                    old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
@@ -142,7 +143,7 @@
           repo-dir (config/get-repo-dir repo-cur)
           fstamp (get-in hl [:content :image])
           fname (str (:page hl) "_" (:id hl))
-          fdir (str config/local-assets-dir "/" fkey)
+          fdir (str gp-config/local-assets-dir "/" fkey)
           fpath (util/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
 
       (fs/unlink! repo-cur fpath {}))))
@@ -156,7 +157,7 @@
         format (state/get-preferred-format)]
     (if-not page
       (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-            asset-dir (util/node-path.join repo-dir config/local-assets-dir)
+            asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
             url (if (string/includes? url asset-dir)
                   (str ".." (last (string/split url repo-dir)))
                   url)
@@ -245,7 +246,7 @@
       (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
         (when-let [hl-page (:hl-page props)]
           (let [asset-path (editor-handler/make-asset-url
-                             (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
+                             (str "/" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
             [:span.hl-area
              [:img {:src asset-path}]]))))))
 

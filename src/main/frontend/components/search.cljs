@@ -20,6 +20,7 @@
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
+            [logseq.graph-parser.util :as gp-util]
             [reitit.frontend.easy :as rfe]
             [frontend.modules.shortcut.core :as shortcut]))
 
@@ -32,7 +33,7 @@
             lc-content (util/search-normalize content)
             lc-q (util/search-normalize q)]
         (if (and (string/includes? lc-content lc-q)
-                 (not (util/safe-re-find #" " q)))
+                 (not (gp-util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
                 [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
             [:div
