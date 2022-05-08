@@ -184,11 +184,16 @@
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
 
-(rum/defc references
-  [page-name]
+(rum/defcs references <
+  (rum/local false ::visible?)
+  [state page-name]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
-   (references* page-name)))
+   (ui/lazy-visible
+    (::visible? state)
+    "loading references..."
+    (fn []
+      (references* page-name)))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

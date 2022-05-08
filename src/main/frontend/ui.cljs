@@ -25,6 +25,7 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["react-visibility-sensor" :as rvs]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
@@ -37,6 +38,7 @@
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
+(def visibility-sensor (r/adapt-class (gobj/get rvs "default")))
 
 (defn reset-ios-whole-page-offset!
   []
@@ -908,3 +910,18 @@
     [:span.text-sm.font-medium
      label-right]]
    (progress-bar width)])
+
+(rum/defc lazy-visible-inner
+  [visible? content-fn loading-label]
+  [:div.lazy-visibility
+   (if visible?
+     (when (fn? content-fn) (content-fn))
+     (loading (or loading-label "loading...")))])
+
+(rum/defc lazy-visible < rum/reactive
+  [*visible? loading-label content-fn]
+  (let [visible? (rum/react *visible?)]
+    (visibility-sensor
+     {:on-change #(reset! *visible? %)
+      :partialVisibility true}
+     (lazy-visible-inner visible? content-fn loading-label))))
