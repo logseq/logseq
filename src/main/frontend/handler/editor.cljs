@@ -54,9 +54,7 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]
-            [logseq.graph-parser.util :as gp-util]
-            ["path" :as path]))
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
