@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [frontend.util :as front-utils]
+            [frontend.util :as util]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -44,7 +44,7 @@
       (let [active-hl (:pdf/ref-highlight @state/state)
             page-key (:filename current)
             last-page (and page-key
-                           (front-utils/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
+                           (util/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
 
         (when (and last-page (nil? active-hl))
           (set! (.-currentPageNumber viewer) last-page)))))
@@ -54,7 +54,7 @@
   [^js viewer]
   (let [el-ref (rum/use-ref nil)
         adjust-main-size!
-        (front-utils/debounce
+        (util/debounce
           200 (fn [width]
                 (let [root-el js/document.documentElement]
                   (.setProperty (.-style root-el) "--ph-view-container-width" width)
@@ -119,7 +119,7 @@
 
                         "copy"
                         (do
-                          (front-utils/copy-to-clipboard!
+                          (util/copy-to-clipboard!
                             (or (:text content) (.toString range)))
                           (pdf-utils/clear-all-selection))
 
@@ -155,7 +155,7 @@
         (if (and @*highlight-mode? new?)
           (action-fn! @*highlight-last-color true)
           (let [^js el (rum/deref *el)
-                {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
+                {:keys [x y]} (util/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
             (set! (.. el -style -transform)
                   (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)"))))
         #())
@@ -341,7 +341,7 @@
                                       (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                     (.closest target ".page"))
                            (and e (or (.-metaKey e)
-                                      (and front-utils/win32? (.-shiftKey e))
+                                      (and util/win32? (.-shiftKey e))
                                       @*area-mode?)))))
 
         reset-coords #(do
@@ -688,7 +688,7 @@
         expanded? (boolean expanded)]
 
     [:div.extensions__pdf-outline-item
-     {:class (front-utils/classnames [{:has-children has-child? :is-expand expanded?}])}
+     {:class (util/classnames [{:has-children has-child? :is-expand expanded?}])}
      [:div.inner
       [:a
        {:href      "javascript:void(0);"
@@ -755,7 +755,7 @@
         [])
 
       [:div.extensions__pdf-outline-wrap.hls-popup-wrap
-       {:class    (front-utils/classnames [{:visible visible?}])
+       {:class    (util/classnames [{:visible visible?}])
         :on-click (fn [^js/MouseEvent e]
                     (let [target (.-target e)]
                       (when-not (.contains (rum/deref *el-outline) target)
@@ -790,7 +790,7 @@
                (fn []
                  (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
                        text (string/replace text #"[\n\t]+" "\n")]
-                   (front-utils/copy-to-clipboard! text)
+                   (util/copy-to-clipboard! text)
                    (notification/show! "Copied!" :success)
                    (close-fn!))))]])
 
@@ -852,7 +852,7 @@
 
        ;; selection
        [:a.button
-        {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
+        {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
          :class    (when area-mode? "is-active")
          :on-click #(set-area-mode! (not area-mode?))}
         (svg/icon-area 18)]
@@ -902,7 +902,7 @@
                   :on-mouse-enter #(.select ^js (.-target %))
                   :on-key-up      (fn [^js e]
                                     (let [^js input (.-target e)
-                                          value (front-utils/safe-parse-int (.-value input))]
+                                          value (util/safe-parse-int (.-value input))]
                                       (when (and (= (.-keyCode e) 13) value (> value 0))
                                         (set! (. viewer -currentPageNumber)
                                               (if (> value total-page-num) total-page-num value)))))}]
@@ -962,7 +962,7 @@
                ;;TODO: destroy
                (fn []
                  (when-let [last-page (.-currentPageNumber viewer)]
-                   (storage/set (str "ls-pdf-last-page-" (front-utils/node-path.basename url)) last-page))
+                   (storage/set (str "ls-pdf-last-page-" (util/node-path.basename url)) last-page))
 
                  (when pdf-document (.destroy pdf-document)))))
       [])
@@ -995,7 +995,7 @@
     (let [^js viewer (:viewer state)]
       [:div.extensions__pdf-viewer-cnt
        [:div.extensions__pdf-viewer
-        {:ref *el-ref :class (front-utils/classnames [{:is-area-dashed @*area-dashed?}])}
+        {:ref *el-ref :class (util/classnames [{:is-area-dashed @*area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
 

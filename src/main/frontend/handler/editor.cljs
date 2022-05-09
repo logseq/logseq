@@ -52,6 +52,7 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [frontend.util.keycode :as keycode]
+            [logseq.graph-parser.util :as gp-util]
             ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -157,13 +158,12 @@
 (defn open-block-in-sidebar!
   [block-id]
   (when block-id
-    (when-let [block (db/pull [:block/uuid block-id])]
+    (when-let [block (db/entity [:block/uuid block-id])]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
          (:db/id block)
-         (if page? :page :block)
-         block)))))
+         (if page? :page :block))))))
 
 (defn reset-cursor-range!
   [node]
@@ -255,7 +255,7 @@
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
   (and (string? block-id)
-       (util/uuid-string? block-id)
+       (gp-util/uuid-string? block-id)
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
@@ -336,7 +336,7 @@
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
     (let [format (:block/format block)
-          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-marker (last (gp-util/safe-re-find (marker/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]
@@ -480,10 +480,10 @@
   (let [current-page (state/get-current-page)
         block-id (or
                   (and (:id config)
-                       (util/uuid-string? (:id config))
+                       (gp-util/uuid-string? (:id config))
                        (:id config))
                   (and current-page
-                       (util/uuid-string? current-page)
+                       (gp-util/uuid-string? current-page)
                        current-page))]
     (= uuid (and block-id (medley/uuid block-id)))))
 
@@ -1142,19 +1142,17 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)
-          block? (util/uuid-string? page-name)]
+          block? (gp-util/uuid-string? page-name)]
       (when-let [page (db/get-page page-name)]
         (if block?
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :block
-           page)
+           :block)
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :page
-           {:page page}))))))
+           :page))))))
 
 (defn zoom-in! []
   (if (state/editing?)
@@ -1174,7 +1172,7 @@
     (let [page (state/get-current-page)
           block-id (and
                     (string? page)
-                    (util/uuid-string? page)
+                    (gp-util/uuid-string? page)
                     (medley/uuid page))]
       (when block-id
         (let [block-parent (db/get-block-parent block-id)]
@@ -1295,7 +1293,7 @@
                  elem (and input-id (gdom/getElement input-id))
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
-                                                 (util/safe-subs db-content (:block/level db-block)))
+                                                 (gp-util/safe-subs db-content (:block/level db-block)))
                  value (and elem (gobj/get elem "value"))]
              (cond
                force?
@@ -1762,7 +1760,7 @@
             edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
-         (util/safe-subs edit-content pos current-pos))))))
+         (gp-util/safe-subs edit-content pos current-pos))))))
 
 (defn close-autocomplete-if-outside
   [input]
@@ -1775,7 +1773,7 @@
       (let [value (gobj/get input "value")
             pos (state/get-editor-last-pos)
             current-pos (cursor/pos input)
-            between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
+            between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
         (when (and between
                    (or
                     (string/includes? between "[")
@@ -2036,7 +2034,7 @@
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
   (when id
-    (when-let [entity (if (util/uuid-string? (str id))
+    (when-let [entity (if (gp-util/uuid-string? (str id))
                         (db/entity [:block/uuid (uuid id)])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
@@ -2863,7 +2861,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (util/safe-re-find (if (= format :org)
+                                           (if (gp-util/safe-re-find (if (= format :org)
                                                                     #"\s*\*+\s+"
                                                                     #"\s*-\s+") p)
                                              p
@@ -2926,9 +2924,9 @@
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
         (match [format
-                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+                (nil? (gp-util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                (nil? (gp-util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                (nil? (gp-util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
           (paste-text-parseable format text)
 
@@ -3213,7 +3211,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [block? (util/uuid-string? page)
+    (let [block? (gp-util/uuid-string? page)
           block-id (or root-block (and block? (uuid page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)

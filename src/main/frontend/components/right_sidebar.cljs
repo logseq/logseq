@@ -48,8 +48,18 @@
    (when-let [contents (db/entity [:block/name "contents"])]
      (page/contents-page contents))])
 
+(defn- block-with-breadcrumb
+  [repo block idx sidebar-key ref?]
+  (let [block-id (:block/uuid block)]
+    [[:div.mt-1 {:class (if ref? "ml-8" "ml-1")}
+      (block/breadcrumb {:id     "block-parent"
+                         :block? true
+                         :sidebar-key sidebar-key} repo block-id {})]
+     [:div.ml-2
+      (block-cp repo idx block)]]))
+
 (defn build-sidebar-item
-  [repo idx db-id block-type block-data t]
+  [repo idx db-id block-type]
   (case block-type
     :contents
     [(t :right-side-bar/contents)
@@ -64,33 +74,21 @@
 
     :block-ref
     #_:clj-kondo/ignore
-    (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
-      [(t :right-side-bar/block-ref)
-       (let [block (:block block-data)
-             block-id (:block/uuid block)
-             format (:block/format block)]
-         [[:div.ml-8.mt-1
-           (block/block-parents {:id     "block-parent"
-                                 :block? true} repo block-id {})]
-          [:div.ml-2
-           (block-cp repo idx block)]])])
+    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
+      (when-let [block (db/entity repo lookup)]
+       [(t :right-side-bar/block-ref)
+        (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
     :block
     #_:clj-kondo/ignore
-    (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
-      (let [block-id (:block/uuid block-data)
-            format (:block/format block-data)]
-        [(block/block-parents {:id     "block-parent"
-                               :block? true} repo block-id {})
-         [:div.ml-2
-          (block-cp repo idx block-data)]]))
+    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
+      (when-let [block (db/entity repo lookup)]
+        (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
 
     :page
-    (let [page-name (or (:block/name block-data)
-                        db-id)
-          page-name (if (integer? db-id)
-                      (:block/name (db/entity db-id))
-                      page-name)]
+    (when-let [page-name (if (integer? db-id)
+                           (:block/name (db/entity db-id))
+                           db-id)]
       [[:a.page-title {:href     (rfe/href :page {:name page-name})
                        :on-click (fn [e]
                                    (when (gobj/get e "shiftKey")
@@ -100,7 +98,7 @@
         (page-cp repo page-name)]])
 
     :page-presentation
-    (let [page-name (get-in block-data [:page :block/name])]
+    (let [page-name (:block/name (db/entity db-id))]
       [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
@@ -120,15 +118,8 @@
     svg/close]))
 
 (rum/defc sidebar-item < rum/reactive
-  [repo idx db-id block-type block-data t]
-
-  (let [item
-        (if (= :page block-type)
-          (let [lookup-ref (if (number? db-id) db-id [:block/name (util/page-name-sanity-lc db-id)])
-                page (db/query-entity-in-component lookup-ref)]
-            (when (seq page)
-              (build-sidebar-item repo idx db-id block-type page t)))
-          (build-sidebar-item repo idx db-id block-type block-data t))]
+  [repo idx db-id block-type]
+  (let [item (build-sidebar-item repo idx db-id block-type)]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
         [:div.sidebar-item.content.color-level.px-4.shadow-lg
@@ -210,7 +201,7 @@
        [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "contents" :contents nil))}
+                                                         (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
         [:div.ml-4.text-sm
@@ -218,14 +209,13 @@
                                                          (when-let [page (get-current-page)]
                                                            (state/sidebar-add-block!
                                                             repo
-                                                            (str "page-graph-" page)
-                                                            :page-graph
-                                                            page)))}
+                                                            page
+                                                            :page-graph)))}
           (t :right-side-bar/page)]]
 
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                         (state/sidebar-add-block! repo "help" :help nil))}
+                                                         (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]]
 
        [:div.flex.align-items {:style {:z-index 999
@@ -234,9 +224,9 @@
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
-         (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+         (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
-             (sidebar-item repo idx db-id block-type block-data t)
+             (sidebar-item repo idx db-id block-type)
              (str "sidebar-block-" idx)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
