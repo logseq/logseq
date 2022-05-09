@@ -147,7 +147,7 @@
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
 
-(def swipe (atom nil))
+(def *swipe (atom nil))
 
 (defn on-touch-start
   [event]
@@ -156,116 +156,121 @@
       (let [touch (aget touches 0)
             x (.-clientX touch)
             y (.-clientY touch)]
-        (reset! swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))
+        (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil :reversed false})))))
 
 (defn on-touch-move
   [event block uuid *show-left-menu? *show-right-menu?]
   (when-let [touches (.-targetTouches event)]
-    (when (= (.-length touches) 1)
-     (let [{:keys [x0 xi direction]} @swipe
-           touch (aget touches 0)
-           tx (.-clientX touch)
-           ty (.-clientY touch)
-           direction (if (nil? direction)
-                       (if (> tx x0)
-                         :right
-                         :left)
-                       direction)]
-       (swap! swipe #(-> %
-                         (assoc :tx tx)
-                         (assoc :ty ty)
-                         (assoc :xi tx)
-                         (assoc :yi ty)
-                         (assoc :direction direction)))
-       (when (< (* (- xi x0) (- tx xi)) 0)
-         (swap! swipe #(-> %
-                           (assoc :x0 tx)
-                           (assoc :y0 ty))))
-       (let [{:keys [x0 y0]} @swipe
-             dx (- tx x0)
-             dy (- ty y0)]
-         (when-not (or (> (. js/Math abs dy) 15)
-                       (< (. js/Math abs dx) 5))
-           (let [left (gdom/getElement (str "block-left-menu-" uuid))
-                 right (gdom/getElement (str "block-right-menu-" uuid))]
+    (when (and (= (.-length touches) 1) @*swipe)
+      (let [{:keys [x0 xi direction]} @*swipe
+            touch (aget touches 0)
+            tx (.-clientX touch)
+            ty (.-clientY touch)
+            direction (if (nil? direction)
+                        (if (> tx x0)
+                          :right
+                          :left)
+                        direction)]
+        (swap! *swipe #(-> %
+                           (assoc :tx tx)
+                           (assoc :ty ty)
+                           (assoc :xi tx)
+                           (assoc :yi ty)
+                           (assoc :direction direction)))
+        (when (< (* (- xi x0) (- tx xi)) 0)
+          (swap! *swipe #(-> %
+                             (assoc :x0 tx)
+                             (assoc :y0 ty)
+                             (assoc :reversed true))))
+        (let [{:keys [x0 y0]} @*swipe
+              dx (- tx x0)
+              dy (- ty y0)]
+          (when-not (and (not (:reversed @*swipe))
+                         (or (> (. js/Math abs dy) 10)
+                             (< (. js/Math abs dx) 3)))
+            (let [left (gdom/getElement (str "block-left-menu-" uuid))
+                  right (gdom/getElement (str "block-right-menu-" uuid))]
 
-             (cond
-               (= direction :right)
-               (do
-                 (reset! *show-left-menu? true)
-                 (when left
-                   (if (> dx 0)
-                     (set! (.. left -style -width) (str dx "px"))
-                     (set! (.. left -style -width) (str (+ 50 dx) "px")))
+              (cond
+                (= direction :right)
+                (do
+                  (reset! *show-left-menu? true)
+                  (when left
+                    (if (> dx 0)
+                      (set! (.. left -style -width) (str dx "px"))
+                      (set! (.. left -style -width) (str (+ 50 dx) "px")))
 
-                   (let [indent (gdom/getFirstElementChild left)]
-                     (when (indentable? block)
-                       (if (>= (.-clientWidth left) 50)
-                         (set! (.. indent -style -opacity) "100%")
-                         (set! (.. indent -style -opacity) "30%"))))))
+                    (let [indent (gdom/getFirstElementChild left)]
+                      (when (indentable? block)
+                        (if (>= (.-clientWidth left) 50)
+                          (set! (.. indent -style -opacity) "100%")
+                          (set! (.. indent -style -opacity) "30%"))))))
 
-               (= direction :left)
-               (do
-                 (reset! *show-right-menu? true)
-                 (when right
-                   (if (< dx 0)
-                     (set! (.. right -style -width) (str (- dx) "px"))
-                     (set! (.. right -style -width) (str (- 80 dx) "px")))
+                (= direction :left)
+                (do
+                  (reset! *show-right-menu? true)
+                  (when right
+                    (if (< dx 0)
+                      (set! (.. right -style -width) (str (- dx) "px"))
+                      (set! (.. right -style -width) (str (- 80 dx) "px")))
 
-                   (let [outdent (gdom/getFirstElementChild right)
-                         more (gdom/getLastElementChild right)]
+                    (let [outdent (gdom/getFirstElementChild right)
+                          more (gdom/getLastElementChild right)]
 
-                     (when (outdentable? block)
-                       (if (and (>= (.-clientWidth right) 40)
-                                (< (.-clientWidth right) 80))
-                         (set! (.. outdent -style -opacity) "100%")
-                         (set! (.. outdent -style -opacity) "30%")))
+                      (when (outdentable? block)
+                        (if (and (>= (.-clientWidth right) 40)
+                                 (< (.-clientWidth right) 80))
+                          (set! (.. outdent -style -opacity) "100%")
+                          (set! (.. outdent -style -opacity) "30%")))
 
-                     (if (>= (.-clientWidth right) 80)
-                       (set! (.. more -style -opacity) "100%")
-                       (set! (.. more -style -opacity) "30%")))))
-               :else
-               nil))))))))
+                      (if (>= (.-clientWidth right) 80)
+                        (set! (.. more -style -opacity) "100%")
+                        (set! (.. more -style -opacity) "30%")))))
+                :else
+                nil))))))))
 
 (defn on-touch-end
   [_event block uuid *show-left-menu? *show-right-menu?]
-  (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
-        right-menu (gdom/getElement (str "block-right-menu-" uuid))
-        {:keys [x0 tx]} @swipe
-        dx (- tx x0)]
-    (try
-      (when (> (. js/Math abs dx) 5)
-        (cond
-          (and left-menu (>= (.-clientWidth left-menu) 50))
-          (when (indentable? block)
-           (haptics/with-haptics-impact
-             (indent-outdent-block! block :right)
-             :light))
+  (when @*swipe
+    (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
+          right-menu (gdom/getElement (str "block-right-menu-" uuid))
+          {:keys [x0 tx]} @*swipe
+          dx (- tx x0)]
+      (try
+        (when (> (. js/Math abs dx) 10)
+          (cond
+            (and left-menu (>= (.-clientWidth left-menu) 50))
+            (when (indentable? block)
+              (haptics/with-haptics-impact
+                (indent-outdent-block! block :right)
+                :light))
 
-          (and right-menu (< 40 (.-clientWidth right-menu) 80))
-          (when (outdentable? block)
+            (and right-menu (< 40 (.-clientWidth right-menu) 80))
+            (when (outdentable? block)
+              (haptics/with-haptics-impact
+                (indent-outdent-block! block :left)
+                :light))
+
+            (and right-menu (>= (.-clientWidth right-menu) 80))
             (haptics/with-haptics-impact
-              (indent-outdent-block! block :left)
-              :light))
+              (do (state/set-state! :mobile/show-action-bar? true)
+                  (state/set-state! :mobile/actioned-block block)
+                  (select-block! uuid))
+              :light)
 
-          (and right-menu (>= (.-clientWidth right-menu) 80))
-          (haptics/with-haptics-impact
-            (do (state/set-state! :mobile/show-action-bar? true)
-                (state/set-state! :mobile/actioned-block block)
-                (select-block! uuid))
-            :light)
-
-          :else
-          nil))
-      (catch js/Error e
-        (js/console.error e))
-      (finally
-        (reset! *show-left-menu? false)
-        (reset! *show-right-menu? false)))))
+            :else
+            nil))
+        (catch js/Error e
+          (js/console.error e))
+        (finally
+          (reset! *show-left-menu? false)
+          (reset! *show-right-menu? false)
+          (reset! *swipe nil))))))
 
 (defn on-touch-cancel
   [_event *show-left-menu? *show-right-menu?]
   (reset! *show-left-menu? false)
-  (reset! *show-right-menu? false))
+  (reset! *show-right-menu? false)
+  (reset! *swipe nil))
 
 
