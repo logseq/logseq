@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible frontend.utf8
+(ns ^:nbb-compatible logseq.graph-parser.utf8
   (:require [goog.object :as gobj]))
 
 (defonce encoder

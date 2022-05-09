@@ -35,7 +35,7 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util :refer [profile]]
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]

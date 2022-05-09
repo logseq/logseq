@@ -8,7 +8,7 @@
             [frontend.format :as format]
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]

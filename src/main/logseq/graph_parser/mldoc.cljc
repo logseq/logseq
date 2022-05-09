@@ -8,7 +8,7 @@
                                  :default [lambdaisland.glogi :as log])
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
             [linked.core :as linked]
             [logseq.graph-parser.util :as gp-util]
