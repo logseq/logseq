@@ -264,6 +264,9 @@
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil false))))
+        (.addEventListener element "touchstart"
+                           (fn [e]
+                             (.stopPropagation e)))
         (.save editor)
         (.refresh editor)
         (when default-open?
