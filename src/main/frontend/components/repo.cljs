@@ -123,24 +123,7 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (if @*multiple-windows?
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div
-                                        [:p (t :re-index-multiple-windows-warning)]]])
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div {:style {:max-width 700}}
-                                        [:p (t :re-index-discard-unsaved-changes-warning)]
-                                        (ui/button
-                                         (t :yes)
-                                         :autoFocus "on"
-                                         :large? true
-                                         :on-click (fn []
-                                                     (state/close-modal!)
-                                                     (repo-handler/re-index!
-                                                      nfs-handler/rebuild-index!
-                                                      page-handler/create-today-journal!)))]])))})}
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
         new-window-link (when (util/electron?)
                           {:title        (t :open-new-window)
                            :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]

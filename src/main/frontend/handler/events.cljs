@@ -25,6 +25,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
@@ -354,6 +355,26 @@
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
+  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
+    (handle
+     [:modal/show
+      [:div
+       [:p (t :re-index-multiple-windows-warning)]]])
+    (handle
+     [:modal/show
+      [:div {:style {:max-width 700}}
+       [:p (t :re-index-discard-unsaved-changes-warning)]
+       (ui/button
+         (t :yes)
+         :autoFocus "on"
+         :large? true
+         :on-click (fn []
+                     (state/close-modal!)
+                     (repo-handler/re-index!
+                      nfs-handler/rebuild-index!
+                      page-handler/create-today-journal!)))]])))
 
 ;; encryption
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
