@@ -1,4 +1,4 @@
-(ns frontend.db-schema)
+(ns ^:nbb-compatible frontend.db-schema)
 
 (defonce version 1)
 (defonce ast-version 1)

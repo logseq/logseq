@@ -22,6 +22,7 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
+            [logseq.graph-parser.util :as gp-util]
             [electron.ipc :as ipc]
             [clojure.set :as set]
             [clojure.core.async :as async]))
@@ -300,7 +301,7 @@
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
-                                   (util/remove-nils))
+                                   (gp-util/remove-nils))
               options {:delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
                        :re-render? true}]

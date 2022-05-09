@@ -14,6 +14,7 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile]
+            [logseq.graph-parser.util :as gp-util]
             [electron.ipc :as ipc]))
 
 (defn- get-css-var-value
@@ -111,7 +112,7 @@
   (let [id (and
             (> (count fragment) 36)
             (subs fragment (- (count fragment) 36)))]
-    (if (and id (util/uuid-string? id))
+    (if (and id (gp-util/uuid-string? id))
       (let [elements (array-seq (js/document.getElementsByClassName id))]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))

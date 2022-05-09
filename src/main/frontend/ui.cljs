@@ -398,7 +398,6 @@
                     (menu-link
                      {:id            (str "ac-" idx)
                       :class         (when chosen? "chosen")
-                      :on-mouse-enter #(reset! current-idx idx)
                       :on-mouse-down (fn [e]
                                        (util/stop e)
                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)

@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -448,7 +449,7 @@
     (or
       (when-let [workflow (:preferred-workflow (get-config))]
         (let [workflow (name workflow)]
-          (if (util/safe-re-find #"now|NOW" workflow)
+          (if (gp-util/safe-re-find #"now|NOW" workflow)
             :now
             :todo)))
       (get-in @state [:me :preferred_workflow] :now))))

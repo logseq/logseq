@@ -16,6 +16,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]  
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -75,7 +76,7 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path (util/path-normalize file)
+                                        {:file/path (gp-util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
@@ -115,7 +116,7 @@
 
                 :else
                 file)
-         file (util/path-normalize file)
+         file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
      (db/set-file-content! repo-url file content)
      (let [format (format/get-format file)

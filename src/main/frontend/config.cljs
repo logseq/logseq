@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [shadow.resource :as rc]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
@@ -26,7 +27,7 @@
 ;; dev env
 (goog-define FILE-SYNC-PROD? false)
 (goog-define LOGIN-URL
-             "https://logseq-test.auth.us-east-2.amazoncognito.com/login?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+             "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -105,7 +106,7 @@
 
 (def mobile?
   (when-not util/node-test?
-    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
+    (gp-util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 
@@ -254,7 +255,6 @@
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
-(defonce default-draw-directory "draws")
 
 (defn get-pages-directory
   []
@@ -264,10 +264,6 @@
   []
   (or (state/get-journals-directory) default-journals-directory))
 
-(defn draw?
-  [path]
-  (util/starts-with? path default-draw-directory))
-
 (defonce local-repo "local")
 
 (defn demo-graph?
@@ -276,7 +272,6 @@
   ([graph]
    (= graph local-repo)))
 
-(defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
@@ -298,10 +293,6 @@
   [s]
   (and (string? s)
        (string/starts-with? s local-db-prefix)))
-
-(defn local-asset?
-  [s]
-  (util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defn get-local-asset-absolute-path
   [s]
@@ -368,7 +359,7 @@
 
                  :else
                  relative-path)]
-      (util/path-normalize path))))
+      (gp-util/path-normalize path))))
 
 (defn get-config-path
   ([]

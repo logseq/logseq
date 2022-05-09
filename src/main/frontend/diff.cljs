@@ -5,6 +5,7 @@
             [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.text :as text]))
 
 (defn diff
@@ -54,7 +55,7 @@
           (+ pos 2)
 
           (contains? inline-special-chars (util/nth-safe markup pos))
-          (let [matched (->> (take-while inline-special-chars (util/safe-subs markup pos))
+          (let [matched (->> (take-while inline-special-chars (gp-util/safe-subs markup pos))
                              (apply str))
                 matched? (and current-line (string/includes? current-line (string/reverse matched)))]
             (if matched?

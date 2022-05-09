@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [datascript.core :as d]))
 
 (defonce conns (atom {}))
@@ -69,7 +70,7 @@
 
 (defn me-tx
   [_db {:keys [name email avatar]}]
-  (util/remove-nils {:me/name name
+  (gp-util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))
 

@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -84,7 +85,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (util/uuid-string? page-name)
+          block? (gp-util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))

@@ -51,6 +51,8 @@
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -281,7 +283,7 @@
         title (second (first label))]
     (ui/catch-error
      [:span.warning full_text]
-     (if (and (config/local-asset? href)
+     (if (and (gp-config/local-asset? href)
               (config/local-db? (state/get-current-repo)))
        (asset-link config title href metadata full_text)
        (let [href (cond
@@ -647,7 +649,7 @@
   [config id label]
   (when (and
          (not (string/blank? id))
-         (util/uuid-string? id))
+         (gp-util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -763,7 +765,7 @@
        (and
         (nil? metadata-show)
         (or
-         (config/local-asset? s)
+         (gp-config/local-asset? s)
          (text/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
@@ -785,7 +787,7 @@
 
 (rum/defc audio-link
   [config url href _label metadata full_text]
-  (if (and (config/local-asset? href)
+  (if (and (gp-config/local-asset? href)
            (config/local-db? (state/get-current-repo)))
     (asset-link config nil href metadata full_text)
     (let [href (cond
@@ -919,7 +921,7 @@
                (= "Complex" protocol)
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
-               (util/uuid-string? (:link path))) ; org mode id
+               (gp-util/uuid-string? (:link path))) ; org mode id
           (let [id (uuid (:link path))
                 block (db/entity [:block/uuid id])]
             (if (:block/pre-block? block)
@@ -1035,7 +1037,7 @@
                        string/trim)]
         (when-let [id (and s
                            (let [s (string/trim s)]
-                             (and (util/uuid-string? s)
+                             (and (gp-util/uuid-string? s)
                                   (uuid s))))]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -1046,7 +1048,7 @@
   [_config arguments]
   (when-let [url (first arguments)]
     (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
+      (when-let [vimeo-id (nth (gp-util/safe-re-find Vimeo-regex url) 5)]
         (when-not (string/blank? vimeo-id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1067,7 +1069,7 @@
       (when-let [id (cond
                       (<= (count url) 15) url
                       :else
-                      (last (util/safe-re-find id-regex url)))]
+                      (last (gp-util/safe-re-find id-regex url)))]
         (when-not (string/blank? id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1197,7 +1199,7 @@
           (when-let [youtube-id (cond
                                   (== 11 (count url)) url
                                   :else
-                                  (nth (util/safe-re-find YouTube-regex url) 5))]
+                                  (nth (gp-util/safe-re-find YouTube-regex url) 5))]
             (when-not (string/blank? youtube-id)
               (youtube/youtube-video youtube-id)))))
 
@@ -1228,7 +1230,7 @@
           (when-let [id (cond
                           (<= (count url) 15) url
                           :else
-                          (last (util/safe-re-find id-regex url)))]
+                          (last (gp-util/safe-re-find id-regex url)))]
             (ui/tweet-embed id))))
 
       (= name "embed")
@@ -2757,7 +2759,7 @@
 
         ["Paragraph" l]
              ;; TODO: speedup
-        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (gp-util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

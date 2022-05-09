@@ -20,6 +20,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -107,9 +108,9 @@
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
-                   (util/safe-subs edit-content pos current-pos))
+                   (gp-util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos))
+                   (gp-util/safe-subs edit-content pos current-pos))
                  "")
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
@@ -528,7 +529,7 @@
      (when (= (state/sub :editor/record-status) "RECORDING")
        [:div#audio-record-toolbar
         (footer/audio-record-cp)])
-     
+
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
