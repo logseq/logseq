@@ -203,7 +203,7 @@
 (defn- after-parse
   [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
   (load-pages-metadata! repo-url file-paths files true)
-  (when (:new-graph? opts)
+  (when (or (:new-graph? opts) (not (:refresh? opts)))
     (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
       (state/pub-event! [:modal/encryption-setup-dialog repo-url
                          #(create-default-files! repo-url %)])

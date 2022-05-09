@@ -395,8 +395,17 @@
           (t :settings-page/enable-encryption)
           enable-encryption?
           #(let [value (not enable-encryption?)]
-             (config-handler/set-config! :feature/enable-encryption? value))
-          [:div.text-sm.opacity-50 "⚠️ This feature is experimental"]))
+             (config-handler/set-config! :feature/enable-encryption? value)
+             (when value
+               (state/close-modal!)
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+                              100)))
+          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
+           [:span "You can use "]
+           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
+                :target "_blank"}
+            "logseq-encrypt-ui"]
+           [:span " to decrypt your graph."]]))
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
