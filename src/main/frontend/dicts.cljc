@@ -162,6 +162,7 @@
         :settings-page/enable-tooltip "Tooltips"
         :settings-page/enable-journals "Journals"
         :settings-page/enable-all-pages-public "All pages public when publishing"
+        :settings-page/enable-encryption "Encryption"
         :settings-page/customize-shortcuts "Keyboard shortcuts"
         :settings-page/shortcut-settings "Customize shortcuts"
         :settings-page/home-default-page "Set the default home page"
@@ -585,6 +586,7 @@
         :settings-page/customize-shortcuts "Tastaturbefehle"
         :settings-page/disable-sentry "Nutzungs- und Diagnostik-Daten an Logseq senden"
         :settings-page/edit-custom-css "custom.css bearbeiten"
+        :settings-page/enable-encryption "Verschlüsselung"
         :settings-page/enable-shortcut-tooltip "Tooltips für Verknüpfungen aktivieren"
         :settings-page/enable-tooltip "Tooltips"
         :settings-page/shortcut-settings "Verknüpfungen anpassen"
@@ -895,6 +897,7 @@
            :settings-page/enable-tooltip "开启提示框"
            :settings-page/enable-journals "开启日记"
            :settings-page/enable-all-pages-public "发布所有页面"
+           :settings-page/enable-encryption "激活加密功能"
            :settings-page/customize-shortcuts "自定义快捷键"
            :settings-page/shortcut-settings "快捷键设置"
            :settings-page/home-default-page "设置首页默认页面"
@@ -1476,6 +1479,7 @@
         :settings-page/enable-timetracking "Habilitar rastreo de tiempo"
         :settings-page/enable-tooltip "Habilitar descripción emergente"
         :settings-page/enable-journals "Habilitar diarios"
+        :settings-page/enable-encryption "Habilitar función de cifrado"
         :settings-page/home-default-page "Establecer página de inicio"
         :settings-page/enable-block-time "Habilitar marcas temporales de bloque"
         :settings-page/clear-cache "Limpiar caché"
@@ -1706,6 +1710,7 @@
            :settings-page/preferred-workflow "Foretrukket arbeidslflyt"
            :settings-page/enable-shortcut-tooltip "Skru på tooltip for snarveier"
            :settings-page/enable-timetracking "Aktiver tidssporing"
+           :settings-page/enable-encryption "Aktiver kryptering"
            :settings-page/enable-tooltip "Aktiver verktøytips"
            :settings-page/enable-journals "Aktiver dagbøker"
            :settings-page/enable-all-pages-public "Aktiver alle sider som offentlige ved publisering"
@@ -1994,6 +1999,7 @@
            :settings-page/enable-tooltip "Ativar dicas de ferramentas"
            :settings-page/enable-journals "Ativar diários"
            :settings-page/enable-all-pages-public "Ativar todas as páginas públicas ao publicar"
+           :settings-page/enable-encryption "Ativar funcionalidade de criptografia"
            :settings-page/customize-shortcuts "Atalhos de teclado"
            :settings-page/shortcut-settings "Personalizar atalhos"
            :settings-page/home-default-page "Definir a página inicial padrão"
@@ -2315,6 +2321,7 @@
            :settings-page/enable-tooltip "Dicas de atalhos"
            :settings-page/enable-journals "Diários"
            :settings-page/enable-all-pages-public "Todas as páginas públicas ao publicar"
+           :settings-page/enable-encryption "Encriptação"
            :settings-page/customize-shortcuts "Atalhos de teclado"
            :settings-page/shortcut-settings "Personalizar atalhos"
            :settings-page/home-default-page "Definir a página inicial predefinida"
@@ -2610,6 +2617,7 @@
         :settings-page/enable-shortcut-tooltip "Всплывающие подсказки горячих клавиш"
         :settings-page/enable-journals "Включить Дневники"
         :settings-page/enable-all-pages-public "Все страницы общедоступны при публикации"
+        :settings-page/enable-encryption "Функции шифрования"
         :settings-page/customize-shortcuts "Горячие клавиши"
         :settings-page/shortcut-settings "Настроить горячие клавиши"
         :settings-page/home-default-page "Установить домашнюю страницу по умолчанию"
@@ -2897,6 +2905,7 @@
         :settings-page/enable-tooltip "ツールチップ"
         :settings-page/enable-journals "日誌"
         :settings-page/enable-all-pages-public "パブリッシュ時には全てのページを公開する"
+        :settings-page/enable-encryption "暗号化"
         :settings-page/customize-shortcuts "キーボードショートカット"
         :settings-page/shortcut-settings "ショートカットをカスタマイズ"
         :settings-page/home-default-page "デフォルトのホームページを設定"
@@ -3059,7 +3068,7 @@
 
         :file-sync/other-user-graph "現在のローカルグラフは他のユーザーのリモートグラフにバインドされています。同期を開始できません。"
         :file-sync/graph-deleted "現在のリモートグラフが削除されました"}
-   
+
    :it {:tutorial/text #?(:cljs (rc/inline "tutorial-en.md")
                           :default "tutorial-en.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-en.md")

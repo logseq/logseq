@@ -38,7 +38,9 @@
             [frontend.fs :as fs]
             [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
-            [frontend.fs.sync :as sync]))
+            [frontend.fs.sync :as sync]
+            [frontend.components.encryption :as encryption]
+            [frontend.encrypt :as encrypt]))
 
 ;; TODO: should we move all events here?
 
@@ -233,7 +235,8 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (state/set-modal! #(git-component/file-specific-version path hash content)))
+  (p/let [content (when content (encrypt/decrypt content))]
+    (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
@@ -351,6 +354,18 @@
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+;; encryption
+(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
+  (state/set-modal!
+   (encryption/encryption-setup-dialog repo-url close-fn)))
+
+(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
+  (state/set-modal!
+   (encryption/encryption-input-secret-dialog
+    repo-url
+    db-encrypted-secret
+    close-fn)))
 
 (defn run!
   []
