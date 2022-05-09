@@ -32,7 +32,7 @@
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (let [result (first (gp-util/split-last "." file-name))]
                           (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
-                            (string/replace result "." "/")
+                            (util/url-decode (string/replace result "." "/"))
                             result)))]
         (or property-name
             (if (= (state/page-name-order) "heading")
