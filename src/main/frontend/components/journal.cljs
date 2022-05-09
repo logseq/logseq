@@ -8,7 +8,7 @@
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]

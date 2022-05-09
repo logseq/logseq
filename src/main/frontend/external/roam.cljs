@@ -7,7 +7,7 @@
             [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.text :as text]))
+            [logseq.graph-parser.text :as text]))
 
 (defonce all-refed-uids (atom #{}))
 (defonce uid->uuid (atom {}))

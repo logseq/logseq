@@ -45,7 +45,7 @@
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
@@ -726,7 +726,7 @@
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
-    (let [ast (->> (gp-mldoc/->edn macro-content (gp-mldoc/default-config format))
+    (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
                    (map first))
           paragraph? (and (= 1 (count ast))
                           (= "Paragraph" (ffirst ast)))]
@@ -853,7 +853,7 @@
     (not (string/includes? s "."))
     (page-reference (:html-export? config) s config label)
 
-    (util/url? s)
+    (gp-util/url? s)
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
@@ -1703,8 +1703,8 @@
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
 
-       (and (string? v) (util/wrapped-by-quotes? v))
-       (util/unquote-string v)
+       (and (string? v) (gp-util/wrapped-by-quotes? v))
+       (gp-util/unquote-string v)
 
        :else
        (inline-text config (:block/format block) (str v)))]))
@@ -2708,11 +2708,11 @@
 ;;     (cond
 ;;       (= lang "quote")
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Quote" (first (gp-mldoc/->edn content (gp-mldoc/default-config :markdown)))])
+;;         ["Quote" (first (mldoc/->edn content (gp-mldoc/default-config :markdown)))])
 
 ;;       (contains? #{"query" "note" "tip" "important" "caution" "warning" "pinned"} lang)
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Custom" lang nil (first (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
+;;         ["Custom" lang nil (first (mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
 
 ;;       :else
 ;;       ["Src" options])))

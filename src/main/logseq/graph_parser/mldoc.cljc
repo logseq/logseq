@@ -105,7 +105,7 @@
        (distinct)))
 
 (defn collect-page-properties
-  [ast parse-property]
+  [ast parse-property config-state]
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
@@ -124,7 +124,7 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :macro} k)
                                        v
-                                       (parse-property k v))]
+                                       (parse-property k v config-state))]
                                [k v]))))
           properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -170,7 +170,7 @@
 (def parse-property nil)
 
 (defn ->edn
-  [content config]
+  [content config config-state]
   (if (string? content)
     (try
       (if (string/blank? content)
@@ -179,7 +179,7 @@
             (parse-json config)
             (gp-util/json->clj)
             (update-src-full-content content)
-            (collect-page-properties parse-property)))
+            (collect-page-properties parse-property config-state)))
       (catch js/Error e
         (js/console.error e)
         []))

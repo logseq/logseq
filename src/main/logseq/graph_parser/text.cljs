@@ -1,10 +1,10 @@
-(ns frontend.text
-  (:require [frontend.util :as util]
+(ns ^:nbb-compatible logseq.graph-parser.text
+  (:require ["path" :as path]
+            [goog.string :as gstring]
             [clojure.string :as string]
             [clojure.set :as set]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
-            [frontend.state :as state]))
+            [logseq.graph-parser.util :as gp-util]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -13,7 +13,8 @@
 (defn get-file-basename
   [path]
   (when-not (string/blank? path)
-    (util/node-path.name path)))
+    ;; Same as util/node-path.name
+    (.-name (path/parse (string/replace path "+" "/")))))
 
 (defn get-page-name
   [s]
@@ -122,14 +123,15 @@
   (string/split s #"(\"[^\"]*\")"))
 
 (def markdown-link #"\[([^\[]+)\](\(.*\))")
+
 (defn split-page-refs-without-brackets
   ([s]
    (split-page-refs-without-brackets s {}))
   ([s {:keys [un-brackets?]
        :or {un-brackets? true}}]
    (cond
-     (and (string? s) (util/wrapped-by-quotes? s))
-     (util/unquote-string s)
+     (and (string? s) (gp-util/wrapped-by-quotes? s))
+     (gp-util/unquote-string s)
 
      (and (string? s) (re-find markdown-link s))
      s
@@ -141,11 +143,11 @@
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
-                          (when-not (util/wrapped-by-quotes? (string/trim s))
+                          (when-not (gp-util/wrapped-by-quotes? (string/trim s))
                             (string/split s page-ref-re-2))))
                        (mapcat (fn [s]
                                  (cond
-                                   (util/wrapped-by-quotes? s)
+                                   (gp-util/wrapped-by-quotes? s)
                                    nil
 
                                    (string/includes? (string/trimr s) "]],")
@@ -165,7 +167,7 @@
                        (remove string/blank?)
                        (mapcat (fn [s]
                                  (cond
-                                   (util/wrapped-by-quotes? s)
+                                   (gp-util/wrapped-by-quotes? s)
                                    nil
 
                                    (page-ref? s)
@@ -188,7 +190,7 @@
 
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
-  (let [pattern (util/format
+  (let [pattern (gstring/format
                  (if space?
                    "^[%s]+\\s+"
                    "^[%s]+\\s?")
@@ -217,7 +219,7 @@
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
-    (util/format "[%s]"
+    (gstring/format "[%s]"
                  (string/join ", " items))))
 
 (defn media-link?
@@ -230,7 +232,7 @@
        (string/includes? p "/")
        (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (util/url? p))))
+       (not (gp-util/url? p))))
 
 (defn add-timestamp
   [content key value]
@@ -330,16 +332,16 @@
   (atom #{"background-color" "background_color"}))
 
 (defn parse-property
-  ([k v]
-   (parse-property :markdown k v))
-  ([format k v]
+  ([k v config-state]
+   (parse-property :markdown k v config-state))
+  ([format k v config-state]
    (let [k (name k)
          v (if (or (symbol? v) (keyword? v)) (name v) (str v))
          v (string/trim v)]
      (cond
        (contains? (set/union
                    #{"title" "filters"}
-                   (get (state/get-config) :ignored-page-references-keywords)) k)
+                   (get config-state :ignored-page-references-keywords)) k)
        v
 
        (= v "true")
@@ -348,9 +350,9 @@
        false
 
        (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
-       (util/safe-parse-int v)
+       (gp-util/safe-parse-int v)
 
-       (util/wrapped-by-quotes? v) ; wrapped in ""
+       (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v
 
        (contains? @non-parsing-properties (string/lower-case k))
@@ -361,3 +363,7 @@
 
        :else
        (split-page-refs-without-brackets v)))))
+
+;; TODO: Properly fix this circular dependency:
+;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
+(set! gp-mldoc/parse-property parse-property)

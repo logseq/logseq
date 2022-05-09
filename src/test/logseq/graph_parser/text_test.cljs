@@ -1,7 +1,8 @@
-(ns frontend.text-test
+(ns logseq.graph-parser.text-test
   (:require [cljs.test :refer [are deftest testing]]
             [frontend.config :as config]
-            [frontend.text :as text]))
+            [frontend.state :as state]
+            [logseq.graph-parser.text :as text]))
 
 (deftest test-get-page-name
   []
@@ -127,7 +128,7 @@
 
 (deftest test-parse-property
   (testing "parse-property"
-    (are [k v y] (= (text/parse-property k v) y)
+    (are [k v y] (= (text/parse-property k v (state/get-config)) y)
       :tags "foo" "foo"
       :tags "foo, bar" #{"foo" "bar"}
       :tags "foo,bar" #{"foo" "bar"}
@@ -139,9 +140,9 @@
       :tags "[[foo [[bar]]]]" #{"foo [[bar]]"}
       :tags "[[foo [[bar]]]], baz" #{"baz" "foo [[bar]]"}))
   (testing "parse-property with quoted strings"
-    (are [k v y] (= (text/parse-property k v) y)
+    (are [k v y] (= (text/parse-property k v (state/get-config)) y)
       :tags "\"foo, bar\"" "\"foo, bar\""
       :tags "\"[[foo]], [[bar]]\"" "\"[[foo]], [[bar]]\""
       :tags "baz, \"[[foo]], [[bar]]\"" #{"baz"})))
 
-#_(cljs.test/test-ns 'frontend.text-test)
+#_(cljs.test/test-ns 'logseq.graph-parser.text-test)

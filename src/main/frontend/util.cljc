@@ -1258,14 +1258,6 @@
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
 
-(defn wrapped-by-quotes?
-  [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
-
 #?(:cljs
    (defn right-click?
      [e]
@@ -1273,16 +1265,6 @@
            button (gobj/get e "button")]
        (or (= which 3)
            (= button 2)))))
-
-#?(:cljs
-   (defn url?
-     [s]
-     (and (string? s)
-          (try
-            (js/URL. s)
-            true
-            (catch js/Error _e
-              false)))))
 
 #?(:cljs
    (defn make-el-into-center-viewport

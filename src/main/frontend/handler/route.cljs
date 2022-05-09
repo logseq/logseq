@@ -7,7 +7,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]

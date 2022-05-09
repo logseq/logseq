@@ -34,7 +34,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util :refer [profile]]
             [frontend.util.clock :as clock]
@@ -357,7 +357,7 @@
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
-        ast (gp-mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
+        ast (mldoc/->edn (string/trim content) (gp-mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         first-elem-meta (second (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
@@ -1942,7 +1942,7 @@
                     props (into [] (:properties block))
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
-                    ast (gp-mldoc/->edn content* (gp-mldoc/default-config format))
+                    ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (block/extract-blocks ast content* true format)
                     fst-block (first blocks)]
                 (assert fst-block "fst-block shouldn't be nil")
@@ -2851,7 +2851,7 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (gp-mldoc/->edn text (gp-mldoc/default-config format)) text true format)
+                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
           blocks' (block/with-parent-and-left page-id blocks)]
       (paste-blocks blocks' {}))))
 
@@ -2902,17 +2902,17 @@
           (state/set-copied-full-blocks! blocks)
           (paste-blocks blocks {})))
 
-      (and (util/url? text)
+      (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
 
-      (and (util/url? text)
+      (and (gp-util/url? text)
            (or (string/includes? text "youtube.com")
                (string/includes? text "youtu.be"))
            (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
 
-      (and (util/url? text)
+      (and (gp-util/url? text)
            (string/includes? text "twitter.com")
            (mobile-util/is-native-platform?))
       (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
@@ -3169,7 +3169,7 @@
   [format content semantic?]
   (and (string/includes? content "\n")
        (if semantic?
-         (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+         (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
                first-elem-type (first (ffirst ast))]
            (mldoc/block-with-title? first-elem-type))
          true)))

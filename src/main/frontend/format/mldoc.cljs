@@ -1,6 +1,7 @@
 (ns frontend.format.mldoc
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
@@ -43,15 +44,20 @@
     (if (string/blank? content)
       {}
       (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
-        [headers (gp-mldoc/collect-page-properties blocks gp-mldoc/parse-property)]))
+        [headers (gp-mldoc/collect-page-properties blocks gp-mldoc/parse-property (state/get-config))]))
     (catch js/Error e
       (log/error :edn/convert-failed e)
       [])))
 
+(defn ->edn
+  "Wrapper around gp-mldoc/->edn which provides config state"
+  [content config]
+  (gp-mldoc/->edn content config (state/get-config)))
+
 (defrecord MldocMode []
   protocol/Format
   (toEdn [_this content config]
-    (gp-mldoc/->edn content config))
+    (->edn content config))
   (toHtml [_this content config references]
     (export "html" content config references))
   (loaded? [_this]

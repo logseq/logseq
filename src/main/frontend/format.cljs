@@ -2,11 +2,8 @@
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
-            [frontend.text :as text]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [clojure.string :as string]))
-
-(set! gp-mldoc/parse-property text/parse-property)
 
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))

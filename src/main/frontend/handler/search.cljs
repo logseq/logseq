@@ -7,7 +7,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]))
 

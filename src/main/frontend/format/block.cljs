@@ -7,7 +7,7 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.util.property :as property]
@@ -185,7 +185,7 @@
                                            (remove string/blank? v)
                                            (if (string/blank? v)
                                              nil
-                                             (text/parse-property format k v)))
+                                             (text/parse-property format k v (state/get-config))))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)

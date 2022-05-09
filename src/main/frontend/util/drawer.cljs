@@ -24,7 +24,7 @@
 
 (defn get-drawer-ast
   [format content typ]
-  (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+  (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
         typ-drawer (ffirst (filter (fn [x]
                                      (mldoc/typ-drawer? x typ)) ast))]
     typ-drawer))
@@ -33,7 +33,7 @@
   [format content typ value]
   (when (string? content)
     (try
-      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
             has-properties? (some (fn [x] (mldoc/properties? x)) ast)
             has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
             lines (string/split-lines content)

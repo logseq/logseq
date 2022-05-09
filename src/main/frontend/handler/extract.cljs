@@ -7,8 +7,9 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.block :as block]
+            [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -142,7 +143,7 @@
     []
     (let [format (format/get-format file)
           _ (println "Parsing start: " file)
-          ast (gp-mldoc/->edn content (gp-mldoc/default-config format
+          ast (mldoc/->edn content (gp-mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
                                                          ))]
       (println "Parsing finished : " file)
@@ -151,7 +152,7 @@
                                              (->> (last first-block)
                                                   (map (fn [[x y]]
                                                          [x (if (string? y)
-                                                              (text/parse-property format x y)
+                                                              (text/parse-property format x y (state/get-config))
                                                               y)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
