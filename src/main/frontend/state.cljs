@@ -749,12 +749,12 @@
   (swap! state assoc :ui/sidebar-open? false))
 
 (defn sidebar-add-block!
-  [repo db-id block-type block-data]
+  [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
     (when db-id
       (update-state! :sidebar/blocks (fn [blocks]
                                        (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type block-data])
+                                            (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -768,6 +768,13 @@
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-replace-block!
+  [old-sidebar-key new-sidebar-key]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (map #(if (= % old-sidebar-key)
+                                           new-sidebar-key
+                                           %) blocks))))
 
 (defn sidebar-block-exists?
   [idx]
@@ -1489,6 +1496,15 @@
 (defn get-page-blocks-cp
   []
   (get-in @state [:view/components :page-blocks]))
+
+;; To avoid circular dependencies
+(defn set-component!
+  [k value]
+  (set-state! [:view/components k] value))
+
+(defn get-component
+  [k]
+  (get-in @state [:view/components k]))
 
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]

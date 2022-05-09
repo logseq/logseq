@@ -159,8 +159,7 @@
                                                            (state/sidebar-add-block!
                                                             (state/get-current-repo)
                                                             (:db/id item)
-                                                            :block-ref
-                                                            {:block item})))}
+                                                            :block-ref)))}
                    (when value
                      (if (= :element (first value))
                        (second value)

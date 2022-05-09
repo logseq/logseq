@@ -75,12 +75,12 @@
     [:div
      (when (not= search-mode :page)
        [:div {:class "mb-1" :key "parents"}
-        (block/block-parents {:id "block-search-block-parent"
-                              :block? true
-                              :search? true}
-                             repo
-                             (clojure.core/uuid uuid)
-                             {:indent? false})])
+        (block/breadcrumb {:id "block-search-block-parent"
+                           :block? true
+                           :search? true}
+                          repo
+                          (clojure.core/uuid uuid)
+                          {:indent? false})])
      [:div {:class "font-medium" :key "content"}
       (highlight-exact-query content q)]]))
 
@@ -158,8 +158,7 @@
         (state/sidebar-add-block!
          repo
          (:db/id page)
-         :page
-         {:page page})))
+         :page)))
 
     :block
     (let [block-uuid (uuid (:block/uuid data))
@@ -167,8 +166,7 @@
       (state/sidebar-add-block!
        repo
        (:db/id block)
-       :block
-       block))
+       :block))
 
     :new-page
     (page-handler/create! search-q)
@@ -326,8 +324,7 @@
                                  (state/sidebar-add-block!
                                   (state/get-current-repo)
                                   (:db/id page)
-                                  :page
-                                  {:page page}))))
+                                  :page))))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
