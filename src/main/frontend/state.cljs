@@ -216,6 +216,8 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     :encryption/graph-parsing?             false
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1674,3 +1676,8 @@
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))

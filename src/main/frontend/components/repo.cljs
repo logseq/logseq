@@ -17,7 +17,9 @@
             [frontend.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.components.encryption :as encryption]
+            [frontend.encrypt :as e]))
 
 (rum/defc add-repo
   [args]
@@ -60,6 +62,11 @@
                     :href url}
                 (db/get-repo-path url)])
              [:div.controls
+              (when (e/encrypted-db? url)
+                [:a.control {:title "Show encryption information about this graph"
+                             :on-click (fn []
+                                         (state/set-modal! (encryption/encryption-dialog url)))}
+                 "🔐"])
               [:a.text-gray-400.ml-4.font-medium.text-sm
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []

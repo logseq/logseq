@@ -16,7 +16,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]  
+            [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -271,6 +271,17 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
       (fs/watch-dir! dir))))
+
+(defn create-metadata-file
+  [repo-url encrypted?]
+  (let [repo-dir (config/get-repo-dir repo-url)
+        path (str config/app-name "/" config/metadata-file)
+        file-path (str "/" path)
+        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (reset-file! repo-url path default-content)))))
 
 (defn create-pages-metadata-file
   [repo-url]

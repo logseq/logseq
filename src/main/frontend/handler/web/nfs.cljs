@@ -22,7 +22,8 @@
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [frontend.encrypt :as encrypt]))
 
 (defn remove-ignore-files
   [files]
@@ -168,7 +169,8 @@
            (-> (p/all (map (fn [file]
                              (p/let [content (if nfs?
                                                (.text (:file/file file))
-                                               (:file/content file))]
+                                               (:file/content file))
+                                     content (encrypt/decrypt content)]
                                (assoc file :file/content content))) markup-files))
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
@@ -247,7 +249,8 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))]
+                                          (:file/content file))
+                                content (encrypt/decrypt content)]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)
