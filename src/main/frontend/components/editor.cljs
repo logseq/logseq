@@ -301,6 +301,7 @@
         sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
     [:div#mobile-editor-toolbar.bg-base-2
      [:div.toolbar-commands
+      {:on-touch-start #(util/stop %)}
       (mobile-bar-indent-outdent false "indent-decrease")
       (mobile-bar-indent-outdent true "indent-increase")
       (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
