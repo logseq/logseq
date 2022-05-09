@@ -391,12 +391,18 @@
       :on-mouse-down
       (fn [e]
         (util/stop e)
-        (if (gobj/get e "shiftKey")
+        (cond
+          (gobj/get e "shiftKey")
           (when-let [page-entity (db/entity [:block/name redirect-page-name])]
             (state/sidebar-add-block!
              (state/get-current-repo)
              (:db/id page-entity)
              :page))
+
+          (not= redirect-page-name page-name)
+          (route-handler/redirect-to-page! redirect-page-name)
+
+          :else
           (state/pub-event! [:page/create page-name-in-block]))
         (when (and contents-page?
                    (util/mobile?)
