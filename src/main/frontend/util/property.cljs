@@ -4,6 +4,7 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [medley.core :as medley]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
             [frontend.util.cursor :as cursor]))
@@ -38,7 +39,7 @@
   [content]
   (when content
     (and (string/includes? content properties-start)
-         (util/safe-re-find properties-end-pattern content))))
+         (gp-util/safe-re-find properties-end-pattern content))))
 
 (defn remove-empty-properties
   [content]
@@ -52,28 +53,28 @@
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s?[^ ]+:: " line))))
+        (gp-util/safe-re-find #"^\s?[^ ]+:: " line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*[^ ]+: " line))))
+        (gp-util/safe-re-find #"^\s*[^ ]+: " line))))
 
 (defn get-property-key
   [line format]
   (and (string? line)
        (when-let [key (last
                        (if (= format :org)
-                         (util/safe-re-find #"^\s*:([^: ]+): " line)
-                         (util/safe-re-find #"^\s*([^ ]+):: " line)))]
+                         (gp-util/safe-re-find #"^\s*:([^: ]+): " line)
+                         (gp-util/safe-re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
 
 (defn org-property?
   [line]
   (boolean
    (and (string? line)
-        (util/safe-re-find #"^\s*:[^: ]+: " line)
+        (gp-util/safe-re-find #"^\s*:[^: ]+: " line)
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
@@ -265,7 +266,7 @@
                           middle (doall
                                   (->> (subvec lines (inc start-idx) end-idx)
                                        (mapv (fn [text]
-                                               (let [[k v] (util/split-first ":" (subs text 1))]
+                                               (let [[k v] (gp-util/split-first ":" (subs text 1))]
                                                  (if (and k v)
                                                    (let [key-exists? (= k key)
                                                          _ (when key-exists? (reset! exists? true))
@@ -288,7 +289,7 @@
                                                     (if (property-f (first lines))
                                                       (let [lines (doall
                                                                    (mapv (fn [text]
-                                                                           (let [[k v] (util/split-first sym text)]
+                                                                           (let [[k v] (gp-util/split-first sym text)]
                                                                              (if (and k v)
                                                                                (let [key-exists? (= k key)
                                                                                      _ (when key-exists? (reset! exists? true))
@@ -375,7 +376,7 @@
         (let [before (subvec lines 0 start-idx)
               middle (->> (subvec lines (inc start-idx) end-idx)
                           (map (fn [text]
-                                 (let [[k v] (util/split-first ":" (subs text 1))]
+                                 (let [[k v] (gp-util/split-first ":" (subs text 1))]
                                    (if (and k v)
                                      (let [k (string/replace k "_" "-")
                                            compare-k (keyword (string/lower-case k))

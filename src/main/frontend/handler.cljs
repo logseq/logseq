@@ -2,6 +2,7 @@
   (:require [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.page :as page]
+            [frontend.components.reference :as reference]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -164,6 +165,7 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
+  (state/set-component! :block/linked-references reference/block-linked-references)
   (command-palette/register-global-shortcut-commands))
 
 (defn start!

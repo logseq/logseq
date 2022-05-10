@@ -1,7 +1,7 @@
 (ns frontend.handler.shell
   (:require [electron.ipc :as ipc]
             [clojure.string :as string]
-            [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.handler.notification :as notification]
             [promesa.core :as p]
             [frontend.db :as db]
@@ -34,7 +34,7 @@
 
 (defn run-command!
   [command]
-  (let [[command args] (util/split-first " " command)
+  (let [[command args] (gp-util/split-first " " command)
         command (and command (string/lower-case command))]
     (when (and (not (string/blank? command)) (not (string/blank? args)))
       (let [args (string/trim args)]

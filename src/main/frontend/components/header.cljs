@@ -41,7 +41,7 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            [:a.button
-              {:on-click toggle-fn}
+            {:on-click toggle-fn}
             [:span.text-sm.font-medium (user-handler/email)]])
          [{:title (t :logout)
            :options {:on-click user-handler/logout}}]

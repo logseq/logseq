@@ -34,6 +34,7 @@
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
             [rum.core :as rum]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (defn- get-page-name
@@ -114,7 +115,7 @@
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
-          block? (util/uuid-string? page-name)
+          block? (gp-util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-blocks (get-blocks repo page-name block-id)]
       (if (empty? page-blocks)
@@ -262,8 +263,7 @@
                                         (state/sidebar-add-block!
                                          repo
                                          (:db/id page)
-                                         :page
-                                         {:page page}))
+                                         :page))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
          [:h1.title.ls-page-title {:data-ref page-name}
@@ -310,7 +310,7 @@
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           page-name (util/page-name-sanity-lc path-page-name)
-          block? (util/uuid-string? page-name)
+          block? (gp-util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           format (let [page (if block-id
                               (:block/name (:block/page (db/entity [:block/uuid block-id])))
@@ -370,7 +370,7 @@
            (let [config {:id "block-parent"
                          :block? true}]
              [:div.mb-4
-              (block/block-parents config repo block-id {:level-limit 3})]))
+              (block/breadcrumb config repo block-id {:level-limit 3})]))
 
          ;; blocks
          (let [page (if block?
@@ -633,7 +633,7 @@
               (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
-        graph (if (util/uuid-string? page)
+        graph (if (gp-util/uuid-string? page)
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
@@ -945,8 +945,7 @@
                                               (state/sidebar-add-block!
                                                repo
                                                (:db/id page)
-                                               :page
-                                               {:page (:block/name page)}))))
+                                               :page))))
                               :href     (rfe/href :page {:name (:block/name page)})}
                           (block/page-cp {} page)]]
 

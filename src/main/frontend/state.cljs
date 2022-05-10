@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -215,6 +216,8 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     :encryption/graph-parsing?             false
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -447,7 +450,7 @@
     (or
       (when-let [workflow (:preferred-workflow (get-config))]
         (let [workflow (name workflow)]
-          (if (util/safe-re-find #"now|NOW" workflow)
+          (if (gp-util/safe-re-find #"now|NOW" workflow)
             :now
             :todo)))
       (get-in @state [:me :preferred_workflow] :now))))
@@ -748,12 +751,12 @@
   (swap! state assoc :ui/sidebar-open? false))
 
 (defn sidebar-add-block!
-  [repo db-id block-type block-data]
+  [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
     (when db-id
       (update-state! :sidebar/blocks (fn [blocks]
                                        (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type block-data])
+                                            (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -767,6 +770,13 @@
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-replace-block!
+  [old-sidebar-key new-sidebar-key]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (map #(if (= % old-sidebar-key)
+                                           new-sidebar-key
+                                           %) blocks))))
 
 (defn sidebar-block-exists?
   [idx]
@@ -1489,6 +1499,15 @@
   []
   (get-in @state [:view/components :page-blocks]))
 
+;; To avoid circular dependencies
+(defn set-component!
+  [k value]
+  (set-state! [:view/components k] value))
+
+(defn get-component
+  [k]
+  (get-in @state [:view/components k]))
+
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
@@ -1657,3 +1676,8 @@
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))

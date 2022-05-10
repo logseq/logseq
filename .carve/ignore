@@ -15,6 +15,12 @@ frontend.debug/print
 ;; Lazily loaded
 frontend.extensions.code/editor
 ;; Lazily loaded
+frontend.extensions.age-encryption/keygen
+frontend.extensions.age-encryption/encrypt-with-x25519
+frontend.extensions.age-encryption/decrypt-with-x25519
+frontend.extensions.age-encryption/encrypt-with-user-passphrase
+frontend.extensions.age-encryption/decrypt-with-user-passphrase
+;; Lazily loaded
 frontend.extensions.excalidraw/draw
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding

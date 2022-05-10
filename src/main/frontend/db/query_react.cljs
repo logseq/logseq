@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
@@ -31,12 +32,12 @@
     ;; This sometimes runs when there isn't a current page e.g. :home route
     (some-> (state/get-current-page) string/lower-case)
     (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-before)?$" (name input)))
+         (gp-util/safe-re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
           days (util/parse-int (subs input 0 (dec (count input))))]
       (date->int (t/minus (t/today) (t/days days))))
     (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-after)?$" (name input)))
+         (gp-util/safe-re-find #"^\d+d(-after)?$" (name input)))
     (let [input (name input)
           days (util/parse-int (subs input 0 (dec (count input))))]
       (date->int (t/plus (t/today) (t/days days))))

@@ -2,10 +2,10 @@
   (:require [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as str]
             [clojure.set :refer [rename-keys]]
-            [frontend.config :as cfg]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.file :as file]
-            [frontend.modules.shortcut.config :as config]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -14,7 +14,7 @@
 
 (defn get-bindings
   []
-  (->> (vals @config/config)
+  (->> (vals @shortcut-config/config)
        (into {})
        (map (fn [[k {:keys [binding]}]]
               {k binding}))
@@ -44,21 +44,32 @@
          shortcut)
        (mapv mod-key)))))
 
+(defn normalize-user-keyname
+  [k]
+  (some-> k
+          (util/safe-lower-case)
+          (str/replace #";+" "semicolon")
+          (str/replace #"=+" "equals")
+          (str/replace #"~+" "dash")
+          (str/replace "[" "open-square-bracket")
+          (str/replace "]" "close-square-bracket")
+          (str/replace "'" "single-quote")))
+
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict (->> (vals @config/config)
+  (let [dict (->> (vals @shortcut-config/config)
                   (apply merge)
                   (map (fn [[k _]]
                          {k {:binding (shortcut-binding k)}}))
                   (into {}))]
-    (->> (config/category name)
+    (->> (shortcut-config/category name)
          (mapv (fn [k] [k (k dict)])))))
 
 (defn shortcut-map
   ([handler-id]
    (shortcut-map handler-id nil))
   ([handler-id state]
-   (let [raw       (get @config/config handler-id)
+   (let [raw       (get @shortcut-config/config handler-id)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))
@@ -125,7 +136,7 @@
 
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
-        path (cfg/get-config-path)]
+        path (config/get-config-path)]
     (when-let [content (db/get-file path)]
       (let [result (common-handler/parse-config content)
             new-result (rewrite/update
@@ -140,7 +151,7 @@
   "Given shortcut key, return handler group
   eg: :editor/new-line -> :shortcut.handler/block-editing-only"
   [k]
-  (->> @config/config
+  (->> @shortcut-config/config
        (filter (fn [[_ v]] (contains? v k)))
        (map key)
        (first)))
@@ -150,9 +161,13 @@
     false
     (let [handler-id    (get-group k)
           shortcut-m    (shortcut-map handler-id)
+          parse-shortcut #(try
+                           (KeyboardShortcutHandler/parseStringShortcut %)
+                           (catch js/Error e
+                             (js/console.error "[shortcut/parse-error]" (str % " - " (.-message e)))))
           bindings      (->> (shortcut-binding k)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))
           rest-bindings (->> (map key shortcut-m)
                              (remove #{k})
@@ -160,14 +175,14 @@
                              (filter vector?)
                              (mapcat identity)
                              (map mod-key)
-                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map parse-shortcut)
                              (map js->clj))]
 
       (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
-        data    (->> (vals @config/config)
+        data    (->> (vals @shortcut-config/config)
                      (into  {})
                      id)]
     (assoc
@@ -176,7 +191,7 @@
       (binding-for-display id binding))))
 
 (defn shortcuts->commands [handler-id]
-  (let [m (get @config/config handler-id)]
+  (let [m (get @shortcut-config/config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)

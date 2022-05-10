@@ -14,6 +14,7 @@
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
+            [logseq.graph-parser.util :as gp-util]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
@@ -63,7 +64,7 @@
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          block? (and page (util/uuid-string? page-name))
+          block? (and page (gp-util/uuid-string? page-name))
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (:public properties))
@@ -90,8 +91,7 @@
                                    (state/sidebar-add-block!
                                     repo
                                     (:db/id page)
-                                    :page-presentation
-                                    {:page page}))}})
+                                    :page-presentation))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -102,7 +102,7 @@
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
-          
+
           (when (util/electron?)
             {:title   (t :page/copy-page-url)
               :options {:on-click #(util/copy-to-clipboard!

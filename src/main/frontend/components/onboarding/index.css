@@ -174,7 +174,6 @@ body[data-page=import] {
 
         &.importer {
           background-color: var(--ls-tertiary-background-color);
-          padding-top: 80px;
           position: relative;
 
           > section {
@@ -200,7 +199,6 @@ body[data-page=import] {
                 width: unset;
                 height: 80px;
                 flex: 1;
-                margin: 0 15px;
                 margin-bottom: 10px;
 
                 > span {
@@ -274,8 +272,6 @@ body[data-page=import] {
           }
 
           &.importer {
-            padding-top: 150px;
-
             > section {
               padding: 0;
 
@@ -287,10 +283,6 @@ body[data-page=import] {
                 font-size: 19px;
                 line-height: 3em;
                 padding: unset;
-              }
-
-              &.d {
-                padding: 40px 150px;
               }
 
               &.e {

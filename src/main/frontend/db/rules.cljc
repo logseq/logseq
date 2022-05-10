@@ -1,4 +1,4 @@
-(ns ^:bb-compatible frontend.db.rules)
+(ns ^:bb-compatible ^:nbb-compatible frontend.db.rules)
 
 (def rules
   ;; rule "parent" is optimized for child node -> parent node nesting queries
