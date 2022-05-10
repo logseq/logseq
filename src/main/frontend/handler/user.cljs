@@ -85,10 +85,8 @@
                              {:with-credentials? false}))]
       (if (= 200 (:status resp))
         (-> resp
-              (:body)
-              (js/JSON.parse)
-              (js->clj :keywordize-keys true)
-              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+            :body
+            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
         (debug/pprint "login-callback" resp)))))
 
 (defn logout []
@@ -111,9 +109,7 @@
             (->
              resp
              (as-> $ (and (http/unexceptional-status? (:status $)) $))
-             (:body)
-             (js/JSON.parse)
-             (js->clj :keywordize-keys true)
+             :body
              (as-> $ (set-tokens! (:id_token $) (:access_token $))))
             true))))))
 
