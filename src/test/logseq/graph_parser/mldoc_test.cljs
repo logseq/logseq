@@ -3,8 +3,7 @@
             ["fs" :as fs]
             ["child_process" :as child-process]
             [clojure.string :as string]
-            ;; hack needed for parse-property to exist
-            [logseq.graph-parser.text]
+            [frontend.test.docs-graph-helper :as docs-graph-helper]
             [cljs.test :refer [testing deftest are is]]))
 
 (deftest test-link
@@ -43,33 +42,10 @@
     (are [x y] (= (gp-mldoc/link? :markdown x) y)
       "[YouTube](https://www.youtube.com/watch?v=-8ym7pyUs9gL) - [Vimeo](https://vimeo.com/677920303) {{youtube https://www.youtube.com/watch?v=-8ym7pyUs9g}}" true)))
 
-;; TODO: Reuse with repo-test fns
-(defn- slurp
-  "Like clojure.core/slurp"
-  [file]
-  (str (fs/readFileSync file)))
-
-(defn- sh
-  "Run shell cmd synchronously and print to inherited streams by default. Aims
-    to be similar to babashka.tasks/shell"
-  [cmd opts]
-  (child-process/spawnSync (first cmd)
-                           (clj->js (rest cmd))
-                           (clj->js (merge {:stdio "inherit"} opts))))
-
-(defn- build-graph-files
-  [dir]
-  (let [files (->> (str (.-stdout (sh ["git" "ls-files"]
-                                      {:cwd dir :stdio nil})))
-                   string/split-lines
-                   (filter #(re-find #"^(pages|journals)" %))
-                   (map #(str dir "/" %)))]
-    (mapv #(hash-map :file/path % :file/content (slurp %)) files)))
-
-;; TODO: Add clone docs step
 (deftest ^:integration test->edn
   (let [graph-dir "src/test/docs"
-        files (build-graph-files graph-dir)
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
+        files (docs-graph-helper/build-graph-files graph-dir)
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
                                  (let [format (if (string/ends-with? path ".org")
