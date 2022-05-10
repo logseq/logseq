@@ -1403,6 +1403,7 @@
 (rum/defc block-children < rum/reactive
   [config children collapsed?]
   (let [ref? (:ref? config)
+        query? (:custom-query? config)
         children (and (coll? children) (filter map? children))]
     (when (and (coll? children)
                (seq children)
@@ -1418,8 +1419,8 @@
                             (-> config
                                 (assoc :block/uuid (:block/uuid child))
                                 (dissoc :breadcrumb-show? :embed-parent))
-                             ref?
-                             (assoc :ref-child? true))]
+                             (or ref? query?)
+                             (assoc :ref-query-child? true))]
                 (rum/with-key (block-container config child)
                   (:block/uuid child)))))]]))))
 
@@ -2081,7 +2082,8 @@
     (when show?
       (let [page-name-props (when show-page?
                               [page
-                               (or page-original-name page-name)])
+                               (page-cp config page)
+                               {:block/name (or page-original-name page-name)}])
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
@@ -2333,7 +2335,6 @@
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
-  (rum/local false ::visible?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
@@ -2367,14 +2368,12 @@
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
         ref-or-custom-query? (or ref? custom-query?)]
-    (if (and ref-or-custom-query? (not (:ref-child? config)))
-      (let [*visible? (::visible? state)]
-        (ui/lazy-visible
-         *visible?
-        nil
-        (fn []
-          (block-container-inner state repo config block))
-        nil))
+    (if (and ref-or-custom-query? (not (:ref-query-child? config)))
+      (ui/lazy-visible
+       nil
+       (fn []
+         (block-container-inner state repo config block))
+       nil)
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2701,7 +2700,10 @@
   [config q]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
-   (custom-query* config q)))
+   (ui/lazy-visible
+    "loading ..."
+    (fn [] (custom-query* config q))
+    nil)))
 
 (defn admonition
   [config type result]

@@ -165,14 +165,14 @@
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
 
-(rum/defcs references <
-  (rum/local false ::visible?)
-  [state page-name sidebar?]
+(rum/defc references
+  [page-name sidebar?]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
    (ui/lazy-visible
-    (::visible? state)
-    (if sidebar? nil "loading references...")
+    (if (or sidebar? (gp-util/uuid-string? page-name))
+      nil
+      "loading references...")
     (fn []
       (references* page-name))
     nil)))

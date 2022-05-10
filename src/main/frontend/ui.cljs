@@ -684,7 +684,7 @@
                         :margin-left -30}}
              (not title-trigger?)
              (assoc :on-mouse-down on-mouse-down))
-           [:span {:class (if @control? "control-show cursor-pointer" "control-hide")}
+           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
             (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
@@ -916,11 +916,13 @@
   [:div.lazy-visibility
    (if visible?
      (when (fn? content-fn) (content-fn))
-     (when loading-label (loading loading-label)))])
+     (when loading-label [:span.text-sm.font-medium
+                          loading-label]))])
 
-(rum/defc lazy-visible < rum/reactive
-  [*visible? loading-label content-fn sensor-opts]
-  (let [visible? (rum/react *visible?)]
+(rum/defcs lazy-visible <
+  (rum/local false ::visible?)
+  [state loading-label content-fn sensor-opts]
+  (let [*visible? (::visible? state)]
     (visibility-sensor
      (merge
       {:on-change #(reset! *visible? %)
@@ -928,4 +930,4 @@
        :offset {:top -300
                 :bottom -300}}
       sensor-opts)
-     (lazy-visible-inner visible? content-fn loading-label))))
+     (lazy-visible-inner @*visible? content-fn loading-label))))
