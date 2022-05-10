@@ -12,7 +12,7 @@
 (defn loaded? []
   js/window.katex)
 
-(defonce *loading? (atom true))
+(defonce *loading? (atom false))
 
 (defn render!
   [state]
@@ -31,7 +31,7 @@
     (do
       (reset! *loading? false)
       (render! state))
-    (do
+    (when-not @*loading?
       (reset! *loading? true)
       (loader/load
        (config/asset-uri "/static/js/katex.min.js")
@@ -48,21 +48,24 @@
                 (render! state))))))
        state))))
 
+(defn- state-&-load-and-render!
+  [state]
+  (js/setTimeout #(load-and-render! state) 10)
+  state)
+
 (rum/defc latex < rum/reactive
-  {:did-mount (fn [state]
-                (js/setTimeout #(load-and-render! state) 0)
-                state)
-   :did-update load-and-render!}
+  {:did-mount  state-&-load-and-render!
+   :did-update state-&-load-and-render!}
   [id s block? _display?]
   (let [loading? (rum/react *loading?)]
-    (when loading?
-      (ui/loading "Loading"))
-    (let [element (if block?
-                    :div.latex
-                    :span.latex-inline)]
-      [element {:id id
-                :class (if loading? "hidden" "initial")}
-       s])))
+    (if loading?
+      (ui/loading "Loading")
+      (let [element (if block?
+                      :div.latex
+                      :span.latex-inline)]
+        [element {:id    id
+                  :class "initial"}
+         [:span.opacity-0 s]]))))
 
 (defn html-export
   [s block? display?]

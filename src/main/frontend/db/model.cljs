@@ -15,6 +15,7 @@
             [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.db.rules :refer [rules]]
             [frontend.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
@@ -61,7 +62,7 @@
    (db-utils/transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
    (when-not config/publishing?
-     (let [tx-data (->> (util/remove-nils tx-data)
+     (let [tx-data (->> (gp-util/remove-nils tx-data)
                         (remove nil?)
                         (map #(dissoc % :file/handle :file/type)))]
        (when (seq tx-data)
@@ -573,13 +574,16 @@
 
 (defn recursive-child?
   [repo child-id parent-id]
-  (loop [node (db-utils/entity repo child-id)]
-    (if node
-      (let [parent (:block/parent node)]
-        (if (= (:db/id parent) parent-id)
-          true
-          (recur parent)))
-      false)))
+  (let [*last-node (atom nil)]
+    (loop [node (db-utils/entity repo child-id)]
+      (when-not (= @*last-node node)
+        (reset! *last-node node)
+        (if node
+          (let [parent (:block/parent node)]
+            (if (= (:db/id parent) parent-id)
+              true
+              (recur parent)))
+          false)))))
 
 (defn- get-start-id-for-pagination-query
   [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
@@ -605,7 +609,8 @@
                                    (if id
                                      (if (contains? match-ids id)
                                        id
-                                       (recur others))
+                                       (when (seq others)
+                                         (recur others)))
                                      nil)))))
                            (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
@@ -894,7 +899,7 @@
 
 (defn get-page
   [page-name]
-  (if (util/uuid-string? page-name)
+  (if (gp-util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
@@ -1252,7 +1257,7 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (util/uuid-string? (str page-name-or-block-uuid))
+  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
     (let [id (uuid page-name-or-block-uuid)]
       (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))

@@ -25,6 +25,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.core :as st]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
@@ -38,7 +39,9 @@
             [frontend.fs :as fs]
             [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
-            [frontend.fs.sync :as sync]))
+            [frontend.fs.sync :as sync]
+            [frontend.components.encryption :as encryption]
+            [frontend.encrypt :as encrypt]))
 
 ;; TODO: should we move all events here?
 
@@ -233,7 +236,8 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (state/set-modal! #(git-component/file-specific-version path hash content)))
+  (p/let [content (when content (encrypt/decrypt content))]
+    (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
@@ -346,14 +350,48 @@
          false)))))
 
 (defmethod handle :file-watcher/changed [[_ ^js event]]
-  (fs-watcher/handle-changed!
-   (.-event event)
-   (update (js->clj event :keywordize-keys true)
-           :path
-           js/decodeURI)))
+  (let [type (.-event event)
+        payload (js->clj event :keywordize-keys true)
+        payload' (-> payload
+                     (update :path js/decodeURI))]
+    (prn ::fs-watcher payload)
+    (fs-watcher/handle-changed! type payload')
+    (sync/file-watch-handler type payload')))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
+  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
+    (handle
+     [:modal/show
+      [:div
+       [:p (t :re-index-multiple-windows-warning)]]])
+    (handle
+     [:modal/show
+      [:div {:style {:max-width 700}}
+       [:p (t :re-index-discard-unsaved-changes-warning)]
+       (ui/button
+         (t :yes)
+         :autoFocus "on"
+         :large? true
+         :on-click (fn []
+                     (state/close-modal!)
+                     (repo-handler/re-index!
+                      nfs-handler/rebuild-index!
+                      page-handler/create-today-journal!)))]])))
+
+;; encryption
+(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
+  (state/set-modal!
+   (encryption/encryption-setup-dialog repo-url close-fn)))
+
+(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
+  (state/set-modal!
+   (encryption/encryption-input-secret-dialog
+    repo-url
+    db-encrypted-secret
+    close-fn)))
 
 (defn run!
   []

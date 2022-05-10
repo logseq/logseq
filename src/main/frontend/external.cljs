@@ -1,6 +1,4 @@
 (ns frontend.external
-  ;; Wonky cljs detection
-  #_:clj-kondo/ignore
   (:require [frontend.external.roam :refer [->Roam]]
             [frontend.external.protocol :as protocol]))
 

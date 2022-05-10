@@ -15,6 +15,8 @@
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -274,7 +276,7 @@
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
                (let [file (draw/file-name)
-                     path (str config/default-draw-directory "/" file)
+                     path (str gp-config/default-draw-directory "/" file)
                      text (util/format "[[%s]]" path)]
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
@@ -333,13 +335,13 @@
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
-                         (when-let [i (string/index-of (util/safe-subs edit-content current-pos) end-pattern)]
+                         (when-let [i (string/index-of (gp-util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
           space? (when (and last-pattern orig-prefix)
                    (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                             (util/safe-subs orig-prefix 0 last-index))]
+                             (gp-util/safe-subs orig-prefix 0 last-index))]
                      (not
                       (or
                        (and s
@@ -352,7 +354,7 @@
                    space?)
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
-                   (str (util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                   (str (gp-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
                         (when-not (zero? backward-truncate-number)
                           value))
 
@@ -515,7 +517,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [edit-content marker pos]
-  (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (gp-util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         pos-delta (- (count marker)
                      (count old-marker))
@@ -540,7 +542,7 @@
                   (if-let [matches (seq (util/re-pos new-line-re-pattern prefix))]
                     (let [[start-pos content] (last matches)]
                       (+ start-pos (count content)))
-                    (count (util/safe-re-find re-pattern prefix))))
+                    (count (gp-util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  (marker/marker-pattern format)
@@ -581,7 +583,7 @@
       (let [edit-content (gobj/get current-input "value")
             heading-pattern #"^#+\s+"
             new-value (cond
-                        (util/safe-re-find heading-pattern edit-content)
+                        (gp-util/safe-re-find heading-pattern edit-content)
                         (string/replace-first edit-content
                                               heading-pattern
                                               (str heading " "))

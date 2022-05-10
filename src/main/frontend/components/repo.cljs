@@ -17,7 +17,9 @@
             [frontend.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.components.encryption :as encryption]
+            [frontend.encrypt :as e]))
 
 (rum/defc add-repo
   [args]
@@ -60,6 +62,11 @@
                     :href url}
                 (db/get-repo-path url)])
              [:div.controls
+              (when (e/encrypted-db? url)
+                [:a.control {:title "Show encryption information about this graph"
+                             :on-click (fn []
+                                         (state/set-modal! (encryption/encryption-dialog url)))}
+                 "🔐"])
               [:a.text-gray-400.ml-4.font-medium.text-sm
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []
@@ -116,24 +123,7 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (if @*multiple-windows?
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div
-                                        [:p (t :re-index-multiple-windows-warning)]]])
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div {:style {:max-width 700}}
-                                        [:p (t :re-index-discard-unsaved-changes-warning)]
-                                        (ui/button
-                                         (t :yes)
-                                         :autoFocus "on"
-                                         :large? true
-                                         :on-click (fn []
-                                                     (state/close-modal!)
-                                                     (repo-handler/re-index!
-                                                      nfs-handler/rebuild-index!
-                                                      page-handler/create-today-journal!)))]])))})}
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
         new-window-link (when (util/electron?)
                           {:title        (t :open-new-window)
                            :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]

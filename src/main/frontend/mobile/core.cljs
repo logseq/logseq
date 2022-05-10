@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.util :as util]))
 
 (defn- ios-init
@@ -48,7 +49,21 @@
                          (js/window.history.back))))))
 
   (when (mobile-util/native-ios?)
-    (ios-init))
+    (ios-init)
+    (.removeAllListeners mobile-util/file-sync)
+
+    (.addListener App "appUrlOpen"
+                  (fn [^js data]
+                    (when-let [url (.-url data)]
+                      ;; TODO: handler other logseq:// URLs
+                      (when (string/starts-with? url "logseq://auth-callback")
+                        (let [parsed-url (js/URL. url)
+                              code (.get (.-searchParams parsed-url) "code")]
+                          (user-handler/login-callback code))))))
+
+    (.addListener mobile-util/file-sync "debug"
+                  (fn [event]
+                    (js/console.log "🔄" event))))
 
   (when (mobile-util/is-native-platform?)
     (.addListener mobile-util/fs-watcher "watcher"

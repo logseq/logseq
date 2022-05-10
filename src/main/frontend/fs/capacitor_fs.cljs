@@ -9,7 +9,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -101,7 +102,10 @@
 (defn- contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
+    (if (encrypt/encrypted-db? (state/get-current-repo))
+      (p/let [decrypted-content (encrypt/decrypt disk-content)]
+        (= (string/trim decrypted-content) (string/trim db-content)))
+      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
@@ -136,7 +140,8 @@
          (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
-        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
+        (p/let [disk-content (encrypt/decrypt disk-content)]
+          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
         :else
         (->
@@ -144,7 +149,10 @@
                                                          :data content
                                                          :encoding (.-UTF8 Encoding)
                                                          :recursive true}))]
-           (db/set-file-content! repo (js/decodeURI path) content)
+           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
+                             (encrypt/decrypt content)
+                             content)]
+             (db/set-file-content! repo (js/decodeURI path) content))
            (when ok-handler
              (ok-handler repo path result))
            result)

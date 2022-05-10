@@ -52,6 +52,7 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [frontend.util.keycode :as keycode]
+            [logseq.graph-parser.util :as gp-util]
             ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -157,13 +158,12 @@
 (defn open-block-in-sidebar!
   [block-id]
   (when block-id
-    (when-let [block (db/pull [:block/uuid block-id])]
+    (when-let [block (db/entity [:block/uuid block-id])]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
          (:db/id block)
-         (if page? :page :block)
-         block)))))
+         (if page? :page :block))))))
 
 (defn reset-cursor-range!
   [node]
@@ -255,7 +255,7 @@
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
   (and (string? block-id)
-       (util/uuid-string? block-id)
+       (gp-util/uuid-string? block-id)
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
@@ -336,7 +336,7 @@
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
     (let [format (:block/format block)
-          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-marker (last (gp-util/safe-re-find (marker/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]
@@ -480,10 +480,10 @@
   (let [current-page (state/get-current-page)
         block-id (or
                   (and (:id config)
-                       (util/uuid-string? (:id config))
+                       (gp-util/uuid-string? (:id config))
                        (:id config))
                   (and current-page
-                       (util/uuid-string? current-page)
+                       (gp-util/uuid-string? current-page)
                        current-page))]
     (= uuid (and block-id (medley/uuid block-id)))))
 
@@ -650,16 +650,19 @@
                                                           :keep-uuid? true
                                                           :replace-empty-target? replace-empty-target?})
             (when edit-block?
-              (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10))
+              (if (and replace-empty-target?
+                       (string/blank? (:block/content last-block)))
+                (js/setTimeout #(edit-block! last-block :max (:block/uuid last-block)) 10)
+                (js/setTimeout #(edit-block! new-block :max (:block/uuid new-block)) 10)))
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  ([page-name]
-   (insert-first-page-block-if-not-exists! page-name {}))
-  ([page-name opts]
-   (when (and (string? page-name)
-              (not (string/blank? page-name)))
-     (state/pub-event! [:page/create page-name opts]))))
+  ([page-title]
+   (insert-first-page-block-if-not-exists! page-title {}))
+  ([page-title opts]
+   (when (and (string? page-title)
+              (not (string/blank? page-title)))
+     (state/pub-event! [:page/create page-title opts]))))
 
 (defn properties-block
   [properties format page]
@@ -1139,19 +1142,17 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)
-          block? (util/uuid-string? page-name)]
+          block? (gp-util/uuid-string? page-name)]
       (when-let [page (db/get-page page-name)]
         (if block?
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :block
-           page)
+           :block)
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :page
-           {:page page}))))))
+           :page))))))
 
 (defn zoom-in! []
   (if (state/editing?)
@@ -1171,7 +1172,7 @@
     (let [page (state/get-current-page)
           block-id (and
                     (string? page)
-                    (util/uuid-string? page)
+                    (gp-util/uuid-string? page)
                     (medley/uuid page))]
       (when block-id
         (let [block-parent (db/get-block-parent block-id)]
@@ -1292,7 +1293,7 @@
                  elem (and input-id (gdom/getElement input-id))
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
-                                                 (util/safe-subs db-content (:block/level db-block)))
+                                                 (gp-util/safe-subs db-content (:block/level db-block)))
                  value (and elem (gobj/get elem "value"))]
              (cond
                force?
@@ -1759,7 +1760,7 @@
             edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
-         (util/safe-subs edit-content pos current-pos))))))
+         (gp-util/safe-subs edit-content pos current-pos))))))
 
 (defn close-autocomplete-if-outside
   [input]
@@ -1772,7 +1773,7 @@
       (let [value (gobj/get input "value")
             pos (state/get-editor-last-pos)
             current-pos (cursor/pos input)
-            between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
+            between (gp-util/safe-subs value (min pos current-pos) (max pos current-pos))]
         (when (and between
                    (or
                     (string/includes? between "[")
@@ -1887,6 +1888,16 @@
             :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
                                   (remove nil?))})))
 
+(defn- edit-last-block-after-inserted!
+  [result]
+  (js/setTimeout
+   (fn []
+     (when-let [last-block (last (:blocks result))]
+       (clear-when-saved!)
+       (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
+         (edit-block! last-block' :max (:block/uuid last-block')))))
+   0))
+
 (defn paste-blocks
   [blocks {:keys [content-update-fn
                   exclude-properties
@@ -1920,13 +1931,7 @@
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
-          (js/setTimeout
-           (fn []
-             (when-let [last-block (last (:blocks result))]
-               (clear-when-saved!)
-               (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-                 (edit-block! last-block' :max (:block/uuid last-block')))))
-           0))))))
+          (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
   [tree-vec format]
@@ -1958,11 +1963,12 @@
 (defn insert-template!
   ([element-id db-id]
    (insert-template! element-id db-id {}))
-  ([element-id db-id opts]
+  ([element-id db-id {:keys [target] :as opts}]
    (when-let [db-id (if (integer? db-id)
                       db-id
                       (:db/id (db-model/get-template-by-name (name db-id))))]
      (let [repo (state/get-current-repo)
+           target (or target (state/get-edit-block))
            block (db/entity db-id)
            format (:block/format block)
            block-uuid (:block/uuid block)
@@ -1976,20 +1982,40 @@
                     (drop 1 sorted-blocks))]
        (when element-id
          (insert-command! element-id "" format {}))
-       (let [opts (merge
-                   {:exclude-properties [:id :template :template-including-parent]
-                    :content-update-fn (fn [content]
-                                         (->> content
-                                              (property/remove-property format "template")
-                                              (property/remove-property format "template-including-parent")
-                                              template/resolve-dynamic-template!))}
-                   opts)]
-         (paste-blocks blocks opts))))))
+       (let [exclude-properties [:id :template :template-including-parent]
+             content-update-fn (fn [content]
+                                 (->> content
+                                      (property/remove-property format "template")
+                                      (property/remove-property format "template-including-parent")
+                                      template/resolve-dynamic-template!))
+             page (if (:block/name block) block
+                      (when target (:block/page (db/entity (:db/id target)))))
+             blocks' (map (fn [block]
+                            (paste-block-cleanup block page exclude-properties format content-update-fn))
+                       blocks)
+             sibling? (:sibling? opts)
+             sibling?' (cond
+                         (some? sibling?)
+                         sibling?
+
+                         (db/has-children? (:block/uuid target))
+                         false
+
+                         :else
+                         true)]
+         (outliner-tx/transact!
+           {:outliner-op :insert-blocks}
+           (save-current-block!)
+           (let [result (outliner-core/insert-blocks! blocks'
+                                                      target
+                                                      (assoc opts :sibling? sibling?'))]
+             (edit-last-block-after-inserted! result))))))))
 
 (defn template-on-chosen-handler
   [element-id]
   (fn [[_template db-id] _click?]
-    (insert-template! element-id db-id)))
+    (insert-template! element-id db-id
+                      {:replace-empty-target? true})))
 
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]
@@ -2008,7 +2034,7 @@
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
   (when id
-    (when-let [entity (if (util/uuid-string? (str id))
+    (when-let [entity (if (gp-util/uuid-string? (str id))
                         (db/entity [:block/uuid (uuid id)])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
@@ -2835,7 +2861,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (util/safe-re-find (if (= format :org)
+                                           (if (gp-util/safe-re-find (if (= format :org)
                                                                     #"\s*\*+\s+"
                                                                     #"\s*-\s+") p)
                                              p
@@ -2898,9 +2924,9 @@
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
         (match [format
-                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+                (nil? (gp-util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                (nil? (gp-util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                (nil? (gp-util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
           (paste-text-parseable format text)
 
@@ -3185,7 +3211,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [block? (util/uuid-string? page)
+    (let [block? (gp-util/uuid-string? page)
           block-id (or root-block (and block? (uuid page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
