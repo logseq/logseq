@@ -1,5 +1,7 @@
 (ns frontend.handler.external
-  (:require [frontend.external :as external]
+  (:require [clojure.edn :as edn]
+            [clojure.walk :as walk]
+            [frontend.external :as external]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
@@ -13,9 +15,11 @@
             [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
+            [frontend.handler.notification :as notification]
             [frontend.util :as util]))
 
 (defn index-files!
+  "Create file structure, then parse into DB (client only)"
   [repo files finish-handler]
   (let [titles (->> files
                     (map :title)
@@ -95,3 +99,118 @@
          {:target-block target-block
           :sibling? sibling?})
         (finished-ok-handler [page-name])))))
+
+(defn create-page-with-exported-tree!
+  "Create page from the per page object generated in `export-repo-as-edn-v2!`
+   Return page-name (title)
+   Extension to `insert-block-tree-after-target`
+   :id       - page's uuid
+   :title    - page's title (original name)
+   :children - tree
+   "
+  [{:keys [id title children] :as tree}]
+  (let [has-children? (seq children)
+        page-format (some-> tree (:children) (first) (:format))]
+    (try (page/create! title {:redirect?  false
+                                  :format     page-format
+                                  :uuid       id})
+         (catch js/Error e
+           (notification/show! (str "Error happens when creating page " title ":\n"
+                                    e
+                                    "\nSkipped and continue the remaining import.") :error)))
+    (when has-children?
+      (let [page-block (db/entity [:block/name (util/page-name-sanity-lc title)])]
+        ;; Missing support for per block format (or deprecated?)
+        (try (editor/insert-block-tree children page-format
+                                       {:target-block page-block
+                                        :sibling?     true
+                                        :keep-uuid?   true})
+             (catch js/Error e
+               (notification/show! (str "Error happens when creating block content of page " title "\n"
+                                        e
+                                        "\nSkipped and continue the remaining import.") :error))))))
+  title)
+
+(defn- pre-transact-uuids
+  "Collect all uuids from page trees and write them to the db before hand."
+  [pages]
+  (let [uuids (map (fn [block]
+                     {:block/uuid (:uuid block)})
+                   (mapcat #(tree-seq map? :children %)
+                           pages))]
+    (db/transact! uuids)
+    pages))
+
+(defn- import-from-tree!
+  "Not rely on file system - backend compatible.
+   tree-translator-fn: translate exported tree structure to the desired tree for import"
+  [data tree-translator-fn]
+  (when-let [_repo (state/get-current-repo)]
+    (try (->> (:blocks data)
+              (map tree-translator-fn)
+              (pre-transact-uuids)
+              (mapv create-page-with-exported-tree!))
+         (editor/set-blocks-id! (db/get-all-referenced-blocks-uuid))
+         (catch js/Error e
+           (notification/show! (str "Error happens when importing:\n" e) :error)))))
+
+(defn tree-vec-translate-edn
+  "Actions to do for loading edn tree structure.
+   1) Removes namespace `:block/` from all levels of the `tree-vec`
+   2) Rename all :block/page-name to :title
+   3) Rename all :block/id to :uuid
+   4) Dissoc all :properties"
+  ([tree-vec]
+   (let [rm-kw-ns-fn #(-> %
+                          str
+                          (string/replace ":block/page-name" ":block/title")
+                          (string/replace ":block/id" ":block/uuid")
+                          (string/replace ":block/" "")
+                          keyword)
+         transform-map (fn [form]
+                         (if (map? form)
+                           ;; build a new map with the same keys but without the namespace
+                           (reduce-kv (fn [acc k v]
+                                        (if (not= :block/properties k)
+                                          (assoc acc (rm-kw-ns-fn k) v)
+                                          acc)) {} form)
+                           form))]
+     (walk/postwalk transform-map tree-vec))))
+
+(defn import-from-edn!
+  [raw finished-ok-handler]
+  (import-from-tree! (edn/read-string raw) tree-vec-translate-edn)
+  (finished-ok-handler nil)) ;; it was designed to accept a list of imported page names but now deprecated
+
+(defn tree-vec-translate-json
+  "Actions to do for loading json tree structure.
+   1) Rename all :id to :uuid
+   2) Rename all :page-name to :title
+   3) Dissoc all :properties
+   4) Rename all :format \"markdown\" to :format `:markdown`"
+  ([tree-vec]
+   (let [rm-kw-ns-fn #(-> %
+                          str
+                          (string/replace ":page-name" ":title")
+                          (string/replace ":id" ":uuid")
+                          (string/replace #"^:" "")
+                          keyword)
+         transform-map (fn [form]
+                         (if (map? form)
+                           (reduce-kv (fn [acc k v]
+                                        (if (not= :properties k)
+                                          (let [k (rm-kw-ns-fn k)
+                                                v (if (= k :format) (keyword v) v)]
+                                            (assoc acc k v))
+                                          acc)) {} form)
+                           form))
+         _ (prn tree-vec)
+         _ (prn (walk/postwalk transform-map tree-vec))]
+     (walk/postwalk transform-map tree-vec))))
+
+(defn import-from-json!
+  [raw finished-ok-handler]
+  (let [json     (js/JSON.parse raw)
+        clj-data (js->clj json :keywordize-keys true)]
+    (import-from-tree! clj-data tree-vec-translate-json))
+  (finished-ok-handler nil)) ;; it was designed to accept a list of imported page names but now deprecated
