@@ -453,9 +453,9 @@
 (declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
-  (let [ref-query-top-block? (and (:ref? config)
-                            (:custom-query? config)
-                            (not (:ref-or-query? config)))
+  (let [ref-query-top-block? (and (or (:ref? config)
+                                      (:custom-query? config))
+                                  (not (:ref-query-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
         sibling? (cond
                    ref-query-top-block?
