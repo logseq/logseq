@@ -237,6 +237,10 @@
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
+   with-id?: if true, assign uuid to the map structure.
+    if the page entity already exists, no-op.
+    else, if with-id? is a uuid, the uuid is used.
+    otherwise, generate a uuid.
    with-timestamp?: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
@@ -253,9 +257,10 @@
        {:block/name page-name
         :block/original-name original-page-name}
        (when with-id?
-         (if page-entity
-           {:block/uuid (:block/uuid page-entity)}
-           {:block/uuid (d/squuid)}))
+         (let [new-uuid (cond page-entity      (:block/uuid page-entity)
+                              (uuid? with-id?) with-id?
+                              :else            (d/squuid))]
+           {:block/uuid new-uuid}))
        (when namespace?
          (let [namespace (first (gp-util/split-last "/" original-page-name))]
            (when-not (string/blank? namespace)

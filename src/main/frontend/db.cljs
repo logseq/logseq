@@ -41,7 +41,7 @@
   delete-file-blocks! delete-page-blocks delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
-  get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
+  get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-all-referenced-blocks-uuid
   get-block-children-ids get-block-immediate-children get-block-page
   get-custom-css get-date-scheduled-or-deadlines
   get-file-blocks get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
@@ -158,13 +158,13 @@
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
-(defn restore-graph!
-  "Restore db from serialized db cache, and swap into the current db status"
-  [repo]
+(defn restore-graph-from-text!
+  "Swap db string into the current db status
+   stored: the text to restore from"
+  [repo stored]
   (p/let [db-name (datascript-db repo)
           db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
-          stored (db-persist/get-serialized-graph db-name)
           _ (when stored
               (let [stored-db (try (string->db stored)
                                    (catch js/Error _e
@@ -177,6 +177,13 @@
                          attached-db)]
                 (conn/reset-conn! db-conn db)))]
     (d/transact! db-conn [{:schema/version db-schema/version}])))
+
+(defn restore-graph!
+  "Restore db from serialized db cache"
+  [repo]
+  (p/let [db-name (datascript-db repo)
+          stored (db-persist/get-serialized-graph db-name)]
+    (restore-graph-from-text! repo stored)))
 
 (defn restore!
   [{:keys [repos]} _old-db-schema restore-config-handler]
