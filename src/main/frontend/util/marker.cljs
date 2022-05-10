@@ -1,6 +1,7 @@
 (ns frontend.util.marker
   (:require [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn marker-pattern [format]
   (re-pattern
@@ -20,7 +21,7 @@
         (if-let [matches (seq (util/re-pos new-line-re-pattern content))]
           (let [[start-pos content] (last matches)]
             (+ start-pos (count content)))
-          (count (util/safe-re-find re-pattern content)))
+          (count (gp-util/safe-re-find re-pattern content)))
         new-content
         (str (subs content 0 pos)
              (string/replace-first (subs content pos)
@@ -59,6 +60,6 @@
   (let [content    (string/triml content)
         new-marker (or new-marker
                        (cycle-marker-state (or marker
-                                               (last (util/safe-re-find (marker-pattern format) content))) ; Returns the last matching group (last vec)
+                                               (last (gp-util/safe-re-find (marker-pattern format) content))) ; Returns the last matching group (last vec)
                                            preferred-workflow))]
     [(add-or-update-marker content format new-marker) new-marker]))

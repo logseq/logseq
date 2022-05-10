@@ -30,8 +30,10 @@
 (defn transform-content
   [{:block/keys [collapsed? format pre-block? unordered content heading-level left page parent properties]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
-        first-block? (= left page)
-        pre-block? (and first-block? pre-block?)
+        pre-block? (or pre-block?
+                       (and (= page parent left) ; first block
+                            (= :markdown format)
+                            (string/includes? (first (string/split-lines content)) ":: ")))
         markdown? (= format :markdown)
         content (cond
                   pre-block?
@@ -125,7 +127,7 @@
                   (if journal-page?
                     (date/journal-title->default title)
                     (-> (or (:block/original-name page) (:block/name page))
-                        (util/page-name-sanity true))) "."
+                        (util/file-name-sanity))) "."
                   (if (= format "markdown") "md" format))
             file-path (config/get-file-path repo path)
             file {:file/path file-path}

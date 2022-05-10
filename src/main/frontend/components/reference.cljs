@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -66,6 +67,22 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
+(rum/defc block-linked-references < rum/reactive db-mixins/query
+  [block-id]
+  (let [refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
+    (when (seq refed-blocks-ids)
+      (let [ref-blocks (db/get-block-referenced-blocks block-id)
+            ref-hiccup (block/->hiccup ref-blocks
+                                       {:id (str block-id)
+                                        :ref? true
+                                        :breadcrumb-show? true
+                                        :group-by-page? true
+                                        :editor-box editor/box}
+                                       {})]
+        [:div.references-blocks
+         (content/content block-id
+                          {:hiccup ref-hiccup})]))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
@@ -84,7 +101,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (util/uuid-string? page-name)
+          block? (gp-util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
