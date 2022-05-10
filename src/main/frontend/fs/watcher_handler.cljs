@@ -13,7 +13,8 @@
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.encrypt :as encrypt]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -47,7 +48,9 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (or content (= type "unlink"))
+      (when (and (or content (= type "unlink"))
+                 (not (encrypt/content-encrypted? content))
+                 (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))

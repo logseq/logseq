@@ -390,6 +390,23 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
+(defn encryption-row [t enable-encryption?]
+  (toggle "enable_encryption"
+          (t :settings-page/enable-encryption)
+          enable-encryption?
+          #(let [value (not enable-encryption?)]
+             (config-handler/set-config! :feature/enable-encryption? value)
+             (when value
+               (state/close-modal!)
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+                              100)))
+          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
+           [:span "You can use "]
+           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
+                :target "_blank"}
+            "logseq-encrypt-ui"]
+           [:span " to decrypt your graph."]]))
+
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
@@ -544,6 +561,7 @@
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
         enable-journals? (state/enable-journals? current-repo)
+        enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -578,6 +596,7 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
+     (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
      (auto-push-row t current-repo enable-git-auto-push?)]))

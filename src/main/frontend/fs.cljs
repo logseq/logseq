@@ -11,7 +11,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.db :as db]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.encrypt :as encrypt]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -74,17 +75,20 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (->
-     (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-       (when (= bfs-record (get-fs dir))
-         (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-     (p/catch (fn [error]
-                (log/error :file/write-failed {:dir dir
-                                               :path path
-                                               :error error})
-                ;; Disable this temporarily
-                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                )))))
+    (let [fs-record (get-fs dir)]
+      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
+              content (if-not md-or-org? content (encrypt/encrypt content))]
+        (->
+         (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+           (when (= bfs-record fs-record)
+             (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+         (p/catch (fn [error]
+                    (log/error :file/write-failed {:dir dir
+                                                   :path path
+                                                   :error error})
+                    ;; Disable this temporarily
+                    ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                    )))))))
 
 (defn read-file
   ([dir path]

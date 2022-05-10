@@ -276,6 +276,7 @@
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def custom-js-file "custom.js")
+(def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
@@ -367,6 +368,13 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-metadata-path
+  ([]
+   (get-metadata-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" metadata-file)))))
 
 (defn get-pages-metadata-path
   ([]

@@ -159,13 +159,12 @@
 (defn open-block-in-sidebar!
   [block-id]
   (when block-id
-    (when-let [block (db/pull [:block/uuid block-id])]
+    (when-let [block (db/entity [:block/uuid block-id])]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
          (:db/id block)
-         (if page? :page :block)
-         block)))))
+         (if page? :page :block))))))
 
 (defn reset-cursor-range!
   [node]
@@ -659,12 +658,12 @@
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
-  ([page-name]
-   (insert-first-page-block-if-not-exists! page-name {}))
-  ([page-name opts]
-   (when (and (string? page-name)
-              (not (string/blank? page-name)))
-     (state/pub-event! [:page/create page-name opts]))))
+  ([page-title]
+   (insert-first-page-block-if-not-exists! page-title {}))
+  ([page-title opts]
+   (when (and (string? page-title)
+              (not (string/blank? page-title)))
+     (state/pub-event! [:page/create page-title opts]))))
 
 (defn properties-block
   [properties format page]
@@ -1150,13 +1149,11 @@
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :block
-           page)
+           :block)
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :page
-           {:page page}))))))
+           :page))))))
 
 (defn zoom-in! []
   (if (state/editing?)

@@ -91,12 +91,16 @@
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title? (create-title-property? journal? (:block/name page))
+          create-title? (create-title-property? journal?
+                                                (or
+                                                 (:block/original-name page)
+                                                 (:block/name page)))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
         create-title?
-        [page
-         (default-properties-block (build-title page) format page-entity properties)]
+        (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
+          [page
+           properties-block])
 
         (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
@@ -117,7 +121,7 @@
          title (util/remove-boundary-slashes title)
          page-name (util/page-name-sanity-lc title)
          repo (state/get-current-repo)]
-     (when-not (db/page-exists? page-name)
+     (when (db/page-empty? repo page-name)
        (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
@@ -130,16 +134,19 @@
                            ;; for namespace pages, only last page need properties
                            drop-last
                            (mapcat #(build-page-tx format nil % journal?))
-                           (remove nil?))
+                           (remove nil?)
+                           (remove (fn [m]
+                                     (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
-         (db/transact! txs)))
+         (when (seq txs)
+           (db/transact! txs)))
 
-     (when create-first-block?
-       (when (or
-              (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
-              (create-title-property? journal? page-name))
-         (editor-handler/api-insert-new-block! "" {:page page-name})))
+       (when create-first-block?
+         (when (or
+                (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+                (create-title-property? journal? page-name))
+           (editor-handler/api-insert-new-block! "" {:page page-name}))))
 
      (when redirect?
        (route-handler/redirect-to-page! page-name))
@@ -361,7 +368,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/page-name-sanity new-name true)
+        new-file-name       (util/file-name-sanity new-name)
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
@@ -754,8 +761,7 @@
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
-     :page
-     page)))
+     :page)))
 
 (defn open-file-in-default-app []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]

@@ -261,8 +261,7 @@
                                         (state/sidebar-add-block!
                                          repo
                                          (:db/id page)
-                                         :page
-                                         {:page page}))
+                                         :page))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
          [:h1.title.ls-page-title {:data-ref page-name}
@@ -369,7 +368,7 @@
            (let [config {:id "block-parent"
                          :block? true}]
              [:div.mb-4
-              (block/block-parents config repo block-id {:level-limit 3})]))
+              (block/breadcrumb config repo block-id {:level-limit 3})]))
 
          ;; blocks
          (let [page (if block?
@@ -944,8 +943,7 @@
                                               (state/sidebar-add-block!
                                                repo
                                                (:db/id page)
-                                               :page
-                                               {:page (:block/name page)}))))
+                                               :page))))
                               :href     (rfe/href :page {:name (:block/name page)})}
                           (block/page-cp {} page)]]
 

@@ -12,11 +12,11 @@
         :js-options    {:ignore-asset-requires true} ;; handle `require(xxx.css)`
         :modules       {:main
                         {:init-fn    frontend.core/init}
-                        ;; :graph
-                        ;; {:entries [frontend.extensions.graph.force]
-                        ;;  :depends-on #{:main}}
                         :code-editor
                         {:entries    [frontend.extensions.code]
+                         :depends-on #{:main}}
+                        :age-encryption
+                        {:entries    [frontend.extensions.age-encryption]
                          :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
@@ -69,11 +69,11 @@
                :js-options    {:ignore-asset-requires true}
                :modules       {:main
                                {:init-fn    frontend.publishing/init}
-                               ;; :graph
-                               ;; {:entries [frontend.extensions.graph.force]
-                               ;;  :depends-on #{:main}}
                                :code-editor
                                {:entries    [frontend.extensions.code]
+                                :depends-on #{:main}}
+                               :age-encryption
+                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]
