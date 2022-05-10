@@ -363,8 +363,3 @@
 
        :else
        (split-page-refs-without-brackets v)))))
-
-;; TODO: Properly fix this circular dependency:
-;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
-(set! gp-mldoc/parse-property parse-property)
-; (alter-var-root #'gp-mldoc/parse-property (constantly parse-property))

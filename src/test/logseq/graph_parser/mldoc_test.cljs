@@ -3,7 +3,6 @@
             ["fs" :as fs]
             ["child_process" :as child-process]
             [clojure.string :as string]
-            [clojure.edn :as edn]
             ;; hack needed for parse-property to exist
             [logseq.graph-parser.text]
             [cljs.test :refer [testing deftest are is]]))
@@ -103,7 +102,7 @@
     ; (prn (butlast (clojure.data/diff (edn/read-string (slurp "mldoc-asts.edn"))
     ;                                  asts-by-file)))
     ;; This is just temporary
-    #_(is (= (edn/read-string (slurp "mldoc-asts.edn"))
+    #_(is (= (clojure.edn/read-string (slurp "mldoc-asts.edn"))
              asts-by-file)
           "Matches initial AST")
     #_(println "Wrote asts for" (count asts-by-file) "files")
