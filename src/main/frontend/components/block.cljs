@@ -2271,11 +2271,7 @@
         embed? (:embed? config)
         reference? (:reference? config)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
-        has-child? (boolean
-                    (and
-                     (not pre-block?)
-                     (coll? children)
-                     (seq children)))
+        has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2371,7 +2367,7 @@
         ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
         ref-or-custom-query? (or ref? custom-query?)]
-    (if ref-or-custom-query?
+    (if (and ref-or-custom-query? (not (:ref-child? config)))
       (let [*visible? (::visible? state)]
         (ui/lazy-visible
          *visible?

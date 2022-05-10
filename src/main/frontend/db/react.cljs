@@ -216,9 +216,8 @@
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data]}]
+  [{:keys [tx-data tx-meta db-before]}]
   {:post [(s/valid? ::affected-keys %)]}
-
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
@@ -240,9 +239,15 @@
                                              (:db/id (:block/page block)))
                                     blocks [[::block (:block/uuid block)]]
                                     others (when page-id
-                                             [[::page-blocks page-id]
-                                              [::page->pages page-id]
-                                              [::block-direct-children (:block/uuid (:block/parent block))]])]
+                                             (let [db-after-parent-uuid (:block/uuid (:block/parent block))
+                                                   db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
+                                                                                                               [:block/uuid (:block/uuid block)])))]
+                                               [[::page-blocks page-id]
+                                                [::page->pages page-id]
+                                                [::block-direct-children db-after-parent-uuid]
+                                                (when (and db-before-parent-uuid
+                                                           (not= db-before-parent-uuid db-after-parent-uuid))
+                                                  [::block-direct-children db-before-parent-uuid])]))]
                                 (concat blocks others)))))
                         blocks)
 
@@ -255,7 +260,7 @@
                                 (if (:block/name entity) ; page
                                   [::page-blocks ref]
                                   [::page-blocks (:db/id (:block/page entity))])))
-                            refs))
+                         refs))
         others (->>
                 (keys @query-state)
                 (filter (fn [ks]
