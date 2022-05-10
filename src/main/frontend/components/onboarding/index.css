@@ -346,6 +346,12 @@ body[data-page=import] {
       max-width: 320px;
       border-radius: 8px;
       box-shadow: none;
+
+      &[data-shepherd-step-id=nav-journal-page] {
+        .shepherd-arrow {
+          left: 30px !important;
+        }
+      }
     }
 
     .shepherd-content {

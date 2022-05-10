@@ -78,7 +78,7 @@
                                         [:a "[[link]]"]
                                         [:span "your thoughts."]]])
 
-    :attachTo          {:element ".page.is-journals .page-title" :on "right"}
+    :attachTo          {:element ".page.is-journals .page-title" :on "top-end"}
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
                                   (util/safe-lower-case (date/today)))
                           (wait-target (fn []
