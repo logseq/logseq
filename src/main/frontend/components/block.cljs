@@ -489,8 +489,16 @@
                             page-name-in-block
                             page-name
                             redirect-page-name page-entity contents-page? children html-export? label)]
-      (if (and (not (util/mobile?)) (not preview?))
+      (cond
+        (:breadcrumb? config)
+        (or (:block/original-name page)
+            (:block/name page))
+
+        (and (not (util/mobile?))
+             (not preview?))
         (page-preview-trigger (assoc config :children inner) page-name)
+
+        :else
         inner))))
 
 (rum/defc asset-reference
@@ -2078,11 +2086,12 @@
                   (rest parents)
                   parents)
         more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)]
+        parents (if more? (take-last level-limit parents) parents)
+        config (assoc config :breadcrumb? true)]
     (when show?
       (let [page-name-props (when show-page?
                               [page
-                               (page-cp config page)
+                               (page-cp (dissoc config :breadcrumb? true) page)
                                {:block/name (or page-original-name page-name)}])
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
@@ -2227,7 +2236,7 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defc block-container-inner < rum/reactive db-mixins/query
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   [state repo config block]
   (let [ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
@@ -2255,12 +2264,12 @@
         *control-show? (get state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref? custom-query? (root-block? config block))
+                     (or ref-or-custom-query? (root-block? config block))
                      (state/sub-collapsed uuid)
 
                      :else
                      db-collapsed?)
-        children (if (and (or ref? custom-query?)
+        children (if (and ref-or-custom-query?
                           (not collapsed?))
                    (map
                      (fn [b] (assoc b
@@ -2334,7 +2343,7 @@
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
+(rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
@@ -2342,7 +2351,7 @@
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
 
-               (:ref? config)
+               (or (:ref? config) (:custom-query? config))
                (state/set-collapsed-block! block-id
                                            (editor-handler/block-default-collapsed? block config))
 

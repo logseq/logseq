@@ -216,7 +216,7 @@
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data tx-meta db-before]}]
+  [{:keys [tx-data db-before]}]
   {:post [(s/valid? ::affected-keys %)]}
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
