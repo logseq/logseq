@@ -3473,12 +3473,11 @@
   1. References.
   2. Custom queries."
   [block config]
-  (if (or (:ref? config)
-          (:custom-query? config))
-    (and
-     (seq (:block/children block))
-     (or
-      (:custom-query? config)
-      (>= (:ref/level block)
-          (state/get-ref-open-blocks-level))))
-    (util/collapsed? block)))
+  (or
+   (and
+    (:ref? config)
+    (>= (inc (:block/level block))
+        (state/get-ref-open-blocks-level))
+    ;; has children
+    (first (:block/_parent (db/entity (:db/id block)))))
+   (util/collapsed? block)))

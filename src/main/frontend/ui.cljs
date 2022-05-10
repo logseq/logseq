@@ -916,12 +916,16 @@
   [:div.lazy-visibility
    (if visible?
      (when (fn? content-fn) (content-fn))
-     (loading (or loading-label "loading...")))])
+     (when loading-label (loading loading-label)))])
 
 (rum/defc lazy-visible < rum/reactive
-  [*visible? loading-label content-fn]
+  [*visible? loading-label content-fn sensor-opts]
   (let [visible? (rum/react *visible?)]
     (visibility-sensor
-     {:on-change #(reset! *visible? %)
-      :partialVisibility true}
+     (merge
+      {:on-change #(reset! *visible? %)
+       :partialVisibility true
+       :offset {:top -300
+                :bottom -300}}
+      sensor-opts)
      (lazy-visible-inner visible? content-fn loading-label))))

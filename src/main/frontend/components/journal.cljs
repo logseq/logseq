@@ -60,7 +60,7 @@
      (page/today-queries repo today? false)
 
      (rum/with-key
-       (reference/references title)
+       (reference/references title false)
        (str title "-refs"))]))
 
 (rum/defc journals < rum/reactive
