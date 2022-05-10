@@ -49,24 +49,6 @@
   (fn [close-fn]
     (filter-dialog-inner filters-atom close-fn references page-name)))
 
-(defn- block-with-ref-level
-  [block level]
-  (if (:block/children block)
-    (-> (update block :block/children
-                (fn [blocks]
-                  (map (fn [block]
-                         (let [level (inc level)
-                               block (assoc block :ref/level level)]
-                           (block-with-ref-level block level))) blocks)))
-        (assoc :ref/level level))
-    (assoc block :ref/level level)))
-
-(defn- blocks-with-ref-level
-  [page-blocks]
-  (map (fn [[page blocks]]
-         [page (map #(block-with-ref-level % 1) blocks)])
-    page-blocks))
-
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
   (let [refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
@@ -163,8 +145,7 @@
                      filters (when (seq filter-state)
                                (->> (group-by second filter-state)
                                     (medley/map-vals #(map first %))))
-                     filtered-ref-blocks (->> (block-handler/filter-blocks repo ref-blocks filters true)
-                                              blocks-with-ref-level)
+                     filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
                              (for [[_ rfs] filtered-ref-blocks]
                                (count rfs)))]
@@ -186,14 +167,15 @@
 
 (rum/defcs references <
   (rum/local false ::visible?)
-  [state page-name]
+  [state page-name sidebar?]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
    (ui/lazy-visible
     (::visible? state)
-    "loading references..."
+    (if sidebar? nil "loading references...")
     (fn []
-      (references* page-name)))))
+      (references* page-name))
+    nil)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

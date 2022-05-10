@@ -24,6 +24,8 @@
 ;; ::block-and-children
 ;; get block&children react-query
 (s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
+
+(s/def ::block-direct-children (s/tuple #(= ::block-direct-children %) uuid?))
 ;; ::journals
 ;; get journal-list react-query
 (s/def ::journals (s/tuple #(= ::journals %)))
@@ -48,6 +50,7 @@
 (s/def ::react-query-keys (s/or :block ::block
                                 :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
+                                :block-direct-children ::block-direct-children
                                 :journals ::journals
                                 :page->pages ::page->pages
                                 :page<-pages ::page<-pages
@@ -238,7 +241,8 @@
                                     blocks [[::block (:block/uuid block)]]
                                     others (when page-id
                                              [[::page-blocks page-id]
-                                              [::page->pages page-id]])]
+                                              [::page->pages page-id]
+                                              [::block-direct-children (:block/uuid (:block/parent block))]])]
                                 (concat blocks others)))))
                         blocks)
 
@@ -307,19 +311,20 @@
                  (or (get affected-keys (vec (rest k)))
                      custom?
                      kv?))
-            (let [{:keys [query query-fn]} cache]
-              (when (or query query-fn)
-                (try
-                  (let [f #(execute-query! repo-url db k tx cache)]
-                    ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                    (if (and custom?
-                             ;; modifying during cards review need to be executed immediately
-                             (not (:cards-query? (meta query)))
-                             (not (state/edit-in-query-component)))
-                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                      (f)))
-                  (catch js/Error e
-                    (js/console.error e)))))))))))
+            (util/profile (str "refresh! " (second k))
+             (let [{:keys [query query-fn]} cache]
+               (when (or query query-fn)
+                 (try
+                   (let [f #(execute-query! repo-url db k tx cache)]
+                     ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                     (if (and custom?
+                              ;; modifying during cards review need to be executed immediately
+                              (not (:cards-query? (meta query)))
+                              (not (state/edit-in-query-component)))
+                       (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                       (f)))
+                   (catch js/Error e
+                     (js/console.error e))))))))))))
 
 (defn set-key-value
   [repo-url key value]

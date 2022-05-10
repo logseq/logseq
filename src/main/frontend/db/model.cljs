@@ -815,6 +815,20 @@
           block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
+(defn sub-block-direct-children
+  "Doesn't include nested children."
+  [repo block-uuid]
+  (when-let [db (conn/get-db repo)]
+    (-> (react/q repo [:frontend.db.react/block-direct-children block-uuid] {}
+          '[:find [(pull ?b [*]) ...]
+            :in $ ?parent-id
+            :where
+            [?parent :block/uuid ?parent-id]
+            [?b :block/parent ?parent]]
+          block-uuid)
+        react
+        (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
+
 (defn get-block-children
   "Including nested children."
   [repo block-uuid]
@@ -1080,10 +1094,7 @@
                               :where
                               [?block :block/refs ?ref-page]]
                             pages
-                            block-attrs
-                            ;; TODO: :block/_parent slow recursive query
-                            ;; (butlast block-attrs)
-                            )
+                            (butlast block-attrs))
              result (->> query-result
                          react
                          (remove (fn [block]

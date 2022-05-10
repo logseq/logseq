@@ -2225,37 +2225,11 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
-  {:init (fn [state]
-           (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)]
-             (cond
-               (root-block? config block)
-               (state/set-collapsed-block! block-id false)
-
-               (:ref? config)
-               (state/set-collapsed-block! block-id
-                                           (editor-handler/block-default-collapsed? block config))
-
-               :else
-               nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
-   :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
-                          config-compare-keys [:show-cloze?]
-                          b1 (second (:rum/args old-state))
-                          b2 (second (:rum/args new-state))
-                          result (or
-                                  (not= (select-keys b1 compare-keys)
-                                        (select-keys b2 compare-keys))
-                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))}
-  [state config block]
-  (let [repo (state/get-current-repo)
+(rum/defc block-container-inner < rum/reactive db-mixins/query
+  [state repo config block]
+  (let [ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))
+        ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
@@ -2277,17 +2251,22 @@
                  config)
         heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
-        ref? (:ref? config)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref? (root-block? config block))
+                     (or ref? custom-query? (root-block? config block))
                      (state/sub-collapsed uuid)
 
                      :else
                      db-collapsed?)
+        children (if (and (or ref? custom-query?)
+                          (not collapsed?))
+                   (map
+                     (fn [b] (assoc b
+                                    :block/level (inc (:block/level block))))
+                     (model/sub-block-direct-children repo uuid))
+                   children)
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
-        custom-query? (boolean (:custom-query? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
@@ -2356,6 +2335,51 @@
      (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
+
+(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
+  (rum/local false ::visible?)
+  {:init (fn [state]
+           (let [[config block] (:rum/args state)
+                 block-id (:block/uuid block)]
+             (cond
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
+               (:ref? config)
+               (state/set-collapsed-block! block-id
+                                           (editor-handler/block-default-collapsed? block config))
+
+               :else
+               nil)
+             (assoc state
+                    ::control-show? (atom false)
+                    ::navigating-block (atom (:block/uuid block)))))
+   :should-update (fn [old-state new-state]
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
+                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
+                          config-compare-keys [:show-cloze?]
+                          b1 (second (:rum/args old-state))
+                          b2 (second (:rum/args new-state))
+                          result (or
+                                  (not= (select-keys b1 compare-keys)
+                                        (select-keys b2 compare-keys))
+                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                      (boolean result)))}
+  [state config block]
+  (let [repo (state/get-current-repo)
+        ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))
+        ref-or-custom-query? (or ref? custom-query?)]
+    (if ref-or-custom-query?
+      (let [*visible? (::visible? state)]
+        (ui/lazy-visible
+         *visible?
+        nil
+        (fn []
+          (block-container-inner state repo config block))
+        nil))
+      (block-container-inner state repo config block))))
 
 (defn divide-lists
   [[f & l]]
