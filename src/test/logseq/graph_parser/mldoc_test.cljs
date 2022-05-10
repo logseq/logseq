@@ -1,7 +1,5 @@
 (ns logseq.graph-parser.mldoc-test
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
-            ["fs" :as fs]
-            ["child_process" :as child-process]
             [clojure.string :as string]
             [frontend.test.docs-graph-helper :as docs-graph-helper]
             [cljs.test :refer [testing deftest are is]]))
@@ -42,6 +40,63 @@
     (are [x y] (= (gp-mldoc/link? :markdown x) y)
       "[YouTube](https://www.youtube.com/watch?v=-8ym7pyUs9gL) - [Vimeo](https://vimeo.com/677920303) {{youtube https://www.youtube.com/watch?v=-8ym7pyUs9g}}" true)))
 
+(def md-config (gp-mldoc/default-config :markdown))
+
+(deftest src-test
+  (is (= [["Src"
+           {:lines [": hello" "\n"],
+            :pos_meta {:start_pos 4, :end_pos 12},
+            :full_content "```\n: hello\n```"}]
+          {:start_pos 0, :end_pos 15}]
+         (first (gp-mldoc/->edn "```
+: hello
+```" md-config {})))
+      "Basic src example")
+
+  (is (= [["Src"
+            {:lines ["  hello" "\n" "  world" "\n"],
+             :pos_meta {:start_pos 7, :end_pos 25},
+             :full_content "```\nhello\nworld\n```"}]
+           {:start_pos 1, :end_pos 29}]
+         (second (gp-mldoc/->edn "
+  ```
+  hello
+  world
+  ```
+" md-config {})))
+      "Src example with leading whitespace"))
+
+(deftest properties-test
+  (are [x y] (= [["Properties" y] nil]
+                (first (gp-mldoc/->edn x md-config {})))
+
+       ;; comma separates values
+       "property:: foo, bar"
+       {:property #{"foo" "bar"}}
+
+       ;; alias property
+       "alias:: foo,, bar"
+       {:alias ["foo" "bar"]}
+
+       ;; tags property
+       "tags:: foo,bar,foo"
+       {:tags ["foo" "bar"]}
+
+       ;; title property
+       "title:: comma, is ok"
+       {:title "comma, is ok"}))
+
+(deftest name-definition-test
+  (is (= [["List"
+           [{:content [["Paragraph" [["Plain" "definition"]]]],
+             :items [],
+             :name [["Plain" "term"]],
+             :indent 0,
+             :ordered false}]]
+          {:start_pos 0, :end_pos 17}]
+         (first (gp-mldoc/->edn "term
+: definition" md-config {})))))
+
 (deftest ^:integration test->edn
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
@@ -72,37 +127,4 @@
             "Src" 56,
             "Table" 4}
            (->> asts-by-file (mapcat val) (map ffirst) frequencies))
-        "AST node type counts")
-
-    ; (println :DIFF)
-    ; (prn (butlast (clojure.data/diff (edn/read-string (slurp "mldoc-asts.edn"))
-    ;                                  asts-by-file)))
-    ;; This is just temporary
-    #_(is (= (clojure.edn/read-string (slurp "mldoc-asts.edn"))
-             asts-by-file)
-          "Matches initial AST")
-    #_(println "Wrote asts for" (count asts-by-file) "files")
-    #_(fs/writeFileSync "mldoc-asts.edn" (pr-str asts-by-file))))
-
-(def md-config (gp-mldoc/default-config :markdown))
-
-(deftest src-test
-  (is (= [["Src"
-           {:lines [": hello" "\n"],
-            :pos_meta {:start_pos 4, :end_pos 12},
-            :full_content "```\n: hello\n```"}]
-          {:start_pos 0, :end_pos 15}]
-         (first (gp-mldoc/->edn "```
-: hello
-```" md-config {})))))
-
-(deftest name-definition-test
-  (is (= [["List"
-           [{:content [["Paragraph" [["Plain" "definition"]]]],
-             :items [],
-             :name [["Plain" "term"]],
-             :indent 0,
-             :ordered false}]]
-          {:start_pos 0, :end_pos 17}]
-         (first (gp-mldoc/->edn "term
-: definition" md-config {})))))
+        "AST node type counts")))
