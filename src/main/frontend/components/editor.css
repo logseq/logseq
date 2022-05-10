@@ -1,36 +1,3 @@
-#mobile-editor-toolbar {
-  position: fixed;
-  bottom: 0;
-  transition: bottom 260ms;
-  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
-  /* transition-timing-function: steps(10, jump-end); */
-  /* transition-timing-function: steps(5, end); */
-  transition-timing-function: ease-out;
-  left: 0;
-  width: 100%;
-  z-index: 9999;
-  display: flex;
-  justify-content: space-between;
-
-  button {
-    padding: 7px 10px;
-  }
-  
-  .toolbar-commands {
-    justify-content: space-between;
-    display: flex;
-    align-items: center;
-    overflow-x: overlay;
-    overflow-y: hidden;
-    width: 95%;
-  }
-
-  .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
-  }
-}
-
 #audio-record-toolbar {
     position: fixed;
     background-color: var(--ls-secondary-background-color);

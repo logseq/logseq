@@ -1,7 +1,6 @@
 (ns frontend.components.sidebar
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
-            [frontend.commands :as commands]
             [frontend.components.command-palette :as command-palette]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
@@ -20,17 +19,15 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.srs :as srs]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.history :as history]
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
-            [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -272,92 +269,6 @@
      ;; sidebar contents
      (sidebar-nav route-match close-fn left-sidebar-open?)
      [:span.shade-mask {:on-click close-fn}]]))
-
-(rum/defc mobile-bar-indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(def ^:private mobile-bar-icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
-   :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
-
-(def ^:private mobile-bar-commands-stats
-  (atom (into {}
-              (mapv (fn [name] [name {:counts 0}])
-                    mobile-bar-icons-keywords))))
-
-(defn set-command-stats [icon]
-  (let [key (keyword icon)
-        counts (get-in @mobile-bar-commands-stats [key :counts])]
-    (swap! mobile-bar-commands-stats
-           assoc-in [key :counts] (inc counts))
-    (config-handler/set-config!
-     :mobile/toolbar-stats @mobile-bar-commands-stats)))
-
-(rum/defc mobile-bar-command
-  [command-handler icon & [count? event?]]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (when count?
-                        (set-command-stats icon))
-                      (if event?
-                        (command-handler e)
-                        (command-handler)))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(defn mobile-bar-commands
-  [parent-id]
-  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/scroll-editor-cursor input :to-vw-one-quarter? true)
-                             (.focus input)))]
-    (zipmap mobile-bar-icons-keywords
-            [(mobile-bar-command editor-handler/cycle-todo! "checkbox" true)
-             (mobile-bar-command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) "brackets" true)
-             (mobile-bar-command #(do (viewport-fn) (editor-handler/toggle-block-reference-embed parent-id)) "parentheses" true)
-             (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)
-             (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
-             (mobile-bar-command editor-handler/cycle-priority! "a-b" true)
-             (mobile-bar-command editor-handler/toggle-list! "list" true)
-             (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera" true)
-             (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube" true)
-             (mobile-bar-command editor-handler/html-link-format! "link" true)
-             (mobile-bar-command history/undo! "rotate" true true)
-             (mobile-bar-command history/redo! "rotate-clockwise" true true)
-             (mobile-bar-command #(commands/simple-insert! parent-id "<" {}) "code" true)
-             (mobile-bar-command editor-handler/bold-format! "bold" true)
-             (mobile-bar-command editor-handler/italics-format! "italic" true)
-             (mobile-bar-command editor-handler/strike-through-format! "strikethrough" true)
-             (mobile-bar-command editor-handler/highlight-format! "paint" true)])))
-
-(rum/defc mobile-bar < rum/reactive
-  []
-  (when (state/sub :mobile/show-toolbar?)
-   (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
-     (reset! mobile-bar-commands-stats config-toolbar-stats))
-   (let [parent-id (state/get-edit-input-id)
-         commands (mobile-bar-commands parent-id)
-         sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
-     (when (and (state/sub :mobile/show-toolbar?)
-                (state/sub :editor/editing?))
-       [:div#mobile-editor-toolbar.bg-base-2
-        [:div.toolbar-commands
-         (mobile-bar-indent-outdent false "arrow-bar-left")
-         (mobile-bar-indent-outdent true "arrow-bar-right")
-         (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
-         (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
-         (mobile-bar-command #(if (state/sub :document/mode?)
-                                (editor-handler/insert-new-block! nil)
-                                (commands/simple-insert! parent-id "\n" {})) "arrow-back")
-         (for [command sorted-commands]
-           ((first command) commands))]
-        [:div.toolbar-hide-keyboard
-         (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))))
 
 (rum/defc main <
   {:did-mount (fn [state]

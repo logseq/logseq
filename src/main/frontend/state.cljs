@@ -145,6 +145,9 @@
 
      ;; mobile
      :mobile/show-toolbar?                  false
+     ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
+     ;;; add a random in (<= 1000000) to observer its update
+     :mobile/toolbar-update-observer        0 
      :mobile/show-tabbar?                   false
 
      ;; plugin
