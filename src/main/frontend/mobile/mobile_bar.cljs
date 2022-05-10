@@ -1,27 +1,17 @@
 (ns frontend.mobile.mobile-bar
-  (:require
-   [dommy.core :as dom]
-   [frontend.commands :as commands]
-   [frontend.date :as date]
-   [frontend.handler.config :as config-handler]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.handler.history :as history]
-   [frontend.handler.page :as page-handler]
-   [frontend.mobile.camera :as mobile-camera]
-   [frontend.state :as state]
-   [frontend.ui :as ui]
-   [frontend.util :as util]
-   [goog.dom :as gdom]
-   [goog.object :as gobj]
-   [rum.core :as rum]))
-
-(rum/defc indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+  (:require [dommy.core :as dom]
+            [frontend.commands :as commands]
+            [frontend.date :as date]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.history :as history]
+            [frontend.handler.page :as page-handler]
+            [frontend.mobile.camera :as mobile-camera]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.dom :as gdom]
+            [rum.core :as rum]))
 
 (def ^:private icons-keywords
   [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
@@ -52,6 +42,14 @@
                         (command-handler e)
                         (command-handler))
                       (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000)))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+
+(rum/defc indent-outdent [indent? icon]
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc timestamp-submenu
