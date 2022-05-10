@@ -72,5 +72,7 @@ frontend.util/trace!
 frontend.util.pool/terminate-pool!
 ;; Repl fn
 frontend.util.property/add-page-properties
-;; Used by shadow
+;; Test runner used by shadow
 frontend.test.node-test-runner/main
+;; Test runner for nbb
+logseq.graph-parser.nbb-test-runner/run-tests
