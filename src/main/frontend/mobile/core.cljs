@@ -1,15 +1,12 @@
 (ns frontend.mobile.core
-  (:require [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
-            ["@capacitor/app" :refer [^js App]]
-            ;; ["@capacitor/keyboard" :refer [^js Keyboard]]
-            #_:clj-kondo/ignore
-            ["@capacitor/status-bar" :refer [^js StatusBar]]
-            [frontend.mobile.intent :as intent]
+  (:require ["@capacitor/app" :refer [^js App]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.user :as user-handler]
+            [frontend.mobile.deeplink :as deeplink]
+            [frontend.mobile.intent :as intent]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]))
 
 (defn- ios-init
@@ -55,11 +52,7 @@
     (.addListener App "appUrlOpen"
                   (fn [^js data]
                     (when-let [url (.-url data)]
-                      ;; TODO: handler other logseq:// URLs
-                      (when (string/starts-with? url "logseq://auth-callback")
-                        (let [parsed-url (js/URL. url)
-                              code (.get (.-searchParams parsed-url) "code")]
-                          (user-handler/login-callback code))))))
+                      (deeplink/deeplink url))))
 
     (.addListener mobile-util/file-sync "debug"
                   (fn [event]
