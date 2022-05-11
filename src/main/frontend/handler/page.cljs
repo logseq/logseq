@@ -11,7 +11,6 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
-            [frontend.format.block :as block]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -35,6 +34,7 @@
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.block :as gp-block]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -72,7 +72,7 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (block/get-page-refs-from-properties properties)]
+         refs (gp-block/get-page-refs-from-properties properties)]
      {:block/uuid (db/new-block-id)
       :block/properties ps
       :block/properties-order (keys ps)
@@ -127,7 +127,7 @@
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
-                             (-> (block/page-name->map page true)
+                             (-> (gp-block/page-name->map page true)
                                  (assoc :block/format format)))
                         pages)
              txs      (->> pages

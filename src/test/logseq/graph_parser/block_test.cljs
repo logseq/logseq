@@ -1,9 +1,9 @@
-(ns frontend.format.block-test
-  (:require [frontend.format.block :as block]
+(ns logseq.graph-parser.block-test
+  (:require [logseq.graph-parser.block :as gp-block]
             [cljs.test :refer [deftest are]]))
 
 (deftest test-extract-properties
-  (are [x y] (= (:properties (block/extract-properties :markdown x)) y)
+  (are [x y] (= (:properties (gp-block/extract-properties :markdown x)) y)
     [["year" "1000"]] {:year 1000}
     [["year" "\"1000\""]] {:year "\"1000\""}
     [["background-color" "#000000"]] {:background-color "#000000"}
@@ -23,7 +23,7 @@
     [["foo" "bar, [[baz, test]]"]] {:foo #{"bar" "baz, test"}}
     [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}})
 
-  (are [x y] (= (vec (:page-refs (block/extract-properties :markdown x))) y)
+  (are [x y] (= (vec (:page-refs (gp-block/extract-properties :markdown x))) y)
     [["year" "1000"]] []
     [["year" "\"1000\""]] []
     [["foo" "[[bar]] test"]] ["bar" "test"]

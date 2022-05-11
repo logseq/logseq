@@ -21,7 +21,9 @@
              frontend.util util
              frontend.config config
              frontend.format.mldoc mldoc
+             frontend.format.block block
              logseq.graph-parser.text text
+             logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.util gp-util
              logseq.graph-parser.config gp-config}}}

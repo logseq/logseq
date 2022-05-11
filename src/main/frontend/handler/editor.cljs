@@ -54,6 +54,7 @@
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -265,7 +266,7 @@
   (if (and (:block/pre-block? block)
            (seq (:block/properties block)))
     (let [page-properties (:block/properties block)
-          str->page (fn [n] (block/page-name->map n true))
+          str->page (fn [n] (gp-block/page-name->map n true))
           refs (->> page-properties
                     (filter (fn [[_ v]] (coll? v)))
                     (vals)
@@ -669,7 +670,7 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (block/get-page-refs-from-properties properties)]
+        refs (gp-block/get-page-refs-from-properties properties)]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -1945,7 +1946,7 @@
                     content* (str (if (= :markdown format) "- " "* ")
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
-                    blocks (block/extract-blocks ast content* true format)
+                    blocks (gp-block/extract-blocks ast content* true format)
                     fst-block (first blocks)]
                 (assert fst-block "fst-block shouldn't be nil")
                 (assoc fst-block :block/level (:block/level block)))))))
@@ -2852,7 +2853,7 @@
   [format text]
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
-          blocks (block/extract-blocks
+          blocks (gp-block/extract-blocks
                   (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
           blocks' (block/with-parent-and-left page-id blocks)]
       (paste-blocks blocks' {}))))

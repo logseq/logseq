@@ -55,6 +55,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -1307,7 +1308,7 @@
          (->elem :sub (map-inline config l))
 
          ["Tag" _]
-         (when-let [s (block/get-tag item)]
+         (when-let [s (gp-block/get-tag item)]
            (let [s (text/page-ref-un-brackets! s)]
              (page-cp (assoc config :tag? true) {:block/name s})))
 

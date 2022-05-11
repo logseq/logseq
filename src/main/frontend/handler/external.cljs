@@ -8,7 +8,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
-            [frontend.format.block :as block]
+            [logseq.graph-parser.block :as gp-block]
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
             [frontend.util :as util]))
@@ -73,7 +73,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
-                         (block/extract-blocks parsed-blocks "" true :markdown)
+                         (gp-block/extract-blocks parsed-blocks "" true :markdown)
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (db/page-exists? page-name))

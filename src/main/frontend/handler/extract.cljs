@@ -13,6 +13,7 @@
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
@@ -22,7 +23,7 @@
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
       "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
+      (let [first-block (last (first (filter gp-block/heading-block? ast)))
             property-name (when (and (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
@@ -47,8 +48,8 @@
   [repo-url format ast properties file content]
   (try
     (let [page (get-page-name file ast)
-          [_original-page-name page-name _journal-day] (block/convert-page-if-journal page)
-          blocks (->> (block/extract-blocks ast content false format)
+          [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page)
+          blocks (->> (gp-block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -94,7 +95,7 @@
                         (cond->
                           (gp-util/remove-nils
                            (assoc
-                            (block/page-name->map page false)
+                            (gp-block/page-name->map page false)
                             :block/file {:file/path (gp-util/path-normalize file)}))
                           (seq properties)
                           (assoc :block/properties properties)
@@ -114,7 +115,7 @@
                             (when (text/namespace-page? page)
                               (->> (util/split-namespace-pages page)
                                    (map (fn [page]
-                                          (-> (block/page-name->map page true)
+                                          (-> (gp-block/page-name->map page true)
                                               (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
