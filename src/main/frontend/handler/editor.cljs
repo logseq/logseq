@@ -2883,11 +2883,13 @@
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
+        copied-graph (:copy/graph copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
+       (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
        text
