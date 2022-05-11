@@ -3,7 +3,7 @@
   (:require [cljs.test :as t]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
-            ; [logseq.graph-parser.text-test]
+            [logseq.graph-parser.text-test]
             [logseq.graph-parser.mldoc-test]))
 
 (defmethod cljs.test/report [:cljs.test/default :end-run-tests] [m]
@@ -18,4 +18,4 @@
   (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
   (t/run-tests 'logseq.graph-parser.mldoc-test
                ;; TODO: Enable when https://github.com/babashka/nbb/issues/187 works
-               #_'logseq.graph-parser.text-test))
+               'logseq.graph-parser.text-test))

@@ -716,10 +716,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
 
-"@logseq/nbb-logseq@^0.3.10":
-  version "0.3.10"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.10.tgz#74534f9d263eb2105a41143a55425d0910d43eb8"
-  integrity sha512-y7/VJ99WCoNpQMqQOOBobKzNrRz4IcG85HggAkIaUtNwJ/Adb5fA28ZKP5ttEpqWLXTbAyqbBObD5q/xJLLD8w==
+"@logseq/nbb-logseq@^0.3.99":
+  version "0.3.99"
+  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.99.tgz#cf6c05c559963e4e0fb92f214a63228972ef87d3"
+  integrity sha512-Msa6Ck6wqt7sYGExQZgUT/uUG/z5jGaPlytVdgGkCrVogZb2yaChbWeMOCfCsCTi6kbHo15hC3aOeDAXcfnFzw==
   dependencies:
     import-meta-resolve "^1.1.1"
 
@@ -6826,6 +6826,8 @@ react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.13.1, react-is@^16.3.1, react-is@^16.7.0:
   version "16.13.1"
