@@ -19,6 +19,7 @@
              frontend.db.react react
              frontend.db.query-react query-react
              frontend.util util
+             frontend.util.property property
              frontend.config config
              frontend.format.mldoc mldoc
              frontend.format.block block
@@ -26,6 +27,7 @@
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.util gp-util
+             logseq.graph-parser.property gp-property
              logseq.graph-parser.config gp-config}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc

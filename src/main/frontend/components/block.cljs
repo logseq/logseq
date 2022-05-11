@@ -499,7 +499,7 @@
   "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
-    (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
+    (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (or (and (= :org (state/get-preferred-format))

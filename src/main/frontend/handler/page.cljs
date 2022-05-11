@@ -47,7 +47,7 @@
   [journal? title]
   (when-let [s (if journal?
                  (date/journal-title->default title)
-                 (util/page-name-sanity (string/lower-case title)))]
+                 (gp-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
     (gp-util/safe-subs s 0 200)))
 
@@ -118,12 +118,12 @@
                   properties          nil
                   split-namespace?    true}}]
    (let [title (string/trim title)
-         title (util/remove-boundary-slashes title)
+         title (gp-util/remove-boundary-slashes title)
          page-name (util/page-name-sanity-lc title)
          repo (state/get-current-repo)]
      (when (db/page-empty? repo page-name)
        (let [pages    (if split-namespace?
-                        (util/split-namespace-pages title)
+                        (gp-util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
@@ -170,7 +170,7 @@
 (defn- compute-new-file-path
   [old-path new-name]
   (let [result (string/split old-path "/")
-        file-name (util/page-name-sanity new-name true)
+        file-name (gp-util/page-name-sanity new-name true)
         ext (last (string/split (last result) "."))
         new-file (str file-name "." ext)
         parts (concat (butlast result) [new-file])]
@@ -398,7 +398,7 @@
 
         ;; If page name changed after sanitization
         (when (or (util/create-title-property? new-page-name)
-                  (not= (util/page-name-sanity new-name false) new-name))
+                  (not= (gp-util/page-name-sanity new-name false) new-name))
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))

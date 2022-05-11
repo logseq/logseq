@@ -907,44 +907,18 @@
                 (string/includes? s "%")
                 (string/includes? s "#"))))))
 
-(defn remove-boundary-slashes
-  [s]
-  (when (string? s)
-    (let [s (if (= \/ (first s))
-              (subs s 1)
-              s)]
-      (if (= \/ (last s))
-        (subs s 0 (dec (count s)))
-        s))))
-
-(defn normalize
-  [s]
-  (.normalize s "NFC"))
-
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn page-name-sanity
-  "Sanitize the page-name."
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      (normalize))]
-     (if replace-slash?
-       (string/replace page #"/" "%2A")
-       page))))
-
 #?(:cljs
    (defn file-name-sanity
      "Sanitize page-name for file name (strict), for file writing."
      [page-name]
      (some-> page-name
-             page-name-sanity
+             gp-util/page-name-sanity
              ;; for android filesystem compatiblity
              (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
@@ -952,15 +926,16 @@
              (string/replace #"/" url-encode)
              (string/replace "*" "%2A"))))
 
-(defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
-  [s]
-  (page-name-sanity (string/lower-case s)))
+#?(:cljs
+   (def page-name-sanity-lc
+     "Delegate to gp-util to loosely couple app usages to graph-parser"
+     gp-util/page-name-sanity-lc))
 
-(defn safe-page-name-sanity-lc
-  [s]
-  (if (string? s)
-    (page-name-sanity-lc s) s))
+#?(:cljs
+ (defn safe-page-name-sanity-lc
+   [s]
+   (if (string? s)
+     (page-name-sanity-lc s) s)))
 
 (defn get-page-original-name
   [page]
@@ -1239,17 +1214,6 @@
   "Escape all regex meta chars in text."
   [text]
   (string/join (replace regex-char-esc-smap text)))
-
-(defn split-namespace-pages
-  [title]
-  (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
 
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))

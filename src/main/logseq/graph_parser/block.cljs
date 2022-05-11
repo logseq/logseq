@@ -5,16 +5,16 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [datascript.core :as d]
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [frontend.util :as util]
-            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [lambdaisland.glogi :as log]
-            [medley.core :as medley]))
+            [logseq.graph-parser.date-time-util :as date-time-util]
+            [lambdaisland.glogi :as log]))
 
 (defn heading-block?
   [block]
@@ -59,10 +59,10 @@
                   (and
                    (= typ "Search")
                    (not (contains? #{\# \* \/ \[} (first value)))
-                   (let [ext (some-> (util/get-file-ext value) keyword)]
-                     (when (and (not (util/starts-with? value "http:"))
-                                (not (util/starts-with? value "https:"))
-                                (not (util/starts-with? value "file:"))
+                   (let [ext (some-> (gp-util/get-file-ext value) keyword)]
+                     (when (and (not (string/starts-with? value "http:"))
+                                (not (string/starts-with? value "https:"))
+                                (not (string/starts-with? value "file:"))
                                 (not (gp-config/local-asset? value))
                                 (or (= ext :excalidraw)
                                     (not (contains? (config/supported-formats) ext))))
@@ -97,7 +97,7 @@
                nil)]
     (text/block-ref-un-brackets! page)))
 
-(defn get-block-reference
+(defn- get-block-reference
   [block]
   (when-let [block-id (cond
                         (and (vector? block)
@@ -133,7 +133,7 @@
                (gp-util/uuid-string? block-id))
       block-id)))
 
-(defn paragraph-block?
+(defn- paragraph-block?
   [block]
   (and
    (vector? block)
@@ -197,7 +197,7 @@
        (or (timestamp-block? (first (second block)))
            (timestamp-block? (second (second block))))))
 
-(defn extract-timestamps
+(defn- extract-timestamps
   [block]
   (some->>
    (second block)
@@ -208,12 +208,12 @@
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
-  (let [timestamps (medley/map-keys (comp keyword string/lower-case) timestamps)
+  (let [timestamps (gp-util/map-keys (comp keyword string/lower-case) timestamps)
         m (some->> (select-keys timestamps [:scheduled :deadline])
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
                                 {:keys [year month day]} date
-                                day (js/parseInt (str year (util/zero-pad month) (util/zero-pad day)))]
+                                day (js/parseInt (str year (gp-util/zero-pad month) (gp-util/zero-pad day)))]
                             (cond->
                              (case k
                                :scheduled
@@ -228,11 +228,11 @@
   "Convert journal file name to user' custom date format"
   [original-page-name]
   (when original-page-name
-    (let [page-name (util/page-name-sanity-lc original-page-name)
+    (let [page-name (gp-util/page-name-sanity-lc original-page-name)
           day (date/journal-title->int page-name)]
      (if day
        (let [original-page-name (date/int->journal-title day)]
-         [original-page-name (util/page-name-sanity-lc original-page-name) day])
+         [original-page-name (gp-util/page-name-sanity-lc original-page-name) day])
        [original-page-name page-name day]))))
 
 (defn page-name->map
@@ -246,7 +246,7 @@
   ([original-page-name with-id? with-timestamp?]
    (cond
      (and original-page-name (string? original-page-name))
-     (let [original-page-name (util/remove-boundary-slashes original-page-name)
+     (let [original-page-name (gp-util/remove-boundary-slashes original-page-name)
            [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
            namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                            (text/namespace-page? original-page-name))
@@ -258,13 +258,13 @@
         (when with-id?
           (if page-entity
             {:block/uuid (:block/uuid page-entity)}
-            {:block/uuid (db/new-block-id)}))
+            {:block/uuid (d/squuid)}))
         (when namespace?
           (let [namespace (first (gp-util/split-last "/" original-page-name))]
             (when-not (string/blank? namespace)
-              {:block/namespace {:block/name (util/page-name-sanity-lc namespace)}})))
+              {:block/namespace {:block/name (gp-util/page-name-sanity-lc namespace)}})))
         (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-          (let [current-ms (util/time-ms)]
+          (let [current-ms (date-time-util/time-ms)]
             {:block/created-at current-ms
              :block/updated-at current-ms}))
         (if journal-day
@@ -276,12 +276,12 @@
      original-page-name
 
      (and (map? original-page-name) with-id?)
-     (assoc original-page-name :block/uuid (db/new-block-id))
+     (assoc original-page-name :block/uuid (d/squuid))
 
      :else
      nil)))
 
-(defn with-page-refs
+(defn- with-page-refs
   [{:keys [title body tags refs marker priority] :as block} with-id?]
   (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
@@ -309,7 +309,7 @@
                                           (when (string? p)
                                             (let [p (or (text/get-nested-page-name p) p)]
                                               (when (text/namespace-page? p)
-                                                (util/split-namespace-pages p))))))
+                                                (gp-util/split-namespace-pages p))))))
                                       refs)
                               (remove string/blank?)
                               (distinct))
@@ -318,7 +318,7 @@
           refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
       (assoc block :refs refs))))
 
-(defn with-block-refs
+(defn- with-block-refs
   [{:keys [title body] :as block}]
   (let [ref-blocks (atom nil)]
     (walk/postwalk
@@ -331,14 +331,14 @@
                           (filter gp-util/uuid-string?))
           ref-blocks (map
                        (fn [id]
-                         [:block/uuid (medley/uuid id)])
+                         [:block/uuid (uuid id)])
                        ref-blocks)
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
 
 (defn- block-keywordize
   [block]
-  (medley/map-keys
+  (gp-util/map-keys
    (fn [k]
      (if (namespace k)
        k
@@ -353,7 +353,7 @@
            block))
        blocks))
 
-(defn with-path-refs
+(defn- with-path-refs
   [blocks]
   (loop [blocks blocks
          acc []
@@ -391,7 +391,7 @@
                                 (remove string/blank?)
                                 (map (fn [ref]
                                        (if (string? ref)
-                                         {:block/name (util/page-name-sanity-lc ref)}
+                                         {:block/name (gp-util/page-name-sanity-lc ref)}
                                          ref)))
                                 (remove vector?)
                                 (remove nil?)
@@ -400,12 +400,12 @@
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
-(defn block-tags->pages
+(defn- block-tags->pages
   [{:keys [tags] :as block}]
   (if (seq tags)
     (assoc block :tags (map (fn [tag]
                               (let [tag (text/page-ref-un-brackets! tag)]
-                                [:block/name (util/page-name-sanity-lc tag)])) tags))
+                                [:block/name (gp-util/page-name-sanity-lc tag)])) tags))
     block))
 
 (defn- get-block-content
@@ -424,9 +424,9 @@
                       (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
       content
-      (property/->new-properties content))))
+      (gp-property/->new-properties content))))
 
-(defn get-custom-id-or-new-id
+(defn- get-custom-id-or-new-id
   [properties]
   (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
                                (get-in properties [:properties :custom_id])
@@ -434,7 +434,7 @@
         (let [custom-id (and (string? custom-id) (string/trim custom-id))]
           (when (and custom-id (gp-util/uuid-string? custom-id))
             (uuid custom-id))))
-      (db/new-block-id)))
+      (d/squuid)))
 
 (defn get-page-refs-from-properties
   [properties]
@@ -450,7 +450,7 @@
         page-refs (remove string/blank? page-refs)]
     (map (fn [page] (page-name->map page true)) page-refs)))
 
-(defn with-page-block-refs
+(defn- with-page-block-refs
   [block with-id?]
   (some-> block
           (with-page-refs with-id?)
@@ -458,7 +458,7 @@
           block-tags->pages
           (update :refs (fn [col] (remove nil? col)))))
 
-(defn with-pre-block-if-exists
+(defn- with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
@@ -563,7 +563,7 @@
                         timestamps' (merge timestamps timestamps)]
                     (recur headings (rest blocks) timestamps' properties body))
 
-                  (property/properties-ast? block)
+                  (gp-property/properties-ast? block)
                   (let [properties (extract-properties format (second block))]
                     (recur headings (rest blocks) timestamps properties body))
 

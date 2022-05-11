@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
-            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn with-parent-and-left
@@ -125,7 +125,7 @@
                title (when (gp-block/heading-block? (first ast))
                        (:title (second (first ast))))
                body (vec (if title (rest ast) ast))
-               body (drop-while property/properties-ast? body)
+               body (drop-while gp-property/properties-ast? body)
                result (cond->
                         (if (seq body) {:block/body body} {})
                         title

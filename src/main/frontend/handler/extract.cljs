@@ -14,7 +14,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
-            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
             [lambdaisland.glogi :as log]))
 
 (defn get-page-name
@@ -113,7 +113,7 @@
                                                  tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
                             (when (text/namespace-page? page)
-                              (->> (util/split-namespace-pages page)
+                              (->> (gp-util/split-namespace-pages page)
                                    (map (fn [page]
                                           (-> (gp-block/page-name->map page true)
                                               (assoc :block/format format)))))))
@@ -149,7 +149,7 @@
                                                          ))]
       (println "Parsing finished : " file)
       (let [first-block (ffirst ast)
-            properties (let [properties (and (property/properties-ast? first-block)
+            properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y]]
                                                          [x (if (string? y)

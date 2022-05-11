@@ -9,6 +9,7 @@
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
             [frontend.util :as util]))
@@ -26,7 +27,7 @@
                                       (when journal?
                                         (date/journal-title->default title))
                                       (string/replace title "/" "-"))
-                               title (-> (util/page-name-sanity title)
+                               title (-> (gp-util/page-name-sanity title)
                                          (string/replace "\n" " "))
                                path (str (if journal?
                                            (config/get-journals-directory)
