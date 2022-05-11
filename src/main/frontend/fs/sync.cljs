@@ -107,7 +107,9 @@
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
-(defn update-graphs-txid! [latest-txid graph-uuid user-uuid repo]
+(defn update-graphs-txid!
+  [latest-txid graph-uuid user-uuid repo]
+  {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
   (persist-var/persist-save graphs-txid))
 
