@@ -3,9 +3,9 @@
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
   (:require #?(:org.babashka/nbb ["mldoc$default" :refer [Mldoc]]
-                                 :default ["mldoc" :refer [Mldoc]])
+               :default ["mldoc" :refer [Mldoc]])
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
-                                 :default [lambdaisland.glogi :as log])
+               :default [lambdaisland.glogi :as log])
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
             [logseq.graph-parser.utf8 :as utf8]
@@ -180,8 +180,8 @@
             (gp-util/json->clj)
             (update-src-full-content content)
             (collect-page-properties parse-property config-state)))
-      (catch js/Error e
-        (js/console.error e)
+      (catch :default e
+        (log/error :unexpected-error e)
         []))
     (log/error :edn/wrong-content-type content)))
 
@@ -193,7 +193,7 @@
       (-> text
           (inline-parse-json config)
           (gp-util/json->clj)))
-    (catch js/Error _e
+    (catch :default _e
       [])))
 
 (defn link?
