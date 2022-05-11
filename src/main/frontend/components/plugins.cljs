@@ -606,16 +606,13 @@
 
      (cond
        (not online?)
-       [:p.flex.justify-center.pt-20.opacity-50
-        (svg/offline 30)]
+       [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
        @*fetching
-       [:p.flex.justify-center.pt-20
-        svg/loading]
+       [:p.flex.justify-center.pt-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50
-        "Remote error: " (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
 
        :else
        [:div.cp__plugins-marketplace-cnt
