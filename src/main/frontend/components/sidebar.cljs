@@ -35,7 +35,7 @@
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.components.onboarding :as onboarding]
             [frontend.mobile.footer :as footer]
-            [frontend.mobile.action-sheet :as action-sheet]))
+            [frontend.mobile.action-bar :as action-bar]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -296,7 +296,7 @@
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
       (when show-action-bar?
-        (action-sheet/action-bar))
+        (action-bar/action-bar))
       
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?

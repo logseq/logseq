@@ -32,6 +32,7 @@
     border-radius: 10px;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
     z-index: 100;
+    overflow-x: overlay;
     
     .ti {
         color: var(--ls-primary-text-color);
@@ -45,15 +46,13 @@
     }
 
     button {
-        padding: 7px 10px;
-        border: 10px;
+        padding: 5px 6px;
     }
 }
 
 html.is-native-ipad {
     .cp__footer {
         height: 55px;
-        /* width: calc(100vw - var(--ls-left-sidebar-width)); */
         right: 0;
         box-shadow: none;
         flex: 1;
@@ -68,8 +67,8 @@ html.is-native-ipad {
 html.is-native-iphone {
 
     .action-bar {
-        left: 5%;
-        right: 5%;
+        left: 3%;
+        right: 3%;
     }
     
     @media (orientation: landscape) {

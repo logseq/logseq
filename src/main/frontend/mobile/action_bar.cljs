@@ -1,14 +1,16 @@
-(ns frontend.mobile.action-sheet
-  (:require [frontend.db :as db]
-            [frontend.extensions.srs :as srs]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.mixins :as mixins]
-            [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [rum.core :as rum]))
+(ns frontend.mobile.action-bar
+  (:require
+   [frontend.db :as db]
+   [frontend.extensions.srs :as srs]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.mixins :as mixins]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [frontend.util.url :as url-util]
+   [goog.dom :as gdom]
+   [goog.object :as gobj]
+   [rum.core :as rum]))
 
 (defn- action-command
   [icon description command-handler]
@@ -58,5 +60,10 @@
        (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks))
        (action-command "registered" "Copy ref"
                        (fn [_event] (editor-handler/copy-block-ref! uuid #(str "((" % "))"))))
+       (action-command "link" "Copy url"
+                       (fn [_event] (let [current-repo (state/get-current-repo)
+                                          tap-f (fn [block-id]
+                                                  (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
+                                      (editor-handler/copy-block-ref! uuid tap-f))))
        (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
        (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))])))
