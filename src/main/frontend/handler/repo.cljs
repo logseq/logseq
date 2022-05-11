@@ -212,6 +212,7 @@
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
   (state/reset-parsing-state!)
+  (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
 
 (defn- parse-files-and-create-default-files-inner!
@@ -262,15 +263,9 @@
       (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts))
     (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts)))
 
-(defn- update-parsing-state!
-  [repo-url]
-  (state/set-loading-files! repo-url false))
-
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [delete-files delete-blocks re-render? re-render-opts _refresh?] :as opts
                    :or {re-render? true}}]
-  (update-parsing-state! repo-url)
-
   (let [file-paths (map :file/path files)
         metadata-file (config/get-metadata-path)
         metadata-content (some #(when (= (:file/path %) metadata-file)
