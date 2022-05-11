@@ -739,8 +739,6 @@
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
-                       (not (model/journal-day-exists? repo
-                                                       (date/journal-title->int (date/today))))
                        (or (not file-exists?)
                            (and file-exists? (string/blank? file-content))))
               (create! title {:redirect? false
