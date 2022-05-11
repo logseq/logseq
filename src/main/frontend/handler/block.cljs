@@ -156,7 +156,7 @@
       (let [touch (aget touches 0)
             x (.-clientX touch)
             y (.-clientY touch)]
-        (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil :reversed false})))))
+        (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))
 
 (defn on-touch-move
   [event block uuid *show-left-menu? *show-right-menu?]
@@ -180,14 +180,12 @@
         (when (< (* (- xi x0) (- tx xi)) 0)
           (swap! *swipe #(-> %
                              (assoc :x0 tx)
-                             (assoc :y0 ty)
-                             (assoc :reversed true))))
+                             (assoc :y0 ty))))
         (let [{:keys [x0 y0]} @*swipe
               dx (- tx x0)
               dy (- ty y0)]
-          (when-not (and (not (:reversed @*swipe))
-                         (or (> (. js/Math abs dy) 10)
-                             (< (. js/Math abs dx) 3)))
+          (when (and (< (. js/Math abs dy) 20)
+                     (> (. js/Math abs dx) 10))
             (let [left (gdom/getElement (str "block-left-menu-" uuid))
                   right (gdom/getElement (str "block-right-menu-" uuid))]
 
@@ -196,10 +194,12 @@
                 (do
                   (reset! *show-left-menu? true)
                   (when left
-                    (if (> dx 0)
-                      (set! (.. left -style -width) (str dx "px"))
-                      (set! (.. left -style -width) (str (+ 50 dx) "px")))
+                    (when (>= 55 dx 0)
+                      (set! (.. left -style -width) (str dx "px")))
 
+                    (when (> 0 dx -55)
+                      (set! (.. left -style -width) (str (max (+ 50 dx) 0) "px")))
+                    
                     (let [indent (gdom/getFirstElementChild left)]
                       (when (indentable? block)
                         (if (>= (.-clientWidth left) 50)
@@ -210,9 +210,11 @@
                 (do
                   (reset! *show-right-menu? true)
                   (when right
-                    (if (< dx 0)
-                      (set! (.. right -style -width) (str (- dx) "px"))
-                      (set! (.. right -style -width) (str (- 80 dx) "px")))
+                    (when (<= -85 dx 0)
+                      (set! (.. right -style -width) (str (- dx) "px")))
+
+                    (when (> 85 dx 0)
+                        (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
 
                     (let [outdent (gdom/getFirstElementChild right)
                           more (gdom/getLastElementChild right)]
