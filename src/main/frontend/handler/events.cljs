@@ -401,6 +401,16 @@
     db-encrypted-secret
     close-fn)))
 
+(defmethod handle :journal/insert-template [[_ page-name]]
+  (let [page-name (util/page-name-sanity-lc page-name)]
+    (when-let [page (db/pull [:block/name page-name])]
+      (when (db/page-empty? (state/get-current-repo) page-name)
+        (when-let [template (state/get-default-journal-template)]
+          (editor-handler/insert-template!
+           nil
+           template
+           {:target page}))))))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]
