@@ -102,10 +102,11 @@
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-          (when (util/electron?)
+          (when (or (util/electron?)
+                    (mobile-util/native-ios?))
             {:title   (t :page/copy-page-url)
-              :options {:on-click #(util/copy-to-clipboard!
-                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+             :options {:on-click #(util/copy-to-clipboard!
+                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
             {:title   (t :page/delete)
