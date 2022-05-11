@@ -728,13 +728,13 @@
                 (and (= "local" repo) (not (mobile-util/is-native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
-              template (state/get-default-journal-template)
               format (state/get-preferred-format repo)
               file-name (date/journal-title->default title)
               path (str (config/get-journals-directory) "/" file-name "."
                         (config/get-file-extension format))
               file-path (str "/" path)
-              repo-dir (config/get-repo-dir repo)]
+              repo-dir (config/get-repo-dir repo)
+              template (state/get-default-journal-template)]
           (p/let [file-exists? (fs/file-exists? repo-dir file-path)
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
@@ -745,12 +745,7 @@
                               :split-namespace? false
                               :create-first-block? (not template)
                               :journal? true})
-              (when template
-                (let [page (db/pull [:block/name today-page])]
-                  (editor-handler/insert-template!
-                   nil
-                   template
-                   {:target page})))
+              (state/pub-event! [:journal/insert-template today-page])
               (ui-handler/re-render-root!))))))))
 
 (defn open-today-in-sidebar
