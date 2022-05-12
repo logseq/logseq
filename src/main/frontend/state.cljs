@@ -186,7 +186,9 @@
      :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
+     :copy/blocks                           {:copy/content nil
+                                             :copy/block-ids nil
+                                             :copy/graph nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -1427,13 +1429,15 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
 (defn set-copied-full-blocks
   [content blocks]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!

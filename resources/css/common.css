@@ -1169,3 +1169,8 @@ html[data-theme='dark'] .keyboard-shortcut > code {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.lazy-visibility {
+    min-width: 1px;
+    min-height: 1px;
+}

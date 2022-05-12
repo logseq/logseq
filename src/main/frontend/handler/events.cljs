@@ -269,6 +269,11 @@
       (plugin/open-focused-settings-modal! title))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
+(defmethod handle :go/proxy-settings [[_ agent-opts]]
+  (state/set-sub-modal!
+    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
+    {:id :https-proxy-panel :center? true}))
+
 
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
@@ -359,12 +364,11 @@
 
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)
-        payload' (-> payload
-                     (update :path js/decodeURI))]
-    (prn ::fs-watcher payload)
-    (fs-watcher/handle-changed! type payload')
-    (sync/file-watch-handler type payload')))
+        payload (-> event
+                    (js->clj :keywordize-keys true)
+                    (update :path js/decodeURI))]
+    (fs-watcher/handle-changed! type payload)
+    (sync/file-watch-handler type payload)))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))

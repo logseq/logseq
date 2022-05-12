@@ -185,8 +185,6 @@
 
 (defn- parse-and-load-file!
   [repo-url file new-graph?]
-  (state/set-parsing-state! (fn [m]
-                              (assoc m :current-parsing-file (:file/path file))))
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
@@ -241,13 +239,17 @@
     (if util/node-test?
       (do
         (doseq [file support-files']
+          (state/set-parsing-state! (fn [m]
+                                      (assoc m :current-parsing-file (:file/path file))))
           (parse-and-load-file! repo-url file new-graph?))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
           (do
-            (parse-and-load-file! repo-url file new-graph?)
+            (state/set-parsing-state! (fn [m]
+                                        (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
+            (parse-and-load-file! repo-url file new-graph?)
             (recur))
           (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))

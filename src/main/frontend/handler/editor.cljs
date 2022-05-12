@@ -454,11 +454,12 @@
 (declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
-  (let [ref-top-block? (and (:ref? config)
-                            (not (:ref-child? config)))
+  (let [ref-query-top-block? (and (or (:ref? config)
+                                      (:custom-query? config))
+                                  (not (:ref-query-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
         sibling? (cond
-                   ref-top-block?
+                   ref-query-top-block?
                    false
 
                    (boolean? sibling?)
@@ -2872,11 +2873,13 @@
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
+        copied-graph (:copy/graph copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
+       (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
        text
@@ -3462,12 +3465,11 @@
   1. References.
   2. Custom queries."
   [block config]
-  (if (or (:ref? config)
-          (:custom-query? config))
-    (and
-     (seq (:block/children block))
-     (or
-      (:custom-query? config)
-      (>= (:ref/level block)
-          (state/get-ref-open-blocks-level))))
-    (util/collapsed? block)))
+  (or
+   (and
+    (or (:ref? config) (:custom-query? config))
+    (>= (inc (:block/level block))
+        (state/get-ref-open-blocks-level))
+    ;; has children
+    (first (:block/_parent (db/entity (:db/id block)))))
+   (util/collapsed? block)))
