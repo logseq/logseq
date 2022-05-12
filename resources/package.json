@@ -37,7 +37,7 @@
     "@sentry/electron": "2.5.1",
     "posthog-js": "1.10.2",
     "@logseq/rsapi": "0.0.11",
-    "electron-deeplink": "1.0.9"
+    "electron-deeplink": "1.0.10"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
