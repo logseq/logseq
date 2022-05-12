@@ -1,6 +1,7 @@
 (ns frontend.components.block
   (:refer-clojure :exclude [range])
   (:require ["/frontend/utils" :as utils]
+            ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -265,10 +266,28 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (let [ext (util/get-file-ext @src)]
-        (if (contains? (set (map name config/audio-formats)) ext)
+      (let [ext (keyword (util/get-file-ext @src))]
+        (cond
+          (contains? config/audio-formats ext)
           (audio-cp @src)
-          (resizable-image config title @src metadata full_text true))))))
+
+          (contains? (config/img-formats) ext)
+          (resizable-image config title @src metadata full_text true)
+
+          (= ext :pdf)
+          [:a.asset-ref.is-pdf
+           {:href @src
+            :on-click
+            (fn [event]
+              (util/stop event)
+              (when (mobile-util/is-native-platform?)
+                (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
+                  (.share Share #js {:url url
+                                     :title "Open PDF fils with your favorite app"}))))}
+           title]
+          
+          :else
+          [:a.asset-ref {:ref @src} title])))))
 
 (defn ar-url->http-url
   [href]
@@ -829,15 +848,22 @@
       (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
       (image-link config url s label metadata full_text)
 
-      (util/electron?)
-      (if (= (util/get-file-ext s) "pdf")
-        [:a.asset-ref.is-pdf
-         {:href "javascript:void(0);"
-          :on-mouse-down (fn [_event]
-                           (when-let [current (pdf-assets/inflate-asset s)]
-                             (state/set-state! :pdf/current current)))}
-         (get-label-text label)]
-        (asset-reference config label s)))))
+      (= (util/get-file-ext s) "pdf")
+      (let [label-text (get-label-text label)]
+        (cond
+          (util/electron?)
+          [:a.asset-ref.is-pdf
+           {:href "javascript:void(0);"
+            :on-mouse-down (fn [_event]
+                             (when-let [current (pdf-assets/inflate-asset s)]
+                               (state/set-state! :pdf/current current)))}
+           label-text]
+
+          (mobile-util/is-native-platform?)
+          (asset-link config label-text s metadata full_text)))
+      
+      :else
+      (asset-reference config label s))))
 
 (defn- search-link-cp
   [config url s label title metadata full_text]
