@@ -1,5 +1,44 @@
 .cp__file-sync {
   &-indicator {
-    background-color: rgba(15, 73, 88, 0.23);
+    a.cloud {
+      position: relative;
+      opacity: 1 !important;
+
+      .ti {
+        opacity: .6;
+      }
+
+      &.on {
+        &:after {
+          content: " ";
+          position: absolute;
+          bottom: 6px;
+          right: 2px;
+          width: 7px;
+          height: 7px;
+          background-color: #ff0000;
+          border-radius: 100%;
+          opacity: 1;
+        }
+
+        &.syncing {
+          &:after {
+            background-color: #8972ff;
+          }
+        }
+
+        &.queuing {
+          &:after {
+            background-color: #ffbb4d;
+          }
+        }
+
+        &.idle {
+          &:after {
+            background-color: #04b404;
+          }
+        }
+      }
+    }
   }
 }
