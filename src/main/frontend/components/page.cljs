@@ -109,8 +109,15 @@
      [:a.add-button-link.block
       (ui/icon "circle-plus")]]]])
 
-(rum/defc page-blocks-cp < rum/reactive
-  db-mixins/query
+(rum/defc page-blocks-cp < rum/reactive db-mixins/query
+  {:will-mount (fn [state]
+                 (let [page-e (second (:rum/args state))
+                       page-name (:block/name page-e)]
+                   (when (and (db/journal-page? page-name)
+                              (>= (date/journal-title->int page-name)
+                                  (date/journal-title->int (date/today))))
+                     (state/pub-event! [:journal/insert-template page-name])))
+                 state)}
   [repo page-e {:keys [sidebar?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
@@ -387,7 +394,7 @@
        ;; referenced blocks
        [:div {:key "page-references"}
         (rum/with-key
-          (reference/references route-page-name)
+          (reference/references route-page-name sidebar?)
           (str route-page-name "-refs"))]
 
        (when-not block?
