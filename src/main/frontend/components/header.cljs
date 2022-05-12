@@ -89,7 +89,12 @@
         :options {:href "https://discord.gg/KpN4eHY"
                   :title (t :discord-title)
                   :target "_blank"}
-        :icon (ui/icon "brand-discord")}]
+        :icon (ui/icon "brand-discord")}
+
+       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
+         {:title (str (t :logout) " (" (user-handler/email) ")")
+          :options {:on-click #(user-handler/logout)}
+          :icon  (ui/icon "logout")})]
       (concat page-menu-and-hr)
       (remove nil?))
      {})))
