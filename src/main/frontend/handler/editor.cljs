@@ -471,7 +471,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (save-current-block!)
+      (save-current-block! {:current-block current-block})
       (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                                :keep-uuid? keep-uuid?
                                                                :replace-empty-target? replace-empty-target?}))))
@@ -1274,7 +1274,7 @@
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
    (save-current-block! {}))
-  ([{:keys [force? skip-properties?] :as opts}]
+  ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
    (when-not (state/editor-in-composition?)
      (when (state/get-current-repo)
@@ -1295,7 +1295,8 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (and elem (gobj/get elem "value"))]
+                 value (or (:block/content current-block)
+                           (and elem (gobj/get elem "value")))]
              (cond
                force?
                (save-block-aux! db-block value opts)
