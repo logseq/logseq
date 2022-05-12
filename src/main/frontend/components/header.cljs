@@ -8,9 +8,9 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.fs.sync :as fs-sync]
             [frontend.handler :as handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.components.file-sync :as fs-sync]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -20,8 +20,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [cljs.core.async :as a]))
+            [rum.core :as rum]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -48,85 +47,6 @@
          {})
         [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
          [:span (t :login)]]))))
-
-(rum/defcs file-sync-remote-graphs <
-  (rum/local nil ::remote-graphs)
-  [state]
-  (let [*remote-graphs (::remote-graphs state)
-        refresh-list-fn #(a/go (reset! *remote-graphs (a/<! (file-sync-handler/list-graphs))))]
-    (when (nil? @*remote-graphs)
-      (refresh-list-fn))
-    [:div
-     [:div.flex
-      [:h1.title "Remote Graphs"]
-      [:div
-       {:on-click refresh-list-fn}
-       svg/refresh]]
-     [:p.text-sm "click to delete the selected graph"]
-     [:ul
-      (for [graph @*remote-graphs]
-        [:li.mb-4
-         [:a.font-medium
-          {:on-click #(do (println "delete graph" (:GraphName graph) (:GraphUUID graph))
-                          (file-sync-handler/delete-graph (:GraphUUID graph)))}
-          (:GraphName graph)]])]]))
-
-(rum/defcs file-sync <
-  rum/reactive
-  (rum/local nil ::existed-graphs)
-  [state]
-  (let [_ (state/sub :auth/id-token)
-        sync-state (state/sub :file-sync/sync-state)
-        not-syncing? (or (nil? sync-state) (fs-sync/sync-state--stopped? sync-state))
-        *existed-graphs (::existed-graphs state)
-        _ (rum/react file-sync-handler/refresh-file-sync-component)
-        graph-txid-exists? (file-sync-handler/graph-txid-exists?)
-        uploading-files (:current-local->remote-files sync-state)
-        downloading-files (:current-remote->local-files sync-state)]
-    (when-not config/publishing?
-      (when (user-handler/logged-in?)
-        (when-not (file-sync-handler/graph-txid-exists?)
-          (a/go (reset! *existed-graphs (a/<! (file-sync-handler/list-graphs)))))
-        (ui/dropdown-with-links
-         (fn [{:keys [toggle-fn]}]
-           (if not-syncing?
-             [:a.button
-              {:on-click toggle-fn}
-              (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
-             [:a.button
-              {:on-click toggle-fn}
-              (ui/icon "cloud" {:style {:fontSize ui/icon-size}})]))
-         (cond-> []
-           (not graph-txid-exists?)
-           (concat (->> @*existed-graphs
-                        (filterv #(and (:GraphName %) (:GraphUUID %)))
-                        (mapv (fn [graph]
-                                {:title (:GraphName graph)
-                                 :options {:on-click #(file-sync-handler/switch-graph (:GraphUUID graph))}})))
-                   [{:hr true}
-                    {:title "create graph"
-                     :options {:on-click #(file-sync-handler/create-graph (path/basename (state/get-current-repo)))}}])
-           graph-txid-exists?
-           (concat
-            [{:title "toggle file sync"
-              :options {:on-click #(if not-syncing? (fs-sync/sync-start) (fs-sync/sync-stop))}}
-             {:title "remote graph list"
-              :options {:on-click #(state/set-sub-modal! file-sync-remote-graphs)}}]
-            [{:hr true}]
-            (map (fn [f] {:title f
-                          :icon (ui/icon "arrow-narrow-up")}) uploading-files)
-            (map (fn [f] {:title f
-                          :icon (ui/icon "arrow-narrow-down")}) downloading-files)
-            (when sync-state
-              (map-indexed (fn [i f] (:time f)
-                     {:title [:div {:key i} [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
-                   (take 10 (:history sync-state))))))
-
-         (cond-> {}
-           (not graph-txid-exists?) (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
-                                                          "Switch to:"])))))))
-
-
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
@@ -258,9 +178,10 @@
 
      [:div.r.flex
       (when-not file-sync-handler/hiding-login&file-sync
-        (file-sync))
+        (fs-sync/indicator))
       (when-not file-sync-handler/hiding-login&file-sync
         (login))
+
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 

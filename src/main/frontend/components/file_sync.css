@@ -1,0 +1,5 @@
+.cp__file-sync {
+  &-indicator {
+    background-color: rgba(15, 73, 88, 0.23);
+  }
+}
