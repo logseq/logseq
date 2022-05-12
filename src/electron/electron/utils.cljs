@@ -118,7 +118,7 @@
   ([window kind payload]
    (when window
      (.. ^js window -webContents
-         (send kind (bean/->js payload))))))
+         (send (name kind) (bean/->js payload))))))
 
 (defn get-graph-dir
   [graph-name]

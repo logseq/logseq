@@ -314,6 +314,10 @@
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 
+(defmethod handle :testProxyUrl [win [_ url]]
+  (p/let [_ (utils/fetch url)]
+    (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
+
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 

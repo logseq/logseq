@@ -453,11 +453,12 @@
 (declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? replace-empty-target?]}]
-  (let [ref-top-block? (and (:ref? config)
-                            (not (:ref-child? config)))
+  (let [ref-query-top-block? (and (or (:ref? config)
+                                      (:custom-query? config))
+                                  (not (:ref-query-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
         sibling? (cond
-                   ref-top-block?
+                   ref-query-top-block?
                    false
 
                    (boolean? sibling?)
@@ -470,7 +471,7 @@
                    (not has-children?))]
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (save-current-block!)
+      (save-current-block! {:current-block current-block})
       (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                                :keep-uuid? keep-uuid?
                                                                :replace-empty-target? replace-empty-target?}))))
@@ -1273,7 +1274,7 @@
   "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
    (save-current-block! {}))
-  ([{:keys [force? skip-properties?] :as opts}]
+  ([{:keys [force? skip-properties? current-block] :as opts}]
    ;; non English input method
    (when-not (state/editor-in-composition?)
      (when (state/get-current-repo)
@@ -1294,7 +1295,8 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (and elem (gobj/get elem "value"))]
+                 value (or (:block/content current-block)
+                           (and elem (gobj/get elem "value")))]
              (cond
                force?
                (save-block-aux! db-block value opts)
@@ -2883,11 +2885,13 @@
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
+        copied-graph (:copy/graph copied-blocks)
         input (state/get-input)
         *stop-event? (atom true)]
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
+       (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
        text
@@ -3473,12 +3477,11 @@
   1. References.
   2. Custom queries."
   [block config]
-  (if (or (:ref? config)
-          (:custom-query? config))
-    (and
-     (seq (:block/children block))
-     (or
-      (:custom-query? config)
-      (>= (:ref/level block)
-          (state/get-ref-open-blocks-level))))
-    (util/collapsed? block)))
+  (or
+   (and
+    (or (:ref? config) (:custom-query? config))
+    (>= (inc (:block/level block))
+        (state/get-ref-open-blocks-level))
+    ;; has children
+    (first (:block/_parent (db/entity (:db/id block)))))
+   (util/collapsed? block)))

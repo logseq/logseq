@@ -489,8 +489,16 @@
                             page-name-in-block
                             page-name
                             redirect-page-name page-entity contents-page? children html-export? label)]
-      (if (and (not (util/mobile?)) (not preview?))
+      (cond
+        (:breadcrumb? config)
+        (or (:block/original-name page)
+            (:block/name page))
+
+        (and (not (util/mobile?))
+             (not preview?))
         (page-preview-trigger (assoc config :children inner) page-name)
+
+        :else
         inner))))
 
 (rum/defc asset-reference
@@ -1403,6 +1411,7 @@
 (rum/defc block-children < rum/reactive
   [config children collapsed?]
   (let [ref? (:ref? config)
+        query? (:custom-query? config)
         children (and (coll? children) (filter map? children))]
     (when (and (coll? children)
                (seq children)
@@ -1418,8 +1427,8 @@
                             (-> config
                                 (assoc :block/uuid (:block/uuid child))
                                 (dissoc :breadcrumb-show? :embed-parent))
-                             ref?
-                             (assoc :ref-child? true))]
+                             (or ref? query?)
+                             (assoc :ref-query-child? true))]
                 (rum/with-key (block-container config child)
                   (:block/uuid child)))))]]))))
 
@@ -2077,11 +2086,13 @@
                   (rest parents)
                   parents)
         more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)]
+        parents (if more? (take-last level-limit parents) parents)
+        config (assoc config :breadcrumb? true)]
     (when show?
       (let [page-name-props (when show-page?
                               [page
-                               (or page-original-name page-name)])
+                               (page-cp (dissoc config :breadcrumb? true) page)
+                               {:block/name (or page-original-name page-name)}])
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
@@ -2225,37 +2236,11 @@
        (= (:id config)
           (str (:block/uuid block)))))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container < rum/reactive
-  {:init (fn [state]
-           (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)]
-             (cond
-               (root-block? config block)
-               (state/set-collapsed-block! block-id false)
-
-               (:ref? config)
-               (state/set-collapsed-block! block-id
-                                           (editor-handler/block-default-collapsed? block config))
-
-               :else
-               nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
-   :should-update (fn [old-state new-state]
-                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
-                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
-                          config-compare-keys [:show-cloze?]
-                          b1 (second (:rum/args old-state))
-                          b2 (second (:rum/args new-state))
-                          result (or
-                                  (not= (select-keys b1 compare-keys)
-                                        (select-keys b2 compare-keys))
-                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))}
-  [state config block]
-  (let [repo (state/get-current-repo)
+(rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+  [state repo config block]
+  (let [ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))
+        ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
@@ -2277,26 +2262,27 @@
                  config)
         heading? (or (= type :heading) (and heading-level (<= heading-level 6)))
         *control-show? (get state ::control-show?)
-        ref? (:ref? config)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref? (root-block? config block))
+                     (or ref-or-custom-query? (root-block? config block))
                      (state/sub-collapsed uuid)
 
                      :else
                      db-collapsed?)
+        children (if (and ref-or-custom-query?
+                          (not collapsed?))
+                   (map
+                     (fn [b] (assoc b
+                                    :block/level (inc (:block/level block))))
+                     (model/sub-block-direct-children repo uuid))
+                   children)
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
-        custom-query? (boolean (:custom-query? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
-        has-child? (boolean
-                    (and
-                     (not pre-block?)
-                     (coll? children)
-                     (seq children)))
+        has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
         children-refs (get-children-refs children)
         data-refs (build-refs-data-value children-refs)
@@ -2356,6 +2342,48 @@
      (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
+
+(rum/defcs block-container < rum/reactive
+  {:init (fn [state]
+           (let [[config block] (:rum/args state)
+                 block-id (:block/uuid block)]
+             (cond
+               (root-block? config block)
+               (state/set-collapsed-block! block-id false)
+
+               (or (:ref? config) (:custom-query? config))
+               (state/set-collapsed-block! block-id
+                                           (editor-handler/block-default-collapsed? block config))
+
+               :else
+               nil)
+             (assoc state
+                    ::control-show? (atom false)
+                    ::navigating-block (atom (:block/uuid block)))))
+   :should-update (fn [old-state new-state]
+                    (let [compare-keys [:block/uuid :block/content :block/parent :block/collapsed?
+                                        :block/properties :block/left :block/children :block/_refs :ui/selected?]
+                          config-compare-keys [:show-cloze?]
+                          b1 (second (:rum/args old-state))
+                          b2 (second (:rum/args new-state))
+                          result (or
+                                  (not= (select-keys b1 compare-keys)
+                                        (select-keys b2 compare-keys))
+                                  (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                        (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+                      (boolean result)))}
+  [state config block]
+  (let [repo (state/get-current-repo)
+        ref? (:ref? config)
+        custom-query? (boolean (:custom-query? config))
+        ref-or-custom-query? (or ref? custom-query?)]
+    (if (and ref-or-custom-query? (not (:ref-query-child? config)))
+      (ui/lazy-visible
+       nil
+       (fn []
+         (block-container-inner state repo config block))
+       nil)
+      (block-container-inner state repo config block))))
 
 (defn divide-lists
   [[f & l]]
@@ -2681,7 +2709,10 @@
   [config q]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
-   (custom-query* config q)))
+   (ui/lazy-visible
+    "loading ..."
+    (fn [] (custom-query* config q))
+    nil)))
 
 (defn admonition
   [config type result]
