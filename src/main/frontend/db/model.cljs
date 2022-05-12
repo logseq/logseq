@@ -1321,7 +1321,7 @@
   [name]
   (when (string? name)
     (->> (d/q
-           '[:find (pull ?b [*])
+           '[:find [(pull ?b [*]) ...]
              :in $ ?name
              :where
              [?b :block/properties ?p]
@@ -1329,7 +1329,8 @@
              [(= ?t ?name)]]
            (conn/get-db)
            name)
-         ffirst)))
+         (sort-by :block/name)
+         (first))))
 
 (defonce blocks-count-cache (atom nil))
 

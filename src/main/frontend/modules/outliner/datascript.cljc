@@ -45,7 +45,7 @@
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container)
+                                      :block/title :block/body :block/level :block/container :db/other-tx)
                               m)) txs)]
        (when (and (seq txs)
                   (not (:skip-transact? opts)))
