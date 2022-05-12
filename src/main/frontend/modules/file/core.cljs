@@ -125,7 +125,7 @@
                     (config/get-pages-directory))
                   "/"
                   (if journal-page?
-                    (date/journal-title->default title)
+                    (date/date->file-name journal-page?)
                     (-> (or (:block/original-name page) (:block/name page))
                         (util/file-name-sanity))) "."
                   (if (= format "markdown") "md" format))
