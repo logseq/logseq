@@ -2,10 +2,13 @@
   (:require [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
-            [frontend.text :as text]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as text]
             [clojure.string :as string]))
 
-(set! mldoc/parse-property text/parse-property)
+;; TODO: Properly fix this circular dependency:
+;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
+(set! gp-mldoc/parse-property text/parse-property)
 
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))
@@ -37,9 +40,9 @@
 ;; html
 (defn get-default-config
   ([format]
-   (mldoc/default-config format))
+   (gp-mldoc/default-config format))
   ([format options]
-   (mldoc/default-config format options)))
+   (gp-mldoc/default-config format options)))
 
 (defn to-html
   ([content format]
@@ -49,7 +52,7 @@
      (if (string/blank? content)
        ""
        (if-let [record (get-format-record format)]
-         (protocol/toHtml record content config mldoc/default-references)
+         (protocol/toHtml record content config gp-mldoc/default-references)
          content)))))
 
 (defn to-edn

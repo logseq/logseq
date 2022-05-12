@@ -46,7 +46,7 @@
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
@@ -54,6 +54,7 @@
             [frontend.util.drawer :as drawer]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -746,13 +747,13 @@
    (inline-text {} format v))
   ([config format v]
    (when (string? v)
-     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+     (let [inline-list (gp-mldoc/inline->edn v (gp-mldoc/default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
-    (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
+    (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
                    (map first))
           paragraph? (and (= 1 (count ast))
                           (= "Paragraph" (ffirst ast)))]
@@ -886,7 +887,7 @@
     (not (string/includes? s "."))
     (page-reference (:html-export? config) s config label)
 
-    (util/url? s)
+    (gp-util/url? s)
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
@@ -1737,8 +1738,8 @@
          (for [elem elems]
            (rum/with-key elem (str (random-uuid)))))
 
-       (and (string? v) (util/wrapped-by-quotes? v))
-       (util/unquote-string v)
+       (and (string? v) (gp-util/wrapped-by-quotes? v))
+       (gp-util/unquote-string v)
 
        :else
        (inline-text config (:block/format block) (str v)))]))
@@ -2764,11 +2765,11 @@
 ;;     (cond
 ;;       (= lang "quote")
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Quote" (first (mldoc/->edn content (mldoc/default-config :markdown)))])
+;;         ["Quote" (first (mldoc/->edn content (gp-mldoc/default-config :markdown)))])
 
 ;;       (contains? #{"query" "note" "tip" "important" "caution" "warning" "pinned"} lang)
 ;;       (let [content (string/trim (string/join "\n" lines))]
-;;         ["Custom" lang nil (first (mldoc/->edn content (mldoc/default-config :markdown))) content])
+;;         ["Custom" lang nil (first (mldoc/->edn content (gp-mldoc/default-config :markdown))) content])
 
 ;;       :else
 ;;       ["Src" options])))

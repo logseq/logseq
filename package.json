@@ -5,7 +5,7 @@
     "main": "static/electron.js",
     "devDependencies": {
         "@capacitor/cli": "3.2.2",
-        "@logseq/nbb-logseq": "^0.3.10",
+        "@logseq/nbb-logseq": "^0.3.99",
         "@playwright/test": "^1.19.2",
         "@tailwindcss/ui": "0.7.2",
         "@types/gulp": "^4.0.7",

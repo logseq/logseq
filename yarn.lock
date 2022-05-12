@@ -721,10 +721,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
 
-"@logseq/nbb-logseq@^0.3.10":
-  version "0.3.10"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.10.tgz#74534f9d263eb2105a41143a55425d0910d43eb8"
-  integrity sha512-y7/VJ99WCoNpQMqQOOBobKzNrRz4IcG85HggAkIaUtNwJ/Adb5fA28ZKP5ttEpqWLXTbAyqbBObD5q/xJLLD8w==
+"@logseq/nbb-logseq@^0.3.99":
+  version "0.3.99"
+  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.99.tgz#cf6c05c559963e4e0fb92f214a63228972ef87d3"
+  integrity sha512-Msa6Ck6wqt7sYGExQZgUT/uUG/z5jGaPlytVdgGkCrVogZb2yaChbWeMOCfCsCTi6kbHo15hC3aOeDAXcfnFzw==
   dependencies:
     import-meta-resolve "^1.1.1"
 
@@ -6816,6 +6816,11 @@ react-grid-layout@0.16.6:
     prop-types "15.x"
     react-draggable "3.x"
     react-resizable "1.x"
+
+react-icon-base@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
+  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
 
 react-icon-base@^2.1.2:
   version "2.1.2"

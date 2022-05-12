@@ -10,7 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.db :as db]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.handler.repo :as repo-handler]

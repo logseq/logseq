@@ -7,15 +7,15 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
-            [frontend.text :as text]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
-            [frontend.format.mldoc :as mldoc]))
+            [medley.core :as medley]))
 
 (defn heading-block?
   [block]
@@ -165,7 +165,7 @@
                      (map last)
                      (map (fn [v]
                             (when (and (string? v)
-                                       (not (mldoc/link? format v)))
+                                       (not (gp-mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
@@ -185,7 +185,7 @@
                                            (remove string/blank? v)
                                            (if (string/blank? v)
                                              nil
-                                             (text/parse-property format k v)))
+                                             (text/parse-property format k v (state/get-config))))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)
@@ -425,11 +425,11 @@
                   (utf8/substring utf8-content
                                   (:start_pos meta)))
         content (when content
-                  (let [content (text/remove-level-spaces content format)]
+                  (let [content (text/remove-level-spaces content format (config/get-block-pattern format))]
                     (if (or (:pre-block? block)
                             (= (:format block) :org))
                       content
-                      (mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
+                      (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
       content
       (property/->new-properties content))))
@@ -702,7 +702,7 @@
                        (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
-         (let [ast (->> (format/to-edn content format (mldoc/default-config format))
+         (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
                         (map first))
                title (when (heading-block? (first ast))
                        (:title (second (first ast))))

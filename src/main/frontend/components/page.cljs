@@ -26,7 +26,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -222,8 +222,8 @@
                          (reset! *edit? false)
                          (notification/show! "Illegal page name, can not rename!" :warning))
           blur-fn (fn [e]
-                    (when (util/wrapped-by-quotes? @*title-value)
-                      (swap! *title-value util/unquote-string)
+                    (when (gp-util/wrapped-by-quotes? @*title-value)
+                      (swap! *title-value gp-util/unquote-string)
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
                     (state/set-state! :editor/editing-page-title? false)
                     (cond
