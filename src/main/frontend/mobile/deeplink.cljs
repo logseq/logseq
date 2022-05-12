@@ -6,6 +6,7 @@
    [frontend.handler.notification :as notification]
    [frontend.handler.route :as route-handler]
    [frontend.handler.user :as user-handler]
+   [frontend.mobile.intent :as intent]
    [frontend.state :as state]
    [frontend.text :as text]))
 
@@ -48,5 +49,11 @@
               (notification/show! (str "Opening File link is not supported on mobile.") :error false))
             (notification/show! (str "The SCHEME across graphs has not been supported yet.") :error false))))
 
+      (= hostname "shared")
+      (let [result (into {} (map (fn [key]
+                                   [(keyword key) (.get search-params key)])
+                                 ["title" "url" "type"]))]
+        (intent/handle-result result))
+
       :else
-      (notification/show! (str "The url  has not been supported yet.") :error false))))
+      nil)))
