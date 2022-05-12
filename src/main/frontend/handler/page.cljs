@@ -33,6 +33,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -47,7 +49,7 @@
                  (date/journal-title->default title)
                  (util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
-    (util/safe-subs s 0 200)))
+    (gp-util/safe-subs s 0 200)))
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
@@ -89,12 +91,16 @@
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title? (create-title-property? journal? (:block/name page))
+          create-title? (create-title-property? journal?
+                                                (or
+                                                 (:block/original-name page)
+                                                 (:block/name page)))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
         create-title?
-        [page
-         (default-properties-block (build-title page) format page-entity properties)]
+        (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
+          [page
+           properties-block])
 
         (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
@@ -115,7 +121,7 @@
          title (util/remove-boundary-slashes title)
          page-name (util/page-name-sanity-lc title)
          repo (state/get-current-repo)]
-     (when-not (db/page-exists? page-name)
+     (when (db/page-empty? repo page-name)
        (let [pages    (if split-namespace?
                         (util/split-namespace-pages title)
                         [title])
@@ -128,16 +134,19 @@
                            ;; for namespace pages, only last page need properties
                            drop-last
                            (mapcat #(build-page-tx format nil % journal?))
-                           (remove nil?))
+                           (remove nil?)
+                           (remove (fn [m]
+                                     (some? (db/entity [:block/name (:block/name m)])))))
              last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
-         (db/transact! txs)))
+         (when (seq txs)
+           (db/transact! txs)))
 
-     (when create-first-block?
-       (when (or
-              (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
-              (create-title-property? journal? page-name))
-         (editor-handler/api-insert-new-block! "" {:page page-name})))
+       (when create-first-block?
+         (when (or
+                (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
+                (create-title-property? journal? page-name))
+           (editor-handler/api-insert-new-block! "" {:page page-name}))))
 
      (when redirect?
        (route-handler/redirect-to-page! page-name))
@@ -359,7 +368,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/page-name-sanity new-name true)
+        new-file-name       (util/file-name-sanity new-name)
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
@@ -625,8 +634,8 @@
   (->> (db/get-all-pages repo)
        (remove (fn [p]
                  (let [name (:block/name p)]
-                   (or (util/uuid-string? name)
-                       (config/draw? name)
+                   (or (gp-util/uuid-string? name)
+                       (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 
@@ -669,17 +678,17 @@
         q (or
            @editor-handler/*selected-text
            (when (state/sub :editor/show-page-search-hashtag?)
-             (util/safe-subs edit-content pos current-pos))
+             (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (util/safe-subs edit-content pos current-pos)))]
+             (gp-util/safe-subs edit-content pos current-pos)))]
     (if (state/sub :editor/show-page-search-hashtag?)
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+        (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
-              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
+              chosen (if (and (gp-util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)
@@ -719,31 +728,24 @@
                 (and (= "local" repo) (not (mobile-util/is-native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
-              template (state/get-default-journal-template)
               format (state/get-preferred-format repo)
               file-name (date/journal-title->default title)
               path (str (config/get-journals-directory) "/" file-name "."
                         (config/get-file-extension format))
               file-path (str "/" path)
-              repo-dir (config/get-repo-dir repo)]
+              repo-dir (config/get-repo-dir repo)
+              template (state/get-default-journal-template)]
           (p/let [file-exists? (fs/file-exists? repo-dir file-path)
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
-                       (not (model/journal-day-exists? repo
-                                                       (date/journal-title->int (date/today))))
                        (or (not file-exists?)
                            (and file-exists? (string/blank? file-content))))
               (create! title {:redirect? false
                               :split-namespace? false
                               :create-first-block? (not template)
                               :journal? true})
-              (when template
-                (let [page (db/pull [:block/name today-page])]
-                  (editor-handler/insert-template!
-                   nil
-                   template
-                   {:target page})))
+              (state/pub-event! [:journal/insert-template today-page])
               (ui-handler/re-render-root!))))))))
 
 (defn open-today-in-sidebar
@@ -752,8 +754,7 @@
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
-     :page
-     page)))
+     :page)))
 
 (defn open-file-in-default-app []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]

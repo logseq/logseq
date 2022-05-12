@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [frontend.format.mldoc :as mldoc]
             [clojure.set :as set]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.state :as state]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
@@ -136,8 +137,8 @@
 
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (util/safe-re-find page-ref-re s)
-                (util/safe-re-find #"[\,|，|#|\"]+" s)))
+            (or (gp-util/safe-re-find page-ref-re s)
+                (gp-util/safe-re-find #"[\,|，|#|\"]+" s)))
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
@@ -192,7 +193,7 @@
     (let [pattern (util/format
                    "^[%s]+\\s?"
                    (config/get-block-pattern format))]
-      (util/safe-re-find (re-pattern pattern) text))
+      (gp-util/safe-re-find (re-pattern pattern) text))
     ""))
 
 (defn- remove-level-space-aux!
@@ -231,7 +232,7 @@
 
 (defn media-link?
   [media-formats s]
-  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
+  (some (fn [fmt] (gp-util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
 (defn namespace-page?
   [p]
@@ -356,7 +357,7 @@
        (= v "false")
        false
 
-       (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
+       (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
        (util/safe-parse-int v)
 
        (util/wrapped-by-quotes? v) ; wrapped in ""

@@ -1,5 +1,5 @@
 (ns frontend.modules.instrumentation.posthog
-  (:require [frontend.config :as cfg]
+  (:require [frontend.config :as config]
             [frontend.util :as util]
             [frontend.mobile.util :as mobile]
             [frontend.version :refer [version]]
@@ -22,7 +22,7 @@
 
                    :else
                    "web"))
-     :app_env (if cfg/dev? "development" "production")
+     :app_env (if config/dev? "development" "production")
      :app_ver version
      :schema_ver 0
      ;; hack, did not find ways to hack data on-the-fly with posthog-js

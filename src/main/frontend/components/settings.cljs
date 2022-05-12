@@ -1,6 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
@@ -133,7 +134,6 @@
     (when-not (or (util/mobile?)
                   (mobile-util/is-native-platform?))
       [:div.text-sm desc])]])
-
 
 (defn edit-config-edn []
   (row-with-button-action
@@ -390,6 +390,23 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
+(defn encryption-row [t enable-encryption?]
+  (toggle "enable_encryption"
+          (t :settings-page/enable-encryption)
+          enable-encryption?
+          #(let [value (not enable-encryption?)]
+             (config-handler/set-config! :feature/enable-encryption? value)
+             (when value
+               (state/close-modal!)
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+                              100)))
+          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
+           [:span "You can use "]
+           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
+                :target "_blank"}
+            "logseq-encrypt-ui"]
+           [:span " to decrypt your graph."]]))
+
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
@@ -468,40 +485,6 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")]])]))
 
-(rum/defc user-proxy-settings-panel
-  [{:keys [protocol] :as agent-opts}]
-  (let [[opts set-opts!] (rum/use-state agent-opts)
-        disabled? (string/blank? (:protocol opts))]
-    [:div.cp__settings-network-proxy-panel
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
-     [:div.p-2
-      [:p [:label [:strong (t :type)]
-           (ui/select [{:label "Disabled" :value "" :selected disabled?}
-                       {:label "http" :value "http" :selected (= protocol "http")}
-                       {:label "https" :value "https" :selected (= protocol "https")}
-                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
-                      #(set-opts!
-                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
-      [:p.flex
-       [:label.pr-4 [:strong (t :host)]
-        [:input.form-input.is-small
-         {:value     (:host opts) :disabled disabled?
-          :on-change #(set-opts!
-                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
-
-       [:label [:strong (t :port)]
-        [:input.form-input.is-small
-         {:value (:port opts) :type "number" :disabled disabled?
-          :on-change #(set-opts!
-                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
-
-      [:p.pt-2
-       (ui/button (t :save)
-        :on-click (fn []
-                    (p/let [_ (ipc/ipc :setHttpsAgent opts)]
-                      (state/set-state! [:electron/user-cfgs :settings/agent] opts)
-                      (state/close-sub-modal! :https-proxy-panel))))]]]))
-
 (rum/defc user-proxy-settings
   [{:keys [protocol host port] :as agent-opts}]
   (ui/button [:span
@@ -509,7 +492,7 @@
                 [:strong.pr-1 e])
               (ui/icon "edit")]
              :on-click #(state/set-sub-modal!
-                         (fn [_] (user-proxy-settings-panel agent-opts))
+                         (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
 
 (defn plugin-system-switcher-row []
@@ -544,6 +527,7 @@
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
         enable-journals? (state/enable-journals? current-repo)
+        enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -578,6 +562,7 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
+     (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
      (auto-push-row t current-repo enable-git-auto-push?)]))

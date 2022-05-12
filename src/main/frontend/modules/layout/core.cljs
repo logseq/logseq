@@ -1,6 +1,6 @@
 (ns frontend.modules.layout.core
   (:require [cljs-bean.core :as bean]
-            [frontend.util :as frontend-utils]))
+            [frontend.util :as util]))
 
 (defonce *movable-containers (atom {}))
 
@@ -24,7 +24,7 @@
                    (remove nil?))
           zdx (bean/->js zdx)
           zdx (and zdx (js/Math.max.apply nil zdx))
-          zdx' (frontend-utils/safe-parse-int (.. container -style -zIndex))]
+          zdx' (util/safe-parse-int (.. container -style -zIndex))]
 
       (when (or (nil? zdx') (not= zdx zdx'))
         (set! (.. container -style -zIndex) (inc zdx))))))
@@ -46,8 +46,8 @@
                         (let [^js dset (.-dataset el)
                               dx (.-dx e)
                               dy (.-dy e)
-                              dx' (frontend-utils/safe-parse-float (.-dx dset))
-                              dy' (frontend-utils/safe-parse-float (.-dy dset))
+                              dx' (util/safe-parse-float (.-dx dset))
+                              dy' (util/safe-parse-float (.-dy dset))
                               x (+ dx (if dx' dx' 0))
                               y (+ dy (if dy' dy' 0))]
 
@@ -92,8 +92,8 @@
                              dx (.. e -deltaRect -left)
                              dy (.. e -deltaRect -top)
 
-                             dx' (frontend-utils/safe-parse-float (.-dx dset))
-                             dy' (frontend-utils/safe-parse-float (.-dy dset))
+                             dx' (util/safe-parse-float (.-dx dset))
+                             dy' (util/safe-parse-float (.-dy dset))
 
                              x (+ dx (if dx' dx' 0))
                              y (+ dy (if dy' dy' 0))]

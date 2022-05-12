@@ -21,7 +21,7 @@
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
-(rum/defc journal-cp < rum/reactive
+(rum/defc journal-cp-inner < rum/reactive
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
@@ -48,9 +48,7 @@
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page
-                         {:page     page
-                          :journal? true}))
+                         :page))
                       (.preventDefault e)))}
        [:h1.title
         (util/capitalize-all title)]]
@@ -62,8 +60,12 @@
      (page/today-queries repo today? false)
 
      (rum/with-key
-       (reference/references title)
+       (reference/references title false)
        (str title "-refs"))]))
+
+(rum/defc journal-cp
+  [journal]
+  (ui/lazy-visible nil (fn [] (journal-cp-inner journal)) nil))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

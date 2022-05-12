@@ -1,4 +1,4 @@
-(ns frontend.db.default
+(ns ^:nbb-compatible frontend.db.default
   (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names
