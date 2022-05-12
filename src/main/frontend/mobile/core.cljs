@@ -10,6 +10,11 @@
             [frontend.util :as util]))
 
 (def *url (atom nil))
+;; FIXME: `appUrlOpen` are fired twice when receiving a same intent. 
+;; The following two variable atoms are used to compare whether
+;; they are from the same intent share.
+(def *last-shared-url (atom nil))
+(def *last-shared-seconds (atom 0))
 
 (defn- ios-init
   "Initialize iOS-specified event listeners"
@@ -62,12 +67,15 @@
   []
   (.addListener App "appUrlOpen"
                 (fn [^js data]
-                  (prn :data data)
                   (when-let [url (.-url data)]
                     (if-not (= (.-readyState js/document) "complete")
                       (reset! *url url)
-                      (deeplink/deeplink url)))))
-    
+                      (when-not (and (= @*last-shared-url url)
+                                     (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
+                        (reset! *last-shared-url url)
+                        (reset! *last-shared-seconds (.getSeconds (js/Date.)))
+                        (deeplink/deeplink url))))))
+
   (.addListener mobile-util/fs-watcher "watcher"
                 (fn [event]
                   (state/pub-event! [:file-watcher/changed event])))
