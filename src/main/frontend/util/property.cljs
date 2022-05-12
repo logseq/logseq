@@ -236,7 +236,12 @@
      (let [ast (mldoc/->edn content (mldoc/default-config format))
            title? (mldoc/block-with-title? (ffirst (map first ast)))
            has-properties? (or (and title?
-                                    (mldoc/properties? (second ast)))
+                                    (or (mldoc/properties? (second ast))
+                                        (mldoc/properties? (second
+                                                            (remove
+                                                             (fn [[x _]]
+                                                               (= "Hiccup" (first x)))
+                                                             ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
            [title body] (if title?
