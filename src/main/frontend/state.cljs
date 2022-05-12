@@ -1660,6 +1660,8 @@
   (set-state! :file-sync/sync-manager v))
 (defn set-file-sync-state [v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
+  (js/console.log "queued-local->remote-files ===> "
+    (js/JSON.stringify (bean/->js (:queued-local->remote-files v))))
   (set-state! :file-sync/sync-state v))
 
 (defn get-file-sync-manager []
