@@ -4,7 +4,7 @@
             [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
 

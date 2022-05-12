@@ -5,5 +5,7 @@
                   ;; Ignore b/c too many false positives
                   frontend.db
                   ;; Used for debugging
-                  frontend.db.debug]
+                  frontend.db.debug
+                  ;; carve doesn't detect nbb only usage
+                  logseq.graph-parser.log]
  :report {:format :ignore}}

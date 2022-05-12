@@ -5,8 +5,9 @@
             [frontend.config :as config]
             [medley.core :as medley]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.format.mldoc :as mldoc]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
 
 (defonce properties-start ":PROPERTIES:")
@@ -187,7 +188,7 @@
         properties (filter (fn [[k _v]] ((built-in-properties) k)) properties)]
     (if (seq properties)
       (let [lines (string/split-lines content)
-            ast (mldoc/->edn content (mldoc/default-config format))
+            ast (mldoc/->edn content (gp-mldoc/default-config format))
             [title body] (if (mldoc/block-with-title? (first (ffirst ast)))
                            [(first lines) (rest lines)]
                            [nil lines])
@@ -233,10 +234,15 @@
    (insert-property format content key value false))
   ([format content key value front-matter?]
    (when (string? content)
-     (let [ast (mldoc/->edn content (mldoc/default-config format))
+     (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
            title? (mldoc/block-with-title? (ffirst (map first ast)))
            has-properties? (or (and title?
-                                    (mldoc/properties? (second ast)))
+                                    (or (mldoc/properties? (second ast))
+                                        (mldoc/properties? (second
+                                                            (remove
+                                                             (fn [[x _]]
+                                                               (= "Hiccup" (first x)))
+                                                             ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
            [title body] (if title?
