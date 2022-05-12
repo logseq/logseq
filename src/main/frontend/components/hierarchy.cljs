@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
             [medley.core :as medley]
             [rum.core :as rum]

@@ -231,6 +231,13 @@
                     default-journal-title-formatter)]
     (journal-title-> journal-title #(tf/unparse formatter %))))
 
+(defn date->file-name
+  [date]
+  (let [formatter (if-let [format (state/get-journal-file-name-format)]
+                    (tf/formatter format)
+                    default-journal-title-formatter)]
+    (tf/unparse formatter date)))
+
 (defn journal-title->custom-format
   [journal-title]
   (journal-title-> journal-title format))

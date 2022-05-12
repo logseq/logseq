@@ -1258,14 +1258,6 @@
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
 
-(defn wrapped-by-quotes?
-  [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
-
 #?(:cljs
    (defn right-click?
      [e]

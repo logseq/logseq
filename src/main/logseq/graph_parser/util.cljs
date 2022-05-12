@@ -57,6 +57,38 @@
    (let [c (count s)]
      (subs s (min c start) (min c end)))))
 
+(defn unquote-string
+  [v]
+  (string/trim (subs v 1 (dec (count v)))))
+
+(defn wrapped-by-quotes?
+  [v]
+  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
+
+(defn parse-int
+  "Copy of frontend.util/parse-int. Don't want to couple to main app too much"
+  [x]
+  (if (string? x)
+    (js/parseInt x)
+    x))
+
+(defn safe-parse-int
+  "Copy of frontend.util/safe-parse-int. Don't want to couple to main app too much"
+  [x]
+  (let [result (parse-int x)]
+    (if (js/isNaN result)
+      nil
+      result)))
+
+(defn url?
+  [s]
+  (and (string? s)
+       (try
+         (js/URL. s)
+         true
+         (catch js/Error _e
+           false))))
+
 (defn json->clj
   [json-string]
   (-> json-string

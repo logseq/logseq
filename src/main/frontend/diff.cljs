@@ -6,7 +6,7 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.text :as text]))
+            [logseq.graph-parser.text :as text]))
 
 (defn diff
   [s1 s2]

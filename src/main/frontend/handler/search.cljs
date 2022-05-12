@@ -1,12 +1,13 @@
 (ns frontend.handler.search
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification-handler]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]))
 
@@ -21,7 +22,7 @@
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
   [format content]
-  (->> (text/remove-level-spaces content format)
+  (->> (text/remove-level-spaces content format (config/get-block-pattern format))
        (drawer/remove-logbook)
        (property/remove-built-in-properties format)))
 
