@@ -713,11 +713,6 @@
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
 
-(defn capitalize-all [s]
-  (some->> (string/split s #" ")
-           (map string/capitalize)
-           (string/join " ")))
-
 #?(:cljs
    (defn react
      [ref]

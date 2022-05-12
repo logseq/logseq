@@ -34,7 +34,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.block :as gp-block]
+            [frontend.format.block :as block]
             [frontend.mobile.util :as mobile-util]))
 
 (defn- get-page-name
@@ -332,7 +332,7 @@
                       (db/entity repo))
                  (do
                    (when-not (db/entity repo [:block/name page-name])
-                     (let [m (gp-block/page-name->map path-page-name true)]
+                     (let [m (block/page-name->map path-page-name true)]
                        (db/transact! repo [m])))
                    (db/pull [:block/name page-name])))
           {:keys [icon]} (:block/properties page)

@@ -9,6 +9,23 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
+(defn extract-blocks
+  "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state"
+  [blocks content with-id? format]
+  (gp-block/extract-blocks blocks content with-id? format
+                           {:user-config (state/get-config)
+                            :block-pattern (config/get-block-pattern format)
+                            :supported-formats (config/supported-formats)
+                            :db (db/get-db (state/get-current-repo))
+                            :date-formatter (state/get-date-formatter)}))
+
+(defn page-name->map
+  "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
+  ([original-page-name with-id?]
+   (page-name->map original-page-name with-id? true))
+  ([original-page-name with-id? with-timestamp?]
+   (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+
 (defn with-parent-and-left
   [page-id blocks]
   (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
@@ -87,7 +104,7 @@
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           blocks (gp-block/extract-blocks ast content with-id? format)
+           blocks (extract-blocks ast content with-id? format)
            new-block (first blocks)
            parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
                             :block/path-refs

@@ -5,6 +5,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.text-test]
             [logseq.graph-parser.mldoc-test]
+            [logseq.graph-parser.block-test]
             [logseq.graph-parser.property-test]))
 
 (defmethod cljs.test/report [:cljs.test/default :end-run-tests] [m]
@@ -19,4 +20,5 @@
   (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
   (t/run-tests 'logseq.graph-parser.mldoc-test
                'logseq.graph-parser.text-test
-               'logseq.graph-parser.property-test))
+               'logseq.graph-parser.property-test
+               'logseq.graph-parser.block-test))

@@ -35,6 +35,7 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.block :as gp-block]
+            [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -72,7 +73,9 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties properties)]
+         refs (gp-block/get-page-refs-from-properties properties
+                                                      (db/get-db (state/get-current-repo))
+                                                      (state/get-date-formatter))]
      {:block/uuid (db/new-block-id)
       :block/properties ps
       :block/properties-order (keys ps)
@@ -127,7 +130,7 @@
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
-                             (-> (gp-block/page-name->map page true)
+                             (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
                         pages)
              txs      (->> pages

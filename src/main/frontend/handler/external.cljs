@@ -8,8 +8,9 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
-            [logseq.graph-parser.block :as gp-block]
+            [frontend.format.block :as block]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
             [frontend.util :as util]))
@@ -50,7 +51,7 @@
                              (map
                               (fn [title]
                                 (let [day (date/journal-title->int title)
-                                      page-name (util/page-name-sanity-lc (date/int->journal-title day))]
+                                      page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
                                   {:block/name page-name
                                    :block/journal? true
                                    :block/journal-day day}))
@@ -74,7 +75,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
-                         (gp-block/extract-blocks parsed-blocks "" true :markdown)
+                         (block/extract-blocks parsed-blocks "" true :markdown)
                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (db/page-exists? page-name))

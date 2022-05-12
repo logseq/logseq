@@ -28,7 +28,8 @@
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.config gp-config}}}
+             logseq.graph-parser.config gp-config
+             logseq.graph-parser.date-time-util date-time-util}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}
