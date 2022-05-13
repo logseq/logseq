@@ -215,6 +215,7 @@
      :file-sync/sync-manager                nil
      :file-sync/sync-state-manager          nil
      :file-sync/sync-state                  nil
+     :file-sync/toggling?                   false
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
 
