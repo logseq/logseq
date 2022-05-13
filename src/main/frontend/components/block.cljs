@@ -285,7 +285,7 @@
           [:a.asset-ref.is-pdf {:href @src
                                 :on-click share-fn}
            title]
-          
+
           :else
           [:a.asset-ref.is-doc {:ref @src
                                 :on-click share-fn}
@@ -2406,14 +2406,13 @@
   [state config block]
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)]
-    (if (and ref-or-custom-query? (not (:ref-query-child? config)))
+        custom-query? (boolean (:custom-query? config))]
+    (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       nil
        (fn []
          (block-container-inner state repo config block))
-       nil)
+       nil
+       false)
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2741,9 +2740,9 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    "loading ..."
     (fn [] (custom-query* config q))
-    nil)))
+    nil
+    true)))
 
 (defn admonition
   [config type result]

@@ -127,6 +127,9 @@ dummy.getNodesObjects = function() {};
 dummy.getEdgesObjects = function() {};
 dummy.alphaTarget = function() {};
 dummy.restart = function() {};
+dummy.observe = function() {};
+dummy.contentRect = function() {};
+dummy.height = function() {};
 
 /**
  * @typedef {{
