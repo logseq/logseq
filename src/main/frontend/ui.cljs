@@ -29,8 +29,7 @@
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]
-            [frontend.mobile.util :refer [is-native-platform?]]))
+            [goog.functions :refer [debounce]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -947,7 +946,7 @@
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   [state content-fn sensor-opts reset-height?]
-  (if (or (util/mobile?) (is-native-platform?))
+  (if (or (util/mobile?) (mobile-util/is-native-platform?))
     (content-fn)
     (let [*visible? (::visible? state)]
       (visibility-sensor

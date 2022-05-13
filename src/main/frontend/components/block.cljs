@@ -265,9 +265,15 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-
+    
     (when @src
-      (let [ext (keyword (util/get-file-ext @src))]
+      (let [ext (keyword (util/get-file-ext @src))
+            share-fn (fn [event]
+                       (util/stop event)
+                       (when (mobile-util/is-native-platform?)
+                         (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
+                           (.share Share #js {:url url
+                                              :title "Open file with your favorite app"}))))]
         (cond
           (contains? config/audio-formats ext)
           (audio-cp @src)
@@ -276,19 +282,14 @@
           (resizable-image config title @src metadata full_text true)
 
           (= ext :pdf)
-          [:a.asset-ref.is-pdf
-           {:href @src
-            :on-click
-            (fn [event]
-              (util/stop event)
-              (when (mobile-util/is-native-platform?)
-                (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
-                  (.share Share #js {:url url
-                                     :title "Open PDF fils with your favorite app"}))))}
+          [:a.asset-ref.is-pdf {:href @src
+                                :on-click share-fn}
            title]
 
           :else
-          [:a.asset-ref {:ref @src} title])))))
+          [:a.asset-ref.is-doc {:ref @src
+                                :on-click share-fn}
+           title])))))
 
 (defn ar-url->http-url
   [href]
@@ -659,7 +660,7 @@
   (and (= 1 (count label))
        (let [label (first label)]
          (string? (last label))
-         (last label))))
+         (js/decodeURIComponent (last label)))))
 
 (defn- get-page
   [label]
@@ -841,27 +842,30 @@
 
 (defn- media-link
   [config url s label metadata full_text]
-  (let [ext (util/get-file-ext s)]
+  (let [ext (keyword (util/get-file-ext s))
+        label-text (get-label-text label)]
     (cond
-      (contains? (set (map name config/audio-formats)) ext)
+      (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
 
-      (not (contains? #{"pdf" "mp4" "webm" "mov"} ext))
+      (contains? (config/doc-formats) ext)
+      (asset-link config label-text s metadata full_text)
+
+      (= ext :pdf)
+      (cond
+        (util/electron?)
+        [:a.asset-ref.is-pdf
+         {:href "javascript:void(0);"
+          :on-mouse-down (fn [_event]
+                           (when-let [current (pdf-assets/inflate-asset s)]
+                             (state/set-state! :pdf/current current)))}
+         label-text]
+
+        (mobile-util/is-native-platform?)
+        (asset-link config label-text s metadata full_text))
+
+      (not (contains? #{:mp4 :webm :mov} ext))
       (image-link config url s label metadata full_text)
-
-      (= (util/get-file-ext s) "pdf")
-      (let [label-text (get-label-text label)]
-        (cond
-          (util/electron?)
-          [:a.asset-ref.is-pdf
-           {:href "javascript:void(0);"
-            :on-mouse-down (fn [_event]
-                             (when-let [current (pdf-assets/inflate-asset s)]
-                               (state/set-state! :pdf/current current)))}
-           label-text]
-
-          (mobile-util/is-native-platform?)
-          (asset-link config label-text s metadata full_text)))
 
       :else
       (asset-reference config label s))))
