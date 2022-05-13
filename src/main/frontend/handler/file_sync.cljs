@@ -55,6 +55,7 @@
   []
   (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
 
+
 (defn download-all-files
   [repo graph-uuid user-uuid base-path]
   (go
@@ -82,6 +83,18 @@
           (notification/show! (str "Download graph failed: " (ex-cause r)) :warning)
           (do (state/reset-file-sync-download-init-state!)
               (sync/update-graphs-txid! latest-txid graph-uuid user-uuid repo)))))))
+
+(defn load-session-graphs
+  []
+  (when-not (state/sub [:file-sync/remote-graphs :loading])
+    (go (state/set-state! [:file-sync/remote-graphs :loading] true)
+      (let [graphs (<! (list-graphs))]
+        (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
+
+(defn reset-session-graphs
+  []
+  (state/set-state! :file-sync/remote-graphs {:loading false :graphs nil}))
+
 
 (defn switch-graph [graph-uuid]
   (let [repo (state/get-current-repo)

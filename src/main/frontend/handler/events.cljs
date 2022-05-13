@@ -40,12 +40,19 @@
             [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
             [frontend.fs.sync :as sync]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.encryption :as encryption]
             [frontend.encrypt :as encrypt]))
 
 ;; TODO: should we move all events here?
 
 (defmulti handle first)
+
+(defmethod handle :user/login [[_]]
+  (file-sync-handler/load-session-graphs))
+
+(defmethod handle :user/logout [[_]]
+  (file-sync-handler/reset-session-graphs))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)

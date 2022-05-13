@@ -34,7 +34,12 @@
   []
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
-        repos (util/distinct-by :url repos)]
+        repos (util/distinct-by :url repos)
+        login? (boolean (state/sub :auth/id-token))
+        repos (if login?
+                (concat repos (some->> (state/sub [:file-sync/remote-graphs :graphs])
+                                       (map #(assoc % :url (:GraphName %) :remote? true))))
+                repos)]
     (if (seq repos)
       [:div#graphs
        [:h1.title "All Graphs"]
@@ -49,17 +54,18 @@
             (ui/button
               (t :open-a-directory)
               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [id url] :as repo} repos]
+        (for [{:keys [id url remote?] :as repo} repos]
           (let [local? (config/local-db? url)]
             [:div.flex.justify-between.mb-4 {:key id}
              (if local?
                (let [local-dir (config/get-local-dir url)
                      graph-name (text/get-graph-name-from-path local-dir)]
                  [:a {:title local-dir
-                      :on-click #(state/pub-event! [:graph/switch url])}
+                      :on-click #(state/pub-event! [:graph/switch url repo])}
                   graph-name])
                [:a {:target "_blank"
                     :href url}
+                (when remote? [:strong.pr-1 (ui/icon "cloud")])
                 (db/get-repo-path url)])
              [:div.controls
               (when (e/encrypted-db? url)

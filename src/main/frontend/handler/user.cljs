@@ -86,11 +86,13 @@
       (if (= 200 (:status resp))
         (-> resp
             :body
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $)))
+            (#(state/pub-event! [:user/login])))
         (debug/pprint "login-callback" resp)))))
 
 (defn logout []
-  (clear-tokens))
+  (clear-tokens)
+  (state/pub-event! [:user/logout]))
 
 (defn refresh-id-token&access-token
   "refresh id-token and access-token, if refresh_token expired, clear all tokens
