@@ -394,7 +394,7 @@
        ;; referenced blocks
        [:div {:key "page-references"}
         (rum/with-key
-          (reference/references route-page-name sidebar?)
+          (reference/references route-page-name)
           (str route-page-name "-refs"))]
 
        (when-not block?

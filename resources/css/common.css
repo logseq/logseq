@@ -715,6 +715,11 @@ li p:last-child,
   background-color: var(--ls-primary-background-color, #fff);
 }
 
+.bg-base-4 {
+  background-color: var(--ls-tertiary-background-color);
+}
+
+
 .pre-white-space {
   white-space: pre;
 }

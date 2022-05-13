@@ -286,7 +286,7 @@
                   (.share Share #js {:url url
                                      :title "Open PDF fils with your favorite app"}))))}
            title]
-          
+
           :else
           [:a.asset-ref {:ref @src} title])))))
 
@@ -862,7 +862,7 @@
 
           (mobile-util/is-native-platform?)
           (asset-link config label-text s metadata full_text)))
-      
+
       :else
       (asset-reference config label s))))
 
@@ -2406,7 +2406,6 @@
         ref-or-custom-query? (or ref? custom-query?)]
     (if (and ref-or-custom-query? (not (:ref-query-child? config)))
       (ui/lazy-visible
-       nil
        (fn []
          (block-container-inner state repo config block))
        nil)
@@ -2737,7 +2736,6 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    "loading ..."
     (fn [] (custom-query* config q))
     nil)))
 
