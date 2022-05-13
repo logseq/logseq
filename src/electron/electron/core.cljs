@@ -81,7 +81,7 @@
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
-(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
+(defn- handle-export-publish-assets [_event html export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
           asset-filenames (js->clj asset-filenames)
           root-dir (or output-path (handler/open-dir-dialog))]
@@ -99,35 +99,35 @@
                            (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
                           (map
-                            (fn [filename]
-                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
-                                  (p/catch
-                                      (fn [e]
-                                        (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                        (js/console.error e)))))
-                            asset-filenames)
+                           (fn [filename]
+                             (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                                 (p/catch
+                                  (fn [e]
+                                    (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
+                                    (js/console.error e)))))
+                           asset-filenames)
 
                           (map
-                            (fn [part]
-                              (. fs copy (path/join app-path part) (path/join static-dir part)))
-                            ["css" "fonts" "icons" "img" "js"])))
-                custom-css (. fs readFile custom-css-path)
-                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
+                           (fn [part]
+                             (. fs copy (path/join app-path part) (path/join static-dir part)))
+                           ["css" "fonts" "icons" "img" "js"])))
+                export-css (. fs readFile export-css-path)
+                _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
                                    (path/join static-dir "js" "publishing" file)
                                    (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (. fs removeSync (path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
