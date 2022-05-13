@@ -29,7 +29,7 @@
                (string? r))
         (do
           (sync/update-graphs-txid! 0 r (user/user-uuid) (state/get-current-repo))
-          (swap! refresh-file-sync-component not))
+          (swap! refresh-file-sync-component not) true)
         (if (= 404 (get-in (ex-data r) [:err :status]))
           (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
           (notification/show! (str "Create graph failed: " r) :warning))))))

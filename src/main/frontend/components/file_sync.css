@@ -1,43 +1,103 @@
 .cp__file-sync {
   &-indicator {
+    --ls-color-file-sync-error: #ff0000;
+    --ls-color-file-sync-pending: #ffbb4d;
+    --ls-color-file-sync-idle: #04b404;
+
     a.cloud {
       position: relative;
       opacity: 1 !important;
+      cursor: pointer;
+
+      &:active {
+        opacity: .5 !important;
+      }
 
       .ti {
-        opacity: .6;
+        opacity: .5;
+      }
+
+      &:hover .ti {
+        opacity: .9;
       }
 
       &.on {
         &:after {
           content: " ";
           position: absolute;
-          bottom: 6px;
+          bottom: 7px;
           right: 2px;
           width: 7px;
           height: 7px;
-          background-color: #ff0000;
+          background-color: var(--ls-color-file-sync-error);
           border-radius: 100%;
           opacity: 1;
         }
 
         &.syncing {
           &:after {
-            background-color: #8972ff;
+            background-color: var(--ls-color-file-sync-pending);
           }
         }
 
         &.queuing {
           &:after {
-            background-color: #ffbb4d;
+            background-color: var(--ls-color-file-sync-pending);
           }
         }
 
         &.idle {
           &:after {
-            background-color: #04b404;
+            background-color: var(--ls-color-file-sync-idle);
           }
         }
+      }
+
+      small.full-loading {
+        position: absolute;
+        transform-origin: center;
+        top: 14px;
+        right: 0;
+        display: flex;
+        line-height: 1em;
+        overflow: hidden;
+        z-index: 2;
+        color: var(--ls-color-file-sync-pending);
+
+        > .ti {
+          font-size: 11px;
+          line-height: 1em;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .debug-status {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: #bd0000;
+      color: white;
+      font-size: 14px;
+      padding: 5px 8px;
+    }
+
+    .dropdown-wrapper {
+      width: 90vw;
+      max-height: 80vh;
+      overflow: hidden;
+      overflow-y: auto;
+      position: fixed;
+      right: 60px;
+
+      @screen md {
+        width: 400px;
+        position: absolute;
+        right: -10px;
+      }
+
+      > .py-1 {
+        padding: 0;
       }
     }
   }
