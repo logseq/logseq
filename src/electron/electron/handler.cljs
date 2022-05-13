@@ -82,24 +82,36 @@
     (path/join (.-dir parsed-path)
                (.-name parsed-path))))
 
-(defn backup-file
-  [repo path content]
-  (let [path-dir (get-backup-dir repo path)
-        ext (path/extname path)
-        new-path (path/join path-dir
-                            (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                 ext))]
-    (fs-extra/ensureDirSync path-dir)
+(defn- get-version-file-dir
+  [repo path]
+  (let [path (string/replace path repo "")
+        dir (path/join repo "version-files/local")
+        path (path/join dir path)
+        parsed-path (path/parse path)]
+    (path/join (.-dir parsed-path)
+               (.-name parsed-path))))
+
+(defn- backup-file
+  [path ext content]
+  (let [new-path (path/join
+                  path
+                  (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                       ext))]
+    (fs-extra/ensureDirSync path)
     (fs/writeFileSync new-path content)
     (fs/statSync new-path)
-    (truncate-old-versioned-files! path-dir)
+    (truncate-old-versioned-files! path)
     new-path))
 
 (defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
   (when (and (string? db-content)
              (string? new-content)
              (string-some-deleted? db-content new-content))
-    (backup-file repo path db-content)))
+    (backup-file (get-backup-dir repo path) (path/extname path) db-content)))
+
+
+(defmethod handle :addVersionFile [_window [_ repo path content]]
+  (backup-file (get-version-file-dir repo path) (path/extname path) content))
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
@@ -129,7 +141,7 @@
       (fs/statSync path)
       (catch :default e
         (let [backup-path (try
-                            (backup-file repo path content)
+                            (backup-file (get-backup-dir repo path) (path/extname path) content)
                             (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]

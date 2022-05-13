@@ -1,7 +1,9 @@
 (ns frontend.handler.file-sync
   (:require ["path" :as path]
             [cljs-time.coerce :as tc]
+            [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
+            [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -9,7 +11,8 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.user :as user]))
+            [frontend.handler.user :as user]
+            [frontend.fs :as fs]))
 
 (def hiding-login&file-sync (not config/dev?))
 (def refresh-file-sync-component (atom false))
@@ -65,31 +68,78 @@
         (notification/show! (ex-cause r) :error)
         (notification/show! [:div
                              [:div "Downloaded version file at: "]
-                             [:div key]] :success false)))))
+                             [:div key]] :success false))
+      (when-not (instance? ExceptionInfo r)
+        key))))
+
+(defn- list-file-local-versions
+  [page]
+  (go
+    (when-let [path (-> page :block/file :file/path)]
+      (let [base-path           (config/get-repo-dir (state/get-current-repo))
+            rel-path            (string/replace-first path base-path "")
+            version-files-dir   (->> (path/join "version-files/local" rel-path)
+                                     path/parse
+                                     (#(js->clj % :keywordize-keys true))
+                                     ((juxt :dir :name))
+                                     (apply path/join base-path))
+            version-file-paths* (<! (p->c (fs/readdir version-files-dir)))]
+        (when-not (instance? ExceptionInfo version-file-paths*)
+          (let [version-file-paths
+                (filterv
+                 ;; filter dir
+                 (fn [dir-or-file]
+                   (-> (path/parse dir-or-file)
+                       (js->clj :keywordize-keys true)
+                       :ext
+                       seq))
+                 (js->clj (<! (p->c (fs/readdir version-files-dir)))))]
+            (mapv
+             (fn [path]
+               (let [create-time
+                     (-> (path/parse path)
+                         (js->clj :keywordize-keys true)
+                         :name
+                         (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
+                 {:create-time create-time :path path :relative-path (string/replace-first path base-path "")}))
+             version-file-paths)))))))
 
 (defn list-file-versions [graph-uuid page]
   (let [file-id (:db/id (:block/file page))]
     (when-let [path (:file/path (db/entity file-id))]
       (let [base-path (config/get-repo-dir (state/get-current-repo))
-            path* (string/replace-first path base-path "")]
+            path*     (string/replace-first path base-path "")]
         (go
-          (let [version-list (:VersionList
-                              (<! (sync/get-remote-file-versions sync/remoteapi graph-uuid path*)))]
+          (let [version-list       (:VersionList
+                                    (<! (sync/get-remote-file-versions sync/remoteapi graph-uuid path*)))
+                local-version-list (<! (list-file-local-versions page))
+                all-version-list   (->> (concat version-list local-version-list)
+                                        (sort-by #(or (tc/from-string (:CreateTime %))
+                                                      (:create-time %))
+                                                 >))]
             (notification/show! [:div
                                  [:div.font-bold "File history - " path*]
                                  [:hr.my-2]
-                                 (for [version version-list]
-                                   (let [version-uuid (:VersionUUID version)]
+                                 (for [version all-version-list]
+                                   (let [version-uuid (or (:VersionUUID version) (:relative-path version))
+                                         local?       (some? (:relative-path version))]
                                      [:div.my-4 {:key version-uuid}
                                       [:div
                                        [:a.text-xs.inline
-                                        {:on-click #(download-version-file graph-uuid
-                                                                           (:FileUUID version)
-                                                                           (:VersionUUID version))}
+                                        {:on-click #(if local?
+                                                      (js/window.apis.openPath (:path version))
+                                                      (go
+                                                        (let [relative-path
+                                                              (<! (download-version-file graph-uuid
+                                                                                         (:FileUUID version)
+                                                                                         (:VersionUUID version)))]
+                                                          (js/window.apis.openPath (path/join base-path relative-path)))))}
                                         version-uuid]
-                                       [:div.opacity-70 (str "Size: " (:Size version))]]
+                                       (when-not local?
+                                         [:div.opacity-70 (str "Size: " (:Size version))])]
                                       [:div.opacity-50
-                                       (util/time-ago (tc/from-string (:CreateTime version)))]]))]
+                                       (util/time-ago (or (tc/from-string (:CreateTime version))
+                                                          (:create-time version)))]]))]
                                 :success false)))))))
 
 (defn get-current-graph-uuid [] (second @sync/graphs-txid))
