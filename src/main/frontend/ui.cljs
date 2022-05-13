@@ -911,9 +911,23 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defc lazy-visible-inner
-  [visible? content-fn loading-label]
-  [:div.lazy-visibility
+(rum/defcs lazy-visible-inner <
+  {:init (fn [state]
+           (assoc state
+                  ::ref (atom nil)
+                  ::height (atom 1)))
+   :did-mount (fn [state]
+                (let [observer (js/ResizeObserver. (fn [entries]
+                                                     (let [entry (first entries)
+                                                           *height (::height state)
+                                                           height' (.-height (.-contentRect entry))]
+                                                       (when (> height' @*height)
+                                                         (reset! *height height')))))]
+                  (.observe observer @(::ref state)))
+                state)}
+  [state visible? content-fn loading-label]
+  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
+                         :style {:min-height @(::height state)}}
    (if visible?
      (when (fn? content-fn) (content-fn))
      (when loading-label [:span.text-sm.font-medium
