@@ -240,6 +240,19 @@ html.is-native-android {
       align-items: center;
     }
   }
+
+  &.is-doc {
+      &:before {
+          content: "[[📜";
+          opacity: .7;
+          margin-right: 4px;
+      }
+
+      &:after {
+          content: "]]";
+          opacity: .7;
+      }
+  }
 }
 
 .embed-page {
