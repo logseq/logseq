@@ -1,17 +1,19 @@
-(ns frontend.handler.extract
-  "Extract helper."
+(ns ^:nbb-compatible logseq.graph-parser.extract
+  ;; Disable clj linters since we don't support clj
+  #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
+                                        :unresolved-symbol {:level :off}}}})
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.format.block :as block]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.config :as gp-config]
-            [lambdaisland.glogi :as log]))
+            #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
+               :default [lambdaisland.glogi :as log])))
 
 (defn- get-page-name
   [file ast page-name-order]
@@ -40,13 +42,13 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  #_:clj-kondo/ignore
-  [repo-url format ast properties file content date-formatter page-name-order]
+  [format ast properties file content {:keys [date-formatter page-name-order db] :as options}]
   (try
+    #_:clj-kondo/ignore ;;clj-kondo bug
     (let [page (get-page-name file ast page-name-order)
           [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
-          blocks (->> (block/extract-blocks ast content false format)
-                      (block/with-parent-and-left {:block/name page-name}))
+          blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))
+                      (gp-block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
@@ -91,7 +93,7 @@
                         (cond->
                          (gp-util/remove-nils
                           (assoc
-                           (block/page-name->map page false)
+                           (gp-block/page-name->map page false db true date-formatter)
                            :block/file {:file/path (gp-util/path-normalize file)}))
                          (seq properties)
                          (assoc :block/properties properties)
@@ -111,7 +113,7 @@
                             (when (text/namespace-page? page)
                               (->> (gp-util/split-namespace-pages page)
                                    (map (fn [page]
-                                          (-> (block/page-name->map page true)
+                                          (-> (gp-block/page-name->map page true db true date-formatter)
                                               (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
@@ -131,11 +133,11 @@
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta :block/anchor))))]
       [pages blocks])
-    (catch js/Error e
+    (catch :default e
       (log/error :exception e))))
 
 (defn extract-blocks-pages
-  [repo-url file content {:keys [user-config date-formatter page-name-order]}]
+  [file content {:keys [user-config] :as options}]
   (if (string/blank? content)
     []
     (let [format (gp-util/get-format file)
@@ -161,11 +163,10 @@
                                        (string/replace (or v "") "\\" "")))
                              properties)))]
         (extract-pages-and-blocks
-         repo-url
          format ast properties
-         file content date-formatter page-name-order)))))
+         file content options)))))
 
-(defn with-block-uuid
+(defn- with-block-uuid
   [pages]
   (->> (gp-util/distinct-by :block/name pages)
        (map (fn [page]

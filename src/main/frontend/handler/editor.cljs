@@ -1960,7 +1960,7 @@
   (let [blocks (block-tree->blocks tree-vec format)
         target-block (db/pull target-block-id)
         page-id (:db/id (:block/page target-block))
-        blocks (block/with-parent-and-left page-id blocks)]
+        blocks (gp-block/with-parent-and-left page-id blocks)]
     (paste-blocks
      blocks
      {:target-block target-block
@@ -2857,7 +2857,7 @@
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
                   (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
-          blocks' (block/with-parent-and-left page-id blocks)]
+          blocks' (gp-block/with-parent-and-left page-id blocks)]
       (paste-blocks blocks' {}))))
 
 (defn- paste-segmented-text

@@ -6,7 +6,8 @@
             [logseq.graph-parser.text-test]
             [logseq.graph-parser.mldoc-test]
             [logseq.graph-parser.block-test]
-            [logseq.graph-parser.property-test]))
+            [logseq.graph-parser.property-test]
+            [logseq.graph-parser.extract-test]))
 
 (defmethod cljs.test/report [:cljs.test/default :end-run-tests] [m]
   (when-not (cljs.test/successful? m)
@@ -21,4 +22,5 @@
   (t/run-tests 'logseq.graph-parser.mldoc-test
                'logseq.graph-parser.text-test
                'logseq.graph-parser.property-test
-               'logseq.graph-parser.block-test))
+               'logseq.graph-parser.block-test
+               'logseq.graph-parser.extract-test))
