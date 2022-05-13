@@ -1,7 +1,7 @@
 (ns frontend.search
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.config :as config]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.db :as db]
             [frontend.regex :as regex]
             [frontend.search.browser :as search-browser]
@@ -143,7 +143,7 @@
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
-       (let [mldoc-exts (set (map name config/mldoc-support-formats))
+       (let [mldoc-exts (set (map name gp-config/mldoc-support-formats))
              files (->> (db/get-files (state/get-current-repo))
                         (map first)
                         (remove (fn [file]

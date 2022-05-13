@@ -11,6 +11,7 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.config :as gp-config]
             ["path" :as path]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.notification :as notification]
@@ -109,7 +110,7 @@
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (config/mldoc-support? application-type)
+                    (gp-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
                     (contains? (set/union #{:pdf} config/media-formats) (keyword application-type))

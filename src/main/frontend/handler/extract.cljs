@@ -3,22 +3,18 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.format :as format]
+            [datascript.core :as d]
             [frontend.format.block :as block]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.state :as state]
             [logseq.graph-parser.text :as text]
-            [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]))
 
-(defn get-page-name
-  [file ast]
+(defn- get-page-name
+  [file ast page-name-order]
   ;; headline
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
@@ -33,11 +29,11 @@
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (let [result (first (gp-util/split-last "." file-name))]
-                          (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
-                            (util/url-decode (string/replace result "." "/"))
+                          (if (gp-config/mldoc-support? (string/lower-case (gp-util/get-file-ext file)))
+                            (js/decodeURIComponent (string/replace result "." "/"))
                             result)))]
         (or property-name
-            (if (= (state/page-name-order) "heading")
+            (if (= page-name-order "heading")
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
@@ -45,10 +41,10 @@
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   #_:clj-kondo/ignore
-  [repo-url format ast properties file content]
+  [repo-url format ast properties file content date-formatter page-name-order]
   (try
-    (let [page (get-page-name file ast)
-          [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page (state/get-date-formatter))
+    (let [page (get-page-name file ast page-name-order)
+          [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left {:block/name page-name}))
           ref-pages (atom #{})
@@ -70,13 +66,13 @@
           page-entity (let [alias (:alias properties)
                             alias (if (string? alias) [alias] alias)
                             aliases (and alias
-                                         (seq (remove #(or (= page-name (util/page-name-sanity-lc %))
+                                         (seq (remove #(or (= page-name (gp-util/page-name-sanity-lc %))
                                                            (string/blank? %)) ;; disable blank alias
                                                       alias)))
                             aliases (->>
                                      (map
                                       (fn [alias]
-                                        (let [page-name (util/page-name-sanity-lc alias)
+                                        (let [page-name (gp-util/page-name-sanity-lc alias)
                                               aliases (distinct
                                                        (conj
                                                         (remove #{alias} aliases)
@@ -84,7 +80,7 @@
                                               aliases (when (seq aliases)
                                                         (map
                                                          (fn [alias]
-                                                           {:block/name (util/page-name-sanity-lc alias)})
+                                                           {:block/name (gp-util/page-name-sanity-lc alias)})
                                                          aliases))]
                                           (if (seq aliases)
                                             {:block/name page-name
@@ -108,7 +104,7 @@
                                                   tags (if (string? tags) [tags] tags)
                                                   tags (remove string/blank? tags)]
                                               (swap! ref-tags set/union (set tags))
-                                              (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
+                                              (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
                                                    tags)))))
           namespace-pages (let [page (:block/original-name page-entity)]
@@ -123,15 +119,15 @@
                       (map
                        (fn [page]
                          {:block/original-name page
-                          :block/name (util/page-name-sanity-lc page)})
+                          :block/name (gp-util/page-name-sanity-lc page)})
                        @ref-tags)
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
                      (remove nil?))
-          pages (util/distinct-by :block/name pages)
+          pages (gp-util/distinct-by :block/name pages)
           pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
+          pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta :block/anchor))))]
       [pages blocks])
@@ -139,21 +135,22 @@
       (log/error :exception e))))
 
 (defn extract-blocks-pages
-  [repo-url file content]
+  [repo-url file content {:keys [user-config date-formatter page-name-order]}]
   (if (string/blank? content)
     []
-    (let [format (format/get-format file)
+    (let [format (gp-util/get-format file)
           _ (println "Parsing start: " file)
-          ast (mldoc/->edn content (gp-mldoc/default-config format
+          ast (gp-mldoc/->edn content (gp-mldoc/default-config format
                                                          ;; {:parse_outline_only? true}
-                                                         ))]
+                                                         )
+                           user-config)]
       (println "Parsing finished : " file)
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
                                              (->> (last first-block)
                                                   (map (fn [[x y]]
                                                          [x (if (string? y)
-                                                              (text/parse-property format x y (state/get-config))
+                                                              (text/parse-property format x y user-config)
                                                               y)]))
                                                   (into {})
                                                   (walk/keywordize-keys)))]
@@ -166,15 +163,15 @@
         (extract-pages-and-blocks
          repo-url
          format ast properties
-         file content)))))
+         file content date-formatter page-name-order)))))
 
 (defn with-block-uuid
   [pages]
-  (->> (util/distinct-by :block/name pages)
+  (->> (gp-util/distinct-by :block/name pages)
        (map (fn [page]
               (if (:block/uuid page)
                 page
-                (assoc page :block/uuid (db/new-block-id)))))))
+                (assoc page :block/uuid (d/squuid)))))))
 
 (defn with-ref-pages
   [pages blocks]

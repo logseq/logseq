@@ -981,7 +981,7 @@
                   show-brackets? (state/show-brackets?)]
               (if (and page
                        (when-let [ext (util/get-file-ext href)]
-                         (config/mldoc-support? ext)))
+                         (gp-config/mldoc-support? ext)))
                 [:span.page-reference
                  (when show-brackets? [:span.text-gray-500 "[["])
                  (page-cp config page)

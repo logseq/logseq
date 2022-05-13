@@ -4,6 +4,7 @@
             [frontend.format.protocol :as protocol]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]))
 
 ;; TODO: Properly fix this circular dependency:
@@ -13,22 +14,9 @@
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))
 
-(defn normalize
-  [format]
-  (case (keyword format)
-    :md :markdown
-    :asciidoc :adoc
-    ;; default
-    (keyword format)))
-
-(defn get-format
-  [file]
-  (when file
-    (normalize (keyword (string/lower-case (last (string/split file #"\.")))))))
-
 (defn get-format-record
   [format]
-  (case (normalize format)
+  (case (gp-util/normalize-format format)
     :org
     mldoc-record
     :markdown

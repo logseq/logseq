@@ -8,7 +8,6 @@
             [clojure.core.async :as async]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -17,6 +16,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -43,7 +43,7 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (format/get-format file)]
+     (let [format (gp-util/get-format file)]
        (contains? formats format)))
    files))
 
@@ -119,10 +119,15 @@
          file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
      (db/set-file-content! repo-url file content)
-     (let [format (format/get-format file)
+     (let [format (gp-util/get-format file)
            file-content [{:file/path file}]
-           tx (if (contains? config/mldoc-support-formats format)
-                (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
+           tx (if (contains? gp-config/mldoc-support-formats format)
+                (let [[pages blocks]
+                      (extract-handler/extract-blocks-pages
+                       repo-url file content
+                       {:user-config (state/get-config)
+                        :date-formatter (state/get-date-formatter)
+                        :page-name-order (state/page-name-order)})
                       first-page (first pages)
                       delete-blocks (->
                                      (concat

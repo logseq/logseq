@@ -161,3 +161,27 @@
   (some->> (string/split s #" ")
            (map string/capitalize)
            (string/join " ")))
+
+(defn distinct-by
+  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
+  [f col]
+  (reduce
+   (fn [acc x]
+     (if (some #(= (f x) (f %)) acc)
+       acc
+       (vec (conj acc x))))
+   []
+   col))
+
+(defn normalize-format
+  [format]
+  (case (keyword format)
+    :md :markdown
+    :asciidoc :adoc
+    ;; default
+    (keyword format)))
+
+(defn get-format
+  [file]
+  (when file
+    (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))

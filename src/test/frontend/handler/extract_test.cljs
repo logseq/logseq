@@ -6,7 +6,7 @@
 
 (defn- extract
   [text]
-  (p/let [result (extract/extract-blocks-pages "repo" "a.md" text)
+  (p/let [result (extract/extract-blocks-pages "repo" "a.md" text {})
           result (last result)
           lefts (map (juxt :block/parent :block/left) result)]
     (if (not= (count lefts) (count (distinct lefts)))
