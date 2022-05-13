@@ -213,6 +213,7 @@
      :auth/id-token                         nil
 
      ;; file-sync
+     :file-sync/remote-graphs               {:loading false :graphs nil}
      :file-sync/sync-manager                nil
      :file-sync/sync-state-manager          nil
      :file-sync/sync-state                  nil

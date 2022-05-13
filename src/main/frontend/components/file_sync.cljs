@@ -35,12 +35,11 @@
 
 (rum/defcs indicator <
   rum/reactive
-  (rum/local nil ::existed-graphs)
   [_state]
   (let [_ (state/sub :auth/id-token)
         toggling? (state/sub :file-sync/toggling?)
         sync-state (state/sub :file-sync/sync-state)
-        *existed-graphs (::existed-graphs _state)
+        remote-graphs (state/sub :file-sync/remote-graphs)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)
         uploading-files (:current-local->remote-files sync-state)
@@ -69,9 +68,6 @@
     [:div.cp__file-sync-indicator
      (when (and (not config/publishing?)
                 (user-handler/logged-in?))
-
-       (when-not (file-sync-handler/graph-txid-exists?)
-         (as/go (reset! *existed-graphs (as/<! (file-sync-handler/list-graphs)))))
 
        (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]

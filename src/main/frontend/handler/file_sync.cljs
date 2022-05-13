@@ -51,6 +51,17 @@
   []
   (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
 
+(defn load-session-graphs
+  []
+  (when-not (state/sub [:file-sync/remote-graphs :loading])
+    (go (state/set-state! [:file-sync/remote-graphs :loading] true)
+      (let [graphs (<! (list-graphs))]
+        (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
+
+(defn reset-session-graphs
+  []
+  (state/set-state! :file-sync/remote-graphs {:loading false :graphs nil}))
+
 (defn switch-graph [graph-uuid]
   (sync/update-graphs-txid! 0 graph-uuid (user/user-uuid) (state/get-current-repo))
   (swap! refresh-file-sync-component not))
