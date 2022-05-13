@@ -65,7 +65,7 @@
 
 (rum/defc journal-cp
   [journal]
-  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil))
+  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil true))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

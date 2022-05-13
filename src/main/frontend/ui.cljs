@@ -915,23 +915,25 @@
   {:init (fn [state]
            (assoc state
                   ::ref (atom nil)
-                  ::height (atom 100)))
+                  ::height (atom 26)))
    :did-mount (fn [state]
-                (let [observer (js/ResizeObserver. (fn [entries]
-                                                     (let [entry (first entries)
-                                                           *height (::height state)
-                                                           height' (.-height (.-contentRect entry))]
-                                                       (when (> height' @*height)
-                                                         (reset! *height height')))))]
-                  (.observe observer @(::ref state)))
+                (when (last (:rum/args state))
+                  (let [observer (js/ResizeObserver. (fn [entries]
+                                                      (let [entry (first entries)
+                                                            *height (::height state)
+                                                            height' (.-height (.-contentRect entry))]
+                                                        (when (and (> height' @*height)
+                                                                   (not= height' 64))
+                                                          (reset! *height height')))))]
+                   (.observe observer @(::ref state))))
                 state)}
-  [state visible? content-fn]
+  [state visible? content-fn reset-height?]
   [:div.lazy-visibility {:ref #(reset! (::ref state) %)
                          :style {:min-height @(::height state)}}
 
    (if visible?
      (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto {:style {:height 64}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]
@@ -943,13 +945,15 @@
 
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
-  [state content-fn sensor-opts]
+  [state content-fn sensor-opts reset-height?]
   (let [*visible? (::visible? state)]
     (visibility-sensor
      (merge
       {:on-change #(reset! *visible? %)
        :partialVisibility true
        :offset {:top -300
-                :bottom -300}}
+                :bottom -300}
+       :scrollCheck true
+       :scrollThrottle 1}
       sensor-opts)
-     (lazy-visible-inner @*visible? content-fn))))
+     (lazy-visible-inner @*visible? content-fn reset-height?))))
