@@ -13,8 +13,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.mobile.util :refer [is-native-platform?]]))
+            [rum.core :as rum]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
@@ -66,9 +65,7 @@
 
 (rum/defc journal-cp
   [journal]
-  (if (or (util/mobile?) (is-native-platform?))
-    (journal-cp-inner journal)
-    (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil true)))
+  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil true))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

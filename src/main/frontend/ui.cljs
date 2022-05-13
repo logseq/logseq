@@ -29,7 +29,8 @@
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [frontend.mobile.util :refer [is-native-platform?]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -946,14 +947,16 @@
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   [state content-fn sensor-opts reset-height?]
-  (let [*visible? (::visible? state)]
-    (visibility-sensor
-     (merge
-      {:on-change #(reset! *visible? %)
-       :partialVisibility true
-       :offset {:top -300
-                :bottom -300}
-       :scrollCheck true
-       :scrollThrottle 1}
-      sensor-opts)
-     (lazy-visible-inner @*visible? content-fn reset-height?))))
+  (if (or (util/mobile?) (is-native-platform?))
+    (content-fn)
+    (let [*visible? (::visible? state)]
+      (visibility-sensor
+       (merge
+        {:on-change #(reset! *visible? %)
+         :partialVisibility true
+         :offset {:top -300
+                  :bottom -300}
+         :scrollCheck true
+         :scrollThrottle 1}
+        sensor-opts)
+       (lazy-visible-inner @*visible? content-fn reset-height?)))))
