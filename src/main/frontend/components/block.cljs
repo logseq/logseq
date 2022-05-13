@@ -683,7 +683,7 @@
   [config id label]
   (when (and
          (not (string/blank? id))
-         (gp-util/uuid-string? id))
+         (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -961,7 +961,7 @@
                (= "Complex" protocol)
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
-               (gp-util/uuid-string? (:link path))) ; org mode id
+               (util/uuid-string? (:link path))) ; org mode id
           (let [id (uuid (:link path))
                 block (db/entity [:block/uuid id])]
             (if (:block/pre-block? block)
@@ -1077,7 +1077,7 @@
                        string/trim)]
         (when-let [id (and s
                            (let [s (string/trim s)]
-                             (and (gp-util/uuid-string? s)
+                             (and (util/uuid-string? s)
                                   (uuid s))))]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -1088,7 +1088,7 @@
   [_config arguments]
   (when-let [url (first arguments)]
     (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (gp-util/safe-re-find Vimeo-regex url) 5)]
+      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
         (when-not (string/blank? vimeo-id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1109,7 +1109,7 @@
       (when-let [id (cond
                       (<= (count url) 15) url
                       :else
-                      (last (gp-util/safe-re-find id-regex url)))]
+                      (last (util/safe-re-find id-regex url)))]
         (when-not (string/blank? id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1239,7 +1239,7 @@
           (when-let [youtube-id (cond
                                   (== 11 (count url)) url
                                   :else
-                                  (nth (gp-util/safe-re-find YouTube-regex url) 5))]
+                                  (nth (util/safe-re-find YouTube-regex url) 5))]
             (when-not (string/blank? youtube-id)
               (youtube/youtube-video youtube-id)))))
 
@@ -1270,7 +1270,7 @@
           (when-let [id (cond
                           (<= (count url) 15) url
                           :else
-                          (last (gp-util/safe-re-find id-regex url)))]
+                          (last (util/safe-re-find id-regex url)))]
             (ui/tweet-embed id))))
 
       (= name "embed")
@@ -2858,7 +2858,7 @@
 
         ["Paragraph" l]
              ;; TODO: speedup
-        (if (gp-util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

@@ -45,28 +45,28 @@
   [line]
   (boolean
    (and (string? line)
-        (gp-util/safe-re-find #"^\s?[^ ]+:: " line))))
+        (util/safe-re-find #"^\s?[^ ]+:: " line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (gp-util/safe-re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+: " line))))
 
 (defn get-property-key
   [line format]
   (and (string? line)
        (when-let [key (last
                        (if (= format :org)
-                         (gp-util/safe-re-find #"^\s*:([^: ]+): " line)
-                         (gp-util/safe-re-find #"^\s*([^ ]+):: " line)))]
+                         (util/safe-re-find #"^\s*:([^: ]+): " line)
+                         (util/safe-re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
 
 (defn org-property?
   [line]
   (boolean
    (and (string? line)
-        (gp-util/safe-re-find #"^\s*:[^: ]+: " line)
+        (util/safe-re-find #"^\s*:[^: ]+: " line)
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 

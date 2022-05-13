@@ -122,7 +122,7 @@
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-blocks (get-blocks repo page-name block-id)]
       (if (empty? page-blocks)
@@ -317,7 +317,7 @@
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           page-name (util/page-name-sanity-lc path-page-name)
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           format (let [page (if block-id
                               (:block/name (:block/page (db/entity [:block/uuid block-id])))
@@ -640,7 +640,7 @@
               (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
-        graph (if (gp-util/uuid-string? page)
+        graph (if (util/uuid-string? page)
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))

@@ -8,6 +8,7 @@
 (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
 
 (defn safe-re-find
+  "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
   (when-not (string? s)
     ;; TODO: sentry
@@ -16,6 +17,7 @@
     (re-find pattern s)))
 
 (defn uuid-string?
+  "Copy of frontend.util/uuid-string?. Too basic to couple to main app"
   [s]
   (safe-re-find exactly-uuid-pattern s))
 

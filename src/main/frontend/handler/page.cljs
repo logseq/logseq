@@ -637,7 +637,7 @@
   (->> (db/get-all-pages repo)
        (remove (fn [p]
                  (let [name (:block/name p)]
-                   (or (gp-util/uuid-string? name)
+                   (or (util/uuid-string? name)
                        (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
@@ -691,7 +691,7 @@
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
-              chosen (if (and (gp-util/safe-re-find #"\s+" chosen) (not wrapped?))
+              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)

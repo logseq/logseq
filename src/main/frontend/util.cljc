@@ -40,6 +40,23 @@
            (gdom/getElement "main-content-container")))
 
 #?(:cljs
+   (defn safe-re-find
+     [pattern s]
+     (when-not (string? s)
+       ;; TODO: sentry
+       (js/console.trace))
+     (when (string? s)
+       (re-find pattern s))))
+
+#?(:cljs
+  (do
+    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+    (defn uuid-string?
+      [s]
+      (safe-re-find exactly-uuid-pattern s))))
+
+#?(:cljs
    (defn ios?
      []
      (utils/ios)))
@@ -55,7 +72,7 @@
    (defn mobile?
      []
      (when-not node-test?
-       (gp-util/safe-re-find #"Mobi" js/navigator.userAgent))))
+       (safe-re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
    (defn electron?
@@ -349,7 +366,7 @@
 #?(:cljs
    (defn scroll-to-element
      [elem-id]
-     (when-not (gp-util/safe-re-find #"^/\d+$" elem-id)
+     (when-not (safe-re-find #"^/\d+$" elem-id)
        (when elem-id
          (when-let [elem (gdom/getElement elem-id)]
            (.scroll (app-scroll-container-node)
@@ -829,8 +846,8 @@
      []
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
-       (and (gp-util/safe-re-find #"Chrome" user-agent)
-            (gp-util/safe-re-find #"Google Inc" vendor)))))
+       (and (safe-re-find #"Chrome" user-agent)
+            (safe-re-find #"Google Inc" vendor)))))
 
 #?(:cljs
    (defn indexeddb-check?
@@ -871,7 +888,7 @@
      [block-id]
      (when block-id
        (let [block-id (str block-id)]
-         (when (gp-util/uuid-string? block-id)
+         (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
 #?(:cljs
@@ -890,7 +907,7 @@
    (do
      (defn include-windows-reserved-chars?
       [s]
-       (gp-util/safe-re-find windows-reserved-chars s))
+       (safe-re-find windows-reserved-chars s))
 
      (defn create-title-property?
        [s]

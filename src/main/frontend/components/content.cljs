@@ -363,7 +363,7 @@
                            e
                            (custom-context-menu-content))
 
-                          (and block-id (gp-util/uuid-string? block-id))
+                          (and block-id (util/uuid-string? block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
                               (util/select-highlight! [block]))

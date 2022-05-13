@@ -912,7 +912,7 @@
 
 (defn get-page
   [page-name]
-  (if (gp-util/uuid-string? page-name)
+  (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
@@ -1221,7 +1221,7 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
+  (if (util/uuid-string? (str page-name-or-block-uuid))
     (let [id (uuid page-name-or-block-uuid)]
       (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
