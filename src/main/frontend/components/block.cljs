@@ -2402,8 +2402,7 @@
   [state config block]
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)]
+        custom-query? (boolean (:custom-query? config))]
     (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
        (fn []

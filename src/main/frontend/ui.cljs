@@ -927,7 +927,7 @@
                                                           (reset! *height height')))))]
                    (.observe observer @(::ref state))))
                 state)}
-  [state visible? content-fn reset-height?]
+  [state visible? content-fn _reset-height?]
   [:div.lazy-visibility {:ref #(reset! (::ref state) %)
                          :style {:min-height @(::height state)}}
 
