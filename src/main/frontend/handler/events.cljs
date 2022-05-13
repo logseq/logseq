@@ -66,8 +66,8 @@
 (defn- file-sync-stop-when-switch-graph []
   (p/do! (persist-var/load-vars)
          (sync/sync-stop)
-         ;; trigger rerender file-sync-header
-         (state/set-file-sync-state nil)))
+         (sync/sync-start)
+))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
@@ -105,7 +105,6 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph]]
-  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
     (graph-switch-on-persisted graph)
     (notification/show!
