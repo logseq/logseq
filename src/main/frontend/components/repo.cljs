@@ -30,16 +30,28 @@
         (widgets/add-graph :graph-types graph-types-s)))
     (widgets/add-graph)))
 
+(defn combine-local-&-remote-graphs
+  [local-repos remote-repos]
+  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
+                                         (assoc % :GraphUUID (second sync-meta)) %)
+                                      local-repos)
+                                 (some->> remote-repos
+                                          (map #(assoc % :remote? true)))))]
+    (let [repos' (group-by :GraphUUID repos')]
+      (mapcat (fn [[k vs]]
+                (if-not (nil? k)
+                  [(merge (first vs) (second vs))] vs))
+              repos'))))
+
 (rum/defc repos < rum/reactive
   []
-  (let [repos (->> (state/sub [:me :repos])
+  (let [login? (boolean (state/sub :auth/id-token))
+        repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         repos (util/distinct-by :url repos)
-        login? (boolean (state/sub :auth/id-token))
-        repos (if login?
-                (concat repos (some->> (state/sub [:file-sync/remote-graphs :graphs])
-                                       (map #(assoc % :url (:GraphName %) :remote? true))))
-                repos)]
+        remotes (state/sub [:file-sync/remote-graphs :graphs])
+        repos (if (and (seq repos) login?)
+                (combine-local-&-remote-graphs repos remotes) repos)]
     (if (seq repos)
       [:div#graphs
        [:h1.title "All Graphs"]
@@ -52,27 +64,32 @@
                    (mobile-util/is-native-platform?))
            [:div.mr-8
             (ui/button
-              (t :open-a-directory)
-              :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [id url remote?] :as repo} repos]
+             (t :open-a-directory)
+             :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
+        (for [{:keys [id url remote? GraphUUID GraphName] :as repo} repos]
           (let [local? (config/local-db? url)]
             [:div.flex.justify-between.mb-4 {:key id}
+
              (if local?
                (let [local-dir (config/get-local-dir url)
                      graph-name (text/get-graph-name-from-path local-dir)]
                  [:a {:title local-dir
                       :on-click #(state/pub-event! [:graph/switch url repo])}
-                  graph-name])
+                  (when remote? [:strong.pr-1 (ui/icon "cloud")])
+                  [:span graph-name (and GraphUUID [:strong.px-1 "(" GraphName ")"])]])
+
                [:a {:target "_blank"
                     :href url}
                 (when remote? [:strong.pr-1 (ui/icon "cloud")])
-                (db/get-repo-path url)])
+                (db/get-repo-path (or url GraphName))])
+
              [:div.controls
               (when (e/encrypted-db? url)
                 [:a.control {:title "Show encryption information about this graph"
                              :on-click (fn []
                                          (state/set-modal! (encryption/encryption-dialog url)))}
                  "🔐"])
+
               [:a.text-gray-400.ml-4.font-medium.text-sm
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []
@@ -93,10 +110,11 @@
 (defn- repos-dropdown-links [repos current-repo *multiple-windows?]
   (let [switch-repos (remove (fn [repo] (= current-repo (:url repo))) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url]}]
+                    (fn [{:keys [url remote?]}]
                       (let [repo-path (db/get-repo-name url)
                             short-repo-name (text/get-graph-name-from-path repo-path)]
-                        {:title short-repo-name
+                        {:title [:span.flex.items-center short-repo-name
+                                 (when remote? [:small.pl-1 (ui/icon "cloud")])]
                          :hover-detail repo-path ;; show full path on hover
                          :options {:class "ml-1"
                                    :on-click (fn [e]
@@ -148,8 +166,12 @@
   [state]
   (let [multiple-windows? (::electron-multiple-windows? state)]
     (when-let [current-repo (state/sub :git/current-repo)]
-      (let [repos (state/sub [:me :repos])
+      (let [login? (boolean (state/sub :auth/id-token))
+            repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
+            remotes (state/sub [:file-sync/remote-graphs :graphs])
+            repos (if (and (seq repos) login?)
+                    (combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [repo-path (db/get-repo-name current-repo)

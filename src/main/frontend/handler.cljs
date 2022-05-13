@@ -33,7 +33,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db.persist :as db-persist]))
+            [frontend.db.persist :as db-persist]
+            [cljs-bean.core :as bean]))
 
 (defn set-global-error-notification!
   []
@@ -141,7 +142,13 @@
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)
           nfs-dbs (map (fn [db]
-                         {:url db :nfs? true}) nfs-dbs)]
+                         {:url db
+                          :root (config/get-local-dir db)
+                          :nfs? true}) nfs-dbs)
+          nfs-dbs (and (seq nfs-dbs)
+                       (ipc/ipc :inflateGraphsInfo nfs-dbs))
+          nfs-dbs (seq (bean/->clj nfs-dbs))]
+
     (cond
       (seq nfs-dbs)
       nfs-dbs

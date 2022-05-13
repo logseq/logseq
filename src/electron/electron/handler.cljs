@@ -19,7 +19,8 @@
             [electron.git :as git]
             [electron.plugin :as plugin]
             [electron.window :as win]
-            [electron.file-sync-rsapi :as rsapi]))
+            [electron.file-sync-rsapi :as rsapi]
+            [cljs.reader :as reader]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -231,6 +232,20 @@
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
+
+(defmethod handle :inflateGraphsInfo [_win [_ graphs]]
+  (if (seq graphs)
+    (for [{:keys [root] :as graph} graphs
+          :let [sf #(.join path % "logseq/graphs-txid.edn")]]
+      (try
+        (if-let [sync-meta (and (not (string/blank? root))
+                                  (.toString (.readFileSync fs (sf root))))]
+          (assoc graph :sync-meta (reader/read-string sync-meta))
+          graph)
+        (catch js/Error _e
+          (js/console.debug "[read txid meta] #" (sf root) (.-message _e))
+          graph)))
+    []))
 
 (defn- get-graph-path
   [graph-name]
