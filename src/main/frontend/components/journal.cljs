@@ -61,12 +61,12 @@
      (page/today-queries repo today? false)
 
      (rum/with-key
-       (reference/references title false)
+       (reference/references title)
        (str title "-refs"))]))
 
 (rum/defc journal-cp
   [journal]
-  (ui/lazy-visible nil (fn [] (journal-cp-inner journal)) nil))
+  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil true))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

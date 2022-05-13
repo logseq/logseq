@@ -165,16 +165,14 @@
               :title-trigger? true}))]]))))
 
 (rum/defc references
-  [page-name sidebar?]
+  [page-name]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
    (ui/lazy-visible
-    (if (or sidebar? (util/uuid-string? page-name))
-      nil
-      "loading references...")
     (fn []
       (references* page-name))
-    nil)))
+    nil
+    false)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
