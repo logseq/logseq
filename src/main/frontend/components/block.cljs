@@ -844,7 +844,6 @@
   [config url s label metadata full_text]
   (let [ext (keyword (util/get-file-ext s))
         label-text (get-label-text label)]
-    (js/alert ext)
     (cond
       (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
@@ -852,7 +851,7 @@
       (contains? (config/doc-formats) ext)
       (asset-link config label-text s metadata full_text)
 
-      (= (util/get-file-ext s) "pdf")
+      (= ext :pdf)
       (cond
         (util/electron?)
         [:a.asset-ref.is-pdf
@@ -865,7 +864,7 @@
         (mobile-util/is-native-platform?)
         (asset-link config label-text s metadata full_text))
 
-      (not (contains? #{"mp4" "webm" "mov"} ext))
+      (not (contains? #{:mp4 :webm :mov} ext))
       (image-link config url s label metadata full_text)
 
       :else
