@@ -172,7 +172,8 @@
    (ui/lazy-visible
     (fn []
       (references* page-name))
-    nil)))
+    nil
+    false)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

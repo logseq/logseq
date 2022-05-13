@@ -2402,13 +2402,13 @@
   [state config block]
   (let [repo (state/get-current-repo)
         ref? (:ref? config)
-        custom-query? (boolean (:custom-query? config))
-        ref-or-custom-query? (or ref? custom-query?)]
-    (if (and ref-or-custom-query? (not (:ref-query-child? config)))
+        custom-query? (boolean (:custom-query? config))]
+    (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
        (fn []
          (block-container-inner state repo config block))
-       nil)
+       nil
+       false)
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2737,7 +2737,8 @@
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn [] (custom-query* config q))
-    nil)))
+    nil
+    true)))
 
 (defn admonition
   [config type result]
