@@ -462,7 +462,7 @@
         redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
-        html-template (rum/defc _ []
+        html-template #_:clj-kondo/ignore (rum/defc _ []
                         (let [*el-popup (rum/use-ref nil)]
 
                           (rum/use-effect!
