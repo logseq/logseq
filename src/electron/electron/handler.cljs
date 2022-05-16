@@ -19,7 +19,8 @@
             [electron.git :as git]
             [electron.plugin :as plugin]
             [electron.window :as win]
-            [electron.file-sync-rsapi :as rsapi]))
+            [electron.file-sync-rsapi :as rsapi]
+            [electron.backup-file :as backup-file]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -65,57 +66,18 @@
   (let [result (.diff_main Diff old new)]
     (some (fn [a] (= -1 (first a))) result)))
 
-(defn- truncate-old-versioned-files!
-  [dir]
-  (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
-        files (map #(.-name %) files)
-        old-versioned-files (drop 3 (reverse (sort files)))]
-    (doseq [file old-versioned-files]
-      (fs-extra/removeSync (path/join dir file)))))
-
-(defn- get-backup-dir
-  [repo path]
-  (let [path (string/replace path repo "")
-        bak-dir (str repo "/logseq/bak")
-        path (str bak-dir path)
-        parsed-path (path/parse path)]
-    (path/join (.-dir parsed-path)
-               (.-name parsed-path))))
-
-(defn- get-version-file-dir
-  [repo path]
-  (let [path (string/replace path repo "")
-        dir (path/join repo "version-files/local")
-        path (path/join dir path)
-        parsed-path (path/parse path)]
-    (path/join (.-dir parsed-path)
-               (.-name parsed-path))))
-
-(defn- backup-file
-  [path ext content]
-  (let [new-path (path/join
-                  path
-                  (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                       ext))]
-    (fs-extra/ensureDirSync path)
-    (fs/writeFileSync new-path content)
-    (fs/statSync new-path)
-    (truncate-old-versioned-files! path)
-    new-path))
-
 (defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
   (when (and (string? db-content)
              (string? new-content)
              (string-some-deleted? db-content new-content))
-    (backup-file (get-backup-dir repo path) (path/extname path) db-content)))
-
+    (backup-file/backup-file repo :backup-dir path (path/extname path) db-content)))
 
 (defmethod handle :addVersionFile [_window [_ repo path content]]
-  (backup-file (get-version-file-dir repo path) (path/extname path) content))
+  (backup-file/backup-file repo :version-file-dir path (path/extname path) content))
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
-    (let [dir (get-backup-dir repo path)]
+    (let [dir (backup-file/get-backup-dir repo path)]
       (.openPath shell dir))))
 
 (defmethod handle :readFile [_window [_ path]]
@@ -141,7 +103,7 @@
       (fs/statSync path)
       (catch :default e
         (let [backup-path (try
-                            (backup-file (get-backup-dir repo path) (path/extname path) content)
+                            (backup-file/backup-file repo :backup-dir path (path/extname path) content)
                             (catch :default e
                               (println "Backup file failed")
                               (js/console.dir e)))]
