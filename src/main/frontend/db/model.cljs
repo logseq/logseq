@@ -590,7 +590,11 @@
   (let [db-before (or db-before current-db)
         cached-ids (map :db/id @result)
         cached-ids-set (set (conj cached-ids page-id))
-        first-changed-id (if (= outliner-op :move-blocks)
+        first-changed-id (cond
+                           (= (:real-outliner-op tx-meta) :indent-outdent)
+                           (last (:move-blocks tx-meta))
+
+                           (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
                              (cond
                                (= page-id target) ; move to the first block
@@ -611,6 +615,7 @@
                                        (when (seq others)
                                          (recur others)))
                                      nil)))))
+                           :else
                            (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
@@ -635,11 +640,11 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  previous-count (count previous-blocks)
                   limit 25
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
                                                                            :scoped-block-id scoped-block-id})]
+              (util/pprint (last more))
               (concat previous-blocks more)))))
 
       :else
