@@ -55,6 +55,11 @@
                :query-params {:anchor anchor}
                :push push})))
 
+(defn redirect-to-whiteboard!
+  [name]
+  (redirect! {:to :whiteboard
+              :path-params {:name (str name)}}))
+
 (defn get-title
   [name path-params]
   (case name

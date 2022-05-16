@@ -1,15 +1,15 @@
 (ns frontend.routes
-  (:require [frontend.components.home :as home]
-            [frontend.components.repo :as repo]
-            [frontend.components.file :as file]
+  (:require [frontend.components.file :as file]
+            [frontend.components.home :as home]
+            [frontend.components.journal :as journal]
+            [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
-            [frontend.components.journal :as journal]
+            [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.shortcut :as shortcut]
-            [frontend.components.onboarding.setups :as setups]
-            [frontend.extensions.tldraw :as tldraw]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.extensions.zotero :as zotero]))
 
 ;; http://localhost:3000/#?anchor=fn.1
@@ -22,9 +22,13 @@
     {:name :repos
      :view repo/repos}]
 
-   ["/whiteboard"
+   ["/whiteboard/:name"
     {:name :whiteboard
-     :view #(tldraw/draw {:file "draws/2022-05-15-01-47-49.tldr"})}]
+     :view whiteboard/whiteboard}]
+
+   ["/whiteboards"
+    {:name :whiteboards
+     :view whiteboard/whiteboard-dashboard}]
 
    ["/repo/add"
     {:name :repo-add

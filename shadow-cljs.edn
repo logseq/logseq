@@ -23,9 +23,9 @@
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
                          :depends-on #{:main}}
-                     ;;    :tldraw
-                     ;;    {:entries    [frontend.extensions.tldraw]
-                     ;;     :depends-on #{:main}}
+                        :tldraw
+                        {:entries    [frontend.extensions.tldraw]
+                         :depends-on #{:main}}
                         }
         :output-dir       "./static/js"
         :asset-path       "/static/js"
@@ -84,9 +84,9 @@
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]
                                 :depends-on #{:main}}
-                            ;;    :tldraw
-                            ;;    {:entries    [frontend.extensions.tldraw]
-                            ;;     :depends-on #{:main}}
+                               :tldraw
+                               {:entries    [frontend.extensions.tldraw]
+                                :depends-on #{:main}}
                                }
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"

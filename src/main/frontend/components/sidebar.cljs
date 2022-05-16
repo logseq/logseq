@@ -245,8 +245,8 @@
         
         (sidebar-item
          {:class "whiteboard"
-          :title "Whiteboard"
-          :href  (rfe/href :whiteboard)
+          :title "Whiteboards"
+          :href  (rfe/href :whiteboards)
           :icon  "files"})]]
 
       (favorites t)

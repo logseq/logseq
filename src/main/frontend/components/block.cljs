@@ -596,19 +596,6 @@
     (when draw-component
       (draw-component {:file file :block-uuid block-uuid}))))
 
-(defonce tldraw-loaded? (atom false))
-(rum/defc tldraw < rum/reactive
-  {:init (fn [state]
-           (p/let [_ (loader/load :tldraw)]
-             (reset! tldraw-loaded? true))
-           state)}
-  [file block-uuid]
-  (let [loaded? (rum/react tldraw-loaded?)
-        draw-component (when loaded?
-                         (resolve 'frontend.extensions.tldraw/draw))]
-    (when draw-component
-      (draw-component {:file file :block-uuid block-uuid}))))
-
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
   (let [show-brackets? (state/show-brackets?)
@@ -620,11 +607,6 @@
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
-
-      (string/ends-with? s ".tldr")
-      [:div.draw.cursor-default {:on-click (fn [e]
-                                             (.stopPropagation e))}
-       (tldraw s block-uuid)]
 
       :else
       [:span.page-reference

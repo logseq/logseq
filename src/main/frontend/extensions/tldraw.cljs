@@ -15,6 +15,7 @@
 (rum/defcs draw-inner < rum/reactive
   (rum/local false ::view-mode?)
   [state data option]
+  (println state data option)
   (let [{:keys [file]} option]
     (when file
       [:div.overflow-hidden.draw.tldraw
@@ -22,7 +23,7 @@
        [:div.draw-wrap.relative
         {:on-blur #(state/set-block-component-editing-mode! false)
          :on-wheel util/stop-propagation ;; wheel -> overscroll may cause browser navigation
-         :style {:height "calc(100vh - 80px)" }}
+         :style {:height "calc(100vh - 80px)"}}
 
         (tldraw {:PageComponent page
                  :searchHandler (comp clj->js vec search/page-search)
@@ -32,6 +33,6 @@
                                 (draw-handler/save-draw! file s)))
                  :model data})]])))
 
-(rum/defc draw
+(rum/defc tldraw-app
   [option]
   (draw-common/draw-wrapper option draw-inner))

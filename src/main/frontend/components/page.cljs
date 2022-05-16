@@ -318,7 +318,7 @@
   (rum/local false ::control-show?)
   [state {:keys [repo page-name] :as option}]
   (when-let [path-page-name (or page-name
-                                (gobj/get option "pageId")
+                                (gobj/get option "pageId") ;; FIXME: tldraw-logseq hack
                                 (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)

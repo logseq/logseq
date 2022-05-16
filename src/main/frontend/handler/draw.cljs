@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
+            [frontend.fs.protocol :as protocol]
             [promesa.core :as p]))
 
 (defn create-draws-directory!
@@ -18,6 +19,15 @@
        (fs/mkdir! (str repo-dir (str "/" gp-config/default-draw-directory)))
        (fn [_result] nil)
        (fn [_error] nil)))))
+
+(defn ls-draws-directory!
+  [repo]
+  (when repo
+    (p/let [repo-dir (config/get-repo-dir repo)
+            fs (fs/get-fs repo-dir)
+            dir (str repo (str "/" gp-config/default-draw-directory))
+            files (protocol/readdir fs dir)]
+      files)))
 
 (defn save-draw!
   [file data]

@@ -274,7 +274,6 @@
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["draw" (draw-handler/initialize-excalidarw-file) "Draw a graph with Excalidraw"]
-     ["tldraw" (draw-handler/initialize-tldraw-file) "Draw a graph with tldraw"]
 
      (when (util/zh-CN-supported?)
        ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
