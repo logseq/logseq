@@ -94,7 +94,7 @@
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
         [:div.references.flex-1.flex-row
-         [:div.content.mt-6
+         [:div.content.pt-6
           (when (seq scheduled-or-deadlines)
             (ui/foldable
              [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
