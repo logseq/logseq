@@ -466,7 +466,6 @@
   (let [{:keys [id format]} (get-state)
         input-id id
         input (gdom/getElement input-id)]
-    (println "setup-key-listener!" input id)
     (set-up-key-down! state format)
     (set-up-key-up! state input input-id search-timeout)))
 

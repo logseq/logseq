@@ -11,29 +11,12 @@
 
 (def tldraw (r/adapt-class tldraw-app))
 
-;; from apps/logseq/src/documents/dev.ts
-(def dev-doc-model
-  {:currentPageId "page1",
-   :selectedIds [],
-   :pages
-   [{:name "Page",
-     :id "page1",
-     :shapes
-     [{:id "logseq-portal-1",
-       :type "logseq-portal",
-       :parentId "page1",
-       :point [100 100],
-       :size [160 90],
-       :pageId "asdfasdf"}],
-     :bindings []}],
-   :assets []})
-
 (rum/defcs draw-inner < rum/reactive
   (rum/local false ::view-mode?)
   [state data option]
   (let [{:keys [file]} option]
     (when file
-      [:div.overflow-hidden.draw
+      [:div.overflow-hidden.draw.tldraw
        {:style {:overscroll-behavior "none"}}
        [:div.draw-wrap.relative
         {:on-blur #(state/set-block-component-editing-mode! false)

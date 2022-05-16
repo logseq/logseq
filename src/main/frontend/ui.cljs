@@ -942,9 +942,16 @@
          [:div.h-2.bg-base-4.rounded]]]]])])
 
 (rum/defcs lazy-visible <
+  {:did-mount (fn [state]
+                (let [dom-node (rum/dom-node state)]
+                  (if (and dom-node
+                           (.closest dom-node ".tldraw"))
+                    (assoc state ::inside-of-whiteboard? true)
+                    state)))}
   (rum/local false ::visible?)
   [state content-fn sensor-opts reset-height?]
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+           (println state)
+  (if (or (util/mobile?) (mobile-util/is-native-platform?) (::inside-of-whiteboard? state))
     (content-fn)
     (let [*visible? (::visible? state)]
       (visibility-sensor

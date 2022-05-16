@@ -134,6 +134,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         <div
           style={{
             width: '100%',
+            overflow: 'auto',
             height: pageId ? 'calc(100% - 32px)' : '100%',
             pointerEvents: isSelected ? 'none' : 'all',
             userSelect: 'none',
@@ -141,6 +142,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
         >
           {pageId ? (
             <div
+              onWheelCapture={e => e.stopPropagation()}
               onPointerDown={e => !isEditing && e.stopPropagation()}
               onPointerUp={e => !isEditing && e.stopPropagation()}
               style={{ padding: '0 24px' }}
