@@ -36,7 +36,7 @@
 
 (defn- lazy-load
   [format]
-  (let [format (format/normalize format)]
+  (let [format (gp-util/normalize-format format)]
     (when-let [record (format/get-format-record format)]
       (when-not (protocol/loaded? record)
         (set-format-js-loading! format true)
@@ -363,7 +363,7 @@
                            e
                            (custom-context-menu-content))
 
-                          (and block-id (gp-util/uuid-string? block-id))
+                          (and block-id (util/uuid-string? block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
                               (util/select-highlight! [block]))
@@ -388,7 +388,7 @@
                    :format format}
                   id
                   config)
-      (let [format (format/normalize format)
+      (let [format (gp-util/normalize-format format)
             loading? (get loading format)
             markup? (contains? config/html-render-formats format)
             on-click (fn [e]
@@ -446,5 +446,5 @@
   (if hiccup
     [:div
      (hiccup-content id option)]
-    (let [format (format/normalize format)]
+    (let [format (gp-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

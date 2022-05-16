@@ -10,7 +10,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]
             [clojure.core.async :as async]))
 
@@ -24,6 +23,8 @@
 ;; ::block-and-children
 ;; get block&children react-query
 (s/def ::block-and-children (s/tuple #(= ::block-and-children %) uuid?))
+
+(s/def ::block-direct-children (s/tuple #(= ::block-direct-children %) uuid?))
 ;; ::journals
 ;; get journal-list react-query
 (s/def ::journals (s/tuple #(= ::journals %)))
@@ -48,6 +49,7 @@
 (s/def ::react-query-keys (s/or :block ::block
                                 :page-blocks ::page-blocks
                                 :block-and-children ::block-and-children
+                                :block-direct-children ::block-direct-children
                                 :journals ::journals
                                 :page->pages ::page->pages
                                 :page<-pages ::page<-pages
@@ -213,9 +215,8 @@
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data]}]
+  [{:keys [tx-data db-before]}]
   {:post [(s/valid? ::affected-keys %)]}
-
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
@@ -228,7 +229,7 @@
         affected-keys (concat
                        (mapcat
                         (fn [block-id]
-                          (let [block-id (if (and (string? block-id) (gp-util/uuid-string? block-id))
+                          (let [block-id (if (and (string? block-id) (util/uuid-string? block-id))
                                            [:block/uuid block-id]
                                            block-id)]
                             (when-let [block (db-utils/entity block-id)]
@@ -237,8 +238,15 @@
                                              (:db/id (:block/page block)))
                                     blocks [[::block (:block/uuid block)]]
                                     others (when page-id
-                                             [[::page-blocks page-id]
-                                              [::page->pages page-id]])]
+                                             (let [db-after-parent-uuid (:block/uuid (:block/parent block))
+                                                   db-before-parent-uuid (:block/uuid (:block/parent (d/entity db-before
+                                                                                                               [:block/uuid (:block/uuid block)])))]
+                                               [[::page-blocks page-id]
+                                                [::page->pages page-id]
+                                                [::block-direct-children db-after-parent-uuid]
+                                                (when (and db-before-parent-uuid
+                                                           (not= db-before-parent-uuid db-after-parent-uuid))
+                                                  [::block-direct-children db-before-parent-uuid])]))]
                                 (concat blocks others)))))
                         blocks)
 
@@ -251,7 +259,7 @@
                                 (if (:block/name entity) ; page
                                   [::page-blocks ref]
                                   [::page-blocks (:db/id (:block/page entity))])))
-                            refs))
+                         refs))
         others (->>
                 (keys @query-state)
                 (filter (fn [ks]

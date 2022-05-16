@@ -1,6 +1,6 @@
 (ns frontend.components.page
   (:require [clojure.string :as string]
-            [frontend.components.block :as block]
+            [frontend.components.block :as component-block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.hierarchy :as hierarchy]
@@ -15,9 +15,7 @@
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.editor.lifecycle :as lifecycle]
-            [frontend.format.block :as format-block]
+            [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
@@ -27,17 +25,17 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
-            [frontend.state :as state]
-            [frontend.text :as text]
+            [frontend.mobile.util :as mobile-util]
             [frontend.search :as search]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [reitit.frontend.easy :as rfe]
-            [medley.core :as medley]
-            [rum.core :as rum]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.mobile.util :as mobile-util]))
+            [medley.core :as medley]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -117,13 +115,20 @@
      [:a.add-button-link.block
       (ui/icon "circle-plus")]]]])
 
-(rum/defc page-blocks-cp < rum/reactive
-  db-mixins/query
+(rum/defc page-blocks-cp < rum/reactive db-mixins/query
+  {:will-mount (fn [state]
+                 (let [page-e (second (:rum/args state))
+                       page-name (:block/name page-e)]
+                   (when (and (db/journal-page? page-name)
+                              (>= (date/journal-title->int page-name)
+                                  (date/journal-title->int (date/today))))
+                     (state/pub-event! [:journal/insert-template page-name])))
+                 state)}
   [repo page-e {:keys [sidebar?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-blocks (get-blocks repo page-name block-id)]
       (if (empty? page-blocks)
@@ -140,7 +145,7 @@
                               :document/mode? document-mode?}
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
-              hiccup (block/->hiccup page-blocks hiccup-config {})]
+              hiccup (component-block/->hiccup page-blocks hiccup-config {})]
           [:div
            (page-blocks-inner page-name page-blocks hiccup sidebar? block-id)
            (when-not config/publishing?
@@ -164,9 +169,9 @@
            (rum/with-key
              (ui/catch-error
               (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (block/custom-query {:attr {:class "mt-10"}
-                                   :editor-box editor/box
-                                   :page page} query))
+              (component-block/custom-query {:attr {:class "mt-10"}
+                                             :editor-box editor/box
+                                             :page page} query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn tagged-pages
@@ -223,8 +228,8 @@
                          (reset! *edit? false)
                          (notification/show! "Illegal page name, can not rename!" :warning))
           blur-fn (fn [e]
-                    (when (util/wrapped-by-quotes? @*title-value)
-                      (swap! *title-value util/unquote-string)
+                    (when (gp-util/wrapped-by-quotes? @*title-value)
+                      (swap! *title-value gp-util/unquote-string)
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
                     (state/set-state! :editor/editing-page-title? false)
                     (cond
@@ -319,7 +324,7 @@
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
           page-name (util/page-name-sanity-lc path-page-name)
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           format (let [page (if block-id
                               (:block/name (:block/page (db/entity [:block/uuid block-id])))
@@ -334,7 +339,7 @@
                       (db/entity repo))
                  (do
                    (when-not (db/entity repo [:block/name page-name])
-                     (let [m (format-block/page-name->map path-page-name true)]
+                     (let [m (block/page-name->map path-page-name true)]
                        (db/transact! repo [m])))
                    (db/pull [:block/name page-name])))
           {:keys [icon]} (:block/properties page)
@@ -379,7 +384,7 @@
            (let [config {:id "block-parent"
                          :block? true}]
              [:div.mb-4
-              (block/breadcrumb config repo block-id {:level-limit 3})]))
+              (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
          ;; blocks
          (let [page (if block?
@@ -642,7 +647,7 @@
               (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
-        graph (if (gp-util/uuid-string? page)
+        graph (if (util/uuid-string? page)
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
@@ -714,7 +719,7 @@
          [:tr {:key name}
           [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
           [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
-                     (block/page-cp {} page)]]
+                     (component-block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]
           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
           (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
@@ -956,7 +961,7 @@
                                                (:db/id page)
                                                :page))))
                               :href     (rfe/href :page {:name (:block/name page)})}
-                          (block/page-cp {} page)]]
+                          (component-block/page-cp {} page)]]
 
                (when-not mobile?
                  [:td.backlinks [:span backlinks]])

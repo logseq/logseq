@@ -59,8 +59,8 @@
 (defn- file-sync-stop-when-switch-graph []
   (p/do! (persist-var/load-vars)
          (sync/sync-stop)
-         ;; trigger rerender file-sync-header
-         (state/set-file-sync-state nil)))
+         (sync/sync-start)
+))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
@@ -98,7 +98,6 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph]]
-  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
     (graph-switch-on-persisted graph)
     (notification/show!
@@ -269,6 +268,11 @@
       (plugin/open-focused-settings-modal! title))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
+(defmethod handle :go/proxy-settings [[_ agent-opts]]
+  (state/set-sub-modal!
+    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
+    {:id :https-proxy-panel :center? true}))
+
 
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
@@ -346,12 +350,11 @@
 
 (defmethod handle :file-watcher/changed [[_ ^js event]]
   (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)
-        payload' (-> payload
-                     (update :path js/decodeURI))]
-    (prn ::fs-watcher payload)
-    (fs-watcher/handle-changed! type payload')
-    (sync/file-watch-handler type payload')))
+        payload (-> event
+                    (js->clj :keywordize-keys true)
+                    (update :path js/decodeURI))]
+    (fs-watcher/handle-changed! type payload)
+    (sync/file-watch-handler type payload)))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
@@ -387,6 +390,16 @@
     repo-url
     db-encrypted-secret
     close-fn)))
+
+(defmethod handle :journal/insert-template [[_ page-name]]
+  (let [page-name (util/page-name-sanity-lc page-name)]
+    (when-let [page (db/pull [:block/name page-name])]
+      (when (db/page-empty? (state/get-current-repo) page-name)
+        (when-let [template (state/get-default-journal-template)]
+          (editor-handler/insert-template!
+           nil
+           template
+           {:target page}))))))
 
 (defn run!
   []

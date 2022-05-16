@@ -10,7 +10,8 @@
             [frontend.date :as date]
             [frontend.util :as util]
             [frontend.config :as config]
-            [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.config :as gp-config]
             ["path" :as path]
             [frontend.mobile.util :as mobile-util]
             [frontend.handler.notification :as notification]
@@ -23,11 +24,11 @@
                  (string/lower-case (date/journal-name)))
         format (db/get-page-format page)
         time (date/get-current-time)
-        url (if (and (mldoc/link? format title) (not url))
+        url (if (and (gp-mldoc/link? format title) (not url))
               title
               url)
         text (if (= url title) nil title)
-        [text url] (if (or (mldoc/link? format url) (not url))
+        [text url] (if (or (gp-mldoc/link? format url) (not url))
                      [text url]
                      (string/split url "\"\n"))
         text (some-> text (string/replace #"^\"" ""))
@@ -109,10 +110,11 @@
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (config/mldoc-support? application-type)
+                    (gp-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
-                    (contains? (set/union #{:pdf} config/media-formats) (keyword application-type))
+                    (contains? (set/union (config/doc-formats) config/media-formats)
+                               (keyword application-type))
                     (embed-asset-file url format)
 
                     :else

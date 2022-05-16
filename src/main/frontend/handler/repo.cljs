@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -23,6 +22,7 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [clojure.set :as set]
             [clojure.core.async :as async]
@@ -185,8 +185,6 @@
 
 (defn- parse-and-load-file!
   [repo-url file new-graph?]
-  (state/set-parsing-state! (fn [m]
-                              (assoc m :current-parsing-file (:file/path file))))
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
@@ -212,14 +210,15 @@
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
   (state/reset-parsing-state!)
+  (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (format/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
+                         (let [format (gp-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
@@ -240,13 +239,17 @@
     (if util/node-test?
       (do
         (doseq [file support-files']
+          (state/set-parsing-state! (fn [m]
+                                      (assoc m :current-parsing-file (:file/path file))))
           (parse-and-load-file! repo-url file new-graph?))
         (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
           (do
-            (parse-and-load-file! repo-url file new-graph?)
+            (state/set-parsing-state! (fn [m]
+                                        (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
+            (parse-and-load-file! repo-url file new-graph?)
             (recur))
           (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
@@ -262,15 +265,9 @@
       (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts))
     (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts)))
 
-(defn- update-parsing-state!
-  [repo-url]
-  (state/set-loading-files! repo-url false))
-
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [delete-files delete-blocks re-render? re-render-opts _refresh?] :as opts
                    :or {re-render? true}}]
-  (update-parsing-state! repo-url)
-
   (let [file-paths (map :file/path files)
         metadata-file (config/get-metadata-path)
         metadata-content (some #(when (= (:file/path %) metadata-file)
@@ -298,7 +295,7 @@
                      (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
-                                 (string/replace (str (config/get-local-dir repo-url) "/") "")))
+                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
         nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
         diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
         load-contents (fn [files option]

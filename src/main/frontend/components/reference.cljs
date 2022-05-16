@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -49,24 +48,6 @@
   (fn [close-fn]
     (filter-dialog-inner filters-atom close-fn references page-name)))
 
-(defn- block-with-ref-level
-  [block level]
-  (if (:block/children block)
-    (-> (update block :block/children
-                (fn [blocks]
-                  (map (fn [block]
-                         (let [level (inc level)
-                               block (assoc block :ref/level level)]
-                           (block-with-ref-level block level))) blocks)))
-        (assoc :ref/level level))
-    (assoc block :ref/level level)))
-
-(defn- blocks-with-ref-level
-  [page-blocks]
-  (map (fn [[page blocks]]
-         [page (map #(block-with-ref-level % 1) blocks)])
-    page-blocks))
-
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   [block-id]
   (let [refed-blocks-ids (model-db/get-referenced-blocks-ids (str block-id))]
@@ -101,7 +82,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
@@ -163,8 +144,7 @@
                      filters (when (seq filter-state)
                                (->> (group-by second filter-state)
                                     (medley/map-vals #(map first %))))
-                     filtered-ref-blocks (->> (block-handler/filter-blocks repo ref-blocks filters true)
-                                              blocks-with-ref-level)
+                     filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
                              (for [[_ rfs] filtered-ref-blocks]
                                (count rfs)))]
@@ -188,7 +168,11 @@
   [page-name]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
-   (references* page-name)))
+   (ui/lazy-visible
+    (fn []
+      (references* page-name))
+    nil
+    false)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

@@ -13,7 +13,6 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -182,7 +181,9 @@
      :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
+     :copy/blocks                           {:copy/content nil
+                                             :copy/block-ids nil
+                                             :copy/graph nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -450,7 +451,7 @@
     (or
       (when-let [workflow (:preferred-workflow (get-config))]
         (let [workflow (name workflow)]
-          (if (gp-util/safe-re-find #"now|NOW" workflow)
+          (if (util/safe-re-find #"now|NOW" workflow)
             :now
             :todo)))
       (get-in @state [:me :preferred_workflow] :now))))
@@ -1428,13 +1429,15 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
 (defn set-copied-full-blocks
   [content blocks]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
@@ -1666,6 +1669,7 @@
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
+
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
 
