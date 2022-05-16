@@ -93,8 +93,8 @@
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
-        [:div.references.mt-6.flex-1.flex-row
-         [:div.content
+        [:div.references.flex-1.flex-row
+         [:div.content.mt-6
           (when (seq scheduled-or-deadlines)
             (ui/foldable
              [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
@@ -172,7 +172,7 @@
     (fn []
       (references* page-name))
     nil
-    false)))
+    {:reset-height? false})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
