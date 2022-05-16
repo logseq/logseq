@@ -9,7 +9,7 @@
    [frontend.handler.user :as user-handler]
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
-   [frontend.text :as text]))
+   [logseq.graph-parser.text :as text]))
 
 (def *link-to-another-graph (atom false))
 
