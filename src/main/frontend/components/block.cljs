@@ -55,6 +55,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -457,41 +458,66 @@
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
-  (let [page-name (util/page-name-sanity-lc page-name)
+  (let [*tippy-ref (rum/create-ref)
+        page-name (util/page-name-sanity-lc page-name)
         redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
-        html-template (fn []
-                        (when redirect-page-name
-                          [:div.tippy-wrapper.overflow-y-auto.p-4
-                           {:style {:width          600
-                                    :text-align     "left"
-                                    :font-weight    500
-                                    :max-height     600
-                                    :padding-bottom 64}}
-                           (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                             [:div.my-2
-                              (->>
-                               (for [page (string/split page-original-name #"/")]
-                                 (when (and (string? page) page)
-                                   (page-reference false page {} nil)))
-                               (interpose [:span.mx-2.opacity-30 "/"]))]
-                             [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                      page-original-name
-                                                      [:span
-                                                       [:span.text-sm.mr-2 "Alias:"]
-                                                       page-original-name])])
-                           (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
-                             (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
-                             (when-let [f (state/get-page-blocks-cp)]
-                               (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
+        _  #_:clj-kondo/ignore (rum/defc html-template []
+                        (let [*el-popup (rum/use-ref nil)]
+
+                          (rum/use-effect!
+                            (fn []
+                              (let [el-popup (rum/deref *el-popup)
+                                    cb (fn [^js e]
+                                         (when-not (:editor/editing? @state/state)
+                                           ;; Esc
+                                           (and (= e.which 27)
+                                                (when-let [tp (rum/deref *tippy-ref)]
+                                                  (.hideTooltip tp)))))]
+
+                                (js/setTimeout #(.focus el-popup))
+                                (.addEventListener el-popup "keyup" cb)
+                                #(.removeEventListener el-popup "keyup" cb)))
+                            [])
+
+                          (when redirect-page-name
+                            [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none
+                             {:ref   *el-popup
+                              :tab-index -1
+                              :style {:width          600
+                                      :text-align     "left"
+                                      :font-weight    500
+                                      :max-height     600
+                                      :padding-bottom 64}}
+                             (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                               [:div.my-2
+                                (->>
+                                  (for [page (string/split page-original-name #"/")]
+                                    (when (and (string? page) page)
+                                      (page-reference false page {} nil)))
+                                  (interpose [:span.mx-2.opacity-30 "/"]))]
+                               [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
+                                                        page-original-name
+                                                        [:span
+                                                         [:span.text-sm.mr-2 "Alias:"]
+                                                         page-original-name])])
+                             (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+                               (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
+                               (when-let [f (state/get-page-blocks-cp)]
+                                 (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])))]
+
     (if (or (not manual?) open?)
-      (ui/tippy {:html            html-template
+      (ui/tippy {:ref             *tippy-ref
+                 :html            html-template
                  :interactive     true
                  :delay           [1000, 100]
                  :fixed-position? fixed-position?
                  :position        (or tippy-position "top")
-                 :distance        (or tippy-distance 10)}
+                 :distance        (or tippy-distance 10)
+                 :popperOptions   {:modifiers {:preventOverflow
+                                               {:enabled           true
+                                                :boundariesElement "viewport"}}}}
                 children)
       children)))
 
@@ -499,7 +525,7 @@
   "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
-    (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
+    (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (or (and (= :org (state/get-preferred-format))
@@ -683,7 +709,7 @@
   [config id label]
   (when (and
          (not (string/blank? id))
-         (gp-util/uuid-string? id))
+         (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -964,7 +990,7 @@
                (= "Complex" protocol)
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
-               (gp-util/uuid-string? (:link path))) ; org mode id
+               (util/uuid-string? (:link path))) ; org mode id
           (let [id (uuid (:link path))
                 block (db/entity [:block/uuid id])]
             (if (:block/pre-block? block)
@@ -984,7 +1010,7 @@
                   show-brackets? (state/show-brackets?)]
               (if (and page
                        (when-let [ext (util/get-file-ext href)]
-                         (config/mldoc-support? ext)))
+                         (gp-config/mldoc-support? ext)))
                 [:span.page-reference
                  (when show-brackets? [:span.text-gray-500 "[["])
                  (page-cp config page)
@@ -1080,7 +1106,7 @@
                        string/trim)]
         (when-let [id (and s
                            (let [s (string/trim s)]
-                             (and (gp-util/uuid-string? s)
+                             (and (util/uuid-string? s)
                                   (uuid s))))]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -1091,7 +1117,7 @@
   [_config arguments]
   (when-let [url (first arguments)]
     (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (gp-util/safe-re-find Vimeo-regex url) 5)]
+      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
         (when-not (string/blank? vimeo-id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1112,7 +1138,7 @@
       (when-let [id (cond
                       (<= (count url) 15) url
                       :else
-                      (last (gp-util/safe-re-find id-regex url)))]
+                      (last (util/safe-re-find id-regex url)))]
         (when-not (string/blank? id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1242,7 +1268,7 @@
           (when-let [youtube-id (cond
                                   (== 11 (count url)) url
                                   :else
-                                  (nth (gp-util/safe-re-find YouTube-regex url) 5))]
+                                  (nth (util/safe-re-find YouTube-regex url) 5))]
             (when-not (string/blank? youtube-id)
               (youtube/youtube-video youtube-id)))))
 
@@ -1273,7 +1299,7 @@
           (when-let [id (cond
                           (<= (count url) 15) url
                           :else
-                          (last (gp-util/safe-re-find id-regex url)))]
+                          (last (util/safe-re-find id-regex url)))]
             (ui/tweet-embed id))))
 
       (= name "embed")
@@ -1311,7 +1337,7 @@
          (->elem :sub (map-inline config l))
 
          ["Tag" _]
-         (when-let [s (block/get-tag item)]
+         (when-let [s (gp-block/get-tag item)]
            (let [s (text/page-ref-un-brackets! s)]
              (page-cp (assoc config :tag? true) {:block/name s})))
 
@@ -2860,7 +2886,7 @@
 
         ["Paragraph" l]
              ;; TODO: speedup
-        (if (gp-util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

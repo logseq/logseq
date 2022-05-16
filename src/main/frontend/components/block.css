@@ -4,7 +4,7 @@
 
   @screen sm {
     width: calc(100% - 33px);
-    overflow-x: auto;
+    overflow-x: visible;
   }
 }
 
