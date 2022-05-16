@@ -1,3 +1,4 @@
+/* TODO: move to useStylesheet */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500&display=swap');
 
 :root {
@@ -276,4 +277,8 @@
   pointer-events: all;
   user-select: text;
   -webkit-user-select: text;
+}
+
+.logseq-tldraw .tl-positioned-inner:focus-within {
+  box-shadow: 0 0 12px var(--ls-active-primary-color);
 }

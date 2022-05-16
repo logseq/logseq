@@ -7,7 +7,7 @@
 @import "resources/css/photoswipe.css";
 @import "resources/css/fonts.css";
 @import "resources/css/excalidraw.min.css";
-@import "resources/css/tldraw.css";
+@import "tldraw/apps/tldraw-logseq/src/styles.css";
 @import "resources/css/katex.min.css";
 @import "resources/css/codemirror.min.css";
 @import "resources/css/codemirror.solarized.css";

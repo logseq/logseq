@@ -8,7 +8,7 @@ export const AppUI = observer(function AppUI() {
   return (
     <>
       {/* <ToolBar /> */}
-      {/* <StatusBar /> */}
+      <StatusBar />
       <PrimaryTools />
     </>
   )

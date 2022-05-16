@@ -16,7 +16,6 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
   const events = React.useMemo(() => {
     const onWheel: Handler<'wheel', WheelEvent> = gesture => {
       const { event, delta } = gesture
-      console.log(event.target)
       event.preventDefault()
       if (inputs.state === 'pinching') return
       if (Vec.isEqual(delta, [0, 0])) return

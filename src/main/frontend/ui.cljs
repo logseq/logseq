@@ -950,7 +950,6 @@
                     state)))}
   (rum/local false ::visible?)
   [state content-fn sensor-opts reset-height?]
-           (println state)
   (if (or (util/mobile?) (mobile-util/is-native-platform?) (::inside-of-whiteboard? state))
     (content-fn)
     (let [*visible? (::visible? state)]

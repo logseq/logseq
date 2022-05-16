@@ -6,6 +6,7 @@
             [frontend.search :as search]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [rum.core :as rum]))
 
@@ -20,6 +21,7 @@
        {:style {:overscroll-behavior "none"}}
        [:div.draw-wrap.relative
         {:on-blur #(state/set-block-component-editing-mode! false)
+         :on-wheel util/stop-propagation ;; wheel -> overscroll may cause browser navigation
          :style {:height "calc(100vh - 80px)" }}
 
         (tldraw {:PageComponent page

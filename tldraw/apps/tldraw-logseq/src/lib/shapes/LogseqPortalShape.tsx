@@ -8,6 +8,7 @@ import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextInput } from '~components/inputs/TextInput'
 import { LogseqContext } from '~lib/logseq-context'
+import type { Shape } from '~lib'
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -98,9 +99,19 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       props: { opacity, pageId },
     } = this
 
-    const app = useApp()
+    const app = useApp<Shape>()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
+    const disableTlEvents = !isEditing && !isSelected && app.selectedTool.id !== 'select'
+
+    const stop = React.useCallback(
+      e => {
+        if (!disableTlEvents) {
+          e.stopPropagation()
+        }
+      },
+      [disableTlEvents]
+    )
 
     if (!Page) {
       return null
@@ -135,16 +146,18 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           style={{
             width: '100%',
             overflow: 'auto',
+            overscrollBehavior: 'contain',
             height: pageId ? 'calc(100% - 32px)' : '100%',
             pointerEvents: isSelected ? 'none' : 'all',
             userSelect: 'none',
+            opacity: isSelected ? 0.5 : 1,
           }}
         >
           {pageId ? (
             <div
-              onWheelCapture={e => e.stopPropagation()}
-              onPointerDown={e => !isEditing && e.stopPropagation()}
-              onPointerUp={e => !isEditing && e.stopPropagation()}
+              onWheelCapture={stop}
+              onPointerDown={stop}
+              onPointerUp={stop}
               style={{ padding: '0 24px' }}
             >
               <Page pageId={pageId} />
@@ -152,7 +165,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           ) : (
             <div
               style={{
-                opacity: isSelected ? 0.5 : 1,
                 width: '100%',
                 height: '100%',
                 display: 'flex',
