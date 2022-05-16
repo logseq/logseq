@@ -19,3 +19,7 @@
 (defn toggle-ui-enable-tooltip! []
   (let [enable-tooltip? (state/enable-tooltip?)]
     (set-config! :ui/enable-tooltip? (not enable-tooltip?))))
+
+(defn toggle-collapse-references! []
+  (let [enable-collapse-references? (state/enable-collapse-references?)]
+    (set-config! :ui/enable-collapse-references? (not enable-collapse-references?))))

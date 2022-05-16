@@ -340,6 +340,13 @@
           (fn []
             (state/toggle-shortcut-tooltip!))))
 
+(defn show-collapse-references-row [t enable-collapse-references?]
+  (toggle "collapse_references"
+          (t :settings-page/enable-collapse-references)
+          enable-collapse-references?
+          (fn []
+            (config-handler/toggle-collapse-references!))))
+
 (defn timetracking-row [t enable-timetracking?]
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
@@ -532,6 +539,7 @@
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
+        enable-collapse-references? (state/enable-collapse-references?)
         show-brackets? (state/show-brackets?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
 
@@ -547,6 +555,7 @@
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
        (tooltip-row t enable-tooltip?))
+     (show-collapse-references-row t enable-collapse-references?)
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)
      (when (not enable-journals?)

@@ -158,6 +158,7 @@
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
         :settings-page/enable-shortcut-tooltip "Enable shortcut tooltip"
+        :settings-page/enable-collapse-references "Collapse references"
         :settings-page/enable-timetracking "Timetracking"
         :settings-page/enable-tooltip "Tooltips"
         :settings-page/enable-journals "Journals"

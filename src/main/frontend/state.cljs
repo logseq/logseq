@@ -1177,6 +1177,12 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
+(defn enable-collapse-references?
+  []
+  (get (get (sub-config) (get-current-repo))
+       :ui/enable-collapse-references?
+       false))
+
 (defn enable-tooltip?
   []
   (if (or (util/mobile?) (mobile-util/is-native-platform?))

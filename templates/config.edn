@@ -24,6 +24,10 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
+ ;; Wheter to enable references to show collapsed
+ ;; Default is false, you can also toggle this via settings page
+ :ui/enable-collapse-references? false
+
  :feature/enable-block-timestamps? false
 
  ;; Specify the date on which the week starts.

@@ -79,7 +79,7 @@
           refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
           n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
-          default-collapsed? (>= (count refed-blocks-ids) threshold)
+          default-collapsed? (or (state/enable-collapse-references?)(>= (count refed-blocks-ids) threshold))
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
           block? (util/uuid-string? page-name)
