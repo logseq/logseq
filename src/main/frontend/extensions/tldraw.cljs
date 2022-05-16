@@ -15,7 +15,6 @@
 (rum/defcs draw-inner < rum/reactive
   (rum/local false ::view-mode?)
   [state data option]
-  (println state data option)
   (let [{:keys [file]} option]
     (when file
       [:div.overflow-hidden.draw.tldraw

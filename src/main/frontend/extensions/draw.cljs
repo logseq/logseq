@@ -22,22 +22,26 @@
          (util/format "Could not load this invalid excalidraw file")
          :error)))))
 
+(defn- load-draw-file-from-state
+  [state]
+  (let [[option] (:rum/args state)
+        file (:file option)
+        *data (atom nil)
+        *loading? (atom true)]
+    (when file
+      (draw-handler/load-draw-file
+       file
+       (fn [data]
+         (let [data (from-json data)]
+           (reset! *data data)
+           (reset! *loading? false)))))
+    (assoc state
+           ::data *data
+           ::loading? *loading?)))
+
 (rum/defcs draw-container < rum/reactive
-  {:init (fn [state]
-           (let [[option] (:rum/args state)
-                 file (:file option)
-                 *data (atom nil)
-                 *loading? (atom true)]
-             (when file
-               (draw-handler/load-draw-file
-                file
-                (fn [data]
-                  (let [data (from-json data)]
-                    (reset! *data data)
-                    (reset! *loading? false)))))
-             (assoc state
-                    ::data *data
-                    ::loading? *loading?)))}
+  {:init         load-draw-file-from-state
+   :will-remount load-draw-file-from-state}
   [state option draw-inner]
   (let [*data (get state ::data)
         *loading? (get state ::loading?)
