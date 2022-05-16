@@ -644,7 +644,6 @@
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
                                                                            :scoped-block-id scoped-block-id})]
-              (util/pprint (last more))
               (concat previous-blocks more)))))
 
       :else
