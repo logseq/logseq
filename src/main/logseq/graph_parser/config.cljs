@@ -14,3 +14,11 @@
 (defn draw?
   [path]
   (string/starts-with? path default-draw-directory))
+
+;; TODO: rename
+(defonce mldoc-support-formats
+  #{:org :markdown :md})
+
+(defn mldoc-support?
+  [format]
+  (contains? mldoc-support-formats (keyword format)))

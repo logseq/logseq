@@ -55,6 +55,7 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -524,7 +525,7 @@
   "Accepts {:block/name sanitized / unsanitized page-name}"
   [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
-    (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
+    (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (or (and (= :org (state/get-preferred-format))
@@ -708,7 +709,7 @@
   [config id label]
   (when (and
          (not (string/blank? id))
-         (gp-util/uuid-string? id))
+         (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
@@ -989,7 +990,7 @@
                (= "Complex" protocol)
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
-               (gp-util/uuid-string? (:link path))) ; org mode id
+               (util/uuid-string? (:link path))) ; org mode id
           (let [id (uuid (:link path))
                 block (db/entity [:block/uuid id])]
             (if (:block/pre-block? block)
@@ -1009,7 +1010,7 @@
                   show-brackets? (state/show-brackets?)]
               (if (and page
                        (when-let [ext (util/get-file-ext href)]
-                         (config/mldoc-support? ext)))
+                         (gp-config/mldoc-support? ext)))
                 [:span.page-reference
                  (when show-brackets? [:span.text-gray-500 "[["])
                  (page-cp config page)
@@ -1105,7 +1106,7 @@
                        string/trim)]
         (when-let [id (and s
                            (let [s (string/trim s)]
-                             (and (gp-util/uuid-string? s)
+                             (and (util/uuid-string? s)
                                   (uuid s))))]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
@@ -1116,7 +1117,7 @@
   [_config arguments]
   (when-let [url (first arguments)]
     (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (gp-util/safe-re-find Vimeo-regex url) 5)]
+      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
         (when-not (string/blank? vimeo-id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1137,7 +1138,7 @@
       (when-let [id (cond
                       (<= (count url) 15) url
                       :else
-                      (last (gp-util/safe-re-find id-regex url)))]
+                      (last (util/safe-re-find id-regex url)))]
         (when-not (string/blank? id)
           (let [width (min (- (util/get-width) 96)
                            560)
@@ -1267,7 +1268,7 @@
           (when-let [youtube-id (cond
                                   (== 11 (count url)) url
                                   :else
-                                  (nth (gp-util/safe-re-find YouTube-regex url) 5))]
+                                  (nth (util/safe-re-find YouTube-regex url) 5))]
             (when-not (string/blank? youtube-id)
               (youtube/youtube-video youtube-id)))))
 
@@ -1298,7 +1299,7 @@
           (when-let [id (cond
                           (<= (count url) 15) url
                           :else
-                          (last (gp-util/safe-re-find id-regex url)))]
+                          (last (util/safe-re-find id-regex url)))]
             (ui/tweet-embed id))))
 
       (= name "embed")
@@ -1336,7 +1337,7 @@
          (->elem :sub (map-inline config l))
 
          ["Tag" _]
-         (when-let [s (block/get-tag item)]
+         (when-let [s (gp-block/get-tag item)]
            (let [s (text/page-ref-un-brackets! s)]
              (page-cp (assoc config :tag? true) {:block/name s})))
 
@@ -2885,7 +2886,7 @@
 
         ["Paragraph" l]
              ;; TODO: speedup
-        (if (gp-util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

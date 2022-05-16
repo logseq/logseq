@@ -8,15 +8,15 @@
             [clojure.core.async :as async]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.extract :as extract-handler]
+            [logseq.graph-parser.extract :as extract]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -43,7 +43,7 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (format/get-format file)]
+     (let [format (gp-util/get-format file)]
        (contains? formats format)))
    files))
 
@@ -119,10 +119,19 @@
          file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
      (db/set-file-content! repo-url file content)
-     (let [format (format/get-format file)
+     (let [format (gp-util/get-format file)
            file-content [{:file/path file}]
-           tx (if (contains? config/mldoc-support-formats format)
-                (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
+           tx (if (contains? gp-config/mldoc-support-formats format)
+                (let [[pages blocks]
+                      (extract/extract-blocks-pages
+                       file
+                       content
+                       {:user-config (state/get-config)
+                        :date-formatter (state/get-date-formatter)
+                        :page-name-order (state/page-name-order)
+                        :block-pattern (config/get-block-pattern format)
+                        :supported-formats (config/supported-formats)
+                        :db (db/get-db (state/get-current-repo))})
                       first-page (first pages)
                       delete-blocks (->
                                      (concat
@@ -144,7 +153,7 @@
                                           (seq))
                       ;; To prevent "unique constraint" on datascript
                       block-ids (set/union (set block-ids) (set block-refs-ids))
-                      pages (extract-handler/with-ref-pages pages blocks)
+                      pages (extract/with-ref-pages pages blocks)
                       pages-index (map #(select-keys % [:block/name]) pages)]
                   ;; does order matter?
                   (concat file-content pages-index delete-blocks pages block-ids blocks))

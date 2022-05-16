@@ -8,6 +8,7 @@
 (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
 
 (defn safe-re-find
+  "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
   (when-not (string? s)
     ;; TODO: sentry
@@ -16,6 +17,7 @@
     (re-find pattern s)))
 
 (defn uuid-string?
+  "Copy of frontend.util/uuid-string?. Too basic to couple to main app"
   [s]
   (safe-re-find exactly-uuid-pattern s))
 
@@ -66,14 +68,14 @@
   (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
 
 (defn parse-int
-  "Copy of frontend.util/parse-int. Don't want to couple to main app too much"
+  "Copy of frontend.util/parse-int. Too basic to couple to main app"
   [x]
   (if (string? x)
     (js/parseInt x)
     x))
 
 (defn safe-parse-int
-  "Copy of frontend.util/safe-parse-int. Don't want to couple to main app too much"
+  "Copy of frontend.util/safe-parse-int. Too basic to couple to main app"
   [x]
   (let [result (parse-int x)]
     (if (js/isNaN result)
@@ -94,3 +96,94 @@
   (-> json-string
       (js/JSON.parse)
       (js->clj :keywordize-keys true)))
+
+;; TODO: Use update-keys once its available in cljs and nbb
+(defn map-keys
+  "Maps function `f` over the keys of map `m` to produce a new map."
+  [f m]
+  (reduce-kv
+   (fn [m_ k v]
+     (assoc m_ (f k) v)) {} m))
+
+(defn zero-pad
+  "Copy of frontend.util/zero-pad. Too basic to couple to main app"
+  [n]
+  (if (< n 10)
+    (str "0" n)
+    (str n)))
+
+(defn get-file-ext
+  "Copy of frontend.util/get-file-ext. Too basic to couple to main app"
+  [file]
+  (and
+   (string? file)
+   (string/includes? file ".")
+   (some-> (last (string/split file #"\.")) string/lower-case)))
+
+(defn remove-boundary-slashes
+  [s]
+  (when (string? s)
+    (let [s (if (= \/ (first s))
+              (subs s 1)
+              s)]
+      (if (= \/ (last s))
+        (subs s 0 (dec (count s)))
+        s))))
+
+(defn split-namespace-pages
+  [title]
+  (let [parts (string/split title "/")]
+    (loop [others (rest parts)
+           result [(first parts)]]
+      (if (seq others)
+        (let [prev (last result)]
+          (recur (rest others)
+                 (conj result (str prev "/" (first others)))))
+        result))))
+
+(defn page-name-sanity
+  "Sanitize the page-name."
+  ([page-name]
+   (page-name-sanity page-name false))
+  ([page-name replace-slash?]
+   (let [page (some-> page-name
+                      (remove-boundary-slashes)
+                      (path-normalize))]
+     (if replace-slash?
+       (string/replace page #"/" "%2A")
+       page))))
+
+(defn page-name-sanity-lc
+  "Sanitize the query string for a page name (mandate for :block/name)"
+  [s]
+  (page-name-sanity (string/lower-case s)))
+
+(defn capitalize-all
+  [s]
+  (some->> (string/split s #" ")
+           (map string/capitalize)
+           (string/join " ")))
+
+(defn distinct-by
+  "Copy of frontend.util/distinct-by. Too basic to couple to main app"
+  [f col]
+  (reduce
+   (fn [acc x]
+     (if (some #(= (f x) (f %)) acc)
+       acc
+       (vec (conj acc x))))
+   []
+   col))
+
+(defn normalize-format
+  [format]
+  (case (keyword format)
+    :md :markdown
+    :asciidoc :adoc
+    ;; default
+    (keyword format)))
+
+(defn get-format
+  [file]
+  (when file
+    (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))

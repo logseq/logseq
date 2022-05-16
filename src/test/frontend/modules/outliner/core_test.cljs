@@ -8,7 +8,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [clojure.walk :as walk]
-            [frontend.format.block :as block]
+            [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]
             [frontend.test.helper :as helper]))
 
@@ -65,7 +65,7 @@
 
 (defn- build-blocks
   [tree]
-  (block/with-parent-and-left 1 (build-node-tree tree)))
+  (gp-block/with-parent-and-left 1 (build-node-tree tree)))
 
 (defn transact-tree!
   [tree]

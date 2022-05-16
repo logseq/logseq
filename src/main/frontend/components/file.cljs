@@ -9,11 +9,11 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -71,7 +71,7 @@
                    state)}
   [state]
   (let [path (get-path state)
-        format (format/get-format path)
+        format (gp-util/get-format path)
         original-name (db/get-file-page path)
         random-id (str (d/squuid))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)}

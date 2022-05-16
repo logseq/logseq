@@ -5,7 +5,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.state :as state]
-            [frontend.format.block :as block]
+            [logseq.graph-parser.block :as gp-block]
             [frontend.util :as util]))
 
 
@@ -83,7 +83,7 @@
   [block typ]
   (walk-block block
               (fn [x]
-                (and (block/timestamp-block? x)
+                (and (gp-block/timestamp-block? x)
                      (= typ (first (second x)))))
               #(second (second %))))
 
