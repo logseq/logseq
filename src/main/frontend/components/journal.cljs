@@ -9,6 +9,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -51,7 +52,7 @@
                          :page))
                       (.preventDefault e)))}
        [:h1.title
-        (util/capitalize-all title)]]
+        (gp-util/capitalize-all title)]]
 
       (blocks-cp repo page format)
 

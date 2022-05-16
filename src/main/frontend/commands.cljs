@@ -517,7 +517,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [edit-content marker pos]
-  (let [old-marker (some->> (first (gp-util/safe-re-find marker/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         pos-delta (- (count marker)
                      (count old-marker))
@@ -542,7 +542,7 @@
                   (if-let [matches (seq (util/re-pos new-line-re-pattern prefix))]
                     (let [[start-pos content] (last matches)]
                       (+ start-pos (count content)))
-                    (count (gp-util/safe-re-find re-pattern prefix))))
+                    (count (util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  (marker/marker-pattern format)
@@ -583,7 +583,7 @@
       (let [edit-content (gobj/get current-input "value")
             heading-pattern #"^#+\s+"
             new-value (cond
-                        (gp-util/safe-re-find heading-pattern edit-content)
+                        (util/safe-re-find heading-pattern edit-content)
                         (string/replace-first edit-content
                                               heading-pattern
                                               (str heading " "))

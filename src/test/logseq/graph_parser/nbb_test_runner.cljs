@@ -4,7 +4,10 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.text-test]
-            [logseq.graph-parser.mldoc-test]))
+            [logseq.graph-parser.mldoc-test]
+            [logseq.graph-parser.block-test]
+            [logseq.graph-parser.property-test]
+            [logseq.graph-parser.extract-test]))
 
 (defmethod cljs.test/report [:cljs.test/default :end-run-tests] [m]
   (when-not (cljs.test/successful? m)
@@ -17,5 +20,7 @@
   #_:clj-kondo/ignore
   (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
   (t/run-tests 'logseq.graph-parser.mldoc-test
-               ;; TODO: Enable when https://github.com/babashka/nbb/issues/187 works
-               'logseq.graph-parser.text-test))
+               'logseq.graph-parser.text-test
+               'logseq.graph-parser.property-test
+               'logseq.graph-parser.block-test
+               'logseq.graph-parser.extract-test))

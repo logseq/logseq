@@ -106,17 +106,9 @@
   (set/union (text-formats)
              (img-formats)))
 
-;; TODO: rename
-(defonce mldoc-support-formats
-  #{:org :markdown :md})
-
-(defn mldoc-support?
-  [format]
-  (contains? mldoc-support-formats (keyword format)))
-
 (def mobile?
   (when-not util/node-test?
-    (gp-util/safe-re-find #"Mobi" js/navigator.userAgent)))
+    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 

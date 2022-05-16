@@ -1,4 +1,5 @@
 (ns frontend.format.mldoc
+  "Mldoc code needed by app but not graph-parser"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
             [frontend.state :as state]

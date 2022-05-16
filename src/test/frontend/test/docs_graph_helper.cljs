@@ -5,7 +5,7 @@
             [clojure.string :as string]))
 
 
-(defn- slurp
+(defn slurp
   "Like clojure.core/slurp"
   [file]
   (str (fs/readFileSync file)))

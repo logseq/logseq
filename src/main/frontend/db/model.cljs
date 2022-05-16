@@ -12,7 +12,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
@@ -294,7 +293,7 @@
       (:block/format page)
       (when-let [file (:block/file page)]
         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-          (format/get-format path)))))
+          (gp-util/get-format path)))))
    (state/get-preferred-format)
    :markdown))
 
@@ -913,7 +912,7 @@
 
 (defn get-page
   [page-name]
-  (if (gp-util/uuid-string? page-name)
+  (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
@@ -1222,7 +1221,7 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
+  (if (util/uuid-string? (str page-name-or-block-uuid))
     (let [id (uuid page-name-or-block-uuid)]
       (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
