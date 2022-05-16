@@ -146,7 +146,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           style={{
             width: '100%',
             overflow: 'auto',
-            overscrollBehavior: 'contain',
+            overscrollBehavior: 'none',
             height: pageId ? 'calc(100% - 32px)' : '100%',
             pointerEvents: isSelected ? 'none' : 'all',
             userSelect: 'none',
