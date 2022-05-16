@@ -1661,6 +1661,7 @@
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
+
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
 

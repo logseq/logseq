@@ -295,7 +295,7 @@
                      (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
-                                 (string/replace (str (config/get-local-dir repo-url) "/") "")))
+                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
         nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
         diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
         load-contents (fn [files option]

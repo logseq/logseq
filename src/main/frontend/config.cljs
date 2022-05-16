@@ -85,6 +85,15 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
+(defn doc-formats
+  []
+  (let [config-formats (some->> (get-in @state/state [:config :document-formats])
+                                (map :keyword)
+                                (set))]
+    (set/union
+     config-formats
+     #{:doc :docx :xls :xlsx :ppt :pptx :one :epub})))
+
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def media-formats (set/union (img-formats) audio-formats))

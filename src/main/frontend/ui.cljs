@@ -877,23 +877,51 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defc lazy-visible-inner
-  [visible? content-fn loading-label]
-  [:div.lazy-visibility
+(rum/defcs lazy-visible-inner <
+  {:init (fn [state]
+           (assoc state
+                  ::ref (atom nil)
+                  ::height (atom 26)))
+   :did-mount (fn [state]
+                (when (last (:rum/args state))
+                  (let [observer (js/ResizeObserver. (fn [entries]
+                                                      (let [entry (first entries)
+                                                            *height (::height state)
+                                                            height' (.-height (.-contentRect entry))]
+                                                        (when (and (> height' @*height)
+                                                                   (not= height' 64))
+                                                          (reset! *height height')))))]
+                   (.observe observer @(::ref state))))
+                state)}
+  [state visible? content-fn _reset-height?]
+  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
+                         :style {:min-height @(::height state)}}
+
    (if visible?
      (when (fn? content-fn) (content-fn))
-     (when loading-label [:span.text-sm.font-medium
-                          loading-label]))])
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto {:style {:height 64}}
+      [:div.animate-pulse.flex.space-x-4
+       [:div.flex-1.space-y-3.py-1
+        [:div.h-2.bg-base-4.rounded]
+        [:div.space-y-3
+         [:div.grid.grid-cols-3.gap-4
+          [:div.h-2.bg-base-4.rounded.col-span-2]
+          [:div.h-2.bg-base-4.rounded.col-span-1]]
+         [:div.h-2.bg-base-4.rounded]]]]])])
 
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
-  [state loading-label content-fn sensor-opts]
-  (let [*visible? (::visible? state)]
-    (visibility-sensor
-     (merge
-      {:on-change #(reset! *visible? %)
-       :partialVisibility true
-       :offset {:top -300
-                :bottom -300}}
-      sensor-opts)
-     (lazy-visible-inner @*visible? content-fn loading-label))))
+  [state content-fn sensor-opts reset-height?]
+  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+    (content-fn)
+    (let [*visible? (::visible? state)]
+      (visibility-sensor
+       (merge
+        {:on-change #(reset! *visible? %)
+         :partialVisibility true
+         :offset {:top -300
+                  :bottom -300}
+         :scrollCheck true
+         :scrollThrottle 1}
+        sensor-opts)
+       (lazy-visible-inner @*visible? content-fn reset-height?)))))
