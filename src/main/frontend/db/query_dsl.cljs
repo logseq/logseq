@@ -310,8 +310,8 @@
   [e sample]
   (when-let [num (second e)]
     (when (integer? num)
-      (reset! sample num))
-    nil))
+      (reset! sample num)
+      {:query [['?p :block/uuid]]})))
 
 (defn- build-sort-by
   [e sort-by_]
