@@ -61,7 +61,8 @@
         "cljs:debug": "clojure -M:cljs release app --debug",
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html",
         "cljs:build-electron": "clojure -A:cljs compile app electron",
-        "cljs:lint": "clojure -M:clj-kondo --parallel --lint src"
+        "cljs:lint": "clojure -M:clj-kondo --parallel --lint src",
+        "tldraw:build": "cd tldraw && yarn build"
     },
     "dependencies": {
         "@capacitor/android": "3.2.2",

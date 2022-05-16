@@ -37,7 +37,7 @@
        {:style {:overscroll-behavior "none"}}
        [:div.draw-wrap.relative
         {:on-blur #(state/set-block-component-editing-mode! false)
-         :style {:height "calc(100vh - 120px)" }}
+         :style {:height "calc(100vh - 80px)" }}
 
         (tldraw {:PageComponent page
                  :searchHandler (comp clj->js vec search/page-search)

@@ -1,0 +1,43 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`When using the tool Transitions to creating and creates a dot shape on pointer down: created dot 1`] = `
+TLDotShape {
+  "clone": [Function],
+  "getBounds": [Function],
+  "getCachedSerialized": [Function],
+  "getCenter": [Function],
+  "getRotatedBounds": [Function],
+  "getSerialized": [Function],
+  "hideContextBar": false,
+  "hideResizeHandles": true,
+  "hideRotateHandle": true,
+  "hideSelection": true,
+  "hideSelectionDetail": true,
+  "hitTestBounds": [Function],
+  "hitTestLineSegment": [Function],
+  "hitTestPoint": [Function],
+  "isAspectRatioLocked": false,
+  "isDirty": true,
+  "canEdit": false,
+  "isStateful": false,
+  "lastSerialized": Object {},
+  "nonce": 0,
+  "onHandleChange": [Function],
+  "onResize": [Function],
+  "props": Object {
+    "id": "test_dot",
+    "parentId": "page1",
+    "point": Array [
+      94,
+      94,
+    ],
+    "radius": 6,
+    "type": "dot",
+  },
+  "showCloneHandles": false,
+  "canUnmount": false,
+  "type": "dot",
+  "validateProps": [Function],
+  "version": 1,
+}
+`;

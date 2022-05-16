@@ -478,7 +478,7 @@
         wide-mode? (state/sub :ui/wide-mode?)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        margin-less-pages? (#{:graph :whiteboard} route-name)
+        margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)

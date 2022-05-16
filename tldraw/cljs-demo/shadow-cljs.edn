@@ -1,0 +1,22 @@
+;; shadow-cljs configuration
+{:deps {:aliases [:shadow-cljs]}
+
+ :nrepl
+ {:port 8702}
+
+ :js-options {:js-package-dirs ["node_modules" "../node_modules"]}
+
+ :compiler-options {:infer-externs      :auto
+                    :output-feature-set :es-next
+                    :source-map         true
+                    :source-map-detail-level :all
+                    :warnings           {:fn-deprecated false}}
+
+ :builds
+ {:frontend
+  {:target :browser
+   :module-loader true
+   :modules {:main {:init-fn playground.index/init}}
+   :devtools
+   {:http-root   "public"
+    :http-port   3100}}}}

@@ -1,0 +1,47 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`When using the box tool Creates a shape and transitions to select.idle after pointer up: created box 1`] = `
+TLBoxShape {
+  "clone": [Function],
+  "getBounds": [Function],
+  "getCachedSerialized": [Function],
+  "getCenter": [Function],
+  "getRotatedBounds": [Function],
+  "getSerialized": [Function],
+  "hideContextBar": false,
+  "hideResizeHandles": false,
+  "hideRotateHandle": false,
+  "hideSelection": false,
+  "hideSelectionDetail": false,
+  "hitTestBounds": [Function],
+  "hitTestLineSegment": [Function],
+  "hitTestPoint": [Function],
+  "isAspectRatioLocked": false,
+  "isDirty": true,
+  "canEdit": false,
+  "isStateful": false,
+  "lastSerialized": Object {},
+  "nonce": 0,
+  "onHandleChange": [Function],
+  "onResize": [Function],
+  "props": Object {
+    "id": "test_box",
+    "parentId": "page1",
+    "point": Array [
+      100,
+      100,
+      0.5,
+    ],
+    "size": Array [
+      0,
+      50,
+    ],
+    "type": "box",
+  },
+  "showCloneHandles": false,
+  "canUnmount": false,
+  "type": "box",
+  "validateProps": [Function],
+  "version": 1,
+}
+`;

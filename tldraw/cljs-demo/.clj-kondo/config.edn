@@ -1,0 +1,10 @@
+{:hooks {:analyze-call {rum.core/defc hooks.rum/defc
+                         rum.core/defcs hooks.rum/defcs}}
+ :lint-as {promesa.core/let clojure.core/let
+           promesa.core/loop clojure.core/loop
+           promesa.core/recur clojure.core/recur
+           rum.core/defcc rum.core/defc
+           rum.core/defcontext clojure.core/def
+           clojure.test.check.clojure-test/defspec clojure.core/def
+           clojure.test.check.properties/for-all clojure.core/for}
+ :skip-comments true}

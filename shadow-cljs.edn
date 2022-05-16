@@ -6,7 +6,7 @@
  :dev-http {3001 ["static" "."]
             3002 ["public/workspaces" "."]}
  
- :js-options {:js-package-dirs ["node_modules" "tldraw"]}
+ :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
 
  :builds
  {:app {:target        :browser

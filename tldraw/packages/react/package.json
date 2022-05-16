@@ -1,0 +1,105 @@
+{
+  "version": "2.0.0-alpha.1",
+  "name": "@tldraw/react",
+  "description": "A React library for creating spatial UIs.",
+  "author": "@steveruizok",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tldraw/tldraw.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "canvas",
+    "zoom",
+    "drawing",
+    "whiteboard"
+  ],
+  "files": [
+    "dist/**/*"
+  ],
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "scripts": {
+    "start:next": "yarn start",
+    "start:packages": "yarn start",
+    "start": "node scripts/dev & yarn types:dev",
+    "build:next": "yarn build",
+    "build:packages": "yarn build",
+    "build": "node scripts/build && yarn types:build",
+    "types:dev": "tsc -w --p tsconfig.build.json",
+    "types:build": "tsc -p tsconfig.build.json && tsconfig-replace-paths -p tsconfig.build.json",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "test:ci": "jest --ci --runInBand --updateSnapshot",
+    "test:watch": "jest --watchAll"
+  },
+  "dependencies": {
+    "@tldraw/core": "2.0.0-alpha.1",
+    "@tldraw/intersect": "2.0.0-alpha.1",
+    "@tldraw/vec": "2.0.0-alpha.1",
+    "@use-gesture/react": "^10.1.3",
+    "hotkeys-js": "^3.8.7",
+    "is-plain-object": "^5.0.0",
+    "mobx": "^6.3.8",
+    "mobx-react-lite": "^3.2.2",
+    "mousetrap": "^1.6.5",
+    "nanoid": "^3.1.30",
+    "rbush": "^3.0.1"
+  },
+  "peerDependencies": {
+    "react": ">=16.8",
+    "react-dom": "^16.8 || ^17.0"
+  },
+  "devDependencies": {
+    "@swc-node/jest": "^1.3.3",
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^12.0.0",
+    "@types/is-plain-object": "^2.0.4",
+    "@types/jest": "^27.0.2",
+    "@types/mousetrap": "^1.6.8",
+    "@types/node": "^16.11.6",
+    "@types/offscreencanvas": "^2019.6.4",
+    "@types/rbush": "^3.0.0",
+    "@types/react": "^17.0.33",
+    "@types/react-dom": "^17.0.10",
+    "tsconfig-replace-paths": "^0.0.11"
+  },
+  "jest": {
+    "setupFilesAfterEnv": [
+      "<rootDir>/../../setupTests.ts"
+    ],
+    "transform": {
+      "^.+\\.(tsx|jsx|ts|js|mjs)?$": [
+        "@swc-node/jest",
+        {
+          "dynamicImport": true,
+          "experimentalDecorators": true,
+          "emitDecoratorMetadata": true
+        }
+      ]
+    },
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ],
+    "testEnvironment": "jsdom",
+    "modulePathIgnorePatterns": [
+      "<rootDir>/dist/",
+      "<rootDir>/src/test/"
+    ],
+    "moduleNameMapper": {
+      "@tldraw/react": "<rootDir>/src",
+      "@tldraw/core": "<rootDir>/../core",
+      "\\~(.*)": "<rootDir>/src/$1"
+    }
+  },
+  "gitHead": "3ab5db27b9e83736fdae934474e80e90c854922c"
+}
