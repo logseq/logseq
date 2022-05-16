@@ -50,23 +50,26 @@
                     (reset! *link-to-another-graph true))
                 (notification/show! (str "Open graph failed. Graph `" graph-name "` doesn't exist.") :error false))))
 
-          (js/setTimeout
-           (fn []
-             (cond
-               page-name
-               (let [db-page-name (db-model/get-redirect-page-name page-name)]
-                 (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
+          (when (or (= graph-name current-graph-name)
+                    @*link-to-another-graph)
+            (js/setTimeout
+             (fn []
+               (cond
+                 page-name
+                 (let [db-page-name (db-model/get-redirect-page-name page-name)]
+                   (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
 
-               block-uuid
-               (if (db-model/get-block-by-uuid block-uuid)
-                 (route-handler/redirect-to-page! block-uuid)
-                 (notification/show! (str "Open link failed. Block-id `" block-uuid "` doesn't exist in the graph.") :error false))
+                 block-uuid
+                 (if (db-model/get-block-by-uuid block-uuid)
+                   (route-handler/redirect-to-page! block-uuid)
+                   (notification/show! (str "Open link failed. Block-id `" block-uuid "` doesn't exist in the graph.") :error false))
 
-               :else
-               nil))
-           (if @*link-to-another-graph
-             1000
-             0))))
+                 :else
+                 nil)
+               (reset! *link-to-another-graph false))
+             (if @*link-to-another-graph
+               1000
+               0)))))
 
       (= hostname "shared")
       (let [result (into {} (map (fn [key]
