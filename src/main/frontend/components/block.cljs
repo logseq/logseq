@@ -270,7 +270,7 @@
       (let [ext (keyword (util/get-file-ext @src))
             share-fn (fn [event]
                        (util/stop event)
-                       (when (mobile-util/is-native-platform?)
+                       (when (mobile-util/native-platform?)
                          (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
                            (.share Share #js {:url url
                                               :title "Open file with your favorite app"}))))]
@@ -861,7 +861,7 @@
                              (state/set-state! :pdf/current current)))}
          label-text]
 
-        (mobile-util/is-native-platform?)
+        (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
       (not (contains? #{:mp4 :webm :mov} ext))

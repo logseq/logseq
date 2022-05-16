@@ -912,7 +912,7 @@
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   [state content-fn sensor-opts reset-height?]
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+  (if (or (util/mobile?) (mobile-util/native-platform?))
     (content-fn)
     (let [*visible? (::visible? state)]
       (visibility-sensor
