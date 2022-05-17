@@ -7,7 +7,7 @@
   borkdude/rewrite-edn                  {:git/url "https://github.com/borkdude/rewrite-edn"
                                          :sha     "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
   funcool/promesa                       {:mvn/version "4.0.2"}
-  medley/medley                         {:mvn/version "1.2.0"}
+  medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}
   cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}
   prismatic/dommy                       {:mvn/version "1.1.0"}
@@ -20,7 +20,7 @@
   hickory/hickory                       {:git/url "https://github.com/logseq/hickory"
                                          :sha     "9c2c2f1fc2c45efaad906e0faabc3201278deeaa"}
   hiccups/hiccups                       {:mvn/version "0.3.0"}
-  tongue/tongue                         {:mvn/version "0.2.9"}
+  tongue/tongue                         {:mvn/version "0.4.4"}
   org.clojure/core.async                {:mvn/version "1.3.610"}
   thheller/shadow-cljs                  {:mvn/version "2.19.0"}
   expound/expound                       {:mvn/version "0.8.6"}
