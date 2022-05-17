@@ -5,7 +5,7 @@
  ;; "." for /static
  :dev-http {3001 ["static" "."]
             3002 ["public/workspaces" "."]}
- 
+
  :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
 
  :builds
@@ -41,7 +41,7 @@
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
         ;;   For electron devs, assets are located in ./js(via relative path).
-        ; :dev      {:asset-path "./js"}
+        ;; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
                    :after-load  frontend.core/start ;; after live-reloading finishes call this function
                    :watch-path  "/static"
