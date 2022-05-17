@@ -149,7 +149,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw :tldraw})
+  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
 
 (defn get-ext
   [p]
