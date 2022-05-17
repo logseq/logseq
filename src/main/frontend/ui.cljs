@@ -913,7 +913,7 @@
   {:init (fn [state]
            (assoc state
                   ::ref (atom nil)
-                  ::height (atom 26)))
+                  ::height (atom 24)))
    :did-mount (fn [state]
                 (when (last (:rum/args state))
                   (let [observer (js/ResizeObserver. (fn [entries]
@@ -928,7 +928,6 @@
   [state visible? content-fn _reset-height?]
   [:div.lazy-visibility {:ref #(reset! (::ref state) %)
                          :style {:min-height @(::height state)}}
-
    (if visible?
      (when (fn? content-fn) (content-fn))
      [:div.shadow.rounded-md.p-4.w-full.mx-auto {:style {:height 64}}
@@ -942,24 +941,24 @@
          [:div.h-2.bg-base-4.rounded]]]]])])
 
 (rum/defcs lazy-visible <
-  {:did-mount (fn [state]
-                (let [dom-node (rum/dom-node state)]
-                  (if (and dom-node
-                           (.closest dom-node ".tldraw"))
-                    (assoc state ::inside-of-whiteboard? true)
-                    state)))}
   (rum/local false ::visible?)
-  [state content-fn sensor-opts reset-height?]
-  (if (or (util/mobile?) (mobile-util/is-native-platform?) (::inside-of-whiteboard? state))
-    (content-fn)
-    (let [*visible? (::visible? state)]
-      (visibility-sensor
-       (merge
-        {:on-change #(reset! *visible? %)
-         :partialVisibility true
-         :offset {:top -300
-                  :bottom -300}
-         :scrollCheck true
-         :scrollThrottle 1}
-        sensor-opts)
-       (lazy-visible-inner @*visible? content-fn reset-height?)))))
+  (rum/local true ::active?)
+  [state content-fn sensor-opts {:keys [reset-height? once?]}]
+  (let [*active? (::active? state)]
+    (if (or (util/mobile?) (mobile-util/is-native-platform?))
+      (content-fn)
+      (let [*visible? (::visible? state)]
+        (visibility-sensor
+         (merge
+          {:on-change (fn [v]
+                        (reset! *visible? v)
+                        (when (and once? v)
+                          (reset! *active? false)))
+           :partialVisibility true
+           :offset {:top -300
+                    :bottom -300}
+           :scrollCheck true
+           :scrollThrottle 500
+           :active @*active?}
+          sensor-opts)
+         (lazy-visible-inner @*visible? content-fn reset-height?))))))

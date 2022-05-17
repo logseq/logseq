@@ -266,7 +266,7 @@
         href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
-    
+
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
             share-fn (fn [event]
@@ -2441,7 +2441,7 @@
        (fn []
          (block-container-inner state repo config block))
        nil
-       false)
+       {:reset-height? false})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2771,7 +2771,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     nil
-    true)))
+    {:reset-height? true})))
 
 (defn admonition
   [config type result]
