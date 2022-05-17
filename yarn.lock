@@ -721,10 +721,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
 
-"@logseq/nbb-logseq@^0.3.99":
-  version "0.3.99"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.99.tgz#cf6c05c559963e4e0fb92f214a63228972ef87d3"
-  integrity sha512-Msa6Ck6wqt7sYGExQZgUT/uUG/z5jGaPlytVdgGkCrVogZb2yaChbWeMOCfCsCTi6kbHo15hC3aOeDAXcfnFzw==
+"@logseq/nbb-logseq@^0.5.103":
+  version "0.5.103"
+  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.5.103.tgz#1084380cd54c92ca8cc94a8934cc777206e45cc0"
+  integrity sha512-V9UW0XrCaaadHUc6/Hp9wfGpQqkzqzoqnDGeSVZkWR6l3QwyqGi9mkhnhVcfTwAvxIfOgrfz93GcaeepV4pYNA==
   dependencies:
     import-meta-resolve "^1.1.1"
 

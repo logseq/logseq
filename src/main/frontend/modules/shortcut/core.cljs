@@ -8,8 +8,7 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log]
-            [medley.core :as medley])
+            [lambdaisland.glogi :as log])
   (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -117,7 +116,7 @@
                     dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
                 ;; trigger fn
                 (when dispatch-fn (dispatch-fn e))))
-          install-id (medley/random-uuid)
+          install-id (random-uuid)
           data       {install-id
                       {:group      handler-id
                        :dispatch-fn f

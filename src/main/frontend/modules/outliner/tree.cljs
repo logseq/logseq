@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
-            [frontend.util :as util]
             [clojure.string :as string]
             [frontend.state :as state]))
 
@@ -45,8 +44,8 @@
 (defn- get-root-and-page
   [repo root-id]
   (if (string? root-id)
-    (if (util/uuid-string? root-id)
-      [false (db/entity repo [:block/uuid (uuid root-id)])]
+    (if-let [id (parse-uuid root-id)]
+      [false (db/entity repo [:block/uuid id])]
       [true (db/entity repo [:block/name (string/lower-case root-id)])])
     [false root-id]))
 

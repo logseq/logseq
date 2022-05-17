@@ -129,8 +129,7 @@
 
                         :else
                         nil)]
-    (when (and block-id
-               (gp-util/uuid-string? block-id))
+    (when (some-> block-id parse-uuid)
       block-id)))
 
 (defn- paragraph-block?
@@ -325,12 +324,10 @@
          (swap! ref-blocks conj block))
        form)
      (concat title body))
-    (let [ref-blocks (->> @ref-blocks
-                          (filter gp-util/uuid-string?))
-          ref-blocks (map
-                       (fn [id]
-                         [:block/uuid (uuid id)])
-                       ref-blocks)
+    (let [ref-blocks (keep (fn [block]
+                             (when-let [id (parse-uuid block)]
+                               [:block/uuid id]))
+                           @ref-blocks)
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
 
@@ -430,8 +427,7 @@
                                (get-in properties [:properties :custom_id])
                                (get-in properties [:properties :id]))]
         (let [custom-id (and (string? custom-id) (string/trim custom-id))]
-          (when (and custom-id (gp-util/uuid-string? custom-id))
-            (uuid custom-id))))
+          (some-> custom-id parse-uuid)))
       (d/squuid)))
 
 (defn get-page-refs-from-properties
