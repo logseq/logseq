@@ -708,7 +708,7 @@
         updates (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
-     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (util/safe-parse-int (count updates)))]
+     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (count updates))]
 
      (if (seq updates)
        ;; lists
