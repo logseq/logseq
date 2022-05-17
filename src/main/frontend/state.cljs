@@ -219,6 +219,8 @@
      :file-sync/sync-downloading-files      nil
 
      :encryption/graph-parsing?             false
+
+     :ui/whiteboards                        {}
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -1685,3 +1687,13 @@
   [repo]
   (:feature/enable-encryption?
    (get (sub-config) repo)))
+
+;; FIXME:
+(defn get-current-whiteboard
+  []
+  (second (first (:ui/whiteboards @state))))
+
+(defn get-tldraw-api
+  []
+  (some-> (get-current-whiteboard)
+          (gobj/get "api")))

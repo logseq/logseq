@@ -1,5 +1,5 @@
 (ns frontend.extensions.tldraw
-  (:require ["tldraw-logseq$App" :as tldraw-app]
+  (:require ["tldraw-logseq" :as TldrawLogseq]
             [frontend.components.page :refer [page]]
             [frontend.extensions.draw :as draw-common]
             [frontend.handler.draw :as draw-handler]
@@ -10,10 +10,17 @@
             [goog.object :as gobj]
             [rum.core :as rum]))
 
-(def tldraw (r/adapt-class tldraw-app))
+(def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
 (rum/defcs draw-inner < rum/reactive
   (rum/local false ::view-mode?)
+  {:init (fn [state]
+           (assoc state ::id (random-uuid)))
+   :will-unmount (fn [state]
+                   (state/update-state! :ui/whiteboards
+                                        (fn [m]
+                                          (dissoc m (::id state))))
+                   state)}
   [state data option]
   (let [{:keys [file]} option]
     (when file
@@ -30,7 +37,9 @@
                               (let [document (gobj/get app "serialized")
                                     s (js/JSON.stringify document)]
                                 (draw-handler/save-draw! file s)))
-                 :model data})]])))
+                 :model data
+                 :onApp (fn [app]
+                          (state/set-state! [:ui/whiteboards (::id state)] app))})]])))
 
 (rum/defc tldraw-app
   [option]

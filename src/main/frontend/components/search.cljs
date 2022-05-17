@@ -9,6 +9,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
@@ -115,35 +116,43 @@
   [repo search-q {:keys [type data alias]}]
   (search-handler/add-search-to-recent! repo search-q)
   (search-handler/clear-search!)
-  (case type
-    :graph-add-filter
-    (state/add-graph-search-filter! search-q)
+  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)]
+    (case type
+     :graph-add-filter
+     (state/add-graph-search-filter! search-q)
 
-    :new-page
-    (page-handler/create! search-q)
+     :new-page
+     (do
+       (page-handler/create! search-q {:redirect? (not whiteboard?)})
+       (when whiteboard?
+         (whiteboard-handler/create-page! search-q)))
 
-    :page
-    (let [data (or alias data)]
-      (route/redirect-to-page! data))
+     :page
+     (let [data (or alias data)]
+       (if whiteboard?
+         (whiteboard-handler/create-page! data)
+         (route/redirect-to-page! data)))
 
-    :file
-    (route/redirect! {:to :file
-                      :path-params {:path data}})
+     :file
+     (route/redirect! {:to :file
+                       :path-params {:path data}})
 
-    :block
-    (let [block-uuid (uuid (:block/uuid data))
-          collapsed? (db/parents-collapsed? repo block-uuid)
-          page (:block/page (db/entity [:block/uuid block-uuid]))
-          long-page? (block-handler/long-page? repo (:db/id page))]
-      (if page
-        (if (or collapsed? long-page?)
-          (route/redirect-to-page! block-uuid)
-          (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
-        ;; search indice outdated
-        (println "[Error] Block page missing: "
-                 {:block-id block-uuid
-                  :block (db/pull [:block/uuid block-uuid])})))
-    nil)
+     :block
+     (let [block-uuid (uuid (:block/uuid data))
+           collapsed? (db/parents-collapsed? repo block-uuid)
+           page (:block/page (db/entity [:block/uuid block-uuid]))
+           long-page? (block-handler/long-page? repo (:db/id page))]
+       (if whiteboard?
+         (whiteboard-handler/create-page! (str block-uuid))
+         (if page
+           (if (or collapsed? long-page?)
+             (route/redirect-to-page! block-uuid)
+             (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+           ;; search indice outdated
+           (println "[Error] Block page missing: "
+                    {:block-id block-uuid
+                     :block (db/pull [:block/uuid block-uuid])}))))
+     nil))
   (state/close-modal!))
 
 (defn- search-on-shift-chosen
