@@ -54,6 +54,7 @@
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.block :as gp-block]
             ["path" :as path]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -256,7 +257,7 @@
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
   (and (string? block-id)
-       (gp-util/uuid-string? block-id)
+       (util/uuid-string? block-id)
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
@@ -337,7 +338,7 @@
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
     (let [format (:block/format block)
-          new-marker (last (gp-util/safe-re-find (marker/marker-pattern format) (or value "")))
+          new-marker (last (util/safe-re-find (marker/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
                       new-marker
                       (:block/marker block))]
@@ -482,10 +483,10 @@
   (let [current-page (state/get-current-page)
         block-id (or
                   (and (:id config)
-                       (gp-util/uuid-string? (:id config))
+                       (util/uuid-string? (:id config))
                        (:id config))
                   (and current-page
-                       (gp-util/uuid-string? current-page)
+                       (util/uuid-string? current-page)
                        current-page))]
     (= uuid (and block-id (medley/uuid block-id)))))
 
@@ -669,7 +670,9 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (block/get-page-refs-from-properties properties)]
+        refs (gp-block/get-page-refs-from-properties properties
+                                                     (db/get-db (state/get-current-repo))
+                                                     (state/get-date-formatter))]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -1144,7 +1147,7 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)
-          block? (gp-util/uuid-string? page-name)]
+          block? (util/uuid-string? page-name)]
       (when-let [page (db/get-page page-name)]
         (if block?
           (state/sidebar-add-block!
@@ -1174,7 +1177,7 @@
     (let [page (state/get-current-page)
           block-id (and
                     (string? page)
-                    (gp-util/uuid-string? page)
+                    (util/uuid-string? page)
                     (medley/uuid page))]
       (when block-id
         (let [block-parent (db/get-block-parent block-id)]
@@ -1705,7 +1708,8 @@
   (let [blocks (get-selected-ordered-blocks)]
     (when (seq blocks)
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (outliner-core/indent-outdent-blocks! blocks (= direction :right))))))
 
 (defn- get-link [format link label]
@@ -1957,7 +1961,7 @@
   (let [blocks (block-tree->blocks tree-vec format)
         target-block (db/pull target-block-id)
         page-id (:db/id (:block/page target-block))
-        blocks (block/with-parent-and-left page-id blocks)]
+        blocks (gp-block/with-parent-and-left page-id blocks)]
     (paste-blocks
      blocks
      {:target-block target-block
@@ -2030,14 +2034,15 @@
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (save-current-block!)
         (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
   (when id
-    (when-let [entity (if (gp-util/uuid-string? (str id))
+    (when-let [entity (if (util/uuid-string? (str id))
                         (db/entity [:block/uuid (uuid id)])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
@@ -2587,7 +2592,8 @@
     (when block
       (state/set-editor-last-pos! pos)
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (save-current-block!)
         (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
@@ -2854,7 +2860,7 @@
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
                   (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
-          blocks' (block/with-parent-and-left page-id blocks)]
+          blocks' (gp-block/with-parent-and-left page-id blocks)]
       (paste-blocks blocks' {}))))
 
 (defn- paste-segmented-text
@@ -2864,7 +2870,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (gp-util/safe-re-find (if (= format :org)
+                                           (if (util/safe-re-find (if (= format :org)
                                                                     #"\s*\*+\s+"
                                                                     #"\s*-\s+") p)
                                              p
@@ -2929,9 +2935,9 @@
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
         (match [format
-                (nil? (gp-util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                (nil? (gp-util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                (nil? (gp-util/safe-re-find #"(?:\r?\n){2,}" text))]
+                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
           (paste-text-parseable format text)
 
@@ -3216,7 +3222,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [block? (gp-util/uuid-string? page)
+    (let [block? (util/uuid-string? page)
           block-id (or root-block (and block? (uuid page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)

@@ -18,6 +18,9 @@
             [frontend.util.persist-var :as persist-var]
             [frontend.handler.notification :as notification]
             [frontend.context.i18n :refer [t]]
+            [frontend.diff :as diff]
+            [frontend.db :as db]
+            [frontend.fs :as fs]
             [medley.core :refer [dedupe-by]]
             [rum.core :as rum]))
 
@@ -162,7 +165,7 @@
                                          (offer! remote-changes-chan data)))))))
 
 (defn ws-listen!
-  "return channal which output messages from server"
+  "return channel which output messages from server"
   [graph-uuid *ws]
   (let [remote-changes-chan (chan (async/sliding-buffer 1))]
     (ws-listen!* graph-uuid *ws remote-changes-chan)
@@ -721,23 +724,67 @@
 
 (def remoteapi (->RemoteAPI))
 
+(defn- add-new-version-file
+  [repo path content]
+  (go
+    (println "add-new-version-file: "
+             (<! (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))))))
+
+(defn- is-journals-or-pages?
+  [filetxn]
+  (let [rel-path (relative-path filetxn)]
+    (or (string/starts-with? rel-path "journals/")
+        (string/starts-with? rel-path "pages/"))))
+
+(defn- need-add-version-file?
+  "when we need to create a new version file:
+  1. when apply a 'update' filetxn, it already exists(same page name) locally and has delete diffs
+  2. when apply a 'delete' filetxn, its origin remote content and local content are different
+     - TODO: we need to store origin remote content md5 in server db
+  3. create version files only for files under 'journals/', 'pages/' dir"
+  [^FileTxn filetxn origin-db-content]
+  (go
+    (cond
+      (.renamed? filetxn)
+      false
+      (.-deleted? filetxn)
+      false
+      (.-updated? filetxn)
+      (let [path (relative-path filetxn)
+            repo (state/get-current-repo)
+            file-path (config/get-file-path repo path)
+            content (<! (p->c (fs/read-file "" file-path)))]
+        (or (nil? content)
+            (some :removed (diff/diff origin-db-content content)))))))
+
 (defn- apply-filetxns
   [graph-uuid base-path filetxns]
-  (cond
-    (.renamed? (first filetxns))
-    (let [filetxn (first filetxns)]
-      (assert (= 1 (count filetxns)))
-      (rename-local-file rsapi graph-uuid base-path
-                         (relative-path (.-from-path filetxn))
-                         (relative-path (.-to-path filetxn))))
+  (go
+    (cond
+      (.renamed? (first filetxns))
+      (let [^FileTxn filetxn (first filetxns)
+            from-path (.-from-path filetxn)
+            to-path (.-to-path filetxn)]
+        (assert (= 1 (count filetxns)))
+        (<! (rename-local-file rsapi graph-uuid base-path
+                               (relative-path from-path)
+                               (relative-path to-path))))
 
-    (.-updated? (first filetxns))
-    (update-local-files rsapi graph-uuid base-path (map relative-path filetxns))
+      (.-updated? (first filetxns))
+      (let [repo (state/get-current-repo)
+            txn->db-content-vec (->> filetxns
+                                     (mapv
+                                      #(when (is-journals-or-pages? %)
+                                         [% (db/get-file repo (config/get-file-path repo (relative-path %)))]))
+                                     (remove nil?))]
+        (<! (update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
+        (doseq [[filetxn origin-db-content] txn->db-content-vec]
+          (when (need-add-version-file? filetxn origin-db-content)
+            (add-new-version-file repo (relative-path filetxn) origin-db-content))))
 
-    (.-deleted? (first filetxns))
-    (let [filetxn (first filetxns)]
-      (assert (= 1 (count filetxns)))
-      (go
+      (.-deleted? (first filetxns))
+      (let [filetxn (first filetxns)]
+        (assert (= 1 (count filetxns)))
         (let [r (<! (delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)]))]
           (if (and (instance? ExceptionInfo r)
                    (string/index-of (str (ex-cause r)) "No such file or directory"))
@@ -928,7 +975,7 @@
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
 (defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state
-                              ^:mutable local->remote-syncer *stopped]
+                                ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
   (sync-files-remote->local!

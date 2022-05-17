@@ -11,7 +11,6 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
-            [frontend.format.block :as block]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -35,6 +34,8 @@
             [frontend.mobile.util :as mobile-util]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
 (defn- get-directory
@@ -47,7 +48,7 @@
   [journal? title]
   (when-let [s (if journal?
                  (date/journal-title->default title)
-                 (util/page-name-sanity (string/lower-case title)))]
+                 (gp-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
     (gp-util/safe-subs s 0 200)))
 
@@ -72,7 +73,9 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (block/get-page-refs-from-properties properties)]
+         refs (gp-block/get-page-refs-from-properties properties
+                                                      (db/get-db (state/get-current-repo))
+                                                      (state/get-date-formatter))]
      {:block/uuid (db/new-block-id)
       :block/properties ps
       :block/properties-order (keys ps)
@@ -118,12 +121,12 @@
                   properties          nil
                   split-namespace?    true}}]
    (let [title (string/trim title)
-         title (util/remove-boundary-slashes title)
+         title (gp-util/remove-boundary-slashes title)
          page-name (util/page-name-sanity-lc title)
          repo (state/get-current-repo)]
      (when (db/page-empty? repo page-name)
        (let [pages    (if split-namespace?
-                        (util/split-namespace-pages title)
+                        (gp-util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
@@ -170,7 +173,7 @@
 (defn- compute-new-file-path
   [old-path new-name]
   (let [result (string/split old-path "/")
-        file-name (util/page-name-sanity new-name true)
+        file-name (gp-util/page-name-sanity new-name true)
         ext (last (string/split (last result) "."))
         new-file (str file-name "." ext)
         parts (concat (butlast result) [new-file])]
@@ -398,7 +401,7 @@
 
         ;; If page name changed after sanitization
         (when (or (util/create-title-property? new-page-name)
-                  (not= (util/page-name-sanity new-name false) new-name))
+                  (not= (gp-util/page-name-sanity new-name false) new-name))
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
@@ -634,7 +637,7 @@
   (->> (db/get-all-pages repo)
        (remove (fn [p]
                  (let [name (:block/name p)]
-                   (or (gp-util/uuid-string? name)
+                   (or (util/uuid-string? name)
                        (gp-config/draw? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
@@ -688,7 +691,7 @@
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
                        chosen)
-              chosen (if (and (gp-util/safe-re-find #"\s+" chosen) (not wrapped?))
+              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
               q (if @editor-handler/*selected-text "" q)

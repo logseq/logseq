@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [frontend.handler.extract :as extract]
+            [logseq.graph-parser.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
