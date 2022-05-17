@@ -4,9 +4,6 @@
   (:require [clojure.walk :as walk]
             [clojure.string :as string]))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
@@ -15,11 +12,6 @@
     (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
-
-(defn uuid-string?
-  "Copy of frontend.util/uuid-string?. Too basic to couple to main app"
-  [s]
-  (safe-re-find exactly-uuid-pattern s))
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"

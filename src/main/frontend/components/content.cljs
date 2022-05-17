@@ -363,13 +363,13 @@
                            e
                            (custom-context-menu-content))
 
-                          (and block-id (util/uuid-string? block-id))
+                          (and block-id (parse-uuid block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
                               (util/select-highlight! [block]))
                             (common-handler/show-custom-context-menu!
                             e
-                            (block-context-menu-content target (cljs.core/uuid block-id))))
+                            (block-context-menu-content target (uuid block-id))))
 
                           :else
                           nil))))))

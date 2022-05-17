@@ -916,8 +916,8 @@
 
 (defn get-page
   [page-name]
-  (if (util/uuid-string? page-name)
-    (db-utils/entity [:block/uuid (uuid page-name)])
+  (if-let [id (parse-uuid page-name)]
+    (db-utils/entity [:block/uuid id])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
@@ -1225,9 +1225,8 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (util/uuid-string? (str page-name-or-block-uuid))
-    (let [id (uuid page-name-or-block-uuid)]
-      (get-block-referenced-blocks-ids id))
+  (if-let [id (parse-uuid (str page-name-or-block-uuid))]
+    (get-block-referenced-blocks-ids id)
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn get-matched-blocks

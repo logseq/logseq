@@ -82,8 +82,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
+          block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
           scheduled-or-deadlines (when (and journal?
