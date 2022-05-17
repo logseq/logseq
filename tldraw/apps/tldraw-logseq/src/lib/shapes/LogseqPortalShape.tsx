@@ -9,6 +9,7 @@ import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextInput } from '~components/inputs/TextInput'
 import { LogseqContext } from '~lib/logseq-context'
 import type { Shape } from '~lib'
+import { useCameraMovingRef } from '~hooks/useCameraMoving'
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -100,17 +101,20 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     } = this
 
     const app = useApp<Shape>()
+    const isMoving = useCameraMovingRef()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
-    const disableTlEvents = !isEditing && !isSelected && app.selectedTool.id !== 'select'
+    const enableTlEvents = () => {
+      return isMoving.current || isEditing || isSelected || app.selectedTool.id !== 'select'
+    }
 
     const stop = React.useCallback(
       e => {
-        if (!disableTlEvents) {
+        if (!enableTlEvents()) {
           e.stopPropagation()
         }
       },
-      [disableTlEvents]
+      [enableTlEvents]
     )
 
     if (!Page) {
@@ -147,7 +151,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             width: '100%',
             overflow: 'auto',
             overscrollBehavior: 'none',
-            height: pageId ? 'calc(100% - 32px)' : '100%',
+            height: pageId ? 'calc(100% - 33px)' : '100%',
             pointerEvents: isSelected ? 'none' : 'all',
             userSelect: 'none',
             opacity: isSelected ? 0.5 : 1,

@@ -46,11 +46,15 @@
 #main-content {
   position: relative;
   height: calc(100vh - var(--ls-headbar-height));
+}
 
-  &-container {
-    @apply p-4 sm:px-8;
-    font-size: 1em;
-  }
+#main-content-container {
+  @apply p-4 sm:px-8;
+  font-size: 1em;
+}
+
+#main-content-container[data-is-margin-less-pages=true] {
+  padding: 0;
 }
 
 .left-sidebar-inner {

@@ -24,22 +24,21 @@
   [state data option]
   (let [{:keys [file]} option]
     (when file
-      [:div.overflow-hidden.draw.tldraw
-       {:style {:overscroll-behavior "none"}}
-       [:div.draw-wrap.relative
-        {:on-blur #(state/set-block-component-editing-mode! false)
-         :on-wheel util/stop-propagation ;; wheel -> overscroll may cause browser navigation
-         :style {:height "calc(100vh - 80px)"}}
+      [:div.draw.tldraw.relative.w-full.h-full
+       {:style {:overscroll-behavior "none"}
+        :on-blur #(state/set-block-component-editing-mode! false)
+        ;; wheel -> overscroll may cause browser navigation
+        :on-wheel util/stop-propagation}
 
-        (tldraw {:PageComponent page
-                 :searchHandler (comp clj->js vec search/page-search)
-                 :onPersist (fn [app]
-                              (let [document (gobj/get app "serialized")
-                                    s (js/JSON.stringify document)]
-                                (draw-handler/save-draw! file s)))
-                 :model data
-                 :onApp (fn [app]
-                          (state/set-state! [:ui/whiteboards (::id state)] app))})]])))
+       (tldraw {:PageComponent page
+                :searchHandler (comp clj->js vec search/page-search)
+                :onPersist (fn [app]
+                             (let [document (gobj/get app "serialized")
+                                   s (js/JSON.stringify document)]
+                               (draw-handler/save-draw! file s)))
+                :model data
+                :onApp (fn [app]
+                         (state/set-state! [:ui/whiteboards (::id state)] app))})])))
 
 (rum/defc tldraw-app
   [option]

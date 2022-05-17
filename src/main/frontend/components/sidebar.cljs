@@ -298,6 +298,7 @@
                     :route-match route-match})
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
+      {:data-is-margin-less-pages margin-less-pages?}
 
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?

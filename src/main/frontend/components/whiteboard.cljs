@@ -35,4 +35,7 @@
   [state]
   (let [name (get-whiteboard-name state)
         tldr-name (str "draws/" name ".tldr")]
-    (tldraw-app {:file tldr-name})))
+    [:div.absolute.w-full.h-full
+     ;; makes sure the whiteboard will not cover the borders
+     {:style {:padding "0.5px"}}
+     (tldraw-app {:file tldr-name})]))
