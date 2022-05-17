@@ -1710,7 +1710,8 @@
   (let [blocks (get-selected-ordered-blocks)]
     (when (seq blocks)
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (outliner-core/indent-outdent-blocks! blocks (= direction :right))))))
 
 (defn- get-link [format link label]
@@ -2035,7 +2036,8 @@
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (save-current-block!)
         (outliner-core/move-blocks! [(:data node)] (:data parent-node) true)))))
 
@@ -2592,7 +2594,8 @@
     (when block
       (state/set-editor-last-pos! pos)
       (outliner-tx/transact!
-        {:outliner-op :move-blocks}
+        {:outliner-op :move-blocks
+         :real-outliner-op :indent-outdent}
         (save-current-block!)
         (outliner-core/indent-outdent-blocks! [block] indent?)))
     (state/set-editor-op! :nil)))
