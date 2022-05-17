@@ -207,7 +207,7 @@
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
-  (let [timestamps (gp-util/map-keys (comp keyword string/lower-case) timestamps)
+  (let [timestamps (update-keys timestamps (comp keyword string/lower-case))
         m (some->> (select-keys timestamps [:scheduled :deadline])
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
@@ -333,12 +333,12 @@
 
 (defn- block-keywordize
   [block]
-  (gp-util/map-keys
+  (update-keys
+   block
    (fn [k]
      (if (namespace k)
        k
-       (keyword "block" k)))
-   block))
+       (keyword "block" k)))))
 
 (defn- sanity-blocks-data
   [blocks]

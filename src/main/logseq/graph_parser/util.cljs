@@ -74,14 +74,6 @@
       (js/JSON.parse)
       (js->clj :keywordize-keys true)))
 
-;; TODO: Use update-keys once its available in cljs and nbb
-(defn map-keys
-  "Maps function `f` over the keys of map `m` to produce a new map."
-  [f m]
-  (reduce-kv
-   (fn [m_ k v]
-     (assoc m_ (f k) v)) {} m))
-
 (defn zero-pad
   "Copy of frontend.util/zero-pad. Too basic to couple to main app"
   [n]

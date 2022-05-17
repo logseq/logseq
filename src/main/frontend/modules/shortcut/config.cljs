@@ -659,9 +659,10 @@
 
 (def category
   "Active list of categories for docs purpose"
-  (medley/map-vals (fn [v]
-                     (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))
-                   category*))
+  (update-vals
+   category*
+   (fn [v]
+     (vec (remove #(:inactive (get all-default-keyboard-shortcuts %)) v)))))
 
 (defn add-shortcut!
   [handler-id id shortcut-map]

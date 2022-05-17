@@ -1256,7 +1256,7 @@
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (disj ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
