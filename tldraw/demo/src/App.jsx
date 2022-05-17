@@ -1,3 +1,4 @@
+import React from 'react';
 import { App as TldrawApp } from 'tldraw-logseq'
 
 const storingKey = 'playground.index'
@@ -48,6 +49,8 @@ const Page = props => {
 }
 
 export default function App() {
+  const [app, setApp] = React.useState();
+  console.log(app) // demos how to get the Tldraw app instance
   return (
     <div className="h-screen w-screen">
       <TldrawApp
@@ -55,6 +58,7 @@ export default function App() {
         searchHandler={q => (q ? list : [])}
         model={documentModel}
         onPersist={onPersist}
+        onApp={setApp}
       />
     </div>
   )
