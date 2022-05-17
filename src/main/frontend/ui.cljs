@@ -911,7 +911,7 @@
   (rum/local true ::active?)
   [state content-fn sensor-opts {:keys [reset-height? once?]}]
   (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/is-native-platform?))
+    (if (or (util/mobile?) (mobile-util/native-platform?))
       (content-fn)
       (let [*visible? (::visible? state)]
         (visibility-sensor
