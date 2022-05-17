@@ -67,21 +67,6 @@
   [v]
   (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
 
-(defn parse-int
-  "Copy of frontend.util/parse-int. Too basic to couple to main app"
-  [x]
-  (if (string? x)
-    (js/parseInt x)
-    x))
-
-(defn safe-parse-int
-  "Copy of frontend.util/safe-parse-int. Too basic to couple to main app"
-  [x]
-  (let [result (parse-int x)]
-    (if (js/isNaN result)
-      nil
-      result)))
-
 (defn url?
   [s]
   (and (string? s)

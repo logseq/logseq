@@ -2,7 +2,10 @@
  {:unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
-                                object]}
+                                object
+                                ;; TODO: Remove parse-* when https://github.com/clj-kondo/clj-kondo/issues/1694 is done
+                                parse-long
+                                parse-double]}
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname

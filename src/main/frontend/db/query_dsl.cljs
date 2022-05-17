@@ -67,7 +67,7 @@
           (date/journal-title->int input)))
 
       :else
-      (let [duration (util/parse-int (subs input 0 (dec (count input))))
+      (let [duration (parse-long (subs input 0 (dec (count input))))
             kind (last input)
             tf (case kind
                  "y" t/years
@@ -99,7 +99,7 @@
           (date/journal-title->long input)))
 
       :else
-      (let [duration (util/parse-int (subs input 0 (dec (count input))))
+      (let [duration (parse-long (subs input 0 (dec (count input))))
             kind (last input)
             tf (case kind
                  "y" t/years

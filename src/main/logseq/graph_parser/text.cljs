@@ -350,7 +350,7 @@
        false
 
        (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
-       (gp-util/safe-parse-int v)
+       (parse-long v)
 
        (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v

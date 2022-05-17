@@ -217,39 +217,21 @@
     (str "0" n)
     (str n)))
 
-(defn parse-int
-  [x]
-  #?(:cljs (if (string? x)
-             (js/parseInt x)
-             x)
-     :clj (if (string? x)
-            (Integer/parseInt x)
-            x)))
-
-(defn safe-parse-int
-  [x]
-  #?(:cljs (let [result (parse-int x)]
-             (if (js/isNaN result)
-               nil
-               result))
-     :clj ((try
-             (parse-int x)
-             (catch Exception _
-               nil)))))
 #?(:cljs
-   (defn parse-float
+   (defn safe-parse-int
+     "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
      [x]
      (if (string? x)
-       (js/parseFloat x)
+       (parse-long x)
        x)))
 
 #?(:cljs
    (defn safe-parse-float
+     "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
      [x]
-     (let [result (parse-float x)]
-       (if (js/isNaN result)
-         nil
-         result))))
+     (if (string? x)
+       (parse-double x)
+       x)))
 
 #?(:cljs
    (defn debounce
