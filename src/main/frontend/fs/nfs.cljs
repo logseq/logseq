@@ -173,7 +173,7 @@
                          (not (string/blank? db-content))
                          (not (:skip-compare? opts))
                          (not contents-matched?)
-                         (not (contains? #{"excalidraw" "edn" "css"} ext))
+                         (not (contains? #{"excalidraw" "tldr" "edn" "css"} ext))
                          (not (string/includes? path "/.recycle/"))
                          (zero? pending-writes))
                       (p/let [local-content (encrypt/decrypt local-content)]
