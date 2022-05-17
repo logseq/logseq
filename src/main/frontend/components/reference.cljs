@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [medley.core :as medley]
             [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
@@ -141,8 +140,8 @@
                                   (db/get-block-referenced-blocks block-id)
                                   (db/get-page-referenced-blocks page-name))
                      filters (when (seq filter-state)
-                               (->> (group-by second filter-state)
-                                    (medley/map-vals #(map first %))))
+                               (-> (group-by second filter-state)
+                                   (update-vals #(map first %))))
                      filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
                              (for [[_ rfs] filtered-ref-blocks]
