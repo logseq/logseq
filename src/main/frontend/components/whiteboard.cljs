@@ -37,5 +37,6 @@
         tldr-name (str "draws/" name ".tldr")]
     [:div.absolute.w-full.h-full
      ;; makes sure the whiteboard will not cover the borders
-     {:style {:padding "0.5px"}}
+     {:key name
+      :style {:padding "0.5px"}}
      (tldraw-app {:file tldr-name})]))

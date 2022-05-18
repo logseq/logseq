@@ -116,43 +116,48 @@
   [repo search-q {:keys [type data alias]}]
   (search-handler/add-search-to-recent! repo search-q)
   (search-handler/clear-search!)
-  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)]
+  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)
+        search-mode (:search/mode @state/state)]
     (case type
-     :graph-add-filter
-     (state/add-graph-search-filter! search-q)
+      :graph-add-filter
+      (state/add-graph-search-filter! search-q)
 
-     :new-page
-     (do
-       (page-handler/create! search-q {:redirect? (not whiteboard?)})
-       (when whiteboard?
-         (whiteboard-handler/create-page! search-q)))
+      :new-page
+      (do
+        (page-handler/create! search-q {:redirect? (not whiteboard?)})
+        (when whiteboard?
+          (whiteboard-handler/create-page! search-q)))
 
-     :page
-     (let [data (or alias data)]
-       (if whiteboard?
-         (whiteboard-handler/create-page! data)
-         (route/redirect-to-page! data)))
+      :go-to-whiteboard
+      (route/redirect! {:to :whiteboard
+                        :path-params {:name search-q}})
 
-     :file
-     (route/redirect! {:to :file
-                       :path-params {:path data}})
+      :page
+      (let [data (or alias data)]
+        (if whiteboard?
+          (whiteboard-handler/create-page! data)
+          (route/redirect-to-page! data)))
 
-     :block
-     (let [block-uuid (uuid (:block/uuid data))
-           collapsed? (db/parents-collapsed? repo block-uuid)
-           page (:block/page (db/entity [:block/uuid block-uuid]))
-           long-page? (block-handler/long-page? repo (:db/id page))]
-       (if whiteboard?
-         (whiteboard-handler/create-page! (str block-uuid))
-         (if page
-           (if (or collapsed? long-page?)
-             (route/redirect-to-page! block-uuid)
-             (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
-           ;; search indice outdated
-           (println "[Error] Block page missing: "
-                    {:block-id block-uuid
-                     :block (db/pull [:block/uuid block-uuid])}))))
-     nil))
+      :file
+      (route/redirect! {:to :file
+                        :path-params {:path data}})
+
+      :block
+      (let [block-uuid (uuid (:block/uuid data))
+            collapsed? (db/parents-collapsed? repo block-uuid)
+            page (:block/page (db/entity [:block/uuid block-uuid]))
+            long-page? (block-handler/long-page? repo (:db/id page))]
+        (if whiteboard?
+          (whiteboard-handler/create-page! (str block-uuid))
+          (if page
+            (if (or collapsed? long-page?)
+              (route/redirect-to-page! block-uuid)
+              (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+            ;; search indice outdated
+            (println "[Error] Block page missing: "
+                     {:block-id block-uuid
+                      :block (db/pull [:block/uuid block-uuid])}))))
+      nil))
   (state/close-modal!))
 
 (defn- search-on-shift-chosen
@@ -198,6 +203,11 @@
        :new-page
        [:div.text.font-bold (str (t :new-page) ": ")
         [:span.ml-1 (str "\"" search-q "\"")]]
+
+       :go-to-whiteboard
+       [:div.text.font-bold (str (t :go-to-whiteboard) ": ")
+        [:span.ml-1 (str "\"" search-q "\"")]]
+
 
        :page
        [:span {:data-page-ref data}
@@ -247,9 +257,16 @@
                       all?)
                    []
                    [{:type :new-page}])
-        result (if config/publishing?
+        go-to-whiteboard [{:type :go-to-whiteboard}]
+        result (cond
+                 config/publishing?
                  (concat pages files blocks)
-                 (concat new-page pages files blocks))
+
+                 (= :whiteboard/link search-mode)
+                 (concat pages blocks)
+
+                 :else
+                 (concat new-page go-to-whiteboard pages files blocks))
         result (if (= search-mode :graph)
                  [{:type :graph-add-filter}]
                  result)
@@ -344,8 +361,17 @@
                                 (search-result-item "Page" original-name))
                         nil))}))])
 
-(def default-placeholder
-  (if config/publishing? (t :search/publishing) (t :search)))
+(defn default-placeholder
+  [search-mode]
+  (cond
+    config/publishing?
+    (t :search/publishing)
+
+    (= search-mode :whiteboard/link)
+    (t :whiteboard/link-whiteboard-or-block)
+
+    :else
+    (t :search)))
 
 (rum/defcs search-modal < rum/reactive
   (shortcut/disable-all-shortcuts)
@@ -371,7 +397,7 @@
                          (t :graph-search)
                          :page
                          (t :page-search)
-                         default-placeholder)
+                         (default-placeholder search-mode))
         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
         :value         search-q
         :on-change     (fn [e]

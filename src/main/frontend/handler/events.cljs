@@ -401,6 +401,10 @@
            template
            {:target page}))))))
 
+(defmethod handle :tldraw-link [[_ shapes]]
+  (route-handler/go-to-search! :whiteboard/link)
+  (state/set-state! :whiteboard/linked-shapes shapes))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

@@ -38,7 +38,10 @@
                                (draw-handler/save-draw! file s)))
                 :model data
                 :onApp (fn [app]
-                         (state/set-state! [:ui/whiteboards (::id state)] app))})])))
+                         (state/set-state! [:ui/whiteboards (::id state)] app)
+                         (gobj/set app "pubEvent"
+                                   (fn [type & args]
+                                     (state/pub-event! (cons (keyword type) args)))))})])))
 
 (rum/defc tldraw-app
   [option]
