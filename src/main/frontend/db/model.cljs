@@ -12,7 +12,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
@@ -294,7 +293,7 @@
       (:block/format page)
       (when-let [file (:block/file page)]
         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-          (format/get-format path)))))
+          (gp-util/get-format path)))))
    (state/get-preferred-format)
    :markdown))
 
@@ -591,7 +590,11 @@
   (let [db-before (or db-before current-db)
         cached-ids (map :db/id @result)
         cached-ids-set (set (conj cached-ids page-id))
-        first-changed-id (if (= outliner-op :move-blocks)
+        first-changed-id (cond
+                           (= (:real-outliner-op tx-meta) :indent-outdent)
+                           (last (:move-blocks tx-meta))
+
+                           (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
                              (cond
                                (= page-id target) ; move to the first block
@@ -612,6 +615,7 @@
                                        (when (seq others)
                                          (recur others)))
                                      nil)))))
+                           :else
                            (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
@@ -636,7 +640,6 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  previous-count (count previous-blocks)
                   limit 25
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
@@ -913,7 +916,7 @@
 
 (defn get-page
   [page-name]
-  (if (gp-util/uuid-string? page-name)
+  (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
@@ -1222,7 +1225,7 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
+  (if (util/uuid-string? (str page-name-or-block-uuid))
     (let [id (uuid page-name-or-block-uuid)]
       (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))

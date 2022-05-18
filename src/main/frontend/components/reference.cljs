@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -83,7 +82,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (gp-util/uuid-string? page-name)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
@@ -94,8 +93,8 @@
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
-        [:div.references.mt-6.flex-1.flex-row
-         [:div.content
+        [:div.references.flex-1.flex-row
+         [:div.content.pt-6
           (when (seq scheduled-or-deadlines)
             (ui/foldable
              [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
@@ -173,7 +172,7 @@
     (fn []
       (references* page-name))
     nil
-    false)))
+    {:reset-height? false})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

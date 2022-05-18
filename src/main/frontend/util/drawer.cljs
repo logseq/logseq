@@ -1,9 +1,8 @@
 (ns frontend.util.drawer
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [frontend.util.property :as property]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.format.mldoc :as mldoc]))
 
 (defn drawer-start
@@ -55,8 +54,8 @@
                         (if has-properties?
                           (cond
                             (= :org format)
-                            (let [prop-start-idx (.indexOf body-without-timestamps property/properties-start)
-                                  prop-end-idx (.indexOf body-without-timestamps property/properties-end)
+                            (let [prop-start-idx (.indexOf body-without-timestamps gp-property/properties-start)
+                                  prop-end-idx (.indexOf body-without-timestamps gp-property/properties-end)
                                   properties (subvec body-without-timestamps prop-start-idx (inc prop-end-idx))
                                   after (subvec body-without-timestamps (inc prop-end-idx))]
                               (string/join "\n" (concat [title] scheduled deadline properties [drawer] after)))
@@ -88,8 +87,8 @@
 
 (defn contains-logbook?
   [content]
-  (and (gp-util/safe-re-find (re-pattern (str "(?i)" logbook-start)) content)
-       (gp-util/safe-re-find (re-pattern (str "(?i)" drawer-end)) content)))
+  (and (util/safe-re-find (re-pattern (str "(?i)" logbook-start)) content)
+       (util/safe-re-find (re-pattern (str "(?i)" drawer-end)) content)))
 
 ;; TODO: DRY
 (defn remove-logbook

@@ -14,8 +14,7 @@
             [frontend.db.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
-            [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]))
+            [frontend.util :as util]))
 
 
 ;; Query fields:
@@ -311,8 +310,8 @@
   [e sample]
   (when-let [num (second e)]
     (when (integer? num)
-      (reset! sample num))
-    nil))
+      (reset! sample num)
+      {:query [['?p :block/uuid]]})))
 
 (defn- build-sort-by
   [e sort-by_]
@@ -449,7 +448,7 @@ Some bindings in this fn:
                                                  (remove string/blank?)
                                                  (map (fn [x]
                                                         (if (or (contains? #{"+" "-"} (first x))
-                                                                (and (gp-util/safe-re-find #"\d" (first x))
+                                                                (and (util/safe-re-find #"\d" (first x))
                                                                      (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
                                                           (keyword (name x))
                                                           x)))

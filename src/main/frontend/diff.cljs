@@ -10,7 +10,7 @@
 
 (defn diff
   [s1 s2]
-  (-> ((gobj/get jsdiff "diffLines") s1 s2)
+  (-> ((gobj/get jsdiff "diffLines") s1 s2 (clj->js {"newlineIsToken" true}))
       bean/->clj))
 
 (def inline-special-chars

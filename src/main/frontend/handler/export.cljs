@@ -17,6 +17,7 @@
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p])
   (:import [goog.string StringBuffer]))
@@ -379,7 +380,7 @@
                                               [?e2 :block/file ?e]
                                               [?e2 :block/name ?n]
                                               [?e2 :block/original-name ?n2]] db path)
-                                :format (f/get-format path)})))))
+                                :format (gp-util/get-format path)})))))
 
 
 (defn export-repo-as-markdown!
