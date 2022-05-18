@@ -24,6 +24,9 @@
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
 
+  dev:lint
+  logseq.tasks.dev/lint
+
   test:load-nbb-compatible-namespaces
   logseq.tasks.nbb/load-compatible-namespaces
 

@@ -24,3 +24,20 @@
                (shell "yarn dev-electron-app")
                (println "Waiting for app to build..."))
              (Thread/sleep 1000))))
+
+
+(defn lint
+  "Run
+  - clj-kondo lint
+  - carve lint for unused vars
+  - lint for vars that are too large
+  - lint invalid translation entries
+  - Lint datalog rules"
+  []
+  (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src"
+               "scripts/carve.clj"
+               "scripts/large_vars.clj"
+               "bb lang:invalid-translations"
+               "scripts/lint_rules.clj"]]
+    (println cmd)
+    (shell cmd)))
