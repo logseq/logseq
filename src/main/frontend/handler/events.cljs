@@ -41,6 +41,7 @@
             [frontend.util.persist-var :as persist-var]
             [frontend.fs.sync :as sync]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.components.file-sync :as file-sync]
             [frontend.components.encryption :as encryption]
             [frontend.encrypt :as encrypt]))
 
@@ -111,6 +112,9 @@
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))
+
+(defmethod handle :graph/pick-dest-to-sync [[_ graph]]
+  (state/set-modal! (file-sync/pick-dest-to-sync-panel graph)))
 
 (defmethod handle :graph/open-new-window [[ev repo]]
   (p/let [current-repo (state/get-current-repo)

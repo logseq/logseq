@@ -626,11 +626,13 @@
           (contains? (set templates) (string/lower-case title)))))))
 
 (defn ls-dir-files!
-  [ok-handler]
-  (web-nfs/ls-dir-files-with-handler!
-   (fn []
-     (init-commands!)
-     (when ok-handler (ok-handler)))))
+  ([ok-handler] (ls-dir-files! ok-handler nil))
+  ([ok-handler opts]
+   (web-nfs/ls-dir-files-with-handler!
+     (fn [e]
+       (init-commands!)
+       (when ok-handler (ok-handler e)))
+     opts)))
 
 (defn get-all-pages
   [repo]

@@ -154,3 +154,19 @@
                                 :success false)))))))
 
 (defn get-current-graph-uuid [] (second @sync/graphs-txid))
+
+(def *wait-syncing-graph (atom nil))
+
+(defn set-wait-syncing-graph
+  [graph]
+  (reset! *wait-syncing-graph graph))
+
+(defn switch-to-waiting-graph
+  [local]
+  (when-let [graph (and local @*wait-syncing-graph)]
+    (notification/show!
+      (str "Start to sync <" (:GraphName graph) "> to <" local ">")
+      :warning)
+
+    (switch-graph (:GraphUUID graph))
+    (state/close-modal!)))

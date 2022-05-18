@@ -5,8 +5,11 @@
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notifications]
             [frontend.ui :as ui]
+            [frontend.handler.page :as page-handler]
+            [promesa.core :as p]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.util :as util]
             [rum.core :as rum]
             [cljs.core.async :as as]))
@@ -113,3 +116,33 @@
 
          {:links-header
           [:strong.debug-status (str status)]}))]))
+
+(defn pick-dest-to-sync-panel [graph]
+  (rum/defc _ [_close]
+    
+    (rum/use-effect!
+      (fn []
+        (file-sync-handler/set-wait-syncing-graph graph)
+        #(file-sync-handler/set-wait-syncing-graph nil))
+      [graph])
+
+    [:div.p-5
+    [:h1.mb-4.text-4xl "Sync a remote graph to local"]
+
+     [:div.py-3
+      [:p.px-2.pb-2
+       [:strong "Name: " (:GraphName graph)] [:br]
+       [:small "UUID: " (:GraphUUID graph)]]
+
+      (ui/button
+        (str "Select a empty directory to start")
+        :on-click #(-> (page-handler/ls-dir-files!
+                         (fn [{:keys [url]}]
+                           (file-sync-handler/switch-to-waiting-graph url)
+                           ;; TODO: wait for switch done
+                           (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+                         {:empty-dir-only? true})
+
+                       (p/catch (fn [^js e]
+                                  (when (= "EmptyDirOnly" (.-message e))
+                                    (notifications/show! "Please select a empty directory!" :error))))))]]))
