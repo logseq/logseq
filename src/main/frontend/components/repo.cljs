@@ -19,7 +19,9 @@
             [electron.ipc :as ipc]
             [goog.object :as gobj]
             [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as e]))
+            [frontend.encrypt :as e]
+            [cljs.core.async :as async :refer [go <!]]
+            [frontend.handler.file-sync :as file-sync]))
 
 (rum/defc add-repo
   [args]
@@ -42,6 +44,24 @@
                 (if-not (nil? k)
                   [(merge (first vs) (second vs))] vs))
               repos'))))
+
+(rum/defc normalized-graph-label
+  [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
+  (when graph
+    (let [local? (config/local-db? url)]
+      [:span.flex.items-center
+       (if local?
+         (let [local-dir (config/get-local-dir url)
+               graph-name (text/get-graph-name-from-path local-dir)]
+           [:a {:title    local-dir
+                :on-click #(on-click graph)}
+            [:span graph-name (and GraphUUID [:strong.px-1 "(" GraphName ")"])]
+            (when remote? [:strong.pr-1 (ui/icon "cloud")])])
+
+         [:a {:target "_blank"
+              :href   url}
+          (db/get-repo-path (or url GraphName))
+          (when remote? [:strong.pl-1 (ui/icon "cloud")])])])))
 
 (rum/defc repos < rum/reactive
   []
@@ -66,35 +86,31 @@
             (ui/button
              (t :open-a-directory)
              :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [id url remote? GraphUUID GraphName] :as repo} repos]
-          (let [local? (config/local-db? url)]
-            [:div.flex.justify-between.mb-4 {:key id}
+        (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
+              :let [only-cloud? (and remote? (nil? url))]]
+          [:div.flex.justify-between.mb-4 {:key (or url GraphUUID)}
+           (normalized-graph-label repo #(state/pub-event! [:graph/switch url repo]))
 
-             (if local?
-               (let [local-dir (config/get-local-dir url)
-                     graph-name (text/get-graph-name-from-path local-dir)]
-                 [:a {:title local-dir
-                      :on-click #(state/pub-event! [:graph/switch url repo])}
-                  (when remote? [:strong.pr-1 (ui/icon "cloud")])
-                  [:span graph-name (and GraphUUID [:strong.px-1 "(" GraphName ")"])]])
+           [:div.controls
+            (when (e/encrypted-db? url)
+              [:a.control {:title    "Show encryption information about this graph"
+                           :on-click (fn []
+                                       (state/set-modal! (encryption/encryption-dialog url)))}
+               "🔐"])
 
-               [:a {:target "_blank"
-                    :href url}
-                (when remote? [:strong.pr-1 (ui/icon "cloud")])
-                (db/get-repo-path (or url GraphName))])
-
-             [:div.controls
-              (when (e/encrypted-db? url)
-                [:a.control {:title "Show encryption information about this graph"
-                             :on-click (fn []
-                                         (state/set-modal! (encryption/encryption-dialog url)))}
-                 "🔐"])
-
-              [:a.text-gray-400.ml-4.font-medium.text-sm
-               {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
-                :on-click (fn []
-                            (repo-handler/remove-repo! repo))}
-               "Unlink"]]]))]]
+            [:a.text-gray-400.ml-4.font-medium.text-sm
+             {:title    (if only-cloud?
+                          "Warning: It can't be recovered!"
+                          "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk.")
+              :on-click (fn []
+                          (if only-cloud?
+                            (when (js/confirm (str "Are you sure remove remote this graph (" GraphName ")!"))
+                              (go (<! (file-sync/delete-graph GraphUUID))
+                                  (file-sync/load-session-graphs)))
+                            (repo-handler/remove-repo! repo)))}
+             (if only-cloud?
+               [:span.text-red-600 "Remove"]
+               "Unlink")]]])]]
       (widgets/add-graph))))
 
 (defn refresh-cb []
@@ -110,17 +126,19 @@
 (defn- repos-dropdown-links [repos current-repo *multiple-windows?]
   (let [switch-repos (remove (fn [repo] (= current-repo (:url repo))) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote?]}]
-                      (let [repo-path (db/get-repo-name url)
-                            short-repo-name (text/get-graph-name-from-path repo-path)]
-                        {:title [:span.flex.items-center short-repo-name
-                                 (when remote? [:small.pl-1 (ui/icon "cloud")])]
+                    (fn [{:keys [url remote? GraphName]}]
+                      (let [local? (config/local-db? url)
+                            repo-path (if local? (db/get-repo-name url) GraphName )
+                            short-repo-name (if local? (text/get-graph-name-from-path repo-path) GraphName)]
+                        {:title        [:span.flex.items-center short-repo-name
+                                        (when (and local? GraphName) [:strong (str "(" GraphName ")")])
+                                        (when remote? [:span.pl-1 (ui/icon "cloud")])]
                          :hover-detail repo-path ;; show full path on hover
-                         :options {:class "ml-1"
-                                   :on-click (fn [e]
-                                               (if (gobj/get e "shiftKey")
-                                                 (state/pub-event! [:graph/open-new-window url])
-                                                 (state/pub-event! [:graph/switch url])))}}))
+                         :options      {:class    "ml-1"
+                                        :on-click (fn [e]
+                                                    (if (gobj/get e "shiftKey")
+                                                      (state/pub-event! [:graph/open-new-window url])
+                                                      (state/pub-event! [:graph/switch url])))}}))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
                        (when (and nfs-repo?
@@ -174,7 +192,8 @@
                     (combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [repo-path (db/get-repo-name current-repo)
+                             (let [remote? (some #(= current-repo (:url %)) repos)
+                                   repo-path (db/get-repo-name current-repo)
                                    short-repo-name (db/get-short-repo-name repo-path)]
                                [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
@@ -184,7 +203,7 @@
                                 (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
-                                  [:span [:span#repo-name.font-medium short-repo-name]]
+                                  [:span [:span#repo-name.font-medium short-repo-name (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
                           {:modal-class (util/hiccup->class

@@ -59,8 +59,18 @@
                    (if-not graph-txid-exists?
                      (as/go
                        (notifications/show! "Not a remote graph, ready to init remote!" :warn)
-                       (when (true? (as/<! (file-sync-handler/create-graph (util/node-path.basename (state/get-current-repo)))))
-                         (fs-sync/sync-start)))
+                       (let [repo (state/get-current-repo)
+                             GraphName (util/node-path.basename repo)]
+                         (when-let [GraphUUID (get (as/<! (file-sync-handler/create-graph GraphName)) 2)]
+                           (as/<! (fs-sync/sync-start))
+                           ;; update existing repo
+                           (state/set-repos! (map (fn [r]
+                                                    (if (= (:url r) repo)
+                                                      (assoc r :GraphUUID GraphUUID
+                                                               :GraphName GraphName
+                                                               :remote? true)
+                                                      r))
+                                                  (state/get-repos))))))
                      (fs-sync/sync-start)))
 
         _ (when (and (not off?) toggling?) (state/set-state! :file-sync/toggling? false))]

@@ -31,9 +31,9 @@
           r (if (instance? ExceptionInfo r*) r* (:GraphUUID r*))]
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
-        (do
-          (sync/update-graphs-txid! 0 r (user/user-uuid) (state/get-current-repo))
-          (swap! refresh-file-sync-component not) true)
+        (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
+          (apply sync/update-graphs-txid! tx-info)
+          (swap! refresh-file-sync-component not) tx-info)
         (if (= 404 (get-in (ex-data r) [:err :status]))
           (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
           (notification/show! (str "Create graph failed: " r) :warning))))))
