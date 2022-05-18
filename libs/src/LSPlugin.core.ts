@@ -1512,16 +1512,12 @@ class LSPluginCore
 
   async selectTheme(
     theme: Theme | LegacyTheme,
-    options?: {
+    options: {
       effect?: boolean
       emit?: boolean
-    }
+    } = { effect: true, emit: true }
   ) {
-    const { effect, emit } = Object.assign(
-      {},
-      { effect: true, emit: true },
-      options
-    )
+    const { effect, emit } = options
 
     // Clear current theme before injecting.
     if (this._currentTheme) {

@@ -22,32 +22,32 @@
   (rum/local 0 ::cursor)
   (rum/local 0 ::total)
   {:did-mount (fn [state] (let [*themes        (::themes state)
-                               *cursor        (::cursor state)
-                               *total         (::total state)
-                               mode           (state/sub :ui/theme)
-                               all-themes     (state/sub :plugin/installed-themes)
-                               themes         (->> all-themes
-                                           (filter #(= (:mode %) mode))
-                                           (sort-by #(:name %)))
-                               no-mode-themes (->> all-themes
-                                                   (filter #(= (:mode %) nil))
-                                                   (sort-by #(:name %))
-                                                   (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
-                               selected       (state/sub :plugin/selected-theme)
-                               themes         (map-indexed (fn [idx opt]
-                                                             (let [selected? (= (:url opt) selected)]
-                                                       (when selected? (reset! *cursor (+ idx 1)))
-                                                       (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
-                               themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
-                                                     :url         nil
-                                                     :description (string/join " " ["Logseq default" mode "theme."])
-                                                     :mode        mode
-                                                     :selected    (nil? selected)
-                                                     :group-first true
-                                                     :group-desc  (str mode " themes")} themes)]
-                           (reset! *themes themes)
-                           (reset! *total (count themes))
-                           state))}
+                                *cursor        (::cursor state)
+                                *total         (::total state)
+                                mode           (state/sub :ui/theme)
+                                all-themes     (state/sub :plugin/installed-themes)
+                                themes         (->> all-themes
+                                                    (filter #(= (:mode %) mode))
+                                                    (sort-by #(:name %)))
+                                no-mode-themes (->> all-themes
+                                                    (filter #(= (:mode %) nil))
+                                                    (sort-by #(:name %))
+                                                    (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
+                                selected       (state/sub :plugin/selected-theme)
+                                themes         (map-indexed (fn [idx opt]
+                                                              (let [selected? (= (:url opt) selected)]
+                                                                (when selected? (reset! *cursor (+ idx 1)))
+                                                                (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
+                                themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
+                                                      :url         nil
+                                                      :description (string/join " " ["Logseq default" mode "theme."])
+                                                      :mode        mode
+                                                      :selected    (nil? selected)
+                                                      :group-first true
+                                                      :group-desc  (str mode " themes")} themes)]
+                            (reset! *themes themes)
+                            (reset! *total (count themes))
+                            state))}
   (mixins/event-mixin
    (fn [state]
      (let [*cursor    (::cursor state)
