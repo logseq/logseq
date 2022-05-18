@@ -40,7 +40,8 @@ export const Shape = observer(function Shape({
   const app = useApp()
   let linkButton = null
   if (shape.serialized.logseqLink) {
-    linkButton = <a onClick={() => app.pubEvent(shape.serialized.logseqLink)}>Go to Link</a>
+    const f = () => app.pubEvent('whiteboard-go-to-link', shape.serialized.logseqLink)
+    linkButton = <a onMouseDown={f}>Go to Link</a>
   }
   return (
     <Container bounds={bounds} rotation={rotation} scale={scale}>

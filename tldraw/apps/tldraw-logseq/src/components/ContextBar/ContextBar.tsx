@@ -135,7 +135,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({
             ) : null}
           </>
         )}
-        <a class="shape-link" onClick={() => app.pubEvent("tldraw-link", shapes)}>Link</a>
+        <a class="shape-link" onClick={() => app.pubEvent("whiteboard-link", shapes)}>Link</a>
       </div>
     </HTMLContainer>
   )

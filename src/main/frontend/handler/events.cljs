@@ -401,9 +401,12 @@
            template
            {:target page}))))))
 
-(defmethod handle :tldraw-link [[_ shapes]]
+(defmethod handle :whiteboard-link [[_ shapes]]
   (route-handler/go-to-search! :whiteboard/link)
   (state/set-state! :whiteboard/linked-shapes shapes))
+
+(defmethod handle :whiteboard-go-to-link [[_ link]]
+  (prn "link: " link))
 
 (defn run!
   []
