@@ -27,7 +27,7 @@
 
 
 (defn lint
-  "Run
+  "Run all lint tasks
   - clj-kondo lint
   - carve lint for unused vars
   - lint for vars that are too large
