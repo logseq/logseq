@@ -899,11 +899,13 @@
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))))
 
+(defn toggle-theme
+  [theme]
+  (if (= theme "dark") "light" "dark"))
+
 (defn toggle-theme!
   []
-  (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "light" "dark")]
-    (use-theme-mode! theme')))
+  (use-theme-mode! (toggle-theme (:ui/theme @state))))
 
 (defn set-custom-theme!
   ([custom-theme]

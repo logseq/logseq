@@ -16,65 +16,88 @@
             [clojure.string :as string]))
 
 (rum/defcs installed-themes
-  < rum/reactive
-    (rum/local 0 ::cursor)
-    (rum/local 0 ::total)
-    (mixins/event-mixin
-      (fn [state]
-        (let [*cursor (::cursor state)
-              *total (::total state)
-              ^js target (rum/dom-node state)]
-          (.focus target)
-          (mixins/on-key-down
-            state {38                                       ;; up
-                   (fn [^js _e]
-                     (reset! *cursor
-                             (if (zero? @*cursor)
-                               (dec @*total) (dec @*cursor))))
-                   40                                       ;; down
-                   (fn [^js _e]
-                     (reset! *cursor
-                             (if (= @*cursor (dec @*total))
-                               0 (inc @*cursor))))
+  <
+  (rum/local [] ::themes)
+  (rum/local 0 ::cursor)
+  (rum/local 0 ::total)
+  {:did-mount (fn [state] (let [*themes        (::themes state)
+                               *cursor        (::cursor state)
+                               *total         (::total state)
+                               mode           (state/sub :ui/theme)
+                               all-themes     (state/sub :plugin/installed-themes)
+                               themes         (->> all-themes
+                                           (filter #(= (:mode %) mode))
+                                           (sort-by #(:name %)))
+                               no-mode-themes (->> all-themes
+                                                   (filter #(= (:mode %) nil))
+                                                   (sort-by #(:name %))
+                                                   (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
+                               selected       (state/sub :plugin/selected-theme)
+                               themes         (map-indexed (fn [idx opt]
+                                                             (let [selected? (= (:url opt) selected)]
+                                                       (when selected? (reset! *cursor (+ idx 1)))
+                                                       (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
+                               themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
+                                                     :url         nil
+                                                     :description (string/join " " ["Logseq default" mode "theme."])
+                                                     :mode        mode
+                                                     :selected    (nil? selected)
+                                                     :group-first true
+                                                     :group-desc  (str mode " themes")} themes)]
+                           (reset! *themes themes)
+                           (reset! *total (count themes))
+                           state))}
+  (mixins/event-mixin
+   (fn [state]
+     (let [*cursor    (::cursor state)
+           *total     (::total state)
+           ^js target (rum/dom-node state)]
+       (.focus target)
+       (mixins/on-key-down
+        state {38                                       ;; up
+               (fn [^js _e]
+                 (reset! *cursor
+                         (if (zero? @*cursor)
+                           (dec @*total) (dec @*cursor))))
+               40                                       ;; down
+               (fn [^js _e]
+                 (reset! *cursor
+                         (if (= @*cursor (dec @*total))
+                           0 (inc @*cursor))))
 
-                   13                                       ;; enter
-                   #(when-let [^js active (.querySelector target ".is-active")]
-                      (.click active))
-                   }))))
+               13                                       ;; enter
+               #(when-let [^js active (.querySelector target ".is-active")]
+                  (.click active))}))))
   [state]
   (let [*cursor (::cursor state)
-        *total (::total state)
-        mode (state/sub :ui/theme)
-        themes (filter #(= (:mode %) mode) (state/sub :plugin/installed-themes))
-        selected (state/sub :plugin/selected-theme)
-        themes (cons {:name "Default Theme"
-                      :url nil
-                      :description (string/join " " ["Logseq default" mode "theme."])
-                      :mode mode} themes)
-        themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
-        _ (reset! *total (count themes))]
+        *total  (::total state)
+        *themes (::themes state)]
     [:div.cp__themes-installed
      {:tab-index -1}
      [:h1.mb-4.text-2xl.p-1 (t :themes)]
      (map-indexed
-       (fn [idx opt]
-         (let [current-selected (:selected opt)
-               plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+      (fn [idx opt]
+        (let [current-selected? (:selected opt)
+              group-first?      (:group-first opt)
+              plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+          [:div
+           (when (and group-first?) [:hr.my-2])
            [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
             {:key      (str idx (:url opt))
              :title    (:description opt)
              :class    (util/classnames
-                         [{:is-selected current-selected
-                           :is-active   (= idx @*cursor)}])
+                        [{:is-selected current-selected?
+                          :is-active   (= idx @*cursor)}])
              :on-click #(do (js/LSPluginCore.selectTheme (bean/->js (dissoc opt :selected)))
                             (state/close-modal!))}
-            [:section
-             [:strong.block
-              [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
-              (:name opt)]]
-            [:small.flex-shrink-0.flex.items-center.opacity-10
-             (when current-selected (ui/icon "check"))]]))
-       themes)]))
+            [:div.flex.items-center.text-xs
+             [:div.opacity-60 (str (or (:name plg) "Logseq") " •")]
+             [:div.name.ml-1 (:name opt)]]
+            (when (or group-first? current-selected?)
+              [:div.flex.items-center
+               (when group-first? [:small.opacity-60 (:group-desc opt)])
+               (when current-selected? [:small.inline-flex.ml-1.opacity-60 (ui/icon "check")])])]]))
+      @*themes)]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
