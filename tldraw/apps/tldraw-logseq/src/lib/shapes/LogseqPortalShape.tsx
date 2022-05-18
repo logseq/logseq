@@ -122,9 +122,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }
 
     let linkButton = null
-    if (this.props.logseqLink) {
-      const f = () => app.pubEvent('whiteboard-go-to-link', this.props.logseqLink)
-      linkButton = <a class='ml-2' onMouseDown={f}>🔗 this.props.logseqLink</a>
+    const logseqLink = this.props.logseqLink
+    if (logseqLink) {
+      const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
+      linkButton = <a class='ml-2' onMouseDown={f}>🔗 {logseqLink}</a>
     }
 
     return (
