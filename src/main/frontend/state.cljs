@@ -218,6 +218,8 @@
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
 
+     :file-sync/download-init-progress      nil
+
      :encryption/graph-parsing?             false
      })))
 
@@ -1670,6 +1672,20 @@
 
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-file-sync-download-init-state!
+  []
+  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
+
+(defn set-file-sync-download-init-state!
+  [m]
+  (update-state! [:file-sync/download-init-progress (get-current-repo)]
+                 (if (fn? m) m
+                     (fn [old-value] (merge old-value m)))))
+
+(defn get-file-sync-download-init-state
+  []
+  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
 
 (defn reset-parsing-state!
   []
