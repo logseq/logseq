@@ -37,12 +37,12 @@ export const Shape = observer(function Shape({
     ReactComponent,
   } = shape
   const events = useShapeEvents(shape)
-  const app = useApp()
-  let linkButton = null
-  if (shape.serialized.logseqLink) {
-    const f = () => app.pubEvent('whiteboard-go-to-link', shape.serialized.logseqLink)
-    linkButton = <a onMouseDown={f}>Go to Link</a>
-  }
+  // const app = useApp()
+  // let linkButton = null
+  // if (shape.serialized.logseqLink) {
+  //   const f = () => app.pubEvent('whiteboard-go-to-link', shape.serialized.logseqLink)
+  //   linkButton = <a onMouseDown={f}>Go to Link</a>
+  // }
   return (
     <Container bounds={bounds} rotation={rotation} scale={scale}>
       <ReactComponent
@@ -56,7 +56,6 @@ export const Shape = observer(function Shape({
         asset={asset}
         onEditingEnd={onEditingEnd}
       />
-      {linkButton}
     </Container>
   )
 })

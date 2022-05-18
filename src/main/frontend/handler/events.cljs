@@ -406,7 +406,8 @@
   (state/set-state! :whiteboard/linked-shapes shapes))
 
 (defmethod handle :whiteboard-go-to-link [[_ link]]
-  (prn "link: " link))
+  (route-handler/redirect! {:to :whiteboard
+                            :path-params {:name link}}))
 
 (defn run!
   []

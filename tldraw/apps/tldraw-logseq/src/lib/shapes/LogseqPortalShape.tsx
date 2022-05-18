@@ -121,6 +121,12 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return null
     }
 
+    let linkButton = null
+    if (this.props.logseqLink) {
+      const f = () => app.pubEvent('whiteboard-go-to-link', this.props.logseqLink)
+      linkButton = <a class='ml-2' onMouseDown={f}>🔗 this.props.logseqLink</a>
+    }
+
     return (
       <HTMLContainer
         style={{
@@ -145,6 +151,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             }}
           >
             {pageId}
+
+            {linkButton}
           </div>
         )}
         <div
