@@ -1439,10 +1439,16 @@
 
 (defn- check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
-  (let [result (= current-user-uuid graph-user-uuid)]
-    (when-not result
-      (notification/show! (t :file-sync/other-user-graph) :warning false))
-    result))
+  (cond
+    (nil? current-user-uuid)
+    false
+
+    (= current-user-uuid graph-user-uuid)
+    true
+
+    :else
+    (do (notification/show! (t :file-sync/other-user-graph) :warning false)
+        false)))
 
 (defn check-remote-graph-exists
   [local-graph-uuid]
