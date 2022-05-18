@@ -176,5 +176,3 @@
                                 :success false)))))))
 
 (defn get-current-graph-uuid [] (second @sync/graphs-txid))
-
-(defn get-current-graph-txid [] (nth @sync/graphs-txid 2 nil))
