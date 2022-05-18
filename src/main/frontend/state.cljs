@@ -887,19 +887,19 @@
     (set-edit-content! edit-input-id content)
     (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
-(defn set-theme!
-  [theme]
+(defn set-theme-mode!
+  [mode]
   (when (mobile-util/native-ios?)
-    (if (= theme "light")
+    (if (= mode "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
-  (set-state! :ui/theme theme)
-  (storage/set :ui/theme theme))
+  (set-state! :ui/theme mode)
+  (storage/set :ui/theme mode))
 
 (defn sync-system-theme!
   []
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme! (if system-dark? "dark" "light"))
+    (set-theme-mode! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
@@ -908,7 +908,7 @@
   (if (= theme-mode "system")
     (sync-system-theme!)
     (do
-      (set-theme! theme-mode)
+      (set-theme-mode! theme-mode)
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))))
 

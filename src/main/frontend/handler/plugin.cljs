@@ -603,7 +603,7 @@
                                               mode (:mode theme)]
                                           (when mode
                                             (state/set-custom-theme! mode theme)
-                                            (state/set-theme! mode))
+                                            (state/set-theme-mode! mode))
                                           (state/set-state! :plugin/selected-theme url))))
                                         
                 (.on "reset-custom-theme" (fn [^js themes]
@@ -612,7 +612,7 @@
                                                   mode (:mode themes)]
                                               (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
                                                                         :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
-                                              (state/set-theme! mode))))
+                                              (state/set-theme-mode! mode))))
 
                 (.on "settings-changed" (fn [id ^js settings]
                                           (let [id (keyword id)]
