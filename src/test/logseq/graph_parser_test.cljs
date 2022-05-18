@@ -1,13 +1,9 @@
-(ns frontend.handler.repo-test
-  (:require [cljs.test :refer [deftest use-fixtures is testing]]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.test.helper :as test-helper]
+(ns logseq.graph-parser-test
+  "TODO: Should I reuse repo-test or split it?"
+  (:require [cljs.test :refer [deftest is testing]]
+            [logseq.graph-parser :as graph-parser]
             [frontend.test.docs-graph-helper :as docs-graph-helper]
-            [datascript.core :as d]
-            [frontend.db.conn :as conn]))
-
-(use-fixtures :each {:before test-helper/start-test-db!
-                     :after test-helper/destroy-test-db!})
+            [datascript.core :as d]))
 
 (defn- get-top-block-properties
   [db]
@@ -39,8 +35,10 @@
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (docs-graph-helper/build-graph-files graph-dir)
-        _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
-        db (conn/get-db test-helper/test-db)]
+        conn (graph-parser/init-db)
+        ; _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
+        _ (graph-parser/parse conn files)
+        db @conn]
 
     ;; Counts assertions help check for no major regressions. These counts should
     ;; only increase over time as the docs graph rarely has deletions
@@ -100,6 +98,7 @@
 
       (is (= {:title 98 :id 98
               :updated-at 47 :created-at 47
+              :collapsed 22
               :card-last-score 6 :card-repeats 6 :card-next-schedule 6
               :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
               :alias 6}
@@ -132,13 +131,4 @@
              (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                   (map (comp :block/original-name first))
                   set))
-          "Has correct namespaces"))
-
-    (testing "Delete previous file data when re-parsing a file"
-      (repo-handler/parse-files-and-load-to-db! test-helper/test-db
-                                                (filter #(re-find #"pages/tutorial.md" (:file/path %))
-                                                        files)
-                                                {:re-render? false})
-      (is (= 206 (count files)) "Correct file count")
-      (is (= 40888 (count (d/datoms db :eavt))) "Correct datoms count")
-      )))
+          "Has correct namespaces"))))
