@@ -81,7 +81,7 @@
               group-first?      (:group-first opt)
               plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
           [:div
-           (when group-first? [:hr.my-2])
+           (when (and group-first? (not= idx 0)) [:hr.my-2])
            [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
             {:key      (str idx (:url opt))
              :title    (:description opt)
