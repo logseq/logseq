@@ -55,7 +55,7 @@
                graph-name (text/get-graph-name-from-path local-dir)]
            [:a {:title    local-dir
                 :on-click #(on-click graph)}
-            [:span graph-name (and GraphUUID [:strong.px-1 "(" GraphName ")"])]
+            [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
             (when remote? [:strong.pr-1 (ui/icon "cloud")])])
 
          [:a {:target "_blank"
@@ -107,7 +107,9 @@
                             (when (js/confirm (str "Are you sure remove remote this graph (" GraphName ")!"))
                               (go (<! (file-sync/delete-graph GraphUUID))
                                   (file-sync/load-session-graphs)))
-                            (repo-handler/remove-repo! repo)))}
+                            (do
+                              (repo-handler/remove-repo! repo)
+                              (file-sync/load-session-graphs))))}
              (if only-cloud?
                [:span.text-red-600 "Remove"]
                "Unlink")]]])]]

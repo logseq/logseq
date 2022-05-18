@@ -25,6 +25,7 @@
             [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [clojure.set :as set]
+            [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]))
 
@@ -447,6 +448,30 @@
   [graph]
   (p/let [_ (ipc/ipc "broadcastPersistGraph" graph)] ;; invoke for chaining promise
     nil))
+
+(defn get-repos
+  []
+  (p/let [nfs-dbs (db-persist/get-all-graphs)
+          nfs-dbs (map (fn [db]
+                         {:url db
+                          :root (config/get-local-dir db)
+                          :nfs? true}) nfs-dbs)
+          nfs-dbs (and (seq nfs-dbs)
+                       (ipc/ipc :inflateGraphsInfo nfs-dbs))
+          nfs-dbs (seq (bean/->clj nfs-dbs))]
+
+         (cond
+           (seq nfs-dbs)
+           nfs-dbs
+
+           :else
+           [{:url config/local-repo
+             :example? true}])))
+
+(defn refresh-repos!
+  []
+  (p/let [repos (get-repos)]
+         (state/set-repos! repos)))
 
 (defn graph-ready!
   "Call electron that the graph is loaded."

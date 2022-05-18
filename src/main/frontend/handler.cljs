@@ -138,24 +138,6 @@
                                (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str db)} "*")
 
                                nil)))))))
-(defn- get-repos
-  []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)
-          nfs-dbs (map (fn [db]
-                         {:url db
-                          :root (config/get-local-dir db)
-                          :nfs? true}) nfs-dbs)
-          nfs-dbs (and (seq nfs-dbs)
-                       (ipc/ipc :inflateGraphsInfo nfs-dbs))
-          nfs-dbs (seq (bean/->clj nfs-dbs))]
-
-    (cond
-      (seq nfs-dbs)
-      nfs-dbs
-
-      :else
-      [{:url config/local-repo
-        :example? true}])))
 
 (defn clear-cache!
   []
@@ -197,7 +179,7 @@
 
     (events/run!)
 
-    (p/let [repos (get-repos)]
+    (p/let [repos (repo-handler/get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! repos db-schema)
       (when (mobile-util/is-native-platform?)
