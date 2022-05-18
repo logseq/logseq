@@ -388,7 +388,7 @@ export interface IAppProxy {
     content: string,
     status?: 'success' | 'warning' | 'error' | string
   ) => void
-  
+
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -770,9 +770,7 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(
-    exts: string | string[]
-  ): Promise<{
+  listFilesOfCurrentGraph(exts: string | string[]): Promise<{
     path: string
     size: number
     accessTime: number
@@ -782,14 +780,17 @@ export interface IAssetsProxy {
   }>
 }
 
-export interface ILSPluginThemeManager extends EventEmitter {
-  themes: Map<PluginLocalIdentity, Theme[]>
+export interface ILSPluginThemeManager {
+  get themes(): Map<PluginLocalIdentity, Theme[]>
 
   registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void>
 
-  unregisterTheme(id: PluginLocalIdentity): Promise<void>
+  unregisterTheme(id: PluginLocalIdentity, effect?: boolean): Promise<void>
 
-  selectTheme(opt?: Theme): Promise<void>
+  selectTheme(
+    opt: Theme | LegacyTheme,
+    options: { effect?: boolean; emit?: boolean }
+  ): Promise<void>
 }
 
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'

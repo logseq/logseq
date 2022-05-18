@@ -1149,7 +1149,10 @@ class LSPluginCore
     externals: [],
   }
   private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
-  private readonly _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
+  private readonly _registeredPlugins = new Map<
+    PluginLocalIdentity,
+    PluginLocal
+  >()
   private _currentTheme: {
     pid: PluginLocalIdentity
     opt: Theme | LegacyTheme
@@ -1493,7 +1496,7 @@ class LSPluginCore
     return this._isRegistering
   }
 
-  get themes(): Map<PluginLocalIdentity, Theme[]> {
+  get themes() {
     return this._registeredThemes
   }
 
@@ -1515,9 +1518,13 @@ class LSPluginCore
     options: {
       effect?: boolean
       emit?: boolean
-    } = { effect: true, emit: true }
+    } = {}
   ) {
-    const { effect, emit } = options
+    const { effect, emit } = Object.assign(
+      {},
+      { effect: true, emit: true },
+      options
+    )
 
     // Clear current theme before injecting.
     if (this._currentTheme) {
