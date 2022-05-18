@@ -1,6 +1,7 @@
 (ns frontend.handler.whiteboard
   (:require [frontend.state :as state]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [goog.object :as gobj]))
 
 ;; FIXME: embed /draw should be supported too
 (defn whiteboard-mode?
@@ -15,3 +16,13 @@
                           [{:id (str "logseq-portal-" page-title)
                             :type "logseq-portal"
                             :pageId page-title}])))))
+
+(defn set-linked-page-or-block!
+  [page-or-block-id]
+  (when-let [app ^js (state/get-current-whiteboard)]
+    (let [shapes (:whiteboard/linked-shapes @state/state)]
+      (when (and (seq shapes) page-or-block-id)
+        (let [fs (first shapes)]
+          (.updateShapes app (clj->js
+                              [{:id (.-id fs)
+                                :logseqLink page-or-block-id}])))))))

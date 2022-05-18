@@ -4,6 +4,7 @@ import { observer } from 'mobx-react-lite'
 import { Container } from '~components'
 import type { TLReactShape } from '~lib'
 import { useShapeEvents } from '~hooks/useShapeEvents'
+import { useApp } from '~hooks'
 import type { TLAsset } from '@tldraw/core'
 
 interface ShapeProps {
@@ -36,6 +37,11 @@ export const Shape = observer(function Shape({
     ReactComponent,
   } = shape
   const events = useShapeEvents(shape)
+  const app = useApp()
+  let linkButton = null
+  if (shape.serialized.logseqLink) {
+    linkButton = <a onClick={() => app.pubEvent(shape.serialized.logseqLink)}>Go to Link</a>
+  }
   return (
     <Container bounds={bounds} rotation={rotation} scale={scale}>
       <ReactComponent
@@ -49,6 +55,7 @@ export const Shape = observer(function Shape({
         asset={asset}
         onEditingEnd={onEditingEnd}
       />
+      {linkButton}
     </Container>
   )
 })

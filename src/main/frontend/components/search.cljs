@@ -115,9 +115,10 @@
 (defn- search-on-chosen
   [repo search-q {:keys [type data alias]}]
   (search-handler/add-search-to-recent! repo search-q)
-  (search-handler/clear-search!)
   (let [whiteboard? (whiteboard-handler/whiteboard-mode?)
-        search-mode (:search/mode @state/state)]
+        search-mode (:search/mode @state/state)
+        whiteboard-link? (= search-mode :whiteboard/link)]
+    (search-handler/clear-search!)
     (case type
       :graph-add-filter
       (state/add-graph-search-filter! search-q)
@@ -134,8 +135,13 @@
 
       :page
       (let [data (or alias data)]
-        (if whiteboard?
+        (cond
+          whiteboard-link?
+          (whiteboard-handler/set-linked-page-or-block! data)
+
+          whiteboard?
           (whiteboard-handler/create-page! data)
+          :else
           (route/redirect-to-page! data)))
 
       :file
@@ -147,8 +153,16 @@
             collapsed? (db/parents-collapsed? repo block-uuid)
             page (:block/page (db/entity [:block/uuid block-uuid]))
             long-page? (block-handler/long-page? repo (:db/id page))]
-        (if whiteboard?
+        (cond
+          whiteboard-link?
+          (do
+            (editor-handler/set-blocks-id! [block-uuid])
+            (whiteboard-handler/set-linked-page-or-block! (str block-uuid)))
+
+          whiteboard?
           (whiteboard-handler/create-page! (str block-uuid))
+
+          :else
           (if page
             (if (or collapsed? long-page?)
               (route/redirect-to-page! block-uuid)

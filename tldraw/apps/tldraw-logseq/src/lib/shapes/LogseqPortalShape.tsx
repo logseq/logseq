@@ -134,6 +134,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       >
         {pageId && (
           <div
+            class='ls-whiteboard-card-header'
             style={{
               height: '32px',
               width: '100%',

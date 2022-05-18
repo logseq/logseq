@@ -130,6 +130,8 @@ dummy.restart = function() {};
 dummy.observe = function() {};
 dummy.contentRect = function() {};
 dummy.height = function() {};
+dummy.createShapes = function() {};
+dummy.updateShapes = function() {};
 
 /**
  * @typedef {{
