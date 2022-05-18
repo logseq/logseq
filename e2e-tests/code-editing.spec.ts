@@ -164,7 +164,7 @@ test('multiple code block', async ({ page }) => {
   await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
 
   await page.waitForTimeout(500)
-  await page.click('.CodeMirror pre >> nth=1')
+  await page.click('.CodeMirror >> nth=1 >> pre')
   await page.waitForTimeout(500)
 
   await page.type('.CodeMirror textarea >> nth=1', '\n  :key-test 日本語\n', { strict: true })
@@ -191,11 +191,10 @@ test('click outside to exit', async ({ page }) => {
   expect(await page.inputValue('.block-editor textarea')).toBe('Header ``Click``\n```\n  ABC  DEF\n  GHI\n```')
 })
 
-test('click language label to exit #3463', async ({ page }) => {
+test('click language label to exit #3463', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.press('.block-editor textarea', 'Enter')
-  await page.waitForTimeout(200)
+  await block.enterNext();
 
   await page.fill('.block-editor textarea', '```cpp\n```')
   await page.waitForTimeout(200)
