@@ -61,7 +61,8 @@
   (when (state/setups-picker?)
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
-      (route-handler/redirect-to-home!))))
+      (route-handler/redirect-to-home!)))
+  (repo-handler/refresh-repos!))
 
 (defn- file-sync-stop-when-switch-graph []
   (p/do! (persist-var/load-vars)
