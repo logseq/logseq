@@ -1,5 +1,5 @@
 (ns electron.file-sync-rsapi
-  (:require ["@andelf/rsapi" :as rsapi]))
+  (:require ["@logseq/rsapi" :as rsapi]))
 
 (defn set-env [env] (rsapi/setEnv env))
 

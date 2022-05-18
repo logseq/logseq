@@ -132,9 +132,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
-            [frontend.config :as ui-config]
+            [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -238,7 +238,7 @@
                                                    (when-let [block-id (:block/uuid config)]
                                                      (let [block (db/pull [:block/uuid block-id])]
                                                        (editor-handler/edit-block! block :max block-id))))}}
-                          (when ui-config/publishing?
+                          (when config/publishing?
                             {:readOnly true
                              :cursorBlinkRate -1}))
         editor (when textarea

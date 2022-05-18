@@ -3,7 +3,7 @@
             [rum.core :as rum]
             [frontend.util :as util]
             [clojure.walk :as walk]
-            [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [frontend.handler.notification :as notifications]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
@@ -401,7 +401,7 @@
                             (string/replace matched link (util/node-path.join url link))
                             matched)))
                       content)]
-        (format/to-html content :markdown (mldoc/default-config :markdown))))
+        (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
     (catch js/Error e
       (log/error :parse-user-md-exception e)
       content)))

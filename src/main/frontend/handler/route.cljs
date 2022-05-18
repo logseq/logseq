@@ -1,12 +1,13 @@
 (ns frontend.handler.route
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
@@ -81,7 +82,7 @@
       (if block?
         (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)
-                                                  (:block/format block))]
+                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
             (if (> (count content) 48)
               (str (subs content 0 48) "...")
               content))

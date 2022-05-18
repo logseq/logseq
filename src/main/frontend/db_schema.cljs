@@ -1,4 +1,4 @@
-(ns frontend.db-schema)
+(ns ^:nbb-compatible frontend.db-schema)
 
 (defonce version 1)
 (defonce ast-version 1)
@@ -8,6 +8,8 @@
    :ast/version     {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
+   :db/encrypted?    {}
+   :db/encryption-keys {}
 
    :recent/pages {}
 

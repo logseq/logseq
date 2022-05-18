@@ -5,11 +5,12 @@
             [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]
             [frontend.util :as util]
-            [frontend.text :as text]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.text :as text]))
 
 (defn diff
   [s1 s2]
-  (-> ((gobj/get jsdiff "diffLines") s1 s2)
+  (-> ((gobj/get jsdiff "diffLines") s1 s2 (clj->js {"newlineIsToken" true}))
       bean/->clj))
 
 (def inline-special-chars
@@ -54,7 +55,7 @@
           (+ pos 2)
 
           (contains? inline-special-chars (util/nth-safe markup pos))
-          (let [matched (->> (take-while inline-special-chars (util/safe-subs markup pos))
+          (let [matched (->> (take-while inline-special-chars (gp-util/safe-subs markup pos))
                              (apply str))
                 matched? (and current-line (string/includes? current-line (string/reverse matched)))]
             (if matched?

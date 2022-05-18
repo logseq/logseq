@@ -1,17 +1,17 @@
-(ns frontend.handler.extract-test
+(ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [async deftest is]]
-            [frontend.handler.extract :as extract]
-            [frontend.util :as util]
+            [logseq.graph-parser.extract :as extract]
+            [clojure.pprint :as pprint]
             [promesa.core :as p]))
 
 (defn- extract
   [text]
-  (p/let [result (extract/extract-blocks-pages "repo" "a.md" text)
+  (p/let [result (extract/extract-blocks-pages "a.md" text {:block-pattern "-"})
           result (last result)
           lefts (map (juxt :block/parent :block/left) result)]
     (if (not= (count lefts) (count (distinct lefts)))
       (do
-        (util/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) result))
+        (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) result))
         (throw (js/Error. ":block/parent && :block/left conflicts")))
       (mapv :block/content result))))
 

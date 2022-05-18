@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.components.plugins-settings :as plugins-settings]
@@ -360,10 +361,69 @@
     :intent "logseq"
     :target "_blank"))
 
+(rum/defc user-proxy-settings-panel
+  [{:keys [protocol] :as agent-opts}]
+  (let [[opts set-opts!] (rum/use-state agent-opts)
+        [testing? set-testing?!] (rum/use-state false)
+        *test-input (rum/create-ref)
+        disabled? (string/blank? (:protocol opts))]
+    [:div.cp__settings-network-proxy-panel
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:div.p-2
+      [:p [:label [:strong (t :type)]
+           (ui/select [{:label "Disabled" :value "" :selected disabled?}
+                       {:label "http" :value "http" :selected (= protocol "http")}
+                       {:label "https" :value "https" :selected (= protocol "https")}
+                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
+                      #(set-opts!
+                         (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+      [:p.flex
+       [:label.pr-4 [:strong (t :host)]
+        [:input.form-input.is-small
+         {:value     (:host opts) :disabled disabled?
+          :on-change #(set-opts!
+                        (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+
+       [:label [:strong (t :port)]
+        [:input.form-input.is-small
+         {:value (:port opts) :type "number" :disabled disabled?
+          :on-change #(set-opts!
+                        (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
+
+      [:hr]
+      [:p.flex.items-center.space-x-2
+       [:span.w-60
+        [:input.form-input.is-small
+         {:ref *test-input
+          :placeholder "http://"
+          :on-change #(set-opts!
+                        (assoc opts :test (util/trim-safe (util/evalue %))))
+          :value (:test opts)}]]
+
+       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+         :intent "logseq" :large? false
+         :style {:margin-top 0 :padding "5px 15px"}
+         :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
+                      (when (and (not testing?) (not (string/blank? val)))
+                        (set-testing?! true)
+                        (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
+                                    _ (ipc/ipc :testProxyUrl val)])
+                          (p/catch (fn [e] (notification/show! (str e) :error)))
+                          (p/finally (fn [] (set-testing?! false)))))
+                      ))]
+
+      [:p.pt-2
+       (ui/button (t :save)
+         :on-click (fn []
+                     (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                       (state/set-state! [:electron/user-cfgs :settings/agent] opts)
+                       (state/close-sub-modal! :https-proxy-panel))))]]]))
+
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by
-   selected-unpacked-pkg market? develop-mode? reload-market-fn]
+   selected-unpacked-pkg market? develop-mode?
+   reload-market-fn agent-opts]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
@@ -383,6 +443,16 @@
          (unpacked-plugin-loader selected-unpacked-pkg)])]
 
      [:div.flex.items-center.r
+      ;; extra info
+      (let [{:keys [protocol host port]} agent-opts]
+        (when (every? not-empty [protocol host port])
+          (ui/button
+            [:span.flex.items-center.text-indigo-500
+             (ui/icon "world-download") (str protocol "://" host ":" port)]
+            :small? true
+            :intent "link"
+            :on-click #(state/pub-event! [:go/proxy-settings agent-opts]))))
+
       ;; search
       (panel-tab-search search-key *search-key *search-ref)
 
@@ -466,6 +536,10 @@
                     :options {:on-click #(reload-market-fn)}}]
                   [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                     :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
+
+                [{:title   [:span (ui/icon "world") (t :settings-page/network-proxy)]
+                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+
                 (when (state/developer-mode?)
                   [{:hr true}
                    {:title   [:span (ui/icon "file-code") "Open Preferences"]
@@ -507,6 +581,7 @@
         installing (state/sub :plugin/installing)
         online? (state/sub :network/online?)
         develop-mode? (state/sub :ui/developer-mode?)
+        agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         *search-key (::search-key state)
         *category (::category state)
         *sort-by (::sort-by state)
@@ -552,20 +627,18 @@
        @*search-key *search-key
        @*category *category
        @*sort-by *sort-by @*filter-by *filter-by
-       nil true develop-mode? (::reload state))
+       nil true develop-mode? (::reload state)
+       agent-opts)
 
      (cond
        (not online?)
-       [:p.flex.justify-center.pt-20.opacity-50
-        (svg/offline 30)]
+       [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
        @*fetching
-       [:p.flex.justify-center.pt-20
-        svg/loading]
+       [:p.flex.justify-center.pt-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50
-        "Remote error: " (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -594,6 +667,7 @@
         develop-mode? (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
+        agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         *filter-by (::filter-by state)
         *sort-by (::sort-by state)
         *search-key (::search-key state)
@@ -637,7 +711,8 @@
        @*sort-by *sort-by
        @*filter-by *filter-by
        selected-unpacked-pkg
-       false develop-mode? nil)
+       false develop-mode? nil
+       agent-opts)
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [item sorted-plugins]
@@ -777,6 +852,10 @@
   (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
+
+    (rum/use-effect!
+      #(state/load-app-user-cfgs)
+      [])
 
     [:div.cp__plugins-page
      {:ref       *el-ref

@@ -73,8 +73,7 @@
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
-                            :page
-                            {:page page-entity}))
+                            :page))
                          (route-handler/redirect-to-page! name))))}
      [:span.page-icon icon]
      (pdf-assets/fix-local-asset-filename original-name)]))
@@ -342,6 +341,20 @@
                        (:current-parsing-file state))]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
+(rum/defc file-sync-download-progress < rum/static
+  [state]
+  (let [finished (or (:finished state) 0)
+        total (:total state)
+        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        left-label [:div.flex.flex-row.font-bold
+                    "Downloading"
+                    [:div.hidden.md:flex.flex-row
+                     [:span.mr-1 ": "]
+                     [:ul
+                      (for [file (:downloading-files state)]
+                        [:li file])]]]]
+    (ui/progress-bar-with-label width left-label (str finished "/" total))))
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -356,7 +369,7 @@
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
                                               [page :page])]
-                     (state/sidebar-add-block! current-repo db-id block-type nil)))
+                     (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            state)}
   []
@@ -365,8 +378,16 @@
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])
+        graph-file-sync-download-init-state (state/sub [:file-sync/download-init-progress current-repo])]
     (cond
+      (or
+       (:downloading? graph-file-sync-download-init-state)
+       (not= (:total graph-file-sync-download-init-state) (:finished graph-file-sync-download-init-state)))
+      [:div.flex.items-center.justify-center.full-height-without-header
+       [:div.flex-1
+        (file-sync-download-progress graph-file-sync-download-init-state)]]
+
       (or
        (:graph-loading? graph-parsing-state)
        (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
@@ -396,7 +417,7 @@
 
          ;; FIXME: why will this happen?
          :else
-         [:div "bingo"])])))
+         [:div])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
@@ -431,7 +452,7 @@
     [:div.cp__sidebar-help-btn
      {:title (t :help-shortcut-title)
       :on-click (fn []
-                  (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+                  (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
      "?"]))
 
 (defn- hide-context-menu-and-clear-selection

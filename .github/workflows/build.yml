@@ -17,7 +17,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.7.7'
+  BABASHKA_VERSION: '0.8.1'
 
 jobs:
 
@@ -52,6 +52,11 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.3.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+
       - name: Clojure cache
         uses: actions/cache@v2
         id: clojure-deps
@@ -69,10 +74,16 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
-      - name: Run ClojureScript test
+      - name: Run ClojureScript tests
         run: |
           yarn cljs:test
           node static/tests.js
+
+      - name: Run nbb tests for graph-parser
+        run: yarn nbb-logseq -cp src/main:src/test -m logseq.graph-parser.nbb-test-runner/run-tests
+      # In this job because it depends on an npm package
+      - name: Load nbb compatible namespaces
+        run: bb test:load-nbb-compatible-namespaces
 
   lint:
     runs-on: ubuntu-latest

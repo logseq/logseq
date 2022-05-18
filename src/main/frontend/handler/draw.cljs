@@ -7,6 +7,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]))
 
 (defn create-draws-directory!
@@ -14,7 +15,7 @@
   (when repo
     (let [repo-dir (config/get-repo-dir repo)]
       (util/p-handle
-       (fs/mkdir! (str repo-dir (str "/" config/default-draw-directory)))
+       (fs/mkdir! (str repo-dir (str "/" gp-config/default-draw-directory)))
        (fn [_result] nil)
        (fn [_error] nil)))))
 
@@ -61,6 +62,6 @@
   [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
-                                     (str config/default-draw-directory current-file))]
+                                     (str gp-config/default-draw-directory current-file))]
       (when-not exists?
         (save-excalidraw! current-file default-content)))))

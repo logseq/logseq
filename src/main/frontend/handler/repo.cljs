@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -22,9 +21,12 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [clojure.set :as set]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [frontend.encrypt :as encrypt]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -127,16 +129,19 @@
             (ui-handler/re-render-root!)))))))
 
 (defn create-default-files!
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-            _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
-            _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
-            _ (create-config-file-if-not-exists repo-url)
-            _ (create-contents-file repo-url)
-            _ (create-custom-theme repo-url)]
-      (state/pub-event! [:page/create-today-journal repo-url]))))
+  ([repo-url]
+   (create-default-files! repo-url false))
+  ([repo-url encrypted?]
+   (spec/validate :repos/url repo-url)
+   (let [repo-dir (config/get-repo-dir repo-url)]
+     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+             _ (file-handler/create-metadata-file repo-url encrypted?)
+             _ (create-config-file-if-not-exists repo-url)
+             _ (create-contents-file repo-url)
+             _ (create-custom-theme repo-url)]
+       (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- load-pages-metadata!
   "force?: if set true, skip the metadata timestamp range check"
@@ -180,8 +185,6 @@
 
 (defn- parse-and-load-file!
   [repo-url file new-graph?]
-  (state/set-parsing-state! (fn [m]
-                              (assoc m :current-parsing-file (:file/path file))))
   (try
     (file-handler/alter-file repo-url
                              (:file/path file)
@@ -196,22 +199,26 @@
                               (update m :finished inc))))
 
 (defn- after-parse
-  [repo-url files file-paths re-render? re-render-opts opts graph-added-chan]
+  [repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan]
   (load-pages-metadata! repo-url file-paths files true)
-  (when (:new-graph? opts)
-    (create-default-files! repo-url))
+  (when (or (:new-graph? opts) (not (:refresh? opts)))
+    (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
+      (state/pub-event! [:modal/encryption-setup-dialog repo-url
+                         #(create-default-files! repo-url %)])
+      (create-default-files! repo-url db-encrypted?)))
   (when re-render?
     (ui-handler/re-render-root! re-render-opts))
   (state/pub-event! [:graph/added repo-url opts])
   (state/reset-parsing-state!)
+  (state/set-loading-files! repo-url false)
   (async/offer! graph-added-chan true))
 
-(defn- parse-files-and-create-default-files!
-  [repo-url files delete-files delete-blocks file-paths re-render? re-render-opts opts]
+(defn- parse-files-and-create-default-files-inner!
+  [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (format/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
+                         (let [format (gp-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
@@ -232,28 +239,50 @@
     (if util/node-test?
       (do
         (doseq [file support-files']
+          (state/set-parsing-state! (fn [m]
+                                      (assoc m :current-parsing-file (:file/path file))))
           (parse-and-load-file! repo-url file new-graph?))
-        (after-parse repo-url files file-paths re-render? re-render-opts opts graph-added-chan))
+        (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [file (async/<! chan)]
           (do
-            (parse-and-load-file! repo-url file new-graph?)
+            (state/set-parsing-state! (fn [m]
+                                        (assoc m :current-parsing-file (:file/path file))))
             (async/<! (async/timeout 10))
+            (parse-and-load-file! repo-url file new-graph?)
             (recur))
-          (after-parse repo-url files file-paths re-render? re-render-opts opts graph-added-chan))))
+          (after-parse repo-url files file-paths db-encrypted? re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
 
-(defn- update-parsing-state!
-  [repo-url]
-  (state/set-loading-files! repo-url false))
+(defn- parse-files-and-create-default-files!
+  [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
+  (if db-encrypted?
+    (p/let [files (p/all
+                   (map (fn [file]
+                          (p/let [content (encrypt/decrypt (:file/content file))]
+                            (assoc file :file/content content)))
+                     files))]
+      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts))
+    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts)))
 
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [delete-files delete-blocks re-render? re-render-opts _refresh?] :as opts
                    :or {re-render? true}}]
-  (update-parsing-state! repo-url)
-
-  (let [file-paths (map :file/path files)]
-    (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths re-render? re-render-opts opts)))
+  (let [file-paths (map :file/path files)
+        metadata-file (config/get-metadata-path)
+        metadata-content (some #(when (= (:file/path %) metadata-file)
+                                  (:file/content %)) files)
+        metadata (when metadata-content
+                   (common-handler/read-metadata! metadata-content))
+        db-encrypted? (:db/encrypted? metadata)
+        db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
+    (if db-encrypted?
+      (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts)]
+        (state/set-state! :encryption/graph-parsing? true)
+        (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                           db-encrypted-secret
+                           close-fn]))
+      (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts))))
 
 (defn load-repo-to-db!
   [repo-url {:keys [diffs nfs-files refresh? new-graph? empty-graph?]}]
@@ -266,7 +295,7 @@
                      (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
-                                 (string/replace (str (config/get-local-dir repo-url) "/") "")))
+                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
         nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
         diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
         load-contents (fn [files option]
@@ -300,7 +329,7 @@
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
-                                   (util/remove-nils))
+                                   (gp-util/remove-nils))
               options {:delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
                        :re-render? true}]

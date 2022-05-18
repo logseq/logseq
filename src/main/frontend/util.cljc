@@ -7,13 +7,12 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
-            [camel-snake-kebab.core :as csk]
-            [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
             [frontend.mobile.util :refer [is-native-platform?]]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -41,6 +40,23 @@
            (gdom/getElement "main-content-container")))
 
 #?(:cljs
+   (defn safe-re-find
+     [pattern s]
+     (when-not (string? s)
+       ;; TODO: sentry
+       (js/console.trace))
+     (when (string? s)
+       (re-find pattern s))))
+
+#?(:cljs
+  (do
+    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+    (defn uuid-string?
+      [s]
+      (safe-re-find exactly-uuid-pattern s))))
+
+#?(:cljs
    (defn ios?
      []
      (utils/ios)))
@@ -51,15 +67,6 @@
      (let [ua (string/lower-case js/navigator.userAgent)]
        (and (string/includes? ua "webkit")
             (not (string/includes? ua "chrome"))))))
-
-(defn safe-re-find
-  [pattern s]
-  #?(:cljs
-     (when-not (string? s)
-       ;; TODO: sentry
-       (js/console.trace)))
-  (when (string? s)
-    (re-find pattern s)))
 
 #?(:cljs
    (defn mobile?
@@ -149,28 +156,6 @@
 ;; (defn format
 ;;   [fmt & args]
 ;;   (apply gstring/format fmt args))
-
-#?(:cljs
-   (defn json->clj
-     ([json-string]
-      (json->clj json-string false))
-     ([json-string kebab?]
-      (let [m (-> json-string
-                  (js/JSON.parse)
-                  (js->clj :keywordize-keys true))]
-        (if kebab?
-          (cske/transform-keys csk/->kebab-case-keyword m)
-          m)))))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
 
 (defn remove-nils-non-nested
   [nm]
@@ -420,16 +405,6 @@
       (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
-   (defn url-encode
-     [string]
-     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -524,16 +499,6 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
-
-(defn split-first [pattern s]
-  (when-let [first-index (string/index-of s pattern)]
-    [(subs s 0 first-index)
-     (subs s (+ first-index (count pattern)) (count s))]))
-
-(defn split-last [pattern s]
-  (when-let [last-index (string/last-index-of s pattern)]
-    [(subs s 0 last-index)
-     (subs s (+ last-index (count pattern)) (count s))]))
 
 (defn trim-safe
   [s]
@@ -698,14 +663,6 @@
     []
     (subvec xs start end)))
 
-(defn safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
-
 #?(:cljs
    (defn get-nodes-between-two-nodes
      [id1 id2 class]
@@ -770,19 +727,8 @@
      ([s html?]
       (utils/writeClipboard s html?))))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-(defn uuid-string?
-  [s]
-  (safe-re-find exactly-uuid-pattern s))
-
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
-
-(defn capitalize-all [s]
-  (some->> (string/split s #" ")
-           (map string/capitalize)
-           (string/join " ")))
 
 #?(:cljs
    (defn react
@@ -882,11 +828,6 @@
   []
   (str (rand-str 6) (rand-str 3)))
 
-(defn tag-valid?
-  [tag-name]
-  (when (string? tag-name)
-    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
-
 (defn pp-str [x]
   #_:clj-kondo/ignore
   (with-out-str (clojure.pprint/pprint x)))
@@ -950,39 +891,33 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
+#?(:cljs
+   (defn url-encode
+     [string]
+     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
+
+#?(:cljs
+   (defn url-decode
+     [string]
+     (some-> string str (js/decodeURIComponent))))
+
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
-(defn include-windows-reserved-chars?
-  [s]
-  (safe-re-find windows-reserved-chars s))
+#?(:cljs
+   (do
+     (defn include-windows-reserved-chars?
+      [s]
+       (safe-re-find windows-reserved-chars s))
 
-(defn create-title-property?
-  [s]
-  (and (string? s)
-       (or (include-windows-reserved-chars? s)
-           (string/includes? s "_")
-           (string/includes? s "/")
-           (string/includes? s ".")
-           (string/includes? s "%")
-           (string/includes? s "#"))))
-
-(defn remove-boundary-slashes
-  [s]
-  (when (string? s)
-    (let [s (if (= \/ (first s))
-              (subs s 1)
-              s)]
-      (if (= \/ (last s))
-        (subs s 0 (dec (count s)))
-        s))))
-
-(defn normalize
-  [s]
-  (.normalize s "NFC"))
-(defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)"
-  [s]
-  (.normalize s "NFC"))
+     (defn create-title-property?
+       [s]
+       (and (string? s)
+            (or (include-windows-reserved-chars? s)
+                (string/includes? s "_")
+                (string/includes? s "/")
+                (string/includes? s ".")
+                (string/includes? s "%")
+                (string/includes? s "#"))))))
 
 #?(:cljs
    (defn search-normalize
@@ -990,31 +925,29 @@
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn page-name-sanity
-  "Sanitize the page-name for file name (strict), for file writting"
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      ;; Windows reserved path characters
-                      (string/replace windows-reserved-chars "_")
-                      ;; for android filesystem compatiblity
-                      (string/replace #"[\\#|%]+" "_")
-                      (normalize))]
-     (if replace-slash?
-       (string/replace page #"/" ".")
-       page))))
+#?(:cljs
+   (defn file-name-sanity
+     "Sanitize page-name for file name (strict), for file writing."
+     [page-name]
+     (some-> page-name
+             gp-util/page-name-sanity
+             ;; for android filesystem compatiblity
+             (string/replace #"[\\#|%]+" url-encode)
+             ;; Windows reserved path characters
+             (string/replace windows-reserved-chars url-encode)
+             (string/replace #"/" url-encode)
+             (string/replace "*" "%2A"))))
 
-(defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
-  [s]
-  (page-name-sanity (string/lower-case s)))
+#?(:cljs
+   (def page-name-sanity-lc
+     "Delegate to gp-util to loosely couple app usages to graph-parser"
+     gp-util/page-name-sanity-lc))
 
-(defn safe-page-name-sanity-lc
-  [s]
-  (if (string? s)
-    (page-name-sanity-lc s) s))
+#?(:cljs
+ (defn safe-page-name-sanity-lc
+   [s]
+   (if (string? s)
+     (page-name-sanity-lc s) s)))
 
 (defn get-page-original-name
   [page]
@@ -1294,31 +1227,12 @@
   [text]
   (string/join (replace regex-char-esc-smap text)))
 
-(defn split-namespace-pages
-  [title]
-  (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
-
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
-
-(defn wrapped-by-quotes?
-  [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
 
 #?(:cljs
    (defn right-click?
@@ -1327,16 +1241,6 @@
            button (gobj/get e "button")]
        (or (= which 3)
            (= button 2)))))
-
-#?(:cljs
-   (defn url?
-     [s]
-     (and (string? s)
-          (try
-            (js/URL. s)
-            true
-            (catch js/Error _e
-              false)))))
 
 #?(:cljs
    (defn make-el-into-center-viewport

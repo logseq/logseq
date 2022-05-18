@@ -182,7 +182,9 @@
      :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
+     :copy/blocks                           {:copy/content nil
+                                             :copy/block-ids nil
+                                             :copy/graph nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -216,6 +218,10 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     :file-sync/download-init-progress      nil
+
+     :encryption/graph-parsing?             false
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -749,12 +755,12 @@
   (swap! state assoc :ui/sidebar-open? false))
 
 (defn sidebar-add-block!
-  [repo db-id block-type block-data]
+  [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
     (when db-id
       (update-state! :sidebar/blocks (fn [blocks]
                                        (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type block-data])
+                                            (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -768,6 +774,13 @@
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-replace-block!
+  [old-sidebar-key new-sidebar-key]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (map #(if (= % old-sidebar-key)
+                                           new-sidebar-key
+                                           %) blocks))))
 
 (defn sidebar-block-exists?
   [idx]
@@ -1426,13 +1439,15 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
 (defn set-copied-full-blocks
   [content blocks]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
@@ -1498,6 +1513,15 @@
 (defn get-page-blocks-cp
   []
   (get-in @state [:view/components :page-blocks]))
+
+;; To avoid circular dependencies
+(defn set-component!
+  [k value]
+  (set-state! [:view/components k] value))
+
+(defn get-component
+  [k]
+  (get-in @state [:view/components k]))
 
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
@@ -1655,8 +1679,23 @@
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
+
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-file-sync-download-init-state!
+  []
+  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
+
+(defn set-file-sync-download-init-state!
+  [m]
+  (update-state! [:file-sync/download-init-progress (get-current-repo)]
+                 (if (fn? m) m
+                     (fn [old-value] (merge old-value m)))))
+
+(defn get-file-sync-download-init-state
+  []
+  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
 
 (defn reset-parsing-state!
   []
@@ -1667,3 +1706,8 @@
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))

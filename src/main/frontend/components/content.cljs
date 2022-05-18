@@ -21,6 +21,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -35,7 +36,7 @@
 
 (defn- lazy-load
   [format]
-  (let [format (format/normalize format)]
+  (let [format (gp-util/normalize-format format)]
     (when-let [record (format/get-format-record format)]
       (when-not (protocol/loaded? record)
         (set-format-js-loading! format true)
@@ -214,7 +215,7 @@
             :on-click (fn [_e]
                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
            "Copy block embed")
-          
+
           ;; TODO Logseq protocol mobile support
           (when (util/electron?)
             (ui/menu-link
@@ -295,12 +296,10 @@
       (ui/menu-link
        {:key "open-in-sidebar"
         :on-click (fn []
-                    (let [block (db/pull [:block/uuid block-ref-id])]
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       block-ref-id
-                       :block-ref
-                       {:block block}))                    )}
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     block-ref-id
+                     :block-ref))}
        "Open in sidebar")
       (ui/menu-link
        {:key "copy"
@@ -389,7 +388,7 @@
                    :format format}
                   id
                   config)
-      (let [format (format/normalize format)
+      (let [format (gp-util/normalize-format format)
             loading? (get loading format)
             markup? (contains? config/html-render-formats format)
             on-click (fn [e]
@@ -447,5 +446,5 @@
   (if hiccup
     [:div
      (hiccup-content id option)]
-    (let [format (format/normalize format)]
+    (let [format (gp-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

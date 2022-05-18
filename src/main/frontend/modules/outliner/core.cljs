@@ -12,6 +12,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [cljs.spec.alpha :as s]))
 
 (s/def ::block-map (s/keys :req [:db/id :block/uuid]
@@ -135,7 +136,7 @@
     (let [m (-> (:data this)
                 (dissoc :block/children :block/meta :block/top? :block/bottom?
                         :block/title :block/body :block/level)
-                (util/remove-nils))
+                (gp-util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
           id (:db/id (:data this))

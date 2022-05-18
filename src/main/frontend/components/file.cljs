@@ -9,10 +9,11 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -43,8 +44,8 @@
            (let [file-id file]
              [:tr {:key file-id}
               [:td
-               (let [href (if (config/draw? file)
-                            (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
+               (let [href (if (gp-config/draw? file)
+                            (rfe/href :draw nil {:file (string/replace file (str gp-config/default-draw-directory "/") "")})
                             (rfe/href :file {:path file-id}))]
                  [:a {:href href}
                   file])]
@@ -70,7 +71,7 @@
                    state)}
   [state]
   (let [path (get-path state)
-        format (format/get-format path)
+        format (gp-util/get-format path)
         original-name (db/get-file-page path)
         random-id (str (d/squuid))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)}
@@ -86,8 +87,7 @@
                                                 (state/sidebar-add-block!
                                                  (state/get-current-repo)
                                                  (:db/id page)
-                                                 :page
-                                                 {:page page}))
+                                                 :page))
                                               (util/stop e)))}
          original-name]])
 

@@ -10,7 +10,7 @@
             [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]))
 

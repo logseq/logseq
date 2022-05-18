@@ -36,6 +36,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.version :as fv]
             [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]))
@@ -636,7 +637,7 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (let [page? (not (util/uuid-string? uuid-or-page-name))
+  (let [page? (not (gp-util/uuid-string? uuid-or-page-name))
         page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
         _ (and page-not-exist? (page-handler/create! uuid-or-page-name
                                  {:redirect? false
@@ -652,7 +653,7 @@
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (let [page? (not (util/uuid-string? uuid-or-page-name))
+  (let [page? (not (gp-util/uuid-string? uuid-or-page-name))
         page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
         _ (and page-not-exist? (page-handler/create! uuid-or-page-name
                                  {:redirect? false

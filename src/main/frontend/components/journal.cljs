@@ -8,7 +8,8 @@
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -21,7 +22,7 @@
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
-(rum/defc journal-cp < rum/reactive
+(rum/defc journal-cp-inner < rum/reactive
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
@@ -48,12 +49,10 @@
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page
-                         {:page     page
-                          :journal? true}))
+                         :page))
                       (.preventDefault e)))}
        [:h1.title
-        (util/capitalize-all title)]]
+        (gp-util/capitalize-all title)]]
 
       (blocks-cp repo page format)
 
@@ -64,6 +63,11 @@
      (rum/with-key
        (reference/references title)
        (str title "-refs"))]))
+
+(rum/defc journal-cp
+  [journal]
+  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil
+                   {:reset-height? true}))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

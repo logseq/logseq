@@ -36,15 +36,17 @@ After cloning the [Logseq repository](https://github.com/logseq/logseq), there a
 
 - Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their Clojure counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
 
-- `/public` and `/resources` contain all the static assets
+- `public/` and `resources/` contain all the static assets
 
-- `/src` is where most of the code locates.
+- `src/` is where most of the code is located.
 
-  - `/src/electron` and `/src/main/electron` contains code specific to the desktop app.
+  - `src/electron/` and `src/main/electron/` contains code specific to the desktop app.
 
-  - `/src/test` contains all the test and `/src/dev-cljs` contains some development utilities.
+  - `src/test/` contains all the tests and `src/dev-cljs/` contains some development utilities.
 
-  - `/src/main/frontend` contains code that powers the Logseq editor. Folders and files inside are organized by features or functions. For example, `components` contains all the UI components and `handler` contains all the event-handling code. You can explore on your own interest.
+  - `src/main/frontend/` contains code that powers the Logseq editor. Folders and files inside are organized by features or functions. For example, `components` contains all the UI components and `handler` contains all the event-handling code. You can explore on your own interest.
+
+  - `src/main/logseq/` contains the api used by plugins and the graph-parser.
 
 ## Data Flow
 

@@ -6,6 +6,6 @@
                   frontend.db
                   ;; Used for debugging
                   frontend.db.debug
-                  ;; namespace fns are lazily loaded
-                  frontend.extensions.age-encryption]
+                  ;; carve doesn't detect nbb only usage
+                  logseq.graph-parser.log]
  :report {:format :ignore}}

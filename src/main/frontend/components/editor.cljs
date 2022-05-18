@@ -23,6 +23,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -112,9 +113,9 @@
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
-                   (util/safe-subs edit-content pos current-pos))
+                   (gp-util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos))
+                   (gp-util/safe-subs edit-content pos current-pos))
                  "")
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
@@ -407,9 +408,9 @@
                :z-index    11}
               (when set-default-width?
                 {:width max-width})
-              (let [^js/HTMLElement textarea
-                    (js/document.querySelector "textarea")]
-                (if (<= (.-clientWidth textarea) (+ left (if set-default-width? max-width 500)))
+              (let [^js/HTMLElement editor
+                    (js/document.querySelector ".editor-wrapper")]
+                (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
                   {:right 0}
                   {:left (if (and y-diff (= y-diff 0)) left 0)})))}
      cp]))
@@ -619,7 +620,7 @@
                     config/mobile?)
                 (not (:review-cards? config)))
        (mobile-bar state id))
-     
+
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)

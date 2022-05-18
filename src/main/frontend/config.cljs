@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [shadow.resource :as rc]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
@@ -22,11 +23,12 @@
 ;; (goog-define LOGIN-URL
 ;;              "https://logseq.auth.us-east-1.amazoncognito.com/login?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 ;; (goog-define API-DOMAIN "api-prod.logseq.com")
+;; (goog-define WS-URL "wss://b2rp13onu2.execute-api.us-east-1.amazonaws.com/production?graphuuid=%s")
 
 ;; dev env
 (goog-define FILE-SYNC-PROD? false)
 (goog-define LOGIN-URL
-             "https://logseq-test.auth.us-east-2.amazoncognito.com/login?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+             "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -83,6 +85,15 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
+(defn doc-formats
+  []
+  (let [config-formats (some->> (get-in @state/state [:config :document-formats])
+                                (map :keyword)
+                                (set))]
+    (set/union
+     config-formats
+     #{:doc :docx :xls :xlsx :ppt :pptx :one :epub})))
+
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def media-formats (set/union (img-formats) audio-formats))
@@ -94,14 +105,6 @@
   []
   (set/union (text-formats)
              (img-formats)))
-
-;; TODO: rename
-(defonce mldoc-support-formats
-  #{:org :markdown :md})
-
-(defn mldoc-support?
-  [format]
-  (contains? mldoc-support-formats (keyword format)))
 
 (def mobile?
   (when-not util/node-test?
@@ -254,7 +257,6 @@
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
-(defonce default-draw-directory "draws")
 
 (defn get-pages-directory
   []
@@ -264,10 +266,6 @@
   []
   (or (state/get-journals-directory) default-journals-directory))
 
-(defn draw?
-  [path]
-  (util/starts-with? path default-draw-directory))
-
 (defonce local-repo "local")
 
 (defn demo-graph?
@@ -276,11 +274,11 @@
   ([graph]
    (= graph local-repo)))
 
-(defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def custom-js-file "custom.js")
+(def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
@@ -298,10 +296,6 @@
   [s]
   (and (string? s)
        (string/starts-with? s local-db-prefix)))
-
-(defn local-asset?
-  [s]
-  (util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defn get-local-asset-absolute-path
   [s]
@@ -368,7 +362,7 @@
 
                  :else
                  relative-path)]
-      (util/path-normalize path))))
+      (gp-util/path-normalize path))))
 
 (defn get-config-path
   ([]
@@ -376,6 +370,13 @@
   ([repo]
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-metadata-path
+  ([]
+   (get-metadata-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" metadata-file)))))
 
 (defn get-pages-metadata-path
   ([]

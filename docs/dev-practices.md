@@ -58,6 +58,13 @@ We use [datascript](https://github.com/tonsky/datascript)'s datalog to power our
 scripts/lint_rules.clj
 ```
 
+### Nbb compatible
+
+Namespaces have the metadata flag `^:nbb-compatible` indicate they are compatible with https://github.com/logseq/nbb-logseq. This compatibility is necessary in order for namespaces to be reused by the frontend and CLIs. To confirm these compatibilities, run:
+```
+bb test:load-nbb-compatible-namespaces
+```
+
 ## Testing
 
 We have unit and end to end tests.
@@ -94,9 +101,9 @@ For this workflow:
   1. Add `^:focus` metadata flags to tests e.g. `(deftest ^:focus test-name ...)`.
   2. In another shell, run `node static/tests.js -i focus` to only run those
   tests. To run all tests except those tests run `node static/tests.js -e focus`.
-3. Or focus namespaces: Using the regex option `-r`, run tests for `frontend.text-test` with `node static/tests.js -r text`.
+3. Or focus namespaces: Using the regex option `-r`, run tests for `frontend.util.page-property-test` with `node static/tests.js -r page-property`.
 
-Multiple options can be specified to AND selections. For example, to run all `frontend.text-test` tests except for the focused one: `node static/tests.js -r text -e focus`
+Multiple options can be specified to AND selections. For example, to run all `frontend.util.page-property-test` tests except for the focused one: `node static/tests.js -r page-property -e focus`
 
 For help on more options, run `node static/tests.js -h`.
 
@@ -107,7 +114,7 @@ shadow-cljs watch test --config-merge '{:autorun true}'`. The test output may
 appear where shadow-cljs was first invoked e.g. where `yarn watch` is running.
 Specific namespace(s) can be auto run with the `:ns-regexp` option e.g. `npx
 shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
-"frontend.text-test"}'`.
+"frontend.util.page-property-test"}'`.
 
 ## Logging
 

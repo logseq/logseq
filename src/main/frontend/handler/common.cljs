@@ -80,6 +80,14 @@
       (state/set-config! repo-url config)
       config)))
 
+(defn read-metadata!
+  [content]
+  (try
+    (reader/read-string content)
+    (catch :default e
+      (log/error :parse/metadata-failed e)
+      {})))
+
 (defn get-page-default-properties
   [page-name]
   {:title page-name

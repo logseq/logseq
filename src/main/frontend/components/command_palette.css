@@ -16,7 +16,6 @@
     }
 
     .menu-link {
-      background-color: transparent;
       transition: none;
       border: none;
       border-radius: unset !important;

@@ -16,6 +16,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p])
   (:import [goog.string StringBuffer]))
@@ -214,7 +216,7 @@
   (let [block (db/entity [:block/uuid (uuid block-uuid)])
         block-content (get-blocks-contents repo (:block/uuid block))
         format (:block/format block)
-        ast (mldoc/->edn block-content (mldoc/default-config format))
+        ast (mldoc/->edn block-content (gp-mldoc/default-config format))
         embed-pages-new  (get-embed-pages-from-ast ast)
         embed-blocks-new  (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)
@@ -258,7 +260,7 @@
   (let [page-name* (util/page-name-sanity-lc page-name)
         page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
-        ast (mldoc/->edn page-content (mldoc/default-config format))
+        ast (mldoc/->edn page-content (gp-mldoc/default-config format))
         embed-pages-new (get-embed-pages-from-ast ast)
         embed-blocks-new (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)
@@ -378,7 +380,7 @@
                                               [?e2 :block/file ?e]
                                               [?e2 :block/name ?n]
                                               [?e2 :block/original-name ?n2]] db path)
-                                :format (f/get-format path)})))))
+                                :format (gp-util/get-format path)})))))
 
 
 (defn export-repo-as-markdown!
