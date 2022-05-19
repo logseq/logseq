@@ -925,10 +925,20 @@
   {:post [(s/valid? ::sync-state %)]}
   (update sync-state :current-local->remote-files into paths))
 
-(defn sync-state--update-queued-local->remote-files
+(defn sync-state--add-queued-local->remote-files
   [sync-state paths]
   {:post [(s/valid? ::sync-state %)]}
-  (update sync-state :queued-local->remote-files (fn [_ n] (set n)) paths))
+  (update sync-state :queued-local->remote-files (fn [o n] (set/union o (set n))) paths))
+
+(defn sync-state--remove-queued-local->remote-files
+  [sync-state paths]
+  {:post [(s/valid? ::sync-state %)]}
+  (update sync-state :queued-local->remote-files (fn [o n] (set/difference o (set n))) paths))
+
+(defn sync-state-reset-queued-local->remote-files
+  [sync-state]
+  {:post [(s/valid? ::sync-state %)]}
+  (assoc sync-state :queued-local->remote-files nil))
 
 (defn- add-history-items
   [history paths now]
@@ -1138,17 +1148,19 @@
 
               timeout
               (do (async/onto-chan! c coll false)
-                  (swap! *sync-state sync-state--update-queued-local->remote-files nil)
+                  (swap! *sync-state sync-state-reset-queued-local->remote-files)
                   (recur (async/timeout rate) []))
 
               (some? e)
-              (if (and (filter-e-fn e)
-                           (<! (filter-local-changes-pred e base-path graph-uuid)))
+              (if (filter-e-fn e)
+                (let [e-path [(relative-path e)]]
+                  (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
+                  (if (<! (filter-local-changes-pred e base-path graph-uuid))
                     (let [coll* (distinct (conj coll e))]
-                      (swap! *sync-state sync-state--update-queued-local->remote-files
-                             (mapv relative-path coll*))
                       (recur timeout-c coll*))
-                    (recur timeout-c coll))
+                    (do (swap! *sync-state sync-state--remove-queued-local->remote-files e-path)
+                        (recur timeout-c coll))))
+                (recur timeout-c coll))
 
               (nil? e)
               (do (println "close ratelimit chan")
