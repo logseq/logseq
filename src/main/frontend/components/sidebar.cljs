@@ -344,16 +344,18 @@
 (rum/defc file-sync-download-progress < rum/static
   [state]
   (let [finished (or (:finished state) 0)
-        total (:total state)
-        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-        left-label [:div.flex.flex-row.font-bold
-                    "Downloading"
-                    [:div.hidden.md:flex.flex-row
-                     [:span.mr-1 ": "]
-                     [:ul
-                      (for [file (:downloading-files state)]
-                        [:li file])]]]]
-    (ui/progress-bar-with-label width left-label (str finished "/" total))))
+        total (:total state)]
+    (if (= total :unknown)
+      (ui/loading "Downloading...")
+      (let [width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+           left-label [:div.flex.flex-row.font-bold
+                       "Downloading"
+                       [:div.hidden.md:flex.flex-row
+                        [:span.mr-1 ": "]
+                        [:ul
+                         (for [file (:downloading-files state)]
+                           [:li file])]]]]
+       (ui/progress-bar-with-label width left-label (str finished "/" total))))))
 
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]

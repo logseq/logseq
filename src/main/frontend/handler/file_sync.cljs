@@ -59,7 +59,7 @@
   [repo graph-uuid user-uuid base-path]
   (go
     (state/reset-file-sync-download-init-state!)
-    (state/set-file-sync-download-init-state! {:total js/NaN :finished 0 :downloading? true})
+    (state/set-file-sync-download-init-state! {:total :unknown :finished 0 :downloading? true})
     (let [remote-all-files-meta (<! (sync/get-remote-all-files-meta sync/remoteapi graph-uuid))
           local-all-files-meta (<! (sync/get-local-all-files-meta sync/rsapi graph-uuid base-path))
           diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
