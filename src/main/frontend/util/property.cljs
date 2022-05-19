@@ -232,7 +232,7 @@
                                         (mldoc/properties? (second
                                                             (remove
                                                              (fn [[x _]]
-                                                               (= "Hiccup" (first x)))
+                                                               (contains? #{"Hiccup" "Raw_Html"} (first x)))
                                                              ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
