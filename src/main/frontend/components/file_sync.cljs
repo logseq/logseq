@@ -141,7 +141,6 @@
          :on-click #(-> (page-handler/ls-dir-files!
                           (fn [{:keys [url]}]
                             (file-sync-handler/init-remote-graph url)
-
                             ;; TODO: wait for switch done
                             (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
