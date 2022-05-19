@@ -353,7 +353,7 @@
    :TXType "update_files"
    :TXContent (string/join "/" [user-uuid graph-uuid relative-path])})
 
-(defn- filepaths->partitioned-filetxns
+(defn filepaths->partitioned-filetxns
   "transducer.
   1. filepaths -> diff
   2. diffs->partitioned-filetxns"
@@ -363,6 +363,7 @@
           {:relative-path p :user-uuid user-uuid :graph-uuid graph-uuid}))
    (map-indexed filepath->diff)
    (diffs->partitioned-filetxns n)))
+
 
 (deftype FileMetadata [size etag path last-modified remote? ^:mutable normalized-path]
   Object
@@ -390,7 +391,7 @@
   (-pr-writer [_ w _opts]
     (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
 
-(defn- relative-path [o]
+(defn relative-path [o]
   (cond
     (implements? IRelativePath o)
     (-relative-path o)
@@ -754,8 +755,9 @@
             repo (state/get-current-repo)
             file-path (config/get-file-path repo path)
             content (<! (p->c (fs/read-file "" file-path)))]
-        (or (nil? content)
-            (some :removed (diff/diff origin-db-content content)))))))
+        (and origin-db-content
+             (or (nil? content)
+                 (some :removed (diff/diff origin-db-content content))))))))
 
 (defn- apply-filetxns
   [graph-uuid base-path filetxns]
@@ -797,21 +799,23 @@
          sync-state--remove-current-remote->local-files
          sync-state--stopped?)
 
-(defn- apply-filetxns-partitions
+(defn apply-filetxns-partitions
   "won't call update-graph-txid! when *txid is nil"
-  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped]
+  [*sync-state user-uuid graph-uuid base-path filetxns-partitions repo *txid *stopped before-f after-f]
   (go-loop [filetxns-partitions* filetxns-partitions]
     (if @*stopped
       {:stop true}
       (when (seq filetxns-partitions*)
         (let [filetxns (first filetxns-partitions*)
               paths (map relative-path filetxns)
-              _ (swap! *sync-state sync-state--add-current-remote->local-files paths)
+              _ (when (and before-f (fn? before-f)) (before-f filetxns))
+              _ (when *sync-state (swap! *sync-state sync-state--add-current-remote->local-files paths))
               r (<! (apply-filetxns graph-uuid base-path filetxns))
-              _ (swap! *sync-state sync-state--remove-current-remote->local-files paths)]
+              _ (when *sync-state (swap! *sync-state sync-state--remove-current-remote->local-files paths))]
           (if (instance? ExceptionInfo r)
             r
             (let [latest-txid (apply max (map #(.-txid ^FileTxn %) filetxns))]
+              (when (and after-f (fn? after-f)) (after-f filetxns))
               (when *txid
                 (reset! *txid latest-txid)
                 (update-graphs-txid! latest-txid graph-uuid user-uuid repo))
@@ -982,25 +986,25 @@
     [_ relative-filepaths latest-txid]
     (go
       (let [partitioned-filetxns
-              (sequence (filepaths->partitioned-filetxns 10 graph-uuid user-uuid)
-                        relative-filepaths)
-              r
-              (if (empty? (flatten partitioned-filetxns))
-                {:succ true}
-                (<! (apply-filetxns-partitions
-                     *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
-                     nil *stopped)))]
-          (cond
-            (instance? ExceptionInfo r)
-            {:unknown r}
+            (sequence (filepaths->partitioned-filetxns 10 graph-uuid user-uuid)
+                      relative-filepaths)
+            r
+            (if (empty? (flatten partitioned-filetxns))
+              {:succ true}
+              (<! (apply-filetxns-partitions
+                   *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo
+                   nil *stopped nil nil)))]
+        (cond
+          (instance? ExceptionInfo r)
+          {:unknown r}
 
-            @*stopped
-            {:stop true}
+          @*stopped
+          {:stop true}
 
-            :else
-            (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
-                (reset! *txid latest-txid)
-                {:succ true})))))
+          :else
+          (do (update-graphs-txid! latest-txid graph-uuid user-uuid repo)
+              (reset! *txid latest-txid)
+              {:succ true})))))
 
   IRemote->LocalSync
   (stop-remote->local! [_] (vreset! *stopped true))
@@ -1029,7 +1033,8 @@
                               (reset! *txid latest-txid)
                               {:succ true})
                           (<! (apply-filetxns-partitions
-                               *sync-state user-uuid graph-uuid base-path partitioned-filetxns repo *txid *stopped)))))))))]
+                               *sync-state user-uuid graph-uuid base-path
+                               partitioned-filetxns repo *txid *stopped nil nil)))))))))]
         (cond
           (instance? ExceptionInfo r)
           {:unknown r}
@@ -1050,12 +1055,11 @@
             remote-all-files-meta (<! remote-all-files-meta-c)
             local-all-files-meta (<! local-all-files-meta-c)
             diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
-            latest-txid (:TXId
-                         (<! (get-remote-graph remoteapi nil graph-uuid)))]
+            latest-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
         (println "[full-sync(remote->local)]"
                  (count diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map -relative-path diff-remote-files)
+             this (map relative-path diff-remote-files)
              latest-txid))))))
 
 (defn- file-changed?
@@ -1439,10 +1443,16 @@
 
 (defn- check-graph-belong-to-current-user
   [current-user-uuid graph-user-uuid]
-  (let [result (= current-user-uuid graph-user-uuid)]
-    (when-not result
-      (notification/show! (t :file-sync/other-user-graph) :warning false))
-    result))
+  (cond
+    (nil? current-user-uuid)
+    false
+
+    (= current-user-uuid graph-user-uuid)
+    true
+
+    :else
+    (do (notification/show! (t :file-sync/other-user-graph) :warning false)
+        false)))
 
 (defn check-remote-graph-exists
   [local-graph-uuid]

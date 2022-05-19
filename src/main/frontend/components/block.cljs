@@ -874,9 +874,6 @@
       (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
 
-      (contains? (config/doc-formats) ext)
-      (asset-link config label-text s metadata full_text)
-
       (= ext :pdf)
       (cond
         (util/electron?)
@@ -889,6 +886,9 @@
 
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
+      
+      (contains? (config/doc-formats) ext)
+      (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))
       (image-link config url s label metadata full_text)

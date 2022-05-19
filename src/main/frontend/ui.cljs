@@ -290,6 +290,12 @@
         (.appendChild js/document.head node))
       style)))
 
+(defn apply-custom-theme-effect! [theme]
+  (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
+    (js/LSPluginCore.selectTheme (bean/->js custom-theme)
+                                 (bean/->js {:effect false :emit false}))
+    (state/set-state! :plugin/selected-theme (:url custom-theme))))
+
 (defn setup-system-theme-effect!
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
