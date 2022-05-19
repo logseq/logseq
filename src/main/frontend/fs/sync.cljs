@@ -1116,7 +1116,7 @@
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
     ILocal->RemoteSync
-    (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"version-files/.*" #"logseq/\.recycle/.*"
+    (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"logseq/version-files/.*" #"logseq/\.recycle/.*"
                             #"\.DS_Store$"})
     (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
     (stop-local->remote! [_]

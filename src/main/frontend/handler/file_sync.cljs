@@ -105,7 +105,7 @@
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
 
   (go
-    (let [key (path/join "version-files" file-uuid version-uuid)
+    (let [key (path/join "logseq/version-files" file-uuid version-uuid)
           r (<! (sync/update-local-files
                  sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
       (if (instance? ExceptionInfo r)
@@ -122,7 +122,7 @@
     (when-let [path (-> page :block/file :file/path)]
       (let [base-path           (config/get-repo-dir (state/get-current-repo))
             rel-path            (string/replace-first path base-path "")
-            version-files-dir   (->> (path/join "version-files/local" rel-path)
+            version-files-dir   (->> (path/join "logseq/version-files/local" rel-path)
                                      path/parse
                                      (#(js->clj % :keywordize-keys true))
                                      ((juxt :dir :name))
