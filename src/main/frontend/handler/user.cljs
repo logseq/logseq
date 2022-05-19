@@ -130,7 +130,9 @@
                     (-> id-token parse-jwt almost-expired?)
                     (-> access-token parse-jwt almost-expired?))
         ;; id-token or access-token expired
-        (refresh-id-token&access-token)))))
+        (refresh-id-token&access-token)
+        ;; refresh remote graph list by pub login event
+        (when (user-uuid) (state/pub-event! [:user/login]))))))
 
 (defn login-callback [code]
   (go
