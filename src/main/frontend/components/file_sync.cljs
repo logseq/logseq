@@ -119,7 +119,7 @@
 
 (defn pick-dest-to-sync-panel [graph]
   (rum/defc _ [_close]
-    
+
     (rum/use-effect!
       (fn []
         (file-sync-handler/set-wait-syncing-graph graph)
@@ -138,7 +138,7 @@
         (str "Select a empty directory to start")
         :on-click #(-> (page-handler/ls-dir-files!
                          (fn [{:keys [url]}]
-                           (file-sync-handler/switch-to-waiting-graph url)
+                           (file-sync-handler/init-remote-graph url)
                            ;; TODO: wait for switch done
                            (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
                          {:empty-dir-only? true})
