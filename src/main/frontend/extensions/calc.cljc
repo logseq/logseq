@@ -3,6 +3,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [frontend.util :as util]
+            [cljs.pprint :as pprint]
             #?(:clj [clojure.java.io :as io])
             #?(:cljs [shadow.resource :as rc])
             #?(:cljs [rum.core :as rum])
@@ -83,6 +84,9 @@
               (eval env (parse line))))
           (str/split-lines s))))
 
+(defn fraction? [x]
+  (and (number? x) (not (zero? (mod x 1)))))
+
 ;; ======================================================================
 ;; UI
 
@@ -96,7 +100,10 @@
        [:div.extensions__code-calc.pr-2 {:on-mouse-down (fn [e]
                                                           (.stopPropagation e))}
         ;; TODO: add react keys
-        (for [[i line] (map-indexed vector output-lines)]
+        (for [[i line] (map-indexed vector (mapv (fn [x] (if (fraction? x)
+                                                           (js/parseFloat (pprint/cl-format nil  "~,9f" x))
+                                                           x
+                                                           )) output-lines))]
           [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
            [:span (cond
                     (nil? line)           ""
