@@ -15,7 +15,7 @@ import {
   SlashCommandAction,
   BlockCommandCallback,
   StyleString,
-  ThemeOptions,
+  Theme,
   UIOptions,
   IHookEvent,
   BlockIdentity,
@@ -318,7 +318,8 @@ const KEY_MAIN_UI = 0
  */
 export class LSPluginUser
   extends EventEmitter<LSPluginUserEvents>
-  implements ILSPluginUser {
+  implements ILSPluginUser
+{
   // @ts-ignore
   private _version: string = LIB_VERSION
   private _debugTag: string = ''
@@ -436,7 +437,7 @@ export class LSPluginUser
     return this
   }
 
-  provideTheme(theme: ThemeOptions) {
+  provideTheme(theme: Theme) {
     this.caller.call('provider:theme', theme)
     return this
   }

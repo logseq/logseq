@@ -120,7 +120,7 @@
 
 (def ^:export set_theme_mode
   (fn [mode]
-    (state/set-theme! mode)))
+    (state/set-theme-mode! mode)))
 
 (def ^:export load_plugin_config
   (fn [path]
