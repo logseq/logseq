@@ -120,7 +120,7 @@
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ls-dir-files-with-handler!
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir-only?]}]
+  ([ok-handler {:keys [empty-dir?-or-pred]}]
    (let [path-handles (atom {})
          electron? (util/electron?)
          mobile-native? (mobile-util/is-native-platform?)
@@ -132,8 +132,14 @@
        (p/let [result (fs/open-dir (fn [path handle]
                                      (when nfs?
                                        (swap! path-handles assoc path handle))))
-               _ (when (and empty-dir-only? (not-empty (second result))
-                            (throw (js/Error. "EmptyDirOnly"))))
+               _ (if-not (nil? empty-dir?-or-pred)
+                   (cond
+                     (boolean? empty-dir?-or-pred)
+                     (and (not-empty (second result))
+                          (throw (js/Error. "EmptyDirOnly")))
+
+                     (fn? empty-dir?-or-pred)
+                     (empty-dir?-or-pred result)))
                root-handle (first result)
                dir-name (if nfs?
                           (gobj/get root-handle "name")

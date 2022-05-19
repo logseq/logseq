@@ -207,19 +207,30 @@
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
+(defn- read-txid-info!
+  [root]
+  (try
+    (let [sf #(.join path % "logseq/graphs-txid.edn")]
+      (if-let [sync-meta (and (not (string/blank? root))
+                              (.toString (.readFileSync fs (sf root))))]
+        (reader/read-string sync-meta)))
+    (catch js/Error _e
+      (js/console.debug "[read txid meta] #" (sf root) (.-message _e)))))
+
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
-    (for [{:keys [root] :as graph} graphs
-          :let [sf #(.join path % "logseq/graphs-txid.edn")]]
+    (for [{:keys [root] :as graph} graphs]
       (try
-        (if-let [sync-meta (and (not (string/blank? root))
-                                  (.toString (.readFileSync fs (sf root))))]
-          (assoc graph :sync-meta (reader/read-string sync-meta))
+        (if-let [sync-meta (read-txid-info! root)]
+          (assoc graph :sync-meta sync-meta)
           graph)
         (catch js/Error _e
-          (js/console.debug "[read txid meta] #" (sf root) (.-message _e))
+          (js/console.debug "[read txid meta] #" root (.-message _e))
           graph)))
     []))
+
+(defmethod handle :readGraphTxIdInfo [_win [_ root]]
+  (read-txid-info! root))
 
 (defn- get-graph-path
   [graph-name]

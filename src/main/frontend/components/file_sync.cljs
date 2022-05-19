@@ -12,6 +12,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.util :as util]
             [rum.core :as rum]
+            [electron.ipc :as ipc]
             [cljs.core.async :as as]))
 
 (rum/defcs file-sync-remote-graphs <
@@ -134,15 +135,31 @@
        [:strong "Name: " (:GraphName graph)] [:br]
        [:small "UUID: " (:GraphUUID graph)]]
 
-      (ui/button
-        (str "Select a empty directory to start")
-        :on-click #(-> (page-handler/ls-dir-files!
-                         (fn [{:keys [url]}]
-                           (file-sync-handler/switch-to-waiting-graph url)
-                           ;; TODO: wait for switch done
-                           (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
-                         {:empty-dir-only? true})
+      [:div
+       (ui/button
+         (str "Open a local directory")
+         :on-click #(-> (page-handler/ls-dir-files!
+                          (fn [{:keys [url]}]
+                            (file-sync-handler/switch-to-waiting-graph url)
 
-                       (p/catch (fn [^js e]
-                                  (when (= "EmptyDirOnly" (.-message e))
-                                    (notifications/show! "Please select a empty directory!" :error))))))]]))
+                            ;; TODO: wait for switch done
+                            (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+
+                          {:empty-dir?-or-pred
+                           (fn [ret]
+                             (when-not (nil? (second ret))
+                               (if-let [root (first ret)]
+                                 (do
+                                   (js/console.log root)
+                                   (-> (ipc/ipc :readGraphTxIdInfo root)
+                                       (p/then (fn [^js info]
+                                                 (when (or (nil? info)
+                                                           (nil? (second info))
+                                                           (not= (second info) (:GraphUUID graph)))
+                                                   (throw (js/Error. "AssertDirectoryError")))))))
+                                 (throw (js/Error. nil)))))})
+
+                        (p/catch (fn [^js e]
+                                   (when (= "AssertDirectoryError" (.-message e))
+                                     (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
+       [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]]]))
