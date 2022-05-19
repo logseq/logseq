@@ -2698,7 +2698,7 @@
             (str (count transformed-query-result) " results")]]
           (fn []
             [:div
-             (when (and current-block (nil? table-view?))
+             (when (and current-block (not view-f) (nil? table-view?))
                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                 (when-not page-list?
                   [:div.flex.flex-row
