@@ -1,6 +1,5 @@
 (ns frontend.db.debug
-  (:require [medley.core :as medley]
-            [frontend.db.utils :as db-utils]
+  (:require [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [datascript.core :as d]
             [frontend.util :as util]))
@@ -8,7 +7,7 @@
 ;; shortcut for query a block with string ref
 (defn qb
   [string-id]
-  (db-utils/pull [:block/uuid (medley/uuid string-id)]))
+  (db-utils/pull [:block/uuid (uuid string-id)]))
 
 (defn check-left-id-conflicts
   []

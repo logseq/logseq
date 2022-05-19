@@ -129,8 +129,7 @@
 
                         :else
                         nil)]
-    (when (and block-id
-               (gp-util/uuid-string? block-id))
+    (when (some-> block-id parse-uuid)
       block-id)))
 
 (defn- paragraph-block?
@@ -208,7 +207,7 @@
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
-  (let [timestamps (gp-util/map-keys (comp keyword string/lower-case) timestamps)
+  (let [timestamps (update-keys timestamps (comp keyword string/lower-case))
         m (some->> (select-keys timestamps [:scheduled :deadline])
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
@@ -325,23 +324,21 @@
          (swap! ref-blocks conj block))
        form)
      (concat title body))
-    (let [ref-blocks (->> @ref-blocks
-                          (filter gp-util/uuid-string?))
-          ref-blocks (map
-                       (fn [id]
-                         [:block/uuid (uuid id)])
-                       ref-blocks)
+    (let [ref-blocks (keep (fn [block]
+                             (when-let [id (parse-uuid block)]
+                               [:block/uuid id]))
+                           @ref-blocks)
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
 
 (defn- block-keywordize
   [block]
-  (gp-util/map-keys
+  (update-keys
+   block
    (fn [k]
      (if (namespace k)
        k
-       (keyword "block" k)))
-   block))
+       (keyword "block" k)))))
 
 (defn- sanity-blocks-data
   [blocks]
@@ -430,8 +427,7 @@
                                (get-in properties [:properties :custom_id])
                                (get-in properties [:properties :id]))]
         (let [custom-id (and (string? custom-id) (string/trim custom-id))]
-          (when (and custom-id (gp-util/uuid-string? custom-id))
-            (uuid custom-id))))
+          (some-> custom-id parse-uuid)))
       (d/squuid)))
 
 (defn get-page-refs-from-properties

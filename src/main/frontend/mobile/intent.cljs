@@ -144,15 +144,9 @@
                         (js/decodeURIComponent v)
                         v))])))
 
-(defn handle-received []
-  (p/let [received (p/catch
-                    (.checkSendIntentReceived SendIntent)
-                    (fn [error]
-                      (log/error :intent-received-error {:error error})))]
-    (when received
-      (let [result (-> (js->clj received :keywordize-keys true)
-                       decode-received-result)]
-        (when-let [type (:type result)]
+(defn handle-result [result]
+  (let [result (decode-received-result result)]
+    (when-let [type (:type result)]
           (cond
             (string/starts-with? type "text/")
             (handle-received-text result)
@@ -172,4 +166,13 @@
               [:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
                    :target "_blank"} "Github"]
               ". We will look into it soon."
-              [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))))
+              [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))
+
+(defn handle-received []
+  (p/let [received (p/catch
+                       (.checkSendIntentReceived SendIntent)
+                       (fn [error]
+                         (log/error :intent-received-error {:error error})))]
+    (when received
+      (let [result (js->clj received :keywordize-keys true)]
+        (handle-result result)))))
