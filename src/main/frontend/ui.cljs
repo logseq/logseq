@@ -819,34 +819,36 @@
   (let [*mounted? (::mounted? state)
         mounted? @*mounted?
         manual (not= open? nil)]
-    (Tippy (->
-            (merge {:arrow true
-                    :sticky true
-                    :delay 600
-                    :theme "customized"
-                    :disabled (not (state/enable-tooltip?))
-                    :unmountHTMLWhenHide true
-                    :open (if manual open? @*mounted?)
-                    :trigger (if manual "manual" "mouseenter focus")
-                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
-                    :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
-                                                :hide {:enabled false}
-                                                :preventOverflow {:enabled false}}}
-                    :onShow #(reset! *mounted? true)
-                    :onHide #(reset! *mounted? false)}
-                   opts)
-            (assoc :html (if (or open? mounted?)
-                           (try
-                             (when-let [html (:html opts)]
-                               (if (fn? html)
-                                 (html)
-                                 [:div.px-2.py-1
-                                  html]))
-                             (catch js/Error e
-                               (log/error :exception e)
-                               [:div]))
-                           [:div {:key "tippy"} ""])))
-            (rum/fragment {:key "tippy-children"} child))))
+    (catch-error
+      child
+      (Tippy (->
+               (merge {:arrow               true
+                       :sticky              true
+                       :delay               600
+                       :theme               "customized"
+                       :disabled            (not (state/enable-tooltip?))
+                       :unmountHTMLWhenHide true
+                       :open                (if manual open? @*mounted?)
+                       :trigger             (if manual "manual" "mouseenter focus")
+                       ;; See https://github.com/tvkhoa/react-tippy/issues/13
+                       :popperOptions       {:modifiers {:flip            {:enabled (not fixed-position?)}
+                                                         :hide            {:enabled false}
+                                                         :preventOverflow {:enabled false}}}
+                       :onShow              #(reset! *mounted? true)
+                       :onHide              #(reset! *mounted? false)}
+                      opts)
+               (assoc :html (if (or open? mounted?)
+                              (try
+                                (when-let [html (:html opts)]
+                                  (if (fn? html)
+                                    (html)
+                                    [:div.px-2.py-1
+                                     html]))
+                                (catch js/Error e
+                                  (log/error :exception e)
+                                  [:div]))
+                              [:div {:key "tippy"} ""])))
+             (rum/fragment {:key "tippy-children"} child)))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
