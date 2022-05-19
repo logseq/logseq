@@ -4,9 +4,6 @@
   (:require [clojure.walk :as walk]
             [clojure.string :as string]))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
@@ -15,11 +12,6 @@
     (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
-
-(defn uuid-string?
-  "Copy of frontend.util/uuid-string?. Too basic to couple to main app"
-  [s]
-  (safe-re-find exactly-uuid-pattern s))
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writting)"
@@ -67,21 +59,6 @@
   [v]
   (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
 
-(defn parse-int
-  "Copy of frontend.util/parse-int. Too basic to couple to main app"
-  [x]
-  (if (string? x)
-    (js/parseInt x)
-    x))
-
-(defn safe-parse-int
-  "Copy of frontend.util/safe-parse-int. Too basic to couple to main app"
-  [x]
-  (let [result (parse-int x)]
-    (if (js/isNaN result)
-      nil
-      result)))
-
 (defn url?
   [s]
   (and (string? s)
@@ -96,14 +73,6 @@
   (-> json-string
       (js/JSON.parse)
       (js->clj :keywordize-keys true)))
-
-;; TODO: Use update-keys once its available in cljs and nbb
-(defn map-keys
-  "Maps function `f` over the keys of map `m` to produce a new map."
-  [f m]
-  (reduce-kv
-   (fn [m_ k v]
-     (assoc m_ (f k) v)) {} m))
 
 (defn zero-pad
   "Copy of frontend.util/zero-pad. Too basic to couple to main app"

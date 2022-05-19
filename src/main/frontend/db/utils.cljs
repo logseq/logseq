@@ -4,7 +4,6 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [datascript.transit :as dt]
-            [frontend.util :as util]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
@@ -46,7 +45,7 @@
 
 (defn date->int
   [date]
-  (util/parse-int
+  (parse-long
    (string/replace (date/ymd date) "/" "")))
 
 (defn entity
