@@ -66,12 +66,12 @@
 (rum/defc repos < rum/reactive
   []
   (let [login? (boolean (state/sub :auth/id-token))
-        repos (->> (state/sub [:me :repos])
-                   (remove #(= (:url %) config/local-repo)))
+        repos (state/sub [:me :repos])
         repos (util/distinct-by :url repos)
         remotes (state/sub [:file-sync/remote-graphs :graphs])
-        repos (if (and (seq repos) login?)
-                (combine-local-&-remote-graphs repos remotes) repos)]
+        repos (if (and login? (seq remotes))
+                (combine-local-&-remote-graphs repos remotes) repos)
+        repos (remove #(= (:url %) config/local-repo) repos)]
     (if (seq repos)
       [:div#graphs
        [:h1.title "All Graphs"]
@@ -128,7 +128,8 @@
       (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
 (defn- repos-dropdown-links [repos current-repo *multiple-windows?]
-  (let [switch-repos (remove (fn [repo] (= current-repo (:url repo))) repos) ; exclude current repo
+  (let [switch-repos (if-not (nil? current-repo)
+                       (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
                     (fn [{:keys [url remote? GraphName] :as graph}]
                       (let [local? (config/local-db? url)
@@ -188,23 +189,28 @@
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
   [state]
-  (let [multiple-windows? (::electron-multiple-windows? state)]
-    (when-let [current-repo (state/sub :git/current-repo)]
-      (let [login? (boolean (state/sub :auth/id-token))
-            repos (state/sub [:me :repos])
+  (let [multiple-windows? (::electron-multiple-windows? state)
+        current-repo (state/sub :git/current-repo)
+        login? (boolean (state/sub :auth/id-token))]
+    (when (or login? current-repo)
+      (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
-            repos (if (and (seq repos) login?)
+            repos (if (and (seq remotes) login?)
                     (combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
-                                   repo-path (db/get-repo-name current-repo)
-                                   short-repo-name (db/get-short-repo-name repo-path)]
+                             (let [valid-remotes-but-locals? (and (seq repos) (not (some :url repos)))
+                                   remote? (when-not valid-remotes-but-locals?
+                                             (:remote? (first (filter #(= current-repo (:url %)) repos))))
+                                   repo-path (if-not valid-remotes-but-locals?
+                                               (db/get-repo-name current-repo) "")
+                                   short-repo-name (if-not valid-remotes-but-locals?
+                                                     (db/get-short-repo-name repo-path) "Select a Graph")]
                                [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
-                                 :title repo-path} ;; show full path on hover
+                                 :title    repo-path}       ;; show full path on hover
                                 (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
@@ -213,9 +219,9 @@
                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
             links-header (cond->
-                          {:modal-class (util/hiccup->class
-                                         "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
-                           (> (count repos) 1) ; show switch to if there are multiple repos
+                           {:modal-class (util/hiccup->class
+                                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
+                           (> (count repos) 1)              ; show switch to if there are multiple repos
                            (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
                                                  "Switch to:"]))]
         (when (seq repos)
