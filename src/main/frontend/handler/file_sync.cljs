@@ -101,10 +101,9 @@
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
     (download-all-files repo graph-uuid user-uuid base-path)
     (swap! refresh-file-sync-component not)
-    (sync/sync-start)))
+    (state/pub-event! [:graph/switch repo {:persist? false}])))
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
-
   (go
     (let [key (path/join "logseq/version-files" file-uuid version-uuid)
           r (<! (sync/update-local-files

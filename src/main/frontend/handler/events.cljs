@@ -95,19 +95,21 @@
 (defn- graph-switch-on-persisted
   "Logic for keeping db sync when switching graphs
    Only works for electron"
-  [graph]
+  [graph {:keys [persist?]}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
-     (when (util/electron?)
-       (p/do!
-        (repo-handler/persist-db! current-repo persist-db-noti-m)
-        (repo-handler/broadcast-persist-db! graph)))
-     (repo-handler/restore-and-setup-repo! graph)
+     (when persist?
+       (when (util/electron?)
+         (p/do!
+          (repo-handler/persist-db! current-repo persist-db-noti-m)
+          (repo-handler/broadcast-persist-db! graph))))
+     (when persist?
+       (repo-handler/restore-and-setup-repo! graph))
      (graph-switch graph))))
 
-(defmethod handle :graph/switch [[_ graph]]
+(defmethod handle :graph/switch [[_ graph opts]]
   (if (outliner-file/writes-finished?)
-    (graph-switch-on-persisted graph)
+    (graph-switch-on-persisted graph opts)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
      :warning)))

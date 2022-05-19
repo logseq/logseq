@@ -346,7 +346,7 @@
   (let [finished (or (:finished state) 0)
         total (:total state)]
     (if (= total :unknown)
-      (ui/loading "Downloading...")
+      (ui/loading "Loading...")
       (let [width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
            left-label [:div.flex.flex-row.font-bold
                        "Downloading"
