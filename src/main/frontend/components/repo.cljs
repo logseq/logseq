@@ -131,13 +131,14 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? GraphName] :as graph}]
+                    (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-db? url)
                             repo-path (if local? (db/get-repo-name url) GraphName )
                             short-repo-name (if local? (text/get-graph-name-from-path repo-path) GraphName)]
                         {:title        [:span.flex.items-center short-repo-name
-                                        (when (and local? GraphName) [:strong (str "(" GraphName ")")])
-                                        (when remote? [:span.pl-1 (ui/icon "cloud")])]
+                                        (when remote? [:span.pl-1
+                                                       {:title (str "<" GraphName "> #" GraphUUID)}
+                                                       (ui/icon "cloud")])]
                          :hover-detail repo-path ;; show full path on hover
                          :options      {:class    "ml-1"
                                         :on-click (fn [e]
