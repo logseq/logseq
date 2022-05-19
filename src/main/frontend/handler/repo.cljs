@@ -457,6 +457,7 @@
                           :root (config/get-local-dir db)
                           :nfs? true}) nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
+                       ;; TODO: mobile
                        (ipc/ipc :inflateGraphsInfo nfs-dbs))
           nfs-dbs (seq (bean/->clj nfs-dbs))]
 
@@ -471,7 +472,8 @@
 (defn refresh-repos!
   []
   (p/let [repos (get-repos)]
-         (state/set-repos! repos)))
+    (state/set-repos! repos)
+    repos))
 
 (defn graph-ready!
   "Call electron that the graph is loaded."

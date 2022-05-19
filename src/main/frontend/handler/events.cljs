@@ -49,8 +49,21 @@
 
 (defmulti handle first)
 
+(defn- file-sync-restart! []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)
+         (sync/sync-start)))
+
 (defmethod handle :user/login [[_]]
-  (file-sync-handler/load-session-graphs))
+  (async/go
+    (async/<! (file-sync-handler/load-session-graphs))
+    (p/let [repos (repo-handler/refresh-repos!)]
+      (when-let [repo (state/get-current-repo)]
+        (when (some #(and (= (:url %) repo)
+                          (vector? (:sync-meta %))
+                          (util/uuid-string? (first (:sync-meta %)))
+                          (util/uuid-string? (second (:sync-meta %)))) repos)
+          (file-sync-restart!))))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs))
@@ -65,11 +78,6 @@
       (route-handler/redirect-to-home!)))
   (repo-handler/refresh-repos!))
 
-(defn- file-sync-stop-when-switch-graph []
-  (p/do! (persist-var/load-vars)
-         (sync/sync-stop)
-         (sync/sync-start)))
-
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
   ;; load config
@@ -82,7 +90,7 @@
   (srs/update-cards-due-count!)
   (state/pub-event! [:graph/ready graph])
 
-  (file-sync-stop-when-switch-graph))
+  (file-sync-restart!))
 
 (def persist-db-noti-m
   {:before     #(notification/show!

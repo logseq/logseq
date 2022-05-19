@@ -87,8 +87,8 @@
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go (state/set-state! [:file-sync/remote-graphs :loading] true)
-      (let [graphs (<! (list-graphs))]
-        (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
+        (let [graphs (<! (list-graphs))]
+          (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
 
 (defn reset-session-graphs
   []
