@@ -20,8 +20,8 @@
             [electron.plugin :as plugin]
             [electron.window :as win]
             [electron.file-sync-rsapi :as rsapi]
-            [cljs.reader :as reader]
-            [electron.backup-file :as backup-file]))
+            [electron.backup-file :as backup-file]
+            [cljs.reader :as reader]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 

@@ -66,12 +66,12 @@
 (rum/defc repos < rum/reactive
   []
   (let [login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
+        repos (->> (state/sub [:me :repos])
+                   (remove #(= (:url %) config/local-repo)))
         repos (util/distinct-by :url repos)
         remotes (state/sub [:file-sync/remote-graphs :graphs])
         repos (if (and (seq repos) login?)
-                (combine-local-&-remote-graphs repos remotes) repos)
-        repos (remove #(= (:url %) config/local-repo) repos)]
+                (combine-local-&-remote-graphs repos remotes) repos)]
     (if (seq repos)
       [:div#graphs
        [:h1.title "All Graphs"]
