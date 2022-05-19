@@ -68,8 +68,7 @@
 (defn- file-sync-stop-when-switch-graph []
   (p/do! (persist-var/load-vars)
          (sync/sync-stop)
-         (sync/sync-start)
-))
+         (sync/sync-start)))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)

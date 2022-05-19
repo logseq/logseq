@@ -59,7 +59,7 @@
   [repo graph-uuid user-uuid base-path]
   (go
     (state/reset-file-sync-download-init-state!)
-    (state/set-file-sync-download-init-state! {:total js/NaN :finished 0 :downloading? true})
+    (state/set-file-sync-download-init-state! {:total :unknown :finished 0 :downloading? true})
     (let [remote-all-files-meta (<! (sync/get-remote-all-files-meta sync/remoteapi graph-uuid))
           local-all-files-meta (<! (sync/get-local-all-files-meta sync/rsapi graph-uuid base-path))
           diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
@@ -94,13 +94,14 @@
   []
   (state/set-state! :file-sync/remote-graphs {:loading false :graphs nil}))
 
-(defn switch-graph [graph-uuid]
+(defn init-graph [graph-uuid]
   (let [repo (state/get-current-repo)
         base-path (config/get-repo-dir repo)
         user-uuid (user/user-uuid)]
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
     (download-all-files repo graph-uuid user-uuid base-path)
-    (swap! refresh-file-sync-component not)))
+    (swap! refresh-file-sync-component not)
+    (sync/sync-start)))
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
 
@@ -194,12 +195,12 @@
   [graph]
   (reset! *wait-syncing-graph graph))
 
-(defn switch-to-waiting-graph
+(defn init-remote-graph
   [local]
   (when-let [graph (and local @*wait-syncing-graph)]
     (notification/show!
       (str "Start to sync <" (:GraphName graph) "> to <" local ">")
       :warning)
 
-    (switch-graph (:GraphUUID graph))
+    (init-graph (:GraphUUID graph))
     (state/close-modal!)))

@@ -120,7 +120,7 @@
 
 (defn pick-dest-to-sync-panel [graph]
   (rum/defc _ [_close]
-    
+
     (rum/use-effect!
       (fn []
         (file-sync-handler/set-wait-syncing-graph graph)
