@@ -1,6 +1,5 @@
 (ns frontend.components.header
-  (:require ["path" :as path]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -35,10 +34,10 @@
 (rum/defc login < rum/reactive
   []
   (let [_ (state/sub :auth/id-token)]
-    (when-not config/publishing?
-      (if-not (user-handler/logged-in?)
-        [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-         [:span (t :login)]]))))
+    (when-not (or config/publishing?
+                  (user-handler/logged-in?))
+      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
+         [:span (t :login)]])))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]

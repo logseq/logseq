@@ -61,7 +61,7 @@
                    (state/set-state! :file-sync/toggling? true)
                    (if-not graph-txid-exists?
                      (as/go
-                       (notifications/show! "Not a remote graph, ready to init remote!" :warn)
+                       (notifications/show! "Not a remote graph, ready to init remote graph!" :warn)
                        (let [repo (state/get-current-repo)
                              GraphName (util/node-path.basename repo)]
                          (when-let [GraphUUID (get (as/<! (file-sync-handler/create-graph GraphName)) 2)]
