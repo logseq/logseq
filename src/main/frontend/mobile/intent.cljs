@@ -78,10 +78,12 @@
   (p/let [time (date/get-current-time)
           title (some-> (or title (path/basename url))
                         js/decodeURIComponent
-                        util/node-path.name)
+                        util/node-path.name
+                        util/file-name-sanity
+                        (string/replace "." ""))
           path (path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)
-                          (path/basename url))
+                          (str (js/encodeURI title) (path/extname url)))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]
