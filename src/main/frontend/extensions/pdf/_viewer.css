@@ -26,6 +26,7 @@
   -webkit-text-size-adjust: none;
      -moz-text-size-adjust: none;
           text-size-adjust: none;
+  forced-color-adjust: none;
 }
 
 .textLayer span,
@@ -654,12 +655,12 @@
 }
 
 :root {
+  --viewer-container-height: 0;
   --pdfViewer-padding-bottom: 0;
   --page-margin: 1px auto -8px;
   --page-border: 9px solid transparent;
   --spreadHorizontalWrapped-margin-LR: -3.5px;
   --zoom-factor: 1;
-  --viewport-scale-factor: 1;
 }
 
 @media screen and (forced-colors: active) {
@@ -696,7 +697,7 @@
 .pdfViewer .dummyPage {
   position: relative;
   width: 0;
-  /* The height is set via JS, see `BaseViewer.#ensurePageViewVisible`. */
+  height: var(--viewer-container-height);
 }
 
 .pdfViewer.removePageBorders .page {
