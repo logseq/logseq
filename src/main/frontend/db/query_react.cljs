@@ -33,12 +33,12 @@
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
-          days (util/parse-int (subs input 0 (dec (count input))))]
+          days (parse-long (subs input 0 (dec (count input))))]
       (date->int (t/minus (t/today) (t/days days))))
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-after)?$" (name input)))
     (let [input (name input)
-          days (util/parse-int (subs input 0 (dec (count input))))]
+          days (parse-long (subs input 0 (dec (count input))))]
       (date->int (t/plus (t/today) (t/days days))))
 
     (and (string? input) (text/page-ref? input))

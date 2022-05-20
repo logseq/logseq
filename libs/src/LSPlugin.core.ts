@@ -3,7 +3,6 @@ import {
   deepMerge,
   setupInjectedStyle,
   genID,
-  setupInjectedTheme,
   setupInjectedUI,
   deferred,
   invokeHostExportedApi,
@@ -19,6 +18,7 @@ import {
   IS_DEV,
   cleanInjectedScripts,
   safeSnakeCase,
+  injectTheme,
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -34,11 +34,13 @@ import {
 } from './LSPlugin.caller'
 import {
   ILSPluginThemeManager,
+  LegacyTheme,
   LSPluginPkgConfig,
   SettingSchemaDesc,
   StyleOptions,
   StyleString,
-  ThemeOptions,
+  Theme,
+  ThemeMode,
   UIContainerAttrs,
   UIOptions,
 } from './LSPlugin'
@@ -173,10 +175,13 @@ class PluginLogger extends EventEmitter<'change'> {
 }
 
 interface UserPreferences {
-  theme: ThemeOptions
+  theme: LegacyTheme
+  themes: {
+    mode: ThemeMode
+    light: Theme
+    dark: Theme
+  }
   externals: string[] // external plugin locations
-
-  [key: string]: any
 }
 
 interface PluginLocalOptions {
@@ -310,7 +315,7 @@ function initProviderHandlers(pluginLocal: PluginLocal) {
   let themed = false
 
   // provider:theme
-  pluginLocal.on(_('theme'), (theme: ThemeOptions) => {
+  pluginLocal.on(_('theme'), (theme: Theme) => {
     pluginLocal.themeMgr.registerTheme(pluginLocal.id, theme)
 
     if (!themed) {
@@ -697,7 +702,7 @@ class PluginLocal extends EventEmitter<
     this._options.entry = entry
   }
 
-  async _loadConfigThemes(themes: ThemeOptions[]) {
+  async _loadConfigThemes(themes: Theme[]) {
     themes.forEach((options) => {
       if (!options.url) return
 
@@ -1123,6 +1128,7 @@ class LSPluginCore
     | 'unregistered'
     | 'theme-changed'
     | 'theme-selected'
+    | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
     | 'beforereload'
@@ -1133,19 +1139,24 @@ class LSPluginCore
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
-  private readonly _userPreferences: Partial<UserPreferences> = {}
-  private readonly _registeredThemes = new Map<
-    PluginLocalIdentity,
-    ThemeOptions[]
-  >()
+  private readonly _userPreferences: UserPreferences = {
+    theme: null,
+    themes: {
+      mode: 'light',
+      light: null,
+      dark: null,
+    },
+    externals: [],
+  }
+  private readonly _registeredThemes = new Map<PluginLocalIdentity, Theme[]>()
   private readonly _registeredPlugins = new Map<
     PluginLocalIdentity,
     PluginLocal
   >()
   private _currentTheme: {
-    dis: () => void
     pid: PluginLocalIdentity
-    opt: ThemeOptions
+    opt: Theme | LegacyTheme
+    eject: () => void
   }
 
   /**
@@ -1182,12 +1193,25 @@ class LSPluginCore
     }
   }
 
+  /**
+   * Activate the user preferences.
+   *
+   * Steps:
+   *
+   * 1. Load the custom theme.
+   *
+   * @memberof LSPluginCore
+   */
   async activateUserPreferences() {
-    const { theme } = this._userPreferences
+    const { theme: legacyTheme, themes } = this._userPreferences
+    const currentTheme = themes[themes.mode]
 
-    // 0. theme
-    if (theme) {
-      await this.selectTheme(theme, false)
+    // If there is currently a theme that has been set
+    if (currentTheme) {
+      await this.selectTheme(currentTheme, { effect: false })
+    } else if (legacyTheme) {
+      // Otherwise compatible with older versions
+      await this.selectTheme(legacyTheme, { effect: false })
     }
   }
 
@@ -1238,7 +1262,7 @@ class LSPluginCore
 
       await this.loadUserPreferences()
 
-      const externals = new Set(this._userPreferences.externals || [])
+      const externals = new Set(this._userPreferences.externals)
 
       if (initial) {
         plugins = plugins.concat(
@@ -1349,8 +1373,8 @@ class LSPluginCore
       this.emit('unregistered', identity)
     }
 
-    const externals = this._userPreferences.externals || []
-    if (externals.length > 0 && unregisteredExternals.length > 0) {
+    const externals = this._userPreferences.externals
+    if (externals.length && unregisteredExternals.length) {
       await this.saveUserPreferences({
         externals: externals.filter((it) => {
           return !unregisteredExternals.includes(it)
@@ -1472,18 +1496,15 @@ class LSPluginCore
     return this._isRegistering
   }
 
-  get themes(): Map<PluginLocalIdentity, ThemeOptions[]> {
+  get themes() {
     return this._registeredThemes
   }
 
-  async registerTheme(
-    id: PluginLocalIdentity,
-    opt: ThemeOptions
-  ): Promise<void> {
-    debug('registered Theme #', id, opt)
+  async registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void> {
+    debug('Register theme #', id, opt)
 
     if (!id) return
-    let themes: ThemeOptions[] = this._registeredThemes.get(id)!
+    let themes: Theme[] = this._registeredThemes.get(id)!
     if (!themes) {
       this._registeredThemes.set(id, (themes = []))
     }
@@ -1492,41 +1513,81 @@ class LSPluginCore
     this.emit('theme-changed', this.themes, { id, ...opt })
   }
 
-  async selectTheme(opt?: ThemeOptions, effect = true): Promise<void> {
-    // clear current
+  async selectTheme(
+    theme: Theme | LegacyTheme,
+    options: {
+      effect?: boolean
+      emit?: boolean
+    } = {}
+  ) {
+    const { effect, emit } = Object.assign(
+      {},
+      { effect: true, emit: true },
+      options
+    )
+
+    // Clear current theme before injecting.
     if (this._currentTheme) {
-      this._currentTheme.dis?.()
+      this._currentTheme.eject()
     }
 
-    const disInjectedTheme = setupInjectedTheme(opt?.url)
-    this.emit('theme-selected', opt)
-    effect && (await this.saveUserPreferences({ theme: opt?.url ? opt : null }))
-    if (opt?.url) {
+    // Detect if it is the default theme (no url).
+    if (!theme.url) {
+      this._currentTheme = null
+    } else {
+      const ejectTheme = injectTheme(theme.url)
+
       this._currentTheme = {
-        dis: () => {
-          disInjectedTheme()
-          effect && this.saveUserPreferences({ theme: null })
-        },
-        opt,
-        pid: opt.pid,
+        pid: theme.pid,
+        opt: theme,
+        eject: ejectTheme,
       }
+    }
+
+    if (effect) {
+      await this.saveUserPreferences(
+        theme.mode
+          ? {
+              themes: {
+                ...this._userPreferences.themes,
+                mode: theme.mode,
+                [theme.mode]: theme,
+              },
+            }
+          : { theme: theme }
+      )
+    }
+
+    if (emit) {
+      this.emit('theme-selected', theme)
     }
   }
 
-  async unregisterTheme(
-    id: PluginLocalIdentity,
-    effect: boolean = true
-  ): Promise<void> {
-    debug('unregistered Theme #', id)
+  async unregisterTheme(id: PluginLocalIdentity, effect = true) {
+    debug('Unregister theme #', id)
 
-    if (!this._registeredThemes.has(id)) return
+    if (!this._registeredThemes.has(id)) {
+      return
+    }
+
     this._registeredThemes.delete(id)
     this.emit('theme-changed', this.themes, { id })
     if (effect && this._currentTheme?.pid === id) {
-      this._currentTheme.dis?.()
+      this._currentTheme.eject()
       this._currentTheme = null
-      // reset current theme
-      this.emit('theme-selected', null)
+
+      const { theme, themes } = this._userPreferences
+      await this.saveUserPreferences({
+        theme: theme?.pid === id ? null : theme,
+        themes: {
+          ...themes,
+          light: themes.light?.pid === id ? null : themes.light,
+          dark: themes.dark?.pid === id ? null : themes.dark,
+        },
+      })
+
+      // Reset current theme if it is unregistered
+      this.emit('reset-custom-theme', this._userPreferences.themes)
     }
   }
 }

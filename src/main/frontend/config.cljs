@@ -92,7 +92,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:doc :docx :xls :xlsx :ppt :pptx :one :epub})))
+     #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})))
 
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 

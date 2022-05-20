@@ -63,8 +63,9 @@
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
+     :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
@@ -217,6 +218,8 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     :file-sync/download-init-progress      nil
 
      :encryption/graph-parsing?             false
 
@@ -886,30 +889,45 @@
     (set-edit-content! edit-input-id content)
     (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
-(defn set-theme!
-  [theme]
-  (set-state! :ui/theme theme)
+(defn set-theme-mode!
+  [mode]
   (when (mobile-util/native-ios?)
-    (if (= theme "light")
+    (if (= mode "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
-  (storage/set :ui/theme theme))
+  (set-state! :ui/theme mode)
+  (storage/set :ui/theme mode))
 
 (defn sync-system-theme!
   []
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme! (if system-dark? "dark" "light"))
+    (set-theme-mode! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
 (defn use-theme-mode!
   [theme-mode]
-  (if-not (= theme-mode "system")
+  (if (= theme-mode "system")
+    (sync-system-theme!)
     (do
-      (set-theme! theme-mode)
+      (set-theme-mode! theme-mode)
       (set-state! :ui/system-theme? false)
-      (storage/set :ui/system-theme? false))
-    (sync-system-theme!)))
+      (storage/set :ui/system-theme? false))))
+
+(defn toggle-theme
+  [theme]
+  (if (= theme "dark") "light" "dark"))
+
+(defn toggle-theme!
+  []
+  (use-theme-mode! (toggle-theme (:ui/theme @state))))
+
+(defn set-custom-theme!
+  ([custom-theme]
+   (set-custom-theme! nil custom-theme))
+  ([mode theme]
+   (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
+   (storage/set :ui/custom-theme (:ui/custom-theme @state))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -918,12 +936,6 @@
 (defn get-editing-block-dom-id
   []
   (:editor/block-dom-id @state))
-
-(defn toggle-theme!
-  []
-  (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "light" "dark")]
-    (use-theme-mode! theme')))
 
 (defn set-root-component!
   [component]
@@ -1258,7 +1270,7 @@
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (disj ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
@@ -1672,6 +1684,20 @@
 
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-file-sync-download-init-state!
+  []
+  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
+
+(defn set-file-sync-download-init-state!
+  [m]
+  (update-state! [:file-sync/download-init-progress (get-current-repo)]
+                 (if (fn? m) m
+                     (fn [old-value] (merge old-value m)))))
+
+(defn get-file-sync-download-init-state
+  []
+  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
 
 (defn reset-parsing-state!
   []

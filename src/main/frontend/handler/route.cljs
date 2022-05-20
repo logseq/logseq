@@ -9,7 +9,6 @@
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [frontend.util :as util]
-            [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
@@ -85,7 +84,7 @@
     (let [name (:name path-params)
           block? (util/uuid-string? name)]
       (if block?
-        (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
+        (if-let [block (db/entity [:block/uuid (uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)
                                                   (:block/format block) (config/get-block-pattern (:block/format block)))]
             (if (> (count content) 48)

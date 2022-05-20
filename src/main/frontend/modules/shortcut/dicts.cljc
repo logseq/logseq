@@ -1,10 +1,11 @@
 (ns ^:bb-compatible frontend.modules.shortcut.dicts
-  "Provides dictionary entries for shortcuts"
-  (:require [medley.core :as medley]))
+  "Provides dictionary entries for shortcuts")
+
 (defn- decorate-namespace [k]
   (let [n (name k)
         ns (namespace k)]
     (keyword (str "command." ns) n)))
+
 (def ^:large-vars/data-var all-default-keyboard-shortcuts
   {:date-picker/complete         "Date picker: Choose selected day"
    :date-picker/prev-day         "Date picker: Select previous day"
@@ -113,6 +114,7 @@
    :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
    :ui/toggle-cards                 "Toggle cards"
    :git/commit                      "Git commit message"})
+
 (def category
   {:shortcut.category/basics "Basics"
    :shortcut.category/formatting "Formatting"
@@ -122,12 +124,13 @@
    :shortcut.category/block-selection "Block selection (press Esc to quit selection)"
    :shortcut.category/toggle "Toggle"
    :shortcut.category/others "Others"})
+
 (def ^:large-vars/data-var dicts
   {:en (merge
         ;; Dynamically add this ns since command descriptions have to
         ;; stay in sync with shortcut.config command ids which do not
         ;; have a namespce
-        (medley/map-keys decorate-namespace all-default-keyboard-shortcuts)
+        (update-keys all-default-keyboard-shortcuts decorate-namespace)
         category)
 
    :zh-CN   {:shortcut.category/formatting            "格式化"
@@ -217,7 +220,7 @@
              :command.ui/toggle-theme                "“在暗色/亮色主題之間切換”"
              :command.ui/toggle-right-sidebar        "啟用/關閉右側欄"
              :command.go/journals                    "跳轉到日記"}
-   
+
    :de      {:shortcut.category/formatting           "Formatierung"
              :command.editor/indent                  "Block einrücken"
              :command.editor/outdent                 "Block ausrücken"
@@ -264,7 +267,7 @@
              :command.ui/toggle-theme                "Intervertir le thème foncé/clair"
              :command.ui/toggle-right-sidebar        "Afficher/cacher la barre latérale"
              :command.go/journals                    "Aller au Journal"}
-   
+
    :af      {:shortcut.category/formatting           "Formatering"
              :command.editor/indent                  "Ingekeepte blok oortjie"
              :command.editor/outdent                 "Oningekeepte blok"
@@ -288,7 +291,7 @@
              :command.go/journals                    "Spring na joernale"
              :command.ui/toggle-theme                "Wissel tussen donker/lig temas"
              :command.ui/toggle-right-sidebar        "Wissel regter sybalk"}
-   
+
    :es      {:shortcut.category/formatting            "Formato"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegación"
@@ -352,7 +355,7 @@
              :command.editor/open-edit                "Editar bloque seleccionado"
              :command.editor/delete-selection         "Eliminar bloques seleccionados"
              :command.editor/toggle-open-blocks       "Alternar bloques abieros, (colapsar o expandir todos)"}
-   
+
    :ru      {:shortcut.category/formatting            "Форматирование"
              :shortcut.category/basics                "Базовые"
              :shortcut.category/navigating            "Навигация"
@@ -416,7 +419,7 @@
              :command.editor/open-edit                "Редактировать выбранный блок"
              :command.editor/delete-selection         "Удалить выбранные блоки"
              :command.editor/toggle-open-blocks       "Переключить открытые блоки (свернуть или развернуть все)"}
-   
+
    :nb-NO   {:shortcut.category/formatting            "Formatering"
              :shortcut.category/basics                "Basis"
              :shortcut.category/navigating            "Navigasjon"
@@ -481,7 +484,7 @@
              :command.editor/open-edit                "Rediger valgt blokk"
              :command.editor/delete-selection         "Slett valgte blokker"
              :command.editor/toggle-open-blocks       "Veksle åpne blokker (slå sammen eller utvid alle blokker)"}
-   
+
    :pt-PT   {:shortcut.category/formatting            "Formatação"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegação"
@@ -545,7 +548,7 @@
              :command.editor/open-edit                "Editar bloco selecionado"
              :command.editor/delete-selection         "Eliminar blocos selecionados"
              :command.editor/toggle-open-blocks       "Alternar blocos abertos (colapsar ou expandir todos)"}
-   
+
    :pt-BR   {:shortcut.category/formatting            "Formatação"
              :shortcut.category/basics                "Básico"
              :shortcut.category/navigating            "Navegação"
@@ -659,7 +662,7 @@
              :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
              :command.ui/goto-plugins                 "Ir para o painel de plugins"
              :command.ui/open-new-window              "Abra uma nova janela"}
-   
+
    :ja      {:shortcut.category/formatting                "フォーマット"
              :shortcut.category/basics                "基本操作"
              :shortcut.category/navigating            "ナビゲーション"

@@ -710,11 +710,8 @@
 (rum/defc block-reference < rum/reactive
   db-mixins/query
   [config id label]
-  (when (and
-         (not (string/blank? id))
-         (util/uuid-string? id))
-    (let [block-id (uuid id)
-          block (db/pull-block block-id)
+  (when-let [block-id (parse-uuid id)]
+    (let [block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
@@ -877,9 +874,6 @@
       (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
 
-      (contains? (config/doc-formats) ext)
-      (asset-link config label-text s metadata full_text)
-
       (= ext :pdf)
       (cond
         (util/electron?)
@@ -892,6 +886,9 @@
 
         (mobile-util/is-native-platform?)
         (asset-link config label-text s metadata full_text))
+
+      (contains? (config/doc-formats) ext)
+      (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))
       (image-link config url s label metadata full_text)
@@ -1107,10 +1104,7 @@
       (when-let [s (-> (string/replace a "((" "")
                        (string/replace "))" "")
                        string/trim)]
-        (when-let [id (and s
-                           (let [s (string/trim s)]
-                             (and (util/uuid-string? s)
-                                  (uuid s))))]
+        (when-let [id (some-> s string/trim parse-uuid)]
           (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
       :else                         ;TODO: maybe collections?
@@ -2820,7 +2814,7 @@
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
           (if (:slide? config)
-            (highlight/highlight (str (medley/random-uuid))
+            (highlight/highlight (str (random-uuid))
                                  {:class (str "language-" language)
                                   :data-lang language}
                                  code)
@@ -3068,7 +3062,7 @@
                              (when (> (- (util/time-ms) (:start-time config)) 100)
                                (load-more-blocks! config flat-blocks)))
             has-more? (and
-                       (> (count flat-blocks) model/initial-blocks-length)
+                       (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}

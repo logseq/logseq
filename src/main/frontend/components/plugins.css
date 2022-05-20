@@ -590,7 +590,7 @@
     outline: none;
     padding: 1rem;
 
-    > .it {
+    .it {
       user-select: none;
       background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
@@ -598,13 +598,8 @@
       cursor: pointer;
       opacity: .8;
 
-      > section {
-        line-height: 1.1em;
-
-        > strong {
-          font-size: 13px;
-          font-weight: 600;
-        }
+      .name {
+        font-weight: 600;
       }
 
       &.is-active {
