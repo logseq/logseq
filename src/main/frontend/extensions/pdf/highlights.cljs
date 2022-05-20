@@ -51,6 +51,7 @@
   nil)
 
 (rum/defc pdf-resizer
+  "Watches for changes in the pdf container's width and adjusts the viewer."
   [^js viewer]
   (let [el-ref (rum/use-ref nil)
         adjust-main-size!
@@ -87,6 +88,7 @@
     [:span.extensions__pdf-resizer {:ref el-ref}]))
 
 (rum/defc pdf-highlights-ctx-menu
+  "The contextual menu which appears over a text selection and allows e.g. creating a highlight."
   [^js viewer
    {:keys [highlight point ^js selection]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
@@ -310,6 +312,7 @@
           :on-context-menu open-tip!}]))))
 
 (rum/defc pdf-highlights-region-container
+  "Displays the highlights over a pdf document."
   [^js viewer page-hls ops]
 
   [:div.hls-region-container
