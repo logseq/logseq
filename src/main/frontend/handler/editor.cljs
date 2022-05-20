@@ -49,7 +49,6 @@
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
             [promesa.core :as p]
             [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
@@ -256,10 +255,9 @@
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
-  (and (string? block-id)
-       (util/uuid-string? block-id)
-       (not= current-id (cljs.core/uuid block-id))
-       (db/entity [:block/uuid (cljs.core/uuid block-id)])))
+  (when-let [id (and (string? block-id) (parse-uuid block-id))]
+    (and (not= current-id id)
+         (db/entity [:block/uuid id]))))
 
 (defn- attach-page-properties-if-exists!
   [block]
@@ -481,14 +479,9 @@
 (defn- block-self-alone-when-insert?
   [config uuid]
   (let [current-page (state/get-current-page)
-        block-id (or
-                  (and (:id config)
-                       (util/uuid-string? (:id config))
-                       (:id config))
-                  (and current-page
-                       (util/uuid-string? current-page)
-                       current-page))]
-    (= uuid (and block-id (medley/uuid block-id)))))
+        block-id (or (some-> (:id config) parse-uuid)
+                     (some-> current-page parse-uuid))]
+    (= uuid block-id)))
 
 (defn insert-new-block-before-block-aux!
   [config block _value {:keys [ok-handler]}]
@@ -1175,10 +1168,7 @@
   []
   (if (state/editing?)
     (let [page (state/get-current-page)
-          block-id (and
-                    (string? page)
-                    (util/uuid-string? page)
-                    (medley/uuid page))]
+          block-id (and (string? page) (parse-uuid page))]
       (when block-id
         (let [block-parent (db/get-block-parent block-id)]
           (if-let [id (and
@@ -1355,7 +1345,7 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? url ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
     (case (keyword format)
       :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
@@ -2042,8 +2032,8 @@
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
   (when id
-    (when-let [entity (if (util/uuid-string? (str id))
-                        (db/entity [:block/uuid (uuid id)])
+    (when-let [entity (if-let [id' (parse-uuid (str id))]
+                        (db/entity [:block/uuid id'])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
@@ -3110,7 +3100,7 @@
   (when-let [block-id (some-> (state/get-selection-blocks)
                               first
                               (dom/attr "blockid")
-                              medley/uuid)]
+                              uuid)]
     (util/stop e)
     (let [block    {:block/uuid block-id}
           block-id (-> (state/get-selection-blocks)
@@ -3222,8 +3212,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [block? (util/uuid-string? page)
-          block-id (or root-block (and block? (uuid page)))
+    (let [block-id (or root-block (parse-uuid page))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page))
@@ -3320,7 +3309,7 @@
        (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
-                       medley/uuid
+                       uuid
                        expand-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
@@ -3353,7 +3342,7 @@
        (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
-                       medley/uuid
+                       uuid
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))

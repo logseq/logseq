@@ -37,7 +37,7 @@
   (when journal-title
     (let [journal-title (gp-util/capitalize-all journal-title)]
       (journal-title-> journal-title
-                       #(gp-util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))
+                       #(parse-long (tf/unparse (tf/formatter "yyyyMMdd") %))
                        formatters))))
 
 (defn format
