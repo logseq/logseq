@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [medley.core :as medley]
             [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
@@ -82,8 +81,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
+          block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
           scheduled-or-deadlines (when (and journal?
@@ -142,8 +140,8 @@
                                   (db/get-block-referenced-blocks block-id)
                                   (db/get-page-referenced-blocks page-name))
                      filters (when (seq filter-state)
-                               (->> (group-by second filter-state)
-                                    (medley/map-vals #(map first %))))
+                               (-> (group-by second filter-state)
+                                   (update-vals #(map first %))))
                      filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
                              (for [[_ rfs] filtered-ref-blocks]

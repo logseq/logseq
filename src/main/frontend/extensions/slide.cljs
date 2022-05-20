@@ -1,6 +1,5 @@
 (ns frontend.extensions.slide
   (:require [rum.core :as rum]
-            [medley.core :as medley]
             [cljs-bean.core :as bean]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
@@ -20,11 +19,11 @@
   (let [properties (:block/properties block)]
     (if (seq properties)
       (merge m
-             (medley/map-keys
+             (update-keys
+              properties
               (fn [k]
                 (-> (str "data-" (name k))
-                    (string/replace "data-data-" "data-")))
-              properties))
+                    (string/replace "data-data-" "data-")))))
       m)))
 
 (defonce *loading? (atom false))

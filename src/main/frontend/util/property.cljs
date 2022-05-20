@@ -4,7 +4,6 @@
             [frontend.util :as util]
             [clojure.set :as set]
             [frontend.config :as config]
-            [medley.core :as medley]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property :refer [properties-start properties-end]]
@@ -232,7 +231,7 @@
                                         (mldoc/properties? (second
                                                             (remove
                                                              (fn [[x _]]
-                                                               (= "Hiccup" (first x)))
+                                                               (contains? #{"Hiccup" "Raw_Html"} (first x)))
                                                              ast)))))
                                (mldoc/properties? (first ast)))
            lines (string/split-lines content)
@@ -364,7 +363,7 @@
 
 (defn add-page-properties
   [page-format properties-content properties]
-  (let [properties (medley/map-keys name properties)
+  (let [properties (update-keys properties name)
         lines (string/split-lines properties-content)
         front-matter-format? (contains? #{:markdown} page-format)
         lines (if front-matter-format?
