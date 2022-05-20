@@ -4,7 +4,6 @@
             ["chokidar" :as watcher]
             [electron.utils :as utils]
             ["electron" :refer [app]]
-            [frontend.util.fs :as util-fs]
             [electron.window :as window]))
 
 ;; TODO: explore different solutions for different platforms
@@ -30,10 +29,15 @@
 
 (defn- publish-file-event!
   [dir path event]
-  (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
-                                 :path (utils/fix-win-path! path)
-                                 :content (utils/read-file path)
-                                 :stat (fs/statSync path)}))
+  (let [content (when (and (not= event "unlink")
+                           (utils/should-read-content? path))
+                  (utils/read-file path))
+        stat (when (not= event "unlink")
+               (fs/statSync path))]
+    (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
+                                   :path (utils/fix-win-path! path)
+                                   :content content
+                                   :stat stat})))
 
 (defn watch-dir!
   "Watch a directory if no such file watcher exists"
@@ -43,7 +47,7 @@
     (let [watcher (.watch watcher dir
                           (clj->js
                            {:ignored (fn [path]
-                                       (util-fs/ignored-path? dir path))
+                                       (utils/ignored-path? dir path))
                             :ignoreInitial false
                             :ignorePermissionErrors true
                             :interval polling-interval
@@ -63,9 +67,7 @@
              (publish-file-event! dir path "change")))
       (.on watcher "unlink"
            (fn [path]
-             (send-file-watcher! dir "unlink"
-                                 {:dir (utils/fix-win-path! dir)
-                                  :path (utils/fix-win-path! path)})))
+             (publish-file-event! dir path "unlink")))
       (.on watcher "error"
            (fn [path]
              (println "Watch error happened: "
