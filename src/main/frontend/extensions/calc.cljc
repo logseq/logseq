@@ -101,7 +101,7 @@
                                                           (.stopPropagation e))}
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector (mapv (fn [x] (if (fraction? x)
-                                                           (js/parseFloat (pprint/cl-format nil  "~,9f" x))
+                                                           (js/parseFloat (pprint/cl-format nil  "~,15f" x))
                                                            x
                                                            )) output-lines))]
           [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
