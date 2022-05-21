@@ -4,11 +4,11 @@ import { App as TldrawApp } from 'tldraw-logseq'
 const storingKey = 'playground.index'
 
 const onPersist = app => {
-  sessionStorage.setItem(storingKey, JSON.stringify(app.serialized))
+  window.sessionStorage.setItem(storingKey, JSON.stringify(app.serialized))
 }
 
 const onLoad = () => {
-  return JSON.parse(sessionStorage.getItem(storingKey))
+  return JSON.parse(window.sessionStorage.getItem(storingKey))
 }
 
 const documentModel = onLoad() ?? {
@@ -49,8 +49,6 @@ const Page = props => {
 }
 
 export default function App() {
-  const [app, setApp] = React.useState();
-  console.log(app) // demos how to get the Tldraw app instance
   return (
     <div className="h-screen w-screen">
       <TldrawApp
@@ -58,7 +56,6 @@ export default function App() {
         searchHandler={q => (q ? list : [])}
         model={documentModel}
         onPersist={onPersist}
-        onApp={setApp}
       />
     </div>
   )

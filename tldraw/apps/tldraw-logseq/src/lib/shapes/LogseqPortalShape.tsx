@@ -125,7 +125,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const logseqLink = this.props.logseqLink
     if (logseqLink) {
       const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
-      linkButton = <a class='ml-2' onMouseDown={f}>🔗 {logseqLink}</a>
+      linkButton = <a className='ml-2' onMouseDown={f}>🔗 {logseqLink}</a>
     }
 
     return (
@@ -141,7 +141,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       >
         {pageId && (
           <div
-            class='ls-whiteboard-card-header'
+            className="ls-whiteboard-card-header"
             style={{
               height: '32px',
               width: '100%',
@@ -152,7 +152,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             }}
           >
             {pageId}
-
             {linkButton}
           </div>
         )}
