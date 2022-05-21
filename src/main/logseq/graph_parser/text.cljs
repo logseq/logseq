@@ -122,6 +122,18 @@
   [s]
   (string/split s #"(\"[^\"]*\")"))
 
+(def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com|b23.tv))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
+(def vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
+
+(defn get-matched-video
+  [url]
+  (or (re-find youtube-regex url)
+      (re-find loom-regex url)
+      (re-find vimeo-regex url)
+      (re-find bilibili-regex url)))
+
 (def markdown-link #"\[([^\[]+)\](\(.*\))")
 
 (defn split-page-refs-without-brackets

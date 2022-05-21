@@ -1110,42 +1110,80 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
-        (when-not (string/blank? vimeo-id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allow-full-screen "allowfullscreen"
-              :allow
-              "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-              :frame-border "0"
-              :src (str "https://player.vimeo.com/video/" vimeo-id)
-              :height height
-              :width width}]))))))
+    (when-let [vimeo-id (nth (util/safe-re-find text/vimeo-regex url) 5)]
+      (when-not (string/blank? vimeo-id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allow-full-screen "allowfullscreen"
+            :allow
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :frame-border "0"
+            :src (str "https://player.vimeo.com/video/" vimeo-id)
+            :height height
+            :width width}])))))
 
 (defn- macro-bilibili-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
-      (when-let [id (cond
-                      (<= (count url) 15) url
-                      :else
-                      (last (util/safe-re-find id-regex url)))]
-        (when-not (string/blank? id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allowfullscreen true
-              :framespacing "0"
-              :frameborder "no"
-              :border "0"
-              :scrolling "no"
-              :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-              :width width
-              :height (max 500 height)}]))))))
+    (when-let [id (cond
+                    (<= (count url) 15) url
+                    :else
+                    (nth (util/safe-re-find text/bilibili-regex url) 5))]
+      (when-not (string/blank? id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allowfullscreen true
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+            :width width
+            :height (max 500 height)}])))))
+
+(defn- macro-video-cp
+  [_config arguments]
+  (when-let [url (first arguments)]
+    (let [width (min (- (util/get-width) 96)
+                     560)
+          height (int (* width (/ 315 560)))
+          results (text/get-matched-video url)
+          src (match results
+                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                     (if (= (count id) 11) ["youtube-player" id] url)
+
+                     [_ _ _ "youtube-nocookie.com" _ id _]
+                     (str "https://www.youtube-nocookie.com/embed/" id)
+
+                     [_ _ _ "loom.com" _ id _]
+                     (str "https://www.loom.com/embed/" id)
+
+                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                     (str "https://player.vimeo.com/video/" id)
+
+                     [_ _ _ "bilibili.com" _ id _]
+                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+
+                     :else
+                     url)]
+      (if (and (coll? src)
+               (= (first src) "youtube-player"))
+        (youtube/youtube-video (last src))
+        (when src
+          [:iframe
+           {:allowfullscreen true
+            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src src
+            :width width
+            :height height}])))))
 
 (defn- macro-else-cp
   [name config arguments]
@@ -1258,13 +1296,12 @@
 
       (= name "youtube")
       (when-let [url (first arguments)]
-        (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
-          (when-let [youtube-id (cond
-                                  (== 11 (count url)) url
-                                  :else
-                                  (nth (util/safe-re-find YouTube-regex url) 5))]
-            (when-not (string/blank? youtube-id)
-              (youtube/youtube-video youtube-id)))))
+        (when-let [youtube-id (cond
+                                (== 11 (count url)) url
+                                :else
+                                (nth (util/safe-re-find text/youtube-regex url) 5))]
+          (when-not (string/blank? youtube-id)
+            (youtube/youtube-video youtube-id))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp (first arguments)]
@@ -1287,6 +1324,9 @@
       (= name "bilibili")
       (macro-bilibili-cp config arguments)
 
+      (= name "video")
+      (macro-video-cp config arguments)
+      
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
