@@ -1194,6 +1194,12 @@
      (if mac? "Cmd" "Ctrl")))
 
 #?(:cljs
+   (defn meta-key? [e]
+     (if mac?
+       (gobj/get e "metaKey")
+       (gobj/get e "ctrlKey"))))
+
+#?(:cljs
    (defn right-click?
      [e]
      (let [which (gobj/get e "which")

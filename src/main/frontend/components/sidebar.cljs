@@ -459,7 +459,7 @@
   [e]
   (state/hide-custom-context-menu!)
   (when (and (not (gobj/get e "shiftKey"))
-             (not (gobj/get e "metaKey")))
+             (not (util/meta-key? e)))
     (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
