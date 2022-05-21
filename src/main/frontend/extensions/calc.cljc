@@ -3,6 +3,9 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [frontend.util :as util]
+
+            [bignumber.js :as bn]
+
             #?(:clj [clojure.java.io :as io])
             #?(:cljs [shadow.resource :as rc])
             #?(:cljs [rum.core :as rum])
@@ -24,17 +27,19 @@
 
 (defn new-env [] (atom {}))
 
+;; TODO: Set DECIMAL_PLACES https://mikemcl.github.io/bignumber.js/#decimal-places
+
 (defn eval* [env ast]
   (insta/transform
-   {:number     (comp edn/read-string #(str/replace % "," ""))
+   {:number     (comp bn/BigNumber #(str/replace % "," ""))
     :percent    (fn percent [a] (/ a 100.00))
     :scientific edn/read-string
     :negterm    (fn neg [a] (- a))
     :expr       identity
-    :add        +
-    :sub        -
-    :mul        *
-    :div        /
+    :add        (fn add [a b] (-> a (.plus b)))
+    :sub        (fn sub [a b] (-> a (.minus b)))
+    :mul        (fn mul [a b] (-> a (.multipliedBy b)))
+    :div        (fn div [a b] (-> a (.dividedBy b)))
     :pow        (fn pow [a b]
                   #?(:clj (java.lang.Math/pow a b) :cljs (js/Math.pow a b)))
     :log        (fn log [a]
@@ -101,4 +106,4 @@
            [:span (cond
                     (nil? line)           ""
                     (failure? line) "?"
-                    :else                 line)]])])))
+                    :else                 (str line))]])])))
