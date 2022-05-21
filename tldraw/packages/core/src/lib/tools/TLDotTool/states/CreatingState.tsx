@@ -46,6 +46,7 @@ export class CreatingState<
     if (!this.app.settings.isToolLocked) {
       this.app.transition('select')
     }
+    this.app.persist()
   }
 
   onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {

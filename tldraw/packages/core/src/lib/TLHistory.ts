@@ -11,6 +11,10 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   pointer = 0
   isPaused = true
 
+  get creating() {
+    return this.app.selectedTool.currentState.id === 'creating';
+  }
+
   pause = () => {
     if (this.isPaused) return
     this.isPaused = true
@@ -30,7 +34,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   }
 
   persist = () => {
-    if (this.isPaused) return
+    if (this.isPaused || this.creating) return
 
     const { serialized } = this.app
 

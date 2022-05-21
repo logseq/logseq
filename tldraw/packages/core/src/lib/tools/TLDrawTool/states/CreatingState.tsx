@@ -88,6 +88,7 @@ export class CreatingState<
     })
     this.tool.previousShape = this.shape
     this.tool.transition('idle')
+    this.app.persist()
   }
 
   onWheel: TLStateEvents<S, K>['onWheel'] = (info, e) => {
