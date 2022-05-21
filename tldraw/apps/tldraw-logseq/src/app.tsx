@@ -2,13 +2,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { TLDocumentModel } from '@tldraw/core'
 import {
+  AppCanvas,
+  AppProvider,
   TLReactCallbacks,
   TLReactComponents,
   TLReactShapeConstructor,
   TLReactToolConstructor,
-  useApp,
 } from '@tldraw/react'
-import { AppCanvas, AppProvider } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
 import { ContextBar } from '~components/ContextBar/ContextBar'
@@ -22,6 +22,7 @@ import {
   HighlighterShape,
   ImageShape,
   LineShape,
+  LogseqPortalShape,
   PenShape,
   PolygonShape,
   PolylineShape,
@@ -29,7 +30,6 @@ import {
   StarShape,
   TextShape,
   YouTubeShape,
-  LogseqPortalShape,
 } from '~lib/shapes'
 import {
   BoxTool,
@@ -90,17 +90,6 @@ interface LogseqTldrawProps {
   model?: TLDocumentModel<Shape>
   onMount?: TLReactCallbacks<Shape>['onMount']
   onPersist?: TLReactCallbacks<Shape>['onPersist']
-  onApp?: (app: any) => void
-}
-
-function TldrawAppHacker({ onApp }: { onApp: (app: any) => void }) {
-  const app = useApp()
-
-  React.useEffect(() => {
-    onApp(app)
-  }, [app])
-
-  return null
 }
 
 export const App = function App(props: LogseqTldrawProps): JSX.Element {
@@ -110,12 +99,17 @@ export const App = function App(props: LogseqTldrawProps): JSX.Element {
 
   return (
     <LogseqContext.Provider value={{ Page, search: props.searchHandler }}>
-      <AppProvider Shapes={shapes} Tools={tools} onFileDrop={onFileDrop} {...props}>
+      <AppProvider
+        onMount={props.onMount}
+        Shapes={shapes}
+        Tools={tools}
+        onFileDrop={onFileDrop}
+        {...props}
+      >
         <div className="logseq-tldraw logseq-tldraw-wrapper">
           <AppCanvas components={components} />
           <AppUI />
         </div>
-        <TldrawAppHacker onApp={props.onApp ?? (() => null)} />
       </AppProvider>
     </LogseqContext.Provider>
   )
