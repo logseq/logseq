@@ -489,6 +489,48 @@
         {:tx-data full-tx
          :blocks tx}))))
 
+(defn- build-move-blocks-next-tx
+  [blocks]
+  (let [id->blocks (zipmap (map :db/id blocks) blocks)
+        top-level-blocks (get-top-level-blocks blocks)
+        top-level-blocks-ids (set (map :db/id top-level-blocks))
+        right-block (get-right-sibling (:db/id (last top-level-blocks)))]
+    (when (and right-block
+               (not (contains? top-level-blocks-ids (:db/id right-block))))
+      {:db/id (:db/id right-block)
+       :block/left (loop [block (:block/left right-block)]
+                     (if (contains? top-level-blocks-ids (:db/id block))
+                       (recur (:block/left (get id->blocks (:db/id block))))
+                       (:db/id block)))})))
+
+(defn- find-new-left
+  [block moved-ids target-block current-block sibling?]
+  (if (= (:db/id target-block) (:db/id (:block/left current-block)))
+    (if sibling?
+      (db/entity (last moved-ids))
+      target-block)
+    (let [left (db/entity (:db/id (:block/left block)))]
+      (if (contains? (set moved-ids) (:db/id left))
+        (find-new-left left moved-ids target-block current-block sibling?)
+        left))))
+
+(defn- fix-non-consecutive-blocks
+  [blocks target-block sibling?]
+  (let [page-blocks (group-by :block/page blocks)]
+    (->>
+     (mapcat (fn [[_page blocks]]
+               (let [blocks (db-model/sort-page-random-blocks blocks)
+                     non-consecutive-blocks (->> (conj (db-model/get-non-consecutive-blocks blocks) (last blocks))
+                                                 (util/distinct-by :db/id))]
+                 (when (seq non-consecutive-blocks)
+                   (mapv (fn [block]
+                           (when-let [right (get-right-sibling (:db/id block))]
+                             (when-let [new-left (find-new-left right (distinct (map :db/id blocks)) target-block block sibling?)]
+                               {:db/id      (:db/id right)
+                                :block/left (:db/id new-left)})))
+                         non-consecutive-blocks)))) page-blocks)
+     (remove nil?))))
+
 (defn- delete-block
   "Delete block from the tree."
   [txs-state block' children?]
@@ -551,50 +593,10 @@
               (tree/-save new-right-node txs-state))))
         (doseq [id block-ids]
           (let [node (block (db/pull id))]
-            (tree/-del node txs-state true)))))
+            (tree/-del node txs-state true)))
+        (let [fix-non-consecutive-tx (fix-non-consecutive-blocks blocks nil false)]
+          (swap! txs-state concat fix-non-consecutive-tx))))
     {:tx-data @txs-state}))
-
-(defn- build-move-blocks-next-tx
-  [blocks]
-  (let [id->blocks (zipmap (map :db/id blocks) blocks)
-        top-level-blocks (get-top-level-blocks blocks)
-        top-level-blocks-ids (set (map :db/id top-level-blocks))
-        right-block (get-right-sibling (:db/id (last top-level-blocks)))]
-    (when (and right-block
-               (not (contains? top-level-blocks-ids (:db/id right-block))))
-      {:db/id (:db/id right-block)
-       :block/left (loop [block (:block/left right-block)]
-                     (if (contains? top-level-blocks-ids (:db/id block))
-                       (recur (:block/left (get id->blocks (:db/id block))))
-                       (:db/id block)))})))
-
-(defn find-new-left
-  [block moved-ids target-block current-block sibling?]
-  (if (= (:db/id target-block) (:db/id (:block/left current-block)))
-    (if sibling?
-      (db/entity (last moved-ids))
-      target-block)
-    (let [left (db/entity (:db/id (:block/left block)))]
-      (if (contains? (set moved-ids) (:db/id left))
-        (find-new-left left moved-ids target-block current-block sibling?)
-        left))))
-
-(defn- fix-non-consecutive-blocks
-  [blocks target-block sibling?]
-  (let [page-blocks (group-by :block/page blocks)]
-    (->>
-     (mapcat (fn [[_page blocks]]
-               (let [blocks (db-model/sort-page-random-blocks blocks)
-                     non-consecutive-blocks (->> (conj (db-model/get-non-consecutive-blocks blocks) (last blocks))
-                                                 (util/distinct-by :db/id))]
-                 (when (seq non-consecutive-blocks)
-                   (mapv (fn [block]
-                           (when-let [right (get-right-sibling (:db/id block))]
-                             (when-let [new-left (find-new-left right (distinct (map :db/id blocks)) target-block block sibling?)]
-                               {:db/id      (:db/id right)
-                                :block/left (:db/id new-left)})))
-                         non-consecutive-blocks)))) page-blocks)
-     (remove nil?))))
 
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
