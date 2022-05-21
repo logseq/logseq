@@ -2264,20 +2264,21 @@
 
 (defn- block-mouse-over
   [uuid e *control-show? block-id doc-mode?]
-  (util/stop e)
-  (when (or
-         (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid {:semantic? true}))
-    (reset! *control-show? true))
-  (when-let [parent (gdom/getElement block-id)]
-    (let [node (.querySelector parent ".bullet-container")]
-      (when doc-mode?
-        (dom/remove-class! node "hide-inner-bullet"))))
-  (when (and
-         (state/in-selection-mode?)
-         (non-dragging? e))
+  (when-not @*dragging?
     (util/stop e)
-    (editor-handler/highlight-selection-area! block-id)))
+    (when (or
+           (model/block-collapsed? uuid)
+           (editor-handler/collapsable? uuid {:semantic? true}))
+      (reset! *control-show? true))
+    (when-let [parent (gdom/getElement block-id)]
+      (let [node (.querySelector parent ".bullet-container")]
+        (when doc-mode?
+          (dom/remove-class! node "hide-inner-bullet"))))
+    (when (and
+           (state/in-selection-mode?)
+           (non-dragging? e))
+      (util/stop e)
+      (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]
