@@ -1,5 +1,5 @@
 (ns frontend.encrypt
-  (:require [frontend.utf8 :as utf8]
+  (:require [logseq.graph-parser.utf8 :as utf8]
             [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [promesa.core :as p]

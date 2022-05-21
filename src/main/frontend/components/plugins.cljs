@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.components.plugins-settings :as plugins-settings]
@@ -16,62 +17,87 @@
             [clojure.string :as string]))
 
 (rum/defcs installed-themes
-  < rum/reactive
-    (rum/local 0 ::cursor)
-    (rum/local 0 ::total)
-    (mixins/event-mixin
-      (fn [state]
-        (let [*cursor (::cursor state)
-              *total (::total state)
-              ^js target (rum/dom-node state)]
-          (.focus target)
-          (mixins/on-key-down
-            state {38                                       ;; up
-                   (fn [^js _e]
-                     (reset! *cursor
-                             (if (zero? @*cursor)
-                               (dec @*total) (dec @*cursor))))
-                   40                                       ;; down
-                   (fn [^js _e]
-                     (reset! *cursor
-                             (if (= @*cursor (dec @*total))
-                               0 (inc @*cursor))))
+  <
+  (rum/local [] ::themes)
+  (rum/local 0 ::cursor)
+  (rum/local 0 ::total)
+  {:did-mount (fn [state] (let [*themes        (::themes state)
+                                *cursor        (::cursor state)
+                                *total         (::total state)
+                                mode           (state/sub :ui/theme)
+                                all-themes     (state/sub :plugin/installed-themes)
+                                themes         (->> all-themes
+                                                    (filter #(= (:mode %) mode))
+                                                    (sort-by #(:name %)))
+                                no-mode-themes (->> all-themes
+                                                    (filter #(= (:mode %) nil))
+                                                    (sort-by #(:name %))
+                                                    (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
+                                selected       (state/sub :plugin/selected-theme)
+                                themes         (map-indexed (fn [idx opt]
+                                                              (let [selected? (= (:url opt) selected)]
+                                                                (when selected? (reset! *cursor (+ idx 1)))
+                                                                (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
+                                themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
+                                                      :url         nil
+                                                      :description (string/join " " ["Logseq default" mode "theme."])
+                                                      :mode        mode
+                                                      :selected    (nil? selected)
+                                                      :group-first true
+                                                      :group-desc  (str mode " themes")} themes)]
+                            (reset! *themes themes)
+                            (reset! *total (count themes))
+                            state))}
+  (mixins/event-mixin
+   (fn [state]
+     (let [*cursor    (::cursor state)
+           *total     (::total state)
+           ^js target (rum/dom-node state)]
+       (.focus target)
+       (mixins/on-key-down
+        state {38                                       ;; up
+               (fn [^js _e]
+                 (reset! *cursor
+                         (if (zero? @*cursor)
+                           (dec @*total) (dec @*cursor))))
+               40                                       ;; down
+               (fn [^js _e]
+                 (reset! *cursor
+                         (if (= @*cursor (dec @*total))
+                           0 (inc @*cursor))))
 
-                   13                                       ;; enter
-                   #(when-let [^js active (.querySelector target ".is-active")]
-                      (.click active))
-                   }))))
+               13                                       ;; enter
+               #(when-let [^js active (.querySelector target ".is-active")]
+                  (.click active))}))))
   [state]
   (let [*cursor (::cursor state)
-        *total (::total state)
-        themes (state/sub :plugin/installed-themes)
-        selected (state/sub :plugin/selected-theme)
-        themes (cons {:name "Default Theme" :url nil :description "Logseq default light/dark theme."} themes)
-        themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
-        _ (reset! *total (count themes))]
-
+        *themes (::themes state)]
     [:div.cp__themes-installed
      {:tab-index -1}
      [:h1.mb-4.text-2xl.p-1 (t :themes)]
      (map-indexed
-       (fn [idx opt]
-         (let [current-selected (:selected opt)
-               plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+      (fn [idx opt]
+        (let [current-selected? (:selected opt)
+              group-first?      (:group-first opt)
+              plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+          [:div
+           (when (and group-first? (not= idx 0)) [:hr.my-2])
            [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
             {:key      (str idx (:url opt))
-             :title    (when current-selected "Cancel selected theme")
+             :title    (:description opt)
              :class    (util/classnames
-                         [{:is-selected current-selected
-                           :is-active   (= idx @*cursor)}])
-             :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
+                        [{:is-selected current-selected?
+                          :is-active   (= idx @*cursor)}])
+             :on-click #(do (js/LSPluginCore.selectTheme (bean/->js opt))
                             (state/close-modal!))}
-            [:section
-             [:strong.block
-              [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
-              (:name opt)]]
-            [:small.flex-shrink-0.flex.items-center.opacity-10
-             (when current-selected (ui/icon "check"))]]))
-       themes)]))
+            [:div.flex.items-center.text-xs
+             [:div.opacity-60 (str (or (:name plg) "Logseq") " •")]
+             [:div.name.ml-1 (:name opt)]]
+            (when (or group-first? current-selected?)
+              [:div.flex.items-center
+               (when group-first? [:small.opacity-60 (:group-desc opt)])
+               (when current-selected? [:small.inline-flex.ml-1.opacity-60 (ui/icon "check")])])]]))
+      @*themes)]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -334,10 +360,69 @@
     :intent "logseq"
     :target "_blank"))
 
+(rum/defc user-proxy-settings-panel
+  [{:keys [protocol] :as agent-opts}]
+  (let [[opts set-opts!] (rum/use-state agent-opts)
+        [testing? set-testing?!] (rum/use-state false)
+        *test-input (rum/create-ref)
+        disabled? (string/blank? (:protocol opts))]
+    [:div.cp__settings-network-proxy-panel
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:div.p-2
+      [:p [:label [:strong (t :type)]
+           (ui/select [{:label "Disabled" :value "" :selected disabled?}
+                       {:label "http" :value "http" :selected (= protocol "http")}
+                       {:label "https" :value "https" :selected (= protocol "https")}
+                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
+                      #(set-opts!
+                         (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
+      [:p.flex
+       [:label.pr-4 [:strong (t :host)]
+        [:input.form-input.is-small
+         {:value     (:host opts) :disabled disabled?
+          :on-change #(set-opts!
+                        (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+
+       [:label [:strong (t :port)]
+        [:input.form-input.is-small
+         {:value (:port opts) :type "number" :disabled disabled?
+          :on-change #(set-opts!
+                        (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
+
+      [:hr]
+      [:p.flex.items-center.space-x-2
+       [:span.w-60
+        [:input.form-input.is-small
+         {:ref *test-input
+          :placeholder "http://"
+          :on-change #(set-opts!
+                        (assoc opts :test (util/trim-safe (util/evalue %))))
+          :value (:test opts)}]]
+
+       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+         :intent "logseq" :large? false
+         :style {:margin-top 0 :padding "5px 15px"}
+         :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
+                      (when (and (not testing?) (not (string/blank? val)))
+                        (set-testing?! true)
+                        (-> (p/let [_ (ipc/ipc :setHttpsAgent opts)
+                                    _ (ipc/ipc :testProxyUrl val)])
+                          (p/catch (fn [e] (notification/show! (str e) :error)))
+                          (p/finally (fn [] (set-testing?! false)))))
+                      ))]
+
+      [:p.pt-2
+       (ui/button (t :save)
+         :on-click (fn []
+                     (p/let [_ (ipc/ipc :setHttpsAgent opts)]
+                       (state/set-state! [:electron/user-cfgs :settings/agent] opts)
+                       (state/close-sub-modal! :https-proxy-panel))))]]]))
+
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by
-   selected-unpacked-pkg market? develop-mode? reload-market-fn]
+   selected-unpacked-pkg market? develop-mode?
+   reload-market-fn agent-opts]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
@@ -357,6 +442,16 @@
          (unpacked-plugin-loader selected-unpacked-pkg)])]
 
      [:div.flex.items-center.r
+      ;; extra info
+      (let [{:keys [protocol host port]} agent-opts]
+        (when (every? not-empty [protocol host port])
+          (ui/button
+            [:span.flex.items-center.text-indigo-500
+             (ui/icon "world-download") (str protocol "://" host ":" port)]
+            :small? true
+            :intent "link"
+            :on-click #(state/pub-event! [:go/proxy-settings agent-opts]))))
+
       ;; search
       (panel-tab-search search-key *search-key *search-ref)
 
@@ -440,6 +535,10 @@
                     :options {:on-click #(reload-market-fn)}}]
                   [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                     :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
+
+                [{:title   [:span (ui/icon "world") (t :settings-page/network-proxy)]
+                  :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+
                 (when (state/developer-mode?)
                   [{:hr true}
                    {:title   [:span (ui/icon "file-code") "Open Preferences"]
@@ -481,6 +580,7 @@
         installing (state/sub :plugin/installing)
         online? (state/sub :network/online?)
         develop-mode? (state/sub :ui/developer-mode?)
+        agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         *search-key (::search-key state)
         *category (::category state)
         *sort-by (::sort-by state)
@@ -526,20 +626,18 @@
        @*search-key *search-key
        @*category *category
        @*sort-by *sort-by @*filter-by *filter-by
-       nil true develop-mode? (::reload state))
+       nil true develop-mode? (::reload state)
+       agent-opts)
 
      (cond
        (not online?)
-       [:p.flex.justify-center.pt-20.opacity-50
-        (svg/offline 30)]
+       [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
        @*fetching
-       [:p.flex.justify-center.pt-20
-        svg/loading]
+       [:p.flex.justify-center.pt-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50
-        "Remote error: " (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 "Remote error: " (.-message @*error)]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -568,6 +666,7 @@
         develop-mode? (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
+        agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         *filter-by (::filter-by state)
         *sort-by (::sort-by state)
         *search-key (::search-key state)
@@ -611,7 +710,8 @@
        @*sort-by *sort-by
        @*filter-by *filter-by
        selected-unpacked-pkg
-       false develop-mode? nil)
+       false develop-mode? nil
+       agent-opts)
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [item sorted-plugins]
@@ -633,7 +733,7 @@
         updates (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
-     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (util/safe-parse-int (count updates)))]
+     [:h1.mb-4.text-2xl.p-1 (util/format "Found %s updates" (count updates))]
 
      (if (seq updates)
        ;; lists
@@ -751,6 +851,10 @@
   (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
+
+    (rum/use-effect!
+      #(state/load-app-user-cfgs)
+      [])
 
     [:div.cp__plugins-page
      {:ref       *el-ref

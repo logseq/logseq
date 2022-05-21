@@ -2,12 +2,11 @@
   (:require [cljs-bean.core :as bean]
             [frontend.external.protocol :as protocol]
             [frontend.date :as date]
-            [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.string :as string]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.text :as text]))
+            [logseq.graph-parser.text :as text]))
 
 (defonce all-refed-uids (atom #{}))
 (defonce uid->uuid (atom {}))
@@ -61,7 +60,7 @@
                     (set))]
       (reset! all-refed-uids uids)
       (doseq [uid uids]
-        (swap! uid->uuid assoc uid (medley/random-uuid))))))
+        (swap! uid->uuid assoc uid (random-uuid))))))
 
 (defn transform
   [text]
@@ -76,7 +75,7 @@
 (defn child->text
   [{:keys [uid string children]} level]
   (when-not (and (get @uid->uuid uid) uid)
-    (swap! uid->uuid assoc uid (medley/random-uuid)))
+    (swap! uid->uuid assoc uid (random-uuid)))
   (let [children-text (children->text children (inc level))
         level-pattern (str (apply str (repeat level "\t"))
                            (if (zero? level)

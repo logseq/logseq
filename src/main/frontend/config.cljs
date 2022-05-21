@@ -23,6 +23,7 @@
 ;; (goog-define LOGIN-URL
 ;;              "https://logseq.auth.us-east-1.amazoncognito.com/login?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 ;; (goog-define API-DOMAIN "api-prod.logseq.com")
+;; (goog-define WS-URL "wss://b2rp13onu2.execute-api.us-east-1.amazonaws.com/production?graphuuid=%s")
 
 ;; dev env
 (goog-define FILE-SYNC-PROD? false)
@@ -84,6 +85,15 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
+(defn doc-formats
+  []
+  (let [config-formats (some->> (get-in @state/state [:config :document-formats])
+                                (map :keyword)
+                                (set))]
+    (set/union
+     config-formats
+     #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})))
+
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
 (def media-formats (set/union (img-formats) audio-formats))
@@ -96,17 +106,9 @@
   (set/union (text-formats)
              (img-formats)))
 
-;; TODO: rename
-(defonce mldoc-support-formats
-  #{:org :markdown :md})
-
-(defn mldoc-support?
-  [format]
-  (contains? mldoc-support-formats (keyword format)))
-
 (def mobile?
   (when-not util/node-test?
-    (gp-util/safe-re-find #"Mobi" js/navigator.userAgent)))
+    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 

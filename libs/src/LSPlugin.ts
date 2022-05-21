@@ -1,18 +1,24 @@
-import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
+
+import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
-import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
+import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 
 export type PluginLocalIdentity = string
 
-export type ThemeOptions = {
+export type ThemeMode = 'light' | 'dark'
+
+export interface LegacyTheme {
   name: string
   url: string
   description?: string
-  mode?: 'dark' | 'light'
+  mode?: ThemeMode
+  pid: PluginLocalIdentity
+}
 
-  [key: string]: any
+export interface Theme extends LegacyTheme {
+  mode: ThemeMode
 }
 
 export type StyleString = string
@@ -64,7 +70,7 @@ export interface LSPluginPkgConfig {
   entry: string // alias of main
   title: string
   mode: 'shadow' | 'iframe'
-  themes: Array<ThemeOptions>
+  themes: Theme[]
   icon: string
 
   [key: string]: any
@@ -122,7 +128,7 @@ export interface AppInfo {
  * User's app configurations
  */
 export interface AppUserConfigs {
-  preferredThemeMode: 'dark' | 'light'
+  preferredThemeMode: ThemeMode
   preferredFormat: 'markdown' | 'org'
   preferredDateFormat: string
   preferredStartOfWeek: string
@@ -382,7 +388,7 @@ export interface IAppProxy {
     content: string,
     status?: 'success' | 'warning' | 'error' | string
   ) => void
-  
+
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
@@ -614,9 +620,17 @@ export interface IEditorProxy extends Record<string, any> {
 
   getAllPages: (repo?: string) => Promise<any>
 
-  prependBlockInPage: (page: PageIdentity, content: string, opts?: Partial<{ properties: {} }>) => Promise<BlockEntity | null>
+  prependBlockInPage: (
+    page: PageIdentity,
+    content: string,
+    opts?: Partial<{ properties: {} }>
+  ) => Promise<BlockEntity | null>
 
-  appendBlockInPage: (page: PageIdentity, content: string, opts?: Partial<{ properties: {} }>) => Promise<BlockEntity | null>
+  appendBlockInPage: (
+    page: PageIdentity,
+    content: string,
+    opts?: Partial<{ properties: {} }>
+  ) => Promise<BlockEntity | null>
 
   getPreviousSiblingBlock: (
     srcBlock: BlockIdentity
@@ -756,9 +770,7 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(
-    exts: string | string[]
-  ): Promise<{
+  listFilesOfCurrentGraph(exts: string | string[]): Promise<{
     path: string
     size: number
     accessTime: number
@@ -768,14 +780,17 @@ export interface IAssetsProxy {
   }>
 }
 
-export interface ILSPluginThemeManager extends EventEmitter {
-  themes: Map<PluginLocalIdentity, Array<ThemeOptions>>
+export interface ILSPluginThemeManager {
+  get themes(): Map<PluginLocalIdentity, Theme[]>
 
-  registerTheme(id: PluginLocalIdentity, opt: ThemeOptions): Promise<void>
+  registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void>
 
-  unregisterTheme(id: PluginLocalIdentity): Promise<void>
+  unregisterTheme(id: PluginLocalIdentity, effect?: boolean): Promise<void>
 
-  selectTheme(opt?: ThemeOptions): Promise<void>
+  selectTheme(
+    opt: Theme | LegacyTheme,
+    options: { effect?: boolean; emit?: boolean }
+  ): Promise<void>
 }
 
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
@@ -837,7 +852,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * Set the theme for the main Logseq app
    */
-  provideTheme(theme: ThemeOptions): this
+  provideTheme(theme: Theme): this
 
   /**
    * Inject custom css for the main Logseq app

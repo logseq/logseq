@@ -52,23 +52,20 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
                                                    "dir": baseUrl?.description as Any,
                                                    "path": url.description,
                                                   ])
-        case .Add:
-            let content = try? String(contentsOf: url, encoding: .utf8)
-            self.notifyListeners("watcher", data: ["event": "add",
+        case .Add, .Change:
+            var content: String? = nil
+            if url.shouldNotifyWithContent() {
+                content = try? String(contentsOf: url, encoding: .utf8)
+            }
+            self.notifyListeners("watcher", data: ["event": event.description,
                                                    "dir": baseUrl?.description as Any,
                                                    "path": url.description,
                                                    "content": content as Any,
-                                                   "stat": ["mtime": metadata?.contentModificationTimestamp,
-                                                            "ctime": metadata?.creationTimestamp]
+                                                   "stat": ["mtime": metadata?.contentModificationTimestamp ?? 0,
+                                                            "ctime": metadata?.creationTimestamp ?? 0,
+                                                            "size": metadata?.fileSize as Any]
                                                   ])
-        case .Change:
-            let content = try? String(contentsOf: url, encoding: .utf8)
-            self.notifyListeners("watcher", data: ["event": "change",
-                                                   "dir": baseUrl?.description as Any,
-                                                   "path": url.description,
-                                                   "content": content as Any,
-                                                   "stat": ["mtime": metadata?.contentModificationTimestamp,
-                                                            "ctime": metadata?.creationTimestamp]])
+            
         case .Error:
             // TODO: handle error?
             break
@@ -84,16 +81,18 @@ extension URL {
         if self.lastPathComponent.starts(with: ".") {
             return true
         }
-        // NOTE: used by file-sync
-        if self.lastPathComponent == "graphs-txid.edn" {
+        if self.lastPathComponent == "graphs-txid.edn" || self.lastPathComponent == "broken-config.edn" {
             return true
         }
-        let allowedPathExtensions: Set = ["md", "markdown", "org", "css", "edn", "excalidraw"]
+        return false
+    }
+    
+    func shouldNotifyWithContent() -> Bool {
+        let allowedPathExtensions: Set = ["md", "markdown", "org", "js", "edn", "css", "excalidraw"]
         if allowedPathExtensions.contains(self.pathExtension.lowercased()) {
-            return false
+            return true
         }
-        // skip for other file types
-        return true
+        return false
     }
     
     func isICloudPlaceholder() -> Bool {
@@ -110,12 +109,26 @@ public protocol PollingWatcherDelegate {
     func recevedNotification(_ url: URL, _ event: PollingWatcherEvent, _ metadata: SimpleFileMetadata?)
 }
 
-public enum PollingWatcherEvent: String {
+public enum PollingWatcherEvent {
     case Add
     case Change
     case Unlink
     case Error
+    
+    var description: String {
+        switch self {
+        case .Add:
+            return "add"
+        case .Change:
+            return "change"
+        case .Unlink:
+            return "unlink"
+        case .Error:
+            return "error"
+        }
+    }
 }
+
 
 public struct SimpleFileMetadata: CustomStringConvertible, Equatable {
     var contentModificationTimestamp: Double
@@ -192,11 +205,11 @@ public class PollingWatcher {
                 
                 if isDirectory {
                     // NOTE: URL.path won't end with a `/`
-                    if fileURL.path.hasSuffix("/logseq/bak") || name == ".recycle" || name.hasPrefix(".") || name == "node_modules" {
+                    if fileURL.path.hasSuffix("/logseq/bak") || fileURL.path.hasSuffix("/logseq/version-files") || name == ".recycle" || name.hasPrefix(".") || name == "node_modules" {
                         enumerator.skipDescendants()
                     }
                 }
-            
+                
                 if isRegularFile && !fileURL.isSkipped() {
                     if let meta = SimpleFileMetadata(of: fileURL) {
                         newMetaDb[fileURL] = meta

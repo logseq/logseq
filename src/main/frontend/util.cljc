@@ -40,6 +40,23 @@
            (gdom/getElement "main-content-container")))
 
 #?(:cljs
+   (defn safe-re-find
+     [pattern s]
+     (when-not (string? s)
+       ;; TODO: sentry
+       (js/console.trace))
+     (when (string? s)
+       (re-find pattern s))))
+
+#?(:cljs
+  (do
+    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+    (defn uuid-string?
+      [s]
+      (safe-re-find exactly-uuid-pattern s))))
+
+#?(:cljs
    (defn ios?
      []
      (utils/ios)))
@@ -55,7 +72,7 @@
    (defn mobile?
      []
      (when-not node-test?
-       (gp-util/safe-re-find #"Mobi" js/navigator.userAgent))))
+       (safe-re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
    (defn electron?
@@ -200,39 +217,21 @@
     (str "0" n)
     (str n)))
 
-(defn parse-int
-  [x]
-  #?(:cljs (if (string? x)
-             (js/parseInt x)
-             x)
-     :clj (if (string? x)
-            (Integer/parseInt x)
-            x)))
-
-(defn safe-parse-int
-  [x]
-  #?(:cljs (let [result (parse-int x)]
-             (if (js/isNaN result)
-               nil
-               result))
-     :clj ((try
-             (parse-int x)
-             (catch Exception _
-               nil)))))
 #?(:cljs
-   (defn parse-float
+   (defn safe-parse-int
+     "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
      [x]
      (if (string? x)
-       (js/parseFloat x)
+       (parse-long x)
        x)))
 
 #?(:cljs
    (defn safe-parse-float
+     "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
      [x]
-     (let [result (parse-float x)]
-       (if (js/isNaN result)
-         nil
-         result))))
+     (if (string? x)
+       (parse-double x)
+       x)))
 
 #?(:cljs
    (defn debounce
@@ -349,7 +348,7 @@
 #?(:cljs
    (defn scroll-to-element
      [elem-id]
-     (when-not (gp-util/safe-re-find #"^/\d+$" elem-id)
+     (when-not (safe-re-find #"^/\d+$" elem-id)
        (when elem-id
          (when-let [elem (gdom/getElement elem-id)]
            (.scroll (app-scroll-container-node)
@@ -713,11 +712,6 @@
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
 
-(defn capitalize-all [s]
-  (some->> (string/split s #" ")
-           (map string/capitalize)
-           (string/join " ")))
-
 #?(:cljs
    (defn react
      [ref]
@@ -834,8 +828,8 @@
      []
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
-       (and (gp-util/safe-re-find #"Chrome" user-agent)
-            (gp-util/safe-re-find #"Google Inc" vendor)))))
+       (and (safe-re-find #"Chrome" user-agent)
+            (safe-re-find #"Google Inc" vendor)))))
 
 #?(:cljs
    (defn indexeddb-check?
@@ -876,7 +870,7 @@
      [block-id]
      (when block-id
        (let [block-id (str block-id)]
-         (when (gp-util/uuid-string? block-id)
+         (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
 #?(:cljs
@@ -895,7 +889,7 @@
    (do
      (defn include-windows-reserved-chars?
       [s]
-       (gp-util/safe-re-find windows-reserved-chars s))
+       (safe-re-find windows-reserved-chars s))
 
      (defn create-title-property?
        [s]
@@ -907,44 +901,18 @@
                 (string/includes? s "%")
                 (string/includes? s "#"))))))
 
-(defn remove-boundary-slashes
-  [s]
-  (when (string? s)
-    (let [s (if (= \/ (first s))
-              (subs s 1)
-              s)]
-      (if (= \/ (last s))
-        (subs s 0 (dec (count s)))
-        s))))
-
-(defn normalize
-  [s]
-  (.normalize s "NFC"))
-
 #?(:cljs
    (defn search-normalize
      "Normalize string for searching (loose)"
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn page-name-sanity
-  "Sanitize the page-name."
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      (normalize))]
-     (if replace-slash?
-       (string/replace page #"/" "%2A")
-       page))))
-
 #?(:cljs
    (defn file-name-sanity
      "Sanitize page-name for file name (strict), for file writing."
      [page-name]
      (some-> page-name
-             page-name-sanity
+             gp-util/page-name-sanity
              ;; for android filesystem compatiblity
              (string/replace #"[\\#|%]+" url-encode)
              ;; Windows reserved path characters
@@ -952,15 +920,16 @@
              (string/replace #"/" url-encode)
              (string/replace "*" "%2A"))))
 
-(defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
-  [s]
-  (page-name-sanity (string/lower-case s)))
+#?(:cljs
+   (def page-name-sanity-lc
+     "Delegate to gp-util to loosely couple app usages to graph-parser"
+     gp-util/page-name-sanity-lc))
 
-(defn safe-page-name-sanity-lc
-  [s]
-  (if (string? s)
-    (page-name-sanity-lc s) s))
+#?(:cljs
+ (defn safe-page-name-sanity-lc
+   [s]
+   (if (string? s)
+     (page-name-sanity-lc s) s)))
 
 (defn get-page-original-name
   [page]
@@ -1240,31 +1209,12 @@
   [text]
   (string/join (replace regex-char-esc-smap text)))
 
-(defn split-namespace-pages
-  [title]
-  (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
-
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
-
-(defn wrapped-by-quotes?
-  [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
 
 #?(:cljs
    (defn right-click?
@@ -1273,16 +1223,6 @@
            button (gobj/get e "button")]
        (or (= which 3)
            (= button 2)))))
-
-#?(:cljs
-   (defn url?
-     [s]
-     (and (string? s)
-          (try
-            (js/URL. s)
-            true
-            (catch js/Error _e
-              false)))))
 
 #?(:cljs
    (defn make-el-into-center-viewport

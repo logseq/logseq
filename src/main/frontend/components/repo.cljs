@@ -14,7 +14,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]

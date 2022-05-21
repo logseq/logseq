@@ -8,8 +8,7 @@
                      [frontend.state :as state]
                      [frontend.config :as config]
                      [logseq.graph-parser.util :as gp-util]
-                     [lambdaisland.glogi :as log]
-                     [medley.core :as medley])))
+                     [lambdaisland.glogi :as log])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -33,9 +32,10 @@
      (some->> (gp-util/remove-nils txs)
               (map (fn [x]
                      (if (map? x)
-                       (medley/map-vals (fn [v] (if (vector? v)
-                                                  (remove nil? v)
-                                                  v)) x)
+                       (update-vals x (fn [v]
+                                        (if (vector? v)
+                                          (remove nil? v)
+                                          v)))
                        x))))))
 
 #?(:cljs
@@ -45,7 +45,7 @@
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container)
+                                      :block/title :block/body :block/level :block/container :db/other-tx)
                               m)) txs)]
        (when (and (seq txs)
                   (not (:skip-transact? opts)))

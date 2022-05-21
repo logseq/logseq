@@ -7,7 +7,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [datascript.core :as d]))
 

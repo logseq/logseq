@@ -715,6 +715,11 @@ li p:last-child,
   background-color: var(--ls-primary-background-color, #fff);
 }
 
+.bg-base-4 {
+  background-color: var(--ls-tertiary-background-color);
+}
+
+
 .pre-white-space {
   white-space: pre;
 }
@@ -1168,4 +1173,9 @@ html[data-theme='dark'] .keyboard-shortcut > code {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.lazy-visibility {
+    min-width: 1px;
+    min-height: 1px;
 }

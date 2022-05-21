@@ -14,7 +14,6 @@
             [frontend.handler.shell :as shell]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.util :as gp-util]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
@@ -64,7 +63,7 @@
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
-          block? (and page (gp-util/uuid-string? page-name))
+          block? (and page (util/uuid-string? page-name))
           contents? (= page-name "contents")
           properties (:block/properties page)
           public? (true? (:public properties))
@@ -103,10 +102,11 @@
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-          (when (util/electron?)
+          (when (or (util/electron?)
+                    (mobile-util/is-native-platform?))
             {:title   (t :page/copy-page-url)
-              :options {:on-click #(util/copy-to-clipboard!
-                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+             :options {:on-click #(util/copy-to-clipboard!
+                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
             {:title   (t :page/delete)

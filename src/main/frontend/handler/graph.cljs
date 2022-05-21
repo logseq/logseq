@@ -4,8 +4,7 @@
             [frontend.db :as db]
             [frontend.db.default :as default-db]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]))
+            [frontend.util :as util]))
 
 (defn- build-links
   [links]
@@ -46,7 +45,7 @@
                   ;; slow
 (defn- uuid-or-asset?
   [id]
-  (or (gp-util/uuid-string? id)
+  (or (util/uuid-string? id)
       (string/starts-with? id "../assets/")
       (= id "..")
       (string/starts-with? id "assets/")
