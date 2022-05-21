@@ -6,7 +6,7 @@ import {
   getContextBarTranslation,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
-import type { TextShape, StarShape, PolygonShape, Shape } from '~lib/shapes'
+import type { TextShape, PolygonShape, Shape } from '~lib/shapes'
 import { NumberInput } from '~components/inputs/NumberInput'
 import { ColorInput } from '~components/inputs/ColorInput'
 
@@ -71,7 +71,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({
 
   const textShapes = shapes.filter(shape => shape.type === 'text') as TextShape[]
 
-  const sidesShapes = shapes.filter(shape => 'sides' in shape.props) as (PolygonShape | StarShape)[]
+  const sidesShapes = shapes.filter(shape => 'sides' in shape.props) as (PolygonShape)[]
 
   const ShapeContent =
     shapes.length === 1 && 'ReactContextBar' in shapes[0] ? shapes[0]['ReactContextBar'] : null

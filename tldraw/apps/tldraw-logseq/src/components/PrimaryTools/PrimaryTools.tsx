@@ -5,10 +5,8 @@ import {
   CircleIcon,
   Pencil1Icon,
   VercelLogoIcon,
-  StarIcon,
   ShadowIcon,
   BoxIcon,
-  CodeIcon,
   VideoIcon,
   TextIcon,
 } from '@radix-ui/react-icons'
@@ -90,14 +88,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           <VercelLogoIcon />
         </Button>
         <Button
-          data-tool="star"
-          data-selected={selectedToolId === 'star'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <StarIcon />
-        </Button>
-        <Button
           data-tool="line"
           data-selected={selectedToolId === 'line'}
           onClick={handleToolClick}
@@ -112,14 +102,6 @@ export const PrimaryTools = observer(function PrimaryTools() {
           onDoubleClick={handleToolDoubleClick}
         >
           <TextIcon />
-        </Button>
-        <Button
-          data-tool="code"
-          data-selected={selectedToolId === 'code'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <CodeIcon />
         </Button>
         <Button
           data-tool="youtube"

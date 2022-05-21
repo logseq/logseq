@@ -16,7 +16,6 @@ import { useFileDrop } from '~hooks/useFileDrop'
 import { LogseqContext } from '~lib/logseq-context'
 import {
   BoxShape,
-  CodeSandboxShape,
   DotShape,
   EllipseShape,
   HighlighterShape,
@@ -25,15 +24,12 @@ import {
   LogseqPortalShape,
   PenShape,
   PolygonShape,
-  PolylineShape,
   Shape,
-  StarShape,
   TextShape,
   YouTubeShape,
 } from '~lib/shapes'
 import {
   BoxTool,
-  CodeSandboxTool,
   DotTool,
   EllipseTool,
   HighlighterTool,
@@ -42,7 +38,6 @@ import {
   NuEraseTool,
   PenTool,
   PolygonTool,
-  StarTool,
   TextTool,
   YouTubeTool,
 } from '~lib/tools'
@@ -53,7 +48,6 @@ const components: TLReactComponents<Shape> = {
 
 const shapes: TLReactShapeConstructor<Shape>[] = [
   BoxShape,
-  CodeSandboxShape,
   DotShape,
   EllipseShape,
   HighlighterShape,
@@ -61,8 +55,6 @@ const shapes: TLReactShapeConstructor<Shape>[] = [
   LineShape,
   PenShape,
   PolygonShape,
-  PolylineShape,
-  StarShape,
   TextShape,
   YouTubeShape,
   LogseqPortalShape,
@@ -70,7 +62,6 @@ const shapes: TLReactShapeConstructor<Shape>[] = [
 
 const tools: TLReactToolConstructor<Shape>[] = [
   BoxTool,
-  CodeSandboxTool,
   DotTool,
   EllipseTool,
   NuEraseTool,
@@ -78,7 +69,6 @@ const tools: TLReactToolConstructor<Shape>[] = [
   LineTool,
   PenTool,
   PolygonTool,
-  StarTool,
   TextTool,
   YouTubeTool,
   LogseqPortalTool,
