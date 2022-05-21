@@ -8,11 +8,6 @@
 import Foundation
 import CryptoKit
 
-
-import var CommonCrypto.CC_MD5_DIGEST_LENGTH
-import func CommonCrypto.CC_MD5
-import typealias CommonCrypto.CC_LONG
-
 // via https://github.com/krzyzanowskim/CryptoSwift
 extension Array where Element == UInt8 {
   public init(hex: String) {
@@ -120,27 +115,8 @@ extension Data {
 
 extension String {
     var MD5: String {
-        // TODO: incremental hash
-        if #available(iOS 13.0, *) {
-            let computed = Insecure.MD5.hash(data: self.data(using: .utf8)!)
-            return computed.map { String(format: "%02hhx", $0) }.joined()
-        } else {
-            // Fallback on earlier versions, no CryptoKit
-            let length = Int(CC_MD5_DIGEST_LENGTH)
-            let messageData = self.data(using:.utf8)!
-            var digestData = Data(count: length)
-            
-            _ = digestData.withUnsafeMutableBytes { digestBytes -> UInt8 in
-                messageData.withUnsafeBytes { messageBytes -> UInt8 in
-                    if let messageBytesBaseAddress = messageBytes.baseAddress, let digestBytesBlindMemory = digestBytes.bindMemory(to: UInt8.self).baseAddress {
-                        let messageLength = CC_LONG(messageData.count)
-                        CC_MD5(messageBytesBaseAddress, messageLength, digestBytesBlindMemory)
-                    }
-                    return 0
-                }
-            }
-            return digestData.map { String(format: "%02hhx", $0) }.joined()
-        }
+        let computed = Insecure.MD5.hash(data: self.data(using: .utf8)!)
+        return computed.map { String(format: "%02hhx", $0) }.joined()
     }
     
     func encodeAsFname() -> String {

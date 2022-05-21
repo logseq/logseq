@@ -62,27 +62,27 @@
   (when-let [agent (cfgs/get-item :settings/agent)]
     (set-fetch-agent agent)))
 
-;; keep same as ignored-path? in src/main/frontend/util/fs.cljs
-;; TODO: merge them
 (defn ignored-path?
+  "Ignore given path from file-watcher notification"
   [dir path]
   (when (string? path)
     (or
      (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
+           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
      (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "assets" "node_modules" "logseq/bak"])
-     (string/ends-with? path ".DS_Store")
+           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
+     (some #(string/ends-with? path %)
+           [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
      ;; hidden directory or file
      (let [relpath (path/relative dir path)]
        (or (re-find #"/\.[^.]+" relpath)
-           (re-find #"^\.[^.]+" relpath)))
-     (let [path (string/lower-case path)]
-       (and
-        (not (string/blank? (path/extname path)))
-        (not
-         (some #(string/ends-with? path %)
-               [".md" ".markdown" ".org" ".js" ".edn" ".css"])))))))
+           (re-find #"^\.[^.]+" relpath))))))
+
+(defn should-read-content?
+  "Skip reading content of file while using file-watcher"
+  [path]
+  (let [ext (string/lower-case (path/extname path))]
+    (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
 
 (defn fix-win-path!
   [path]
