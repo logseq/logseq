@@ -1867,7 +1867,7 @@
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")
         shift? (gobj/get e "shiftKey")
-        meta? (gobj/get e "metaKey")]
+        meta? (util/meta-key? e)]
     (if (and meta? (not (state/get-edit-input-id)))
       (do
         (util/stop e)
@@ -1973,7 +1973,7 @@
                                     (state/in-selection-mode?)
                                     (not (string/includes? content "```"))
                                     (not (gobj/get e "shiftKey"))
-                                    (not (gobj/get e "metaKey")))
+                                    (not (util/meta-key? e)))
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
