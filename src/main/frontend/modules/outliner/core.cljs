@@ -99,7 +99,7 @@
 
   (-get-parent-id [this]
     (-> (get-in this [:data :block/parent])
-      (outliner-u/->block-id)))
+        (outliner-u/->block-id)))
 
   (-set-parent-id [this parent-id]
     (outliner-u/check-block-id parent-id)
@@ -107,7 +107,7 @@
 
   (-get-left-id [this]
     (-> (get-in this [:data :block/left])
-      (outliner-u/->block-id)))
+        (outliner-u/->block-id)))
 
   (-set-left-id [this left-id]
     (outliner-u/check-block-id left-id)
@@ -170,7 +170,7 @@
 
   (-del [this txs-state children?]
     (assert (ds/outliner-txs-state? txs-state)
-      "db should be satisfied outliner-tx-state?")
+            "db should be satisfied outliner-tx-state?")
     (let [block-id (tree/-get-id this)
           ids (set (if children?
                      (let [children (db/get-block-children (state/get-current-repo) block-id)
@@ -192,7 +192,7 @@
                                                  (assoc :block/left parent))))
                                            immediate-children)))
                     txs))
-                  txs)]
+                txs)]
       (swap! txs-state concat txs)
       block-id))
 
@@ -209,12 +209,7 @@
 (defn get-right-sibling
   [db-id]
   (when db-id
-    (when-let [block (db/entity db-id)]
-      (db-model/get-by-parent-&-left (conn/get-db)
-                                     (:db/id (:block/parent block))
-                                     db-id))))
-
-
+    (db-model/get-right-sibling (conn/get-db) db-id)))
 
 (defn- assoc-level-aux
   [tree-vec children-key init-level]
@@ -285,13 +280,13 @@
     (loop [node node
            limit limit
            result []]
-     (if (zero? limit)
-       result
-       (if-let [left (tree/-get-left node)]
-         (if-not (= left parent)
-           (recur left (dec limit) (conj result (tree/-get-id left)))
-           result)
-         result)))))
+      (if (zero? limit)
+        result
+        (if-let [left (tree/-get-left node)]
+          (if-not (= left parent)
+            (recur left (dec limit) (conj result (tree/-get-id left)))
+            result)
+          result)))))
 
 (defn- page-first-child?
   [block]
@@ -573,6 +568,34 @@
                        (recur (:block/left (get id->blocks (:db/id block))))
                        (:db/id block)))})))
 
+(defn find-new-left
+  [block moved-ids target-block current-block sibling?]
+  (if (= (:db/id target-block) (:db/id (:block/left current-block)))
+    (if sibling?
+      (db/entity (last moved-ids))
+      target-block)
+    (let [left (db/entity (:db/id (:block/left block)))]
+      (if (contains? (set moved-ids) (:db/id left))
+        (find-new-left left moved-ids target-block current-block sibling?)
+        left))))
+
+(defn- fix-non-consecutive-blocks
+  [blocks target-block sibling?]
+  (let [page-blocks (group-by :block/page blocks)]
+    (->>
+     (mapcat (fn [[_page blocks]]
+               (let [blocks (db-model/sort-page-random-blocks blocks)
+                     non-consecutive-blocks (->> (conj (db-model/get-non-consecutive-blocks blocks) (last blocks))
+                                                 (util/distinct-by :db/id))]
+                 (when (seq non-consecutive-blocks)
+                   (mapv (fn [block]
+                           (when-let [right (get-right-sibling (:db/id block))]
+                             (when-let [new-left (find-new-left right (distinct (map :db/id blocks)) target-block block sibling?)]
+                               {:db/id      (:db/id right)
+                                :block/left (:db/id new-left)})))
+                         non-consecutive-blocks)))) page-blocks)
+     (remove nil?))))
+
 (defn move-blocks
   "Move `blocks` to `target-block` as siblings or children."
   [blocks target-block {:keys [sibling? outliner-op]}]
@@ -598,7 +621,8 @@
                                      (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
                                        (map (fn [uuid] {:block/uuid uuid
                                                         :block/page target-page}) children-ids)))
-                  full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx)
+                  fix-non-consecutive-tx (fix-non-consecutive-blocks blocks target-block sibling?)
+                  full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                   tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                                    :target (:db/id target-block)}
                             not-same-page?
