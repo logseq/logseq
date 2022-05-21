@@ -35,7 +35,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.util :as gp-util]
             [frontend.format.block :as block]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [clojure.string :as str]))
 
 (defn- get-page-name
   [state]
@@ -177,7 +178,7 @@
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
          [:ul.mt-2
-          (for [[original-name name] (sort pages)]
+          (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
               original-name]])]
