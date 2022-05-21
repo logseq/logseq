@@ -35,7 +35,8 @@
             [rum.core :as rum]
             [logseq.graph-parser.util :as gp-util]
             [frontend.format.block :as block]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [clojure.string :as str]))
 
 (defn- get-page-name
   [state]
