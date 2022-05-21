@@ -2907,11 +2907,9 @@
       (html-link-format! text)
 
       (and (gp-util/url? text)
-           (or (string/includes? text "youtube.com")
-               (string/includes? text "youtu.be"))
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-
+           (boolean (text/get-matched-video text)))
+      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{video %s}}" text) nil)
+      
       (and (gp-util/url? text)
            (string/includes? text "twitter.com")
            (mobile-util/is-native-platform?))
