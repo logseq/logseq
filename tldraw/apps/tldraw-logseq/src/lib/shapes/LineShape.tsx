@@ -19,8 +19,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     type: 'line',
     point: [0, 0],
     handles: [
-      { id: 'start', point: [0, 0] },
-      { id: 'end', point: [1, 1] },
+      { id: 'start', canBind: true, point: [0, 0] },
+      { id: 'end', canBind: true, point: [1, 1] },
     ],
     stroke: '#000000',
     fill: '#ffffff',

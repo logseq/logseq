@@ -18,7 +18,7 @@ export interface TLShapeConstructor<S extends TLShape = TLShape> {
   id: string
 }
 
-export type TLFlag = boolean | (() => boolean)
+export type TLFlag = boolean
 
 export interface TLShapeProps {
   id: string
@@ -98,6 +98,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canScale: TLFlag = true
   canFlip: TLFlag = true
   canEdit: TLFlag = false
+  canBind: TLFlag = false
   nonce = 0
   private isDirty = false
   private lastSerialized = {} as TLShapeModel<P>

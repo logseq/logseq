@@ -3,9 +3,10 @@ import { Vec } from '@tldraw/vec'
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
 import { TLCursor, TLEventHandleInfo, TLEventMap, TLEvents, TLHandle } from '~types'
 import { deepCopy } from '~utils'
+import type { TLLineShape } from '~lib/shapes'
 
 export class TranslatingHandleState<
-  S extends TLShape,
+  S extends TLLineShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
   P extends TLSelectTool<S, K, R>
@@ -30,7 +31,7 @@ export class TranslatingHandleState<
     this.offset = [0, 0]
     this.index = info.index
     this.shape = info.shape
-    this.initialShape = { ...this.shape.props }
+    this.initialShape = deepCopy({ ...this.shape.props })
     this.handles = deepCopy(info.shape.props.handles!)
     this.initialHandles = deepCopy(info.shape.props.handles!)
     this.initialTopLeft = [...info.shape.props.point]
@@ -70,9 +71,7 @@ export class TranslatingHandleState<
   onKeyDown: TLEvents<S>['keyboard'] = (info, e) => {
     switch (e.key) {
       case 'Escape': {
-        this.shape.update({
-          handles: this.initialHandles,
-        })
+        this.shape.update(this.initialShape)
         this.tool.transition('idle')
         break
       }
