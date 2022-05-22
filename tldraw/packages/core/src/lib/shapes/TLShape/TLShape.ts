@@ -8,8 +8,8 @@ import {
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
-import type { TLHandle, TLBounds, TLResizeEdge, TLResizeCorner, TLAsset } from '~types'
-import { deepCopy, BoundsUtils, PointUtils } from '~utils'
+import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
+import { BoundsUtils, PointUtils } from '~utils'
 
 export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
   nonce?: number
@@ -221,7 +221,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
         distance = Math.max(
           this.bindingDistance,
           BoundsUtils.getBoundsSides(bounds)
-            .map((side) => Vec.distanceToLineSegment(side[1][0], side[1][1], point))
+            .map(side => Vec.distanceToLineSegment(side[1][0], side[1][1], point))
             .sort((a, b) => a - b)[0]
         )
       }
@@ -313,7 +313,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this
   }
 
-  onHandleChange = (initialShape: any, { index, delta }: TLHandleChangeInfo) => {
+  onHandleChange = (initialShape: P, { index, delta }: TLHandleChangeInfo) => {
     if (initialShape.handles === undefined) return
     const nextHandles = [...initialShape.handles]
     nextHandles[index] = {

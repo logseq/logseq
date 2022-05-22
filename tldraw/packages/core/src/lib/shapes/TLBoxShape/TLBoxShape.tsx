@@ -1,7 +1,7 @@
 import type { TLBounds } from '@tldraw/intersect'
 import { makeObservable } from 'mobx'
-import { TLResizeInfo, TLShape, TLShapeProps } from '../TLShape'
 import { BoundsUtils } from '~utils'
+import { TLResizeInfo, TLShape, TLShapeProps } from '../TLShape'
 
 export interface TLBoxShapeProps extends TLShapeProps {
   size: number[]
@@ -17,6 +17,8 @@ export class TLBoxShape<P extends TLBoxShapeProps = TLBoxShapeProps, M = any> ex
   }
 
   static id = 'box'
+  
+  canBind = true
 
   static defaultProps: TLBoxShapeProps = {
     id: 'box',

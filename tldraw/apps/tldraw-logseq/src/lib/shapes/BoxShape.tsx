@@ -26,7 +26,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     opacity: 1,
   }
 
-  ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isBinding, isSelected }: TLComponentProps) => {
     const {
       props: {
         size: [w, h],
@@ -58,7 +58,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           height={Math.max(0.01, h - strokeWidth)}
           strokeWidth={strokeWidth}
           stroke={stroke}
-          fill={fill}
+          fill={!isBinding ? fill : 'red'}
         />
       </SVGContainer>
     )

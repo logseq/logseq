@@ -32,6 +32,7 @@ import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
 import { TLApi } from '~lib/TLApi'
 import { TLCursors } from '~lib/TLCursors'
+import { GRID_SIZE } from '~constants'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   currentPageId: string
@@ -460,6 +461,24 @@ export class TLApp<
     return this
   }
 
+  /* ------------------ Binding Shape ----------------- */
+
+  @observable bindingId?: string
+
+  @computed get bindingShape(): S | undefined {
+    const { bindingId, currentPage } = this
+    return bindingId ? currentPage.shapes.find(shape => shape.id === bindingId) : undefined
+  }
+
+  @action readonly setBindingShape = (shape?: string | S): this => {
+    this.bindingId = typeof shape === 'string' ? shape : shape?.id
+    return this
+  }
+
+  readonly clearBindingShape = (): this => {
+    return this.setBindingShape()
+  }
+
   /* ---------------------- Brush --------------------- */
 
   @observable brush?: TLBounds
@@ -484,6 +503,17 @@ export class TLApp<
   readonly getScreenPoint = (point: number[]): number[] => {
     const { camera } = this.viewport
     return Vec.mul(Vec.add(point, camera.point), camera.zoom)
+  }
+
+  get currentGrid() {
+    const { zoom } = this.viewport.camera
+    if (zoom < 0.15) {
+      return GRID_SIZE * 16
+    } else if (zoom < 1) {
+      return GRID_SIZE * 4
+    } else {
+      return GRID_SIZE * 1
+    }
   }
 
   /* --------------------- Display -------------------- */

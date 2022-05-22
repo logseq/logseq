@@ -163,4 +163,11 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     })
     return this
   }
+
+  getBindableShapes() {
+    return this.shapes
+      .filter(shape => shape.canBind)
+      .sort((a, b) => b.nonce - a.nonce)
+      .map(s => s.id)
+  }
 }

@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
-import { TLHandle, TLLineShapeProps, TLLineShape } from '@tldraw/core'
+import { TLLineShape, TLLineShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
-  handles: TLHandle[]
 }
 
 export class LineShape extends TLLineShape<LineShapeProps> {

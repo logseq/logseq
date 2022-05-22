@@ -90,6 +90,12 @@ export interface TLBinding {
   fromId: string
 }
 
+export interface TLLineBinding extends TLBinding {
+  handleId: 'start' | 'end'
+  distance: number
+  point: number[]
+}
+
 export interface TLOffset {
   top: number
   right: number

@@ -1,5 +1,6 @@
 import { action, makeObservable, observable } from 'mobx'
 import type { TLEventMap } from '~types'
+import { modKey } from '~utils'
 
 export class TLInputs<K extends TLEventMap> {
   constructor() {
@@ -10,6 +11,7 @@ export class TLInputs<K extends TLEventMap> {
   // any of these properties observable
   @observable shiftKey = false
   @observable ctrlKey = false
+  @observable modKey = false
   @observable altKey = false
   @observable spaceKey = false
   @observable isPinching = false
@@ -32,8 +34,9 @@ export class TLInputs<K extends TLEventMap> {
     }
     if ('shiftKey' in event) {
       this.shiftKey = event.shiftKey
-      this.ctrlKey = event.metaKey || event.ctrlKey
+      this.ctrlKey = event.ctrlKey
       this.altKey = event.altKey
+      this.modKey = modKey(event)
     }
   }
 

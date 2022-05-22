@@ -39,3 +39,17 @@ export function throttle<T extends (...args: any) => any>(
 export function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
 }
+
+/** Find whether the current device is a Mac / iOS / iPadOS. */
+export function isDarwin(): boolean {
+  return /Mac|iPod|iPhone|iPad/.test(window.navigator.platform)
+}
+
+/**
+ * Get whether an event is command (mac) or control (pc).
+ *
+ * @param e
+ */
+export function modKey(e: any): boolean {
+  return isDarwin() ? e.metaKey : e.ctrlKey
+}

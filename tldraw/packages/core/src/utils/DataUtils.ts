@@ -1,5 +1,6 @@
 import { isPlainObject } from 'is-plain-object'
 import copy from 'fast-copy'
+import deepmerge from 'deepmerge'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
@@ -10,7 +11,12 @@ import copy from 'fast-copy'
  * @see Source project, ts-deeply https://github.com/ykdr2017/ts-deepcopy
  * @see Code pen https://codepen.io/erikvullings/pen/ejyBYg
  */
-export const deepCopy = copy;
+export const deepCopy = copy
+export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
+  return deepmerge(a, b, {
+    arrayMerge: (destinationArray, sourceArray, options) => sourceArray,
+  })
+}
 
 /**
  * Modulate a value between two ranges.

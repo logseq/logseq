@@ -3,10 +3,9 @@ import { Vec } from '@tldraw/vec'
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
 import { TLCursor, TLEventHandleInfo, TLEventMap, TLEvents, TLHandle } from '~types'
 import { deepCopy } from '~utils'
-import type { TLLineShape } from '~lib/shapes'
 
 export class TranslatingHandleState<
-  S extends TLLineShape,
+  S extends TLShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
   P extends TLSelectTool<S, K, R>
@@ -18,9 +17,10 @@ export class TranslatingHandleState<
   private initialTopLeft = [0, 0]
   private index = 0
   private shape: S = {} as S
+  private handleId: 'start' | 'end' = 'start'
   private initialShape: S['props'] = {} as S['props']
-  private handles: TLHandle[] = []
-  private initialHandles: TLHandle[] = []
+  private handle: TLHandle = {} as TLHandle
+  private bindableShapeIds: string[] = []
 
   onEnter = (
     info: {
@@ -31,10 +31,27 @@ export class TranslatingHandleState<
     this.offset = [0, 0]
     this.index = info.index
     this.shape = info.shape
+    this.handle = info.handle
     this.initialShape = deepCopy({ ...this.shape.props })
-    this.handles = deepCopy(info.shape.props.handles!)
-    this.initialHandles = deepCopy(info.shape.props.handles!)
     this.initialTopLeft = [...info.shape.props.point]
+
+    const page = this.app.currentPage
+
+    this.bindableShapeIds = page.shapes
+      .filter(shape => shape.canBind)
+      .sort((a, b) => b.nonce - a.nonce)
+      .map(s => s.id)
+
+    // // TODO: find out why this the oppositeHandleBindingId is sometimes missing
+    // const oppositeHandleBindingId =
+    //   this.initialShape.handles[handleId === 'start' ? 'end' : 'start']?.bindingId
+
+    // if (oppositeHandleBindingId) {
+    //   const oppositeToId = page.bindings[oppositeHandleBindingId]?.toId
+    //   if (oppositeToId) {
+    //     this.bindableShapeIds = this.bindableShapeIds.filter(id => id !== oppositeToId)
+    //   }
+    // }
   }
 
   onExit = () => {
