@@ -3,9 +3,11 @@ import {
   intersectLineSegmentBounds,
   intersectLineSegmentPolyline,
   intersectPolygonBounds,
+  intersectRayBounds,
 } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, toJS } from 'mobx'
+import { BINDING_DISTANCE } from '~constants'
 import type { TLHandle, TLBounds, TLResizeEdge, TLResizeCorner, TLAsset } from '~types'
 import { deepCopy, BoundsUtils, PointUtils } from '~utils'
 
@@ -100,6 +102,9 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canEdit: TLFlag = false
   canBind: TLFlag = false
   nonce = 0
+
+  bindingDistance = BINDING_DISTANCE
+
   private isDirty = false
   private lastSerialized = {} as TLShapeModel<P>
 
@@ -152,6 +157,89 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
       BoundsUtils.boundsContain(bounds, rotatedBounds) ||
       intersectPolygonBounds(corners, bounds).length > 0
     )
+  }
+
+  getExpandedBounds = () => {
+    return BoundsUtils.expandBounds(this.getBounds(), this.bindingDistance)
+  }
+
+  // Migrated from tldraw/tldraw
+  getBindingPoint = (
+    point: number[],
+    origin: number[],
+    direction: number[],
+    bindAnywhere: boolean
+  ) => {
+    // Algorithm time! We need to find the binding point (a normalized point inside of the shape, or around the shape, where the arrow will point to) and the distance from the binding shape to the anchor.
+
+    const bounds = this.getBounds()
+    const expandedBounds = this.getExpandedBounds()
+
+    // The point must be inside of the expanded bounding box
+    if (!PointUtils.pointInBounds(point, expandedBounds)) return
+
+    const intersections = intersectRayBounds(origin, direction, expandedBounds)
+      .filter(int => int.didIntersect)
+      .map(int => int.points[0])
+
+    if (!intersections.length) return
+
+    // The center of the shape
+    const center = this.getCenter()
+
+    // Find furthest intersection between ray from origin through point and expanded bounds. TODO: What if the shape has a curve? In that case, should we intersect the circle-from-three-points instead?
+    const intersection = intersections.sort((a, b) => Vec.dist(b, origin) - Vec.dist(a, origin))[0]
+
+    // The point between the handle and the intersection
+    const middlePoint = Vec.med(point, intersection)
+
+    // The anchor is the point in the shape where the arrow will be pointing
+    let anchor: number[]
+
+    // The distance is the distance from the anchor to the handle
+    let distance: number
+
+    if (bindAnywhere) {
+      // If the user is indicating that they want to bind inside of the shape, we just use the handle's point
+      anchor = Vec.dist(point, center) < BINDING_DISTANCE / 2 ? center : point
+      distance = 0
+    } else {
+      if (Vec.distanceToLineSegment(point, middlePoint, center) < BINDING_DISTANCE / 2) {
+        // If the line segment would pass near to the center, snap the anchor the center point
+        anchor = center
+      } else {
+        // Otherwise, the anchor is the middle point between the handle and the intersection
+        anchor = middlePoint
+      }
+
+      if (PointUtils.pointInBounds(point, bounds)) {
+        // If the point is inside of the shape, use the shape's binding distance
+
+        distance = this.bindingDistance
+      } else {
+        // Otherwise, use the actual distance from the handle point to nearest edge
+        distance = Math.max(
+          this.bindingDistance,
+          BoundsUtils.getBoundsSides(bounds)
+            .map((side) => Vec.distanceToLineSegment(side[1][0], side[1][1], point))
+            .sort((a, b) => a - b)[0]
+        )
+      }
+    }
+
+    // The binding point is a normalized point indicating the position of the anchor.
+    // An anchor at the middle of the shape would be (0.5, 0.5). When the shape's bounds
+    // changes, we will re-recalculate the actual anchor point by multiplying the
+    // normalized point by the shape's new bounds.
+    const bindingPoint = Vec.divV(Vec.sub(anchor, [expandedBounds.minX, expandedBounds.minY]), [
+      expandedBounds.width,
+      expandedBounds.height,
+    ])
+
+    return {
+      point: Vec.clampV(bindingPoint, 0, 1),
+      distance,
+    }
   }
 
   @computed get center(): number[] {

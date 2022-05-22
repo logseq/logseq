@@ -11,21 +11,22 @@ import {
 } from '~types'
 
 export class BoundsUtils {
-  static getRectangleSides(point: number[], size: number[], rotation = 0): number[][][] {
+  static getRectangleSides(point: number[], size: number[], rotation = 0): [string, number[][]][] {
     const center = [point[0] + size[0] / 2, point[1] + size[1] / 2]
     const tl = Vec.rotWith(point, center, rotation)
     const tr = Vec.rotWith(Vec.add(point, [size[0], 0]), center, rotation)
     const br = Vec.rotWith(Vec.add(point, size), center, rotation)
     const bl = Vec.rotWith(Vec.add(point, [0, size[1]]), center, rotation)
+
     return [
-      [tl, tr],
-      [tr, br],
-      [br, bl],
-      [bl, tl],
+      ['top', [tl, tr]],
+      ['right', [tr, br]],
+      ['bottom', [br, bl]],
+      ['left', [bl, tl]],
     ]
   }
 
-  static getBoundsSides(bounds: TLBounds): number[][][] {
+  static getBoundsSides(bounds: TLBounds): [string, number[][]][] {
     return BoundsUtils.getRectangleSides([bounds.minX, bounds.minY], [bounds.width, bounds.height])
   }
 

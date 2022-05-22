@@ -18,7 +18,6 @@ export interface TLBounds {
 
 /**
  * Get an intersection.
- *
  * @param message
  * @param points
  * @internal
@@ -29,28 +28,29 @@ function createIntersection(message: string, ...points: number[][]): TLIntersect
 }
 
 /**
+ *
  * @param point
  * @param size
  * @param rotation
  * @internal
  */
-function getRectangleSides(point: number[], size: number[], rotation = 0): number[][][] {
+function getRectangleSides(point: number[], size: number[], rotation = 0): [string, number[][]][] {
   const center = [point[0] + size[0] / 2, point[1] + size[1] / 2]
   const tl = Vec.rotWith(point, center, rotation)
   const tr = Vec.rotWith(Vec.add(point, [size[0], 0]), center, rotation)
   const br = Vec.rotWith(Vec.add(point, size), center, rotation)
   const bl = Vec.rotWith(Vec.add(point, [0, size[1]]), center, rotation)
+
   return [
-    [tl, tr],
-    [tr, br],
-    [br, bl],
-    [bl, tl],
+    ['top', [tl, tr]],
+    ['right', [tr, br]],
+    ['bottom', [br, bl]],
+    ['left', [bl, tl]],
   ]
 }
 
 /**
  * Get whether angle c lies between angles a and b.
- *
  * @param a
  * @param b
  * @param c
@@ -63,29 +63,29 @@ function isAngleBetween(a: number, b: number, c: number): boolean {
   const AC = (c - a + PI2) % PI2
   return AB <= Math.PI !== AC > AB
 }
+
 /* -------------------------------------------------- */
 /*                        Line                        */
 /* -------------------------------------------------- */
 
-export function intersectLineLine(AB: number[][], PQ: number[][]): TLIntersection {
+export function intersectLineLine(AB: number[][], PQ: number[][]): number[] | undefined {
   const slopeAB = Vec.slope(AB[0], AB[1])
   const slopePQ = Vec.slope(PQ[0], PQ[1])
-  if (slopeAB === slopePQ) return createIntersection('no intersection')
+
+  if (slopeAB === slopePQ) return undefined
+
   if (Number.isNaN(slopeAB) && !Number.isNaN(slopePQ)) {
-    return createIntersection('intersection', [
-      AB[0][0],
-      (AB[0][0] - PQ[0][0]) * slopePQ + PQ[0][1],
-    ])
+    return [AB[0][0], (AB[0][0] - PQ[0][0]) * slopePQ + PQ[0][1]]
   }
+
   if (Number.isNaN(slopePQ) && !Number.isNaN(slopeAB)) {
-    return createIntersection('intersection', [
-      PQ[0][0],
-      (PQ[0][0] - AB[0][0]) * slopeAB + AB[0][1],
-    ])
+    return [PQ[0][0], (PQ[0][0] - AB[0][0]) * slopeAB + AB[0][1]]
   }
+
   const x = (slopeAB * AB[0][0] - slopePQ * PQ[0][0] + PQ[0][1] - AB[0][1]) / (slopeAB - slopePQ)
   const y = slopePQ * (x - PQ[0][0]) + PQ[0][1]
-  return createIntersection('intersection', [x, y])
+
+  return [x, y]
 }
 
 /* -------------------------------------------------- */
@@ -94,7 +94,6 @@ export function intersectLineLine(AB: number[][], PQ: number[][]): TLIntersectio
 
 /**
  * Find the intersection between a ray and a ray.
- *
  * @param p0 The first ray's point
  * @param n0 The first ray's direction vector.
  * @param p1 The second ray's point.
@@ -112,12 +111,14 @@ export function intersectRayRay(
   const u = (dy * n1[0] - dx * n1[1]) / det
   const v = (dy * n0[0] - dx * n0[1]) / det
   if (u < 0 || v < 0) return createIntersection('miss')
+
   const m0 = n0[1] / n0[0]
   const m1 = n1[1] / n1[0]
   const b0 = p0[1] - m0 * p0[0]
   const b1 = p1[1] - m1 * p1[0]
   const x = (b1 - b0) / (m0 - m1)
   const y = m0 * x + b0
+
   return Number.isFinite(x)
     ? createIntersection('intersection', [x, y])
     : createIntersection('parallel')
@@ -125,7 +126,6 @@ export function intersectRayRay(
 
 /**
  * Find the intersections between a ray and a line segment.
- *
  * @param origin
  * @param direction
  * @param a1
@@ -141,6 +141,7 @@ export function intersectRayLineSegment(
   const [dx, dy] = direction
   const [x1, y1] = a1
   const [x2, y2] = a2
+
   if (dy / dx !== (y2 - y1) / (x2 - x1)) {
     const d = dx * (y2 - y1) - dy * (x2 - x1)
     if (d !== 0) {
@@ -156,7 +157,6 @@ export function intersectRayLineSegment(
 
 /**
  * Find the intersections between a ray and a rectangle.
- *
  * @param origin
  * @param direction
  * @param point
@@ -175,7 +175,6 @@ export function intersectRayRectangle(
 
 /**
  * Find the intersections between a ray and an ellipse.
- *
  * @param origin
  * @param direction
  * @param center
@@ -198,7 +197,6 @@ export function intersectRayEllipse(
 
 /**
  * Find the intersections between a ray and a bounding box.
- *
  * @param origin
  * @param direction
  * @param bounds
@@ -220,7 +218,6 @@ export function intersectRayBounds(
 
 /**
  * Find the intersection between a line segment and a ray.
- *
  * @param a1
  * @param a2
  * @param origin
@@ -237,7 +234,6 @@ export function intersectLineSegmentRay(
 
 /**
  * Find the intersection between a line segment and a line segment.
- *
  * @param a1
  * @param a2
  * @param b1
@@ -252,11 +248,19 @@ export function intersectLineSegmentLineSegment(
   const AB = Vec.sub(a1, b1)
   const BV = Vec.sub(b2, b1)
   const AV = Vec.sub(a2, a1)
+
   const ua_t = BV[0] * AB[1] - BV[1] * AB[0]
   const ub_t = AV[0] * AB[1] - AV[1] * AB[0]
   const u_b = BV[1] * AV[0] - BV[0] * AV[1]
-  if (ua_t === 0 || ub_t === 0) return createIntersection('coincident')
-  if (u_b === 0) return createIntersection('parallel')
+
+  if (ua_t === 0 || ub_t === 0) {
+    return createIntersection('coincident')
+  }
+
+  if (u_b === 0) {
+    return createIntersection('parallel')
+  }
+
   if (u_b !== 0) {
     const ua = ua_t / u_b
     const ub = ub_t / u_b
@@ -264,12 +268,12 @@ export function intersectLineSegmentLineSegment(
       return createIntersection('intersection', Vec.add(a1, Vec.mul(AV, ua)))
     }
   }
+
   return createIntersection('no intersection')
 }
 
 /**
  * Find the intersections between a line segment and a rectangle.
- *
  * @param a1
  * @param a2
  * @param point
@@ -286,7 +290,6 @@ export function intersectLineSegmentRectangle(
 
 /**
  * Find the intersections between a line segment and an arc.
- *
  * @param a1
  * @param a2
  * @param center
@@ -305,17 +308,22 @@ export function intersectLineSegmentArc(
   const sa = Vec.angle(center, start)
   const ea = Vec.angle(center, end)
   const ellipseTest = intersectEllipseLineSegment(center, radius, radius, 0, a1, a2)
+
   if (!ellipseTest.didIntersect) return createIntersection('no intersection')
-  const points = ellipseTest.points.filter(point =>
+
+  const points = ellipseTest.points.filter((point) =>
     isAngleBetween(sa, ea, Vec.angle(center, point))
   )
-  if (points.length === 0) return createIntersection('no intersection')
+
+  if (points.length === 0) {
+    return createIntersection('no intersection')
+  }
+
   return createIntersection('intersection', ...points)
 }
 
 /**
  * Find the intersections between a line segment and a circle.
- *
  * @param a1
  * @param a2
  * @param c
@@ -336,26 +344,37 @@ export function intersectLineSegmentCircle(
     a1[1] * a1[1] -
     2 * (c[0] * a1[0] + c[1] * a1[1]) -
     r * r
+
   const deter = b * b - 4 * a * cc
-  if (deter < 0) return createIntersection('outside')
-  if (deter === 0) return createIntersection('tangent')
+
+  if (deter < 0) {
+    return createIntersection('outside')
+  }
+
+  if (deter === 0) {
+    return createIntersection('tangent')
+  }
+
   const e = Math.sqrt(deter)
   const u1 = (-b + e) / (2 * a)
   const u2 = (-b - e) / (2 * a)
   if ((u1 < 0 || u1 > 1) && (u2 < 0 || u2 > 1)) {
     if ((u1 < 0 && u2 < 0) || (u1 > 1 && u2 > 1)) {
       return createIntersection('outside')
-    } else return createIntersection('inside')
+    } else {
+      return createIntersection('inside')
+    }
   }
+
   const results: number[][] = []
   if (0 <= u1 && u1 <= 1) results.push(Vec.lrp(a1, a2, u1))
   if (0 <= u2 && u2 <= 1) results.push(Vec.lrp(a1, a2, u2))
+
   return createIntersection('intersection', ...results)
 }
 
 /**
  * Find the intersections between a line segment and an ellipse.
- *
  * @param a1
  * @param a2
  * @param center
@@ -372,22 +391,31 @@ export function intersectLineSegmentEllipse(
   rotation = 0
 ): TLIntersection {
   // If the ellipse or line segment are empty, return no tValues.
-  if (rx === 0 || ry === 0 || Vec.isEqual(a1, a2)) return createIntersection('no intersection')
+  if (rx === 0 || ry === 0 || Vec.isEqual(a1, a2)) {
+    return createIntersection('no intersection')
+  }
+
   // Get the semimajor and semiminor axes.
   rx = rx < 0 ? rx : -rx
   ry = ry < 0 ? ry : -ry
+
   // Rotate points and translate so the ellipse is centered at the origin.
   a1 = Vec.sub(Vec.rotWith(a1, center, -rotation), center)
   a2 = Vec.sub(Vec.rotWith(a2, center, -rotation), center)
+
   // Calculate the quadratic parameters.
   const diff = Vec.sub(a2, a1)
+
   const A = (diff[0] * diff[0]) / rx / rx + (diff[1] * diff[1]) / ry / ry
   const B = (2 * a1[0] * diff[0]) / rx / rx + (2 * a1[1] * diff[1]) / ry / ry
   const C = (a1[0] * a1[0]) / rx / rx + (a1[1] * a1[1]) / ry / ry - 1
+
   // Make a list of t values (normalized points on the line where intersections occur).
   const tValues: number[] = []
+
   // Calculate the discriminant.
   const discriminant = B * B - 4 * A * C
+
   if (discriminant === 0) {
     // One real solution.
     tValues.push(-B / 2 / A)
@@ -397,20 +425,19 @@ export function intersectLineSegmentEllipse(
     tValues.push((-B + root) / 2 / A)
     tValues.push((-B - root) / 2 / A)
   }
+
   // Filter to only points that are on the segment.
   // Solve for points, then counter-rotate points.
-  return createIntersection(
-    'intersection',
-    ...tValues
-      .filter(t => t >= 0 && t <= 1)
-      .map(t => Vec.add(center, Vec.add(a1, Vec.mul(Vec.sub(a2, a1), t))))
-      .map(p => Vec.rotWith(p, center, rotation))
-  )
+  const points = tValues
+    .filter((t) => t >= 0 && t <= 1)
+    .map((t) => Vec.add(center, Vec.add(a1, Vec.mul(Vec.sub(a2, a1), t))))
+    .map((p) => Vec.rotWith(p, center, rotation))
+
+  return createIntersection('intersection', ...points)
 }
 
 /**
  * Find the intersections between a line segment and a bounding box.
- *
  * @param a1
  * @param a2
  * @param bounds
@@ -425,7 +452,6 @@ export function intersectLineSegmentBounds(
 
 /**
  * Find the intersections between a line segment and a polyline.
- *
  * @param a1
  * @param a2
  * @param points
@@ -436,16 +462,23 @@ export function intersectLineSegmentPolyline(
   points: number[][]
 ): TLIntersection {
   const pts: number[][] = []
+
   for (let i = 1; i < points.length; i++) {
     const int = intersectLineSegmentLineSegment(a1, a2, points[i - 1], points[i])
-    if (int) pts.push(...int.points)
+
+    if (int) {
+      pts.push(...int.points)
+    }
   }
-  if (pts.length === 0) return createIntersection('no intersection')
+
+  if (pts.length === 0) {
+    return createIntersection('no intersection')
+  }
+
   return createIntersection('intersection', ...points)
 }
 /**
  * Find the intersections between a line segment and a closed polygon.
- *
  * @param a1
  * @param a2
  * @param points
@@ -456,11 +489,19 @@ export function intersectLineSegmentPolygon(
   points: number[][]
 ): TLIntersection {
   const pts: number[][] = []
+
   for (let i = 1; i < points.length + 1; i++) {
     const int = intersectLineSegmentLineSegment(a1, a2, points[i - 1], points[i % points.length])
-    if (int) pts.push(...int.points)
+
+    if (int) {
+      pts.push(...int.points)
+    }
   }
-  if (!pts.length) return createIntersection('no intersection')
+
+  if (pts.length === 0) {
+    return createIntersection('no intersection')
+  }
+
   return createIntersection('intersection', ...points)
 }
 
@@ -470,7 +511,6 @@ export function intersectLineSegmentPolygon(
 
 /**
  * Find the intersections between a rectangle and a ray.
- *
  * @param point
  * @param size
  * @param rotation
@@ -484,18 +524,24 @@ export function intersectRectangleRay(
   origin: number[],
   direction: number[]
 ): TLIntersection[] {
-  return getRectangleSides(point, size, rotation)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size, rotation).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectRayLineSegment(origin, direction, a1, a2)
-      if (intersection) acc.push(createIntersection(SIDES[i], ...intersection.points))
+
+      if (intersection) {
+        acc.push(createIntersection(message, ...intersection.points))
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a line segment.
- *
  * @param point
  * @param size
  * @param a1
@@ -507,18 +553,24 @@ export function intersectRectangleLineSegment(
   a1: number[],
   a2: number[]
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [b1, b2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [b1, b2]]) => {
       const intersection = intersectLineSegmentLineSegment(a1, a2, b1, b2)
-      if (intersection) acc.push(createIntersection(SIDES[i], ...intersection.points))
+
+      if (intersection) {
+        acc.push(createIntersection(message, ...intersection.points))
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a rectangle.
- *
  * @param point1
  * @param size1
  * @param point2
@@ -530,20 +582,26 @@ export function intersectRectangleRectangle(
   point2: number[],
   size2: number[]
 ): TLIntersection[] {
-  return getRectangleSides(point1, size1)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point1, size1).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersections = intersectRectangleLineSegment(point2, size2, a1, a2)
+
       acc.push(
-        ...intersections.map(int => createIntersection(`${i} ${int.message}`, ...int.points))
+        ...intersections.map((int) =>
+          createIntersection(`${message} ${int.message}`, ...int.points)
+        )
       )
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and an arc.
- *
  * @param point
  * @param size
  * @param center
@@ -559,18 +617,24 @@ export function intersectRectangleArc(
   start: number[],
   end: number[]
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectArcLineSegment(center, radius, start, end, a1, a2)
-      if (intersection) acc.push({ ...intersection, message: SIDES[i] })
+
+      if (intersection) {
+        acc.push({ ...intersection, message })
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a circle.
- *
  * @param point
  * @param size
  * @param c
@@ -582,18 +646,24 @@ export function intersectRectangleCircle(
   c: number[],
   r: number
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectLineSegmentCircle(a1, a2, c, r)
-      if (intersection) acc.push({ ...intersection, message: SIDES[i] })
+
+      if (intersection) {
+        acc.push({ ...intersection, message })
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and an ellipse.
- *
  * @param point
  * @param size
  * @param c
@@ -609,18 +679,24 @@ export function intersectRectangleEllipse(
   ry: number,
   rotation = 0
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectLineSegmentEllipse(a1, a2, c, rx, ry, rotation)
-      if (intersection) acc.push({ ...intersection, message: SIDES[i] })
+
+      if (intersection) {
+        acc.push({ ...intersection, message })
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a bounding box.
- *
  * @param point
  * @param size
  * @param bounds
@@ -636,7 +712,6 @@ export function intersectRectangleBounds(
 
 /**
  * Find the intersections between a rectangle and a polyline.
- *
  * @param point
  * @param size
  * @param points
@@ -646,17 +721,23 @@ export function intersectRectanglePolyline(
   size: number[],
   points: number[][]
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectLineSegmentPolyline(a1, a2, points)
-      if (intersection.didIntersect) acc.push(createIntersection(SIDES[i], ...intersection.points))
+
+      if (intersection.didIntersect) {
+        acc.push(createIntersection(message, ...intersection.points))
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 /**
  * Find the intersections between a rectangle and a polygon.
- *
  * @param point
  * @param size
  * @param points
@@ -666,13 +747,20 @@ export function intersectRectanglePolygon(
   size: number[],
   points: number[][]
 ): TLIntersection[] {
-  return getRectangleSides(point, size)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = getRectangleSides(point, size).reduce<TLIntersection[]>(
+    (acc, [message, [a1, a2]]) => {
       const intersection = intersectLineSegmentPolygon(a1, a2, points)
-      if (intersection.didIntersect) acc.push(createIntersection(SIDES[i], ...intersection.points))
+
+      if (intersection.didIntersect) {
+        acc.push(createIntersection(message, ...intersection.points))
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 /* -------------------------------------------------- */
@@ -681,7 +769,6 @@ export function intersectRectanglePolygon(
 
 /**
  * Find the intersections between a arc and a line segment.
- *
  * @param center
  * @param radius
  * @param start
@@ -702,7 +789,6 @@ export function intersectArcLineSegment(
 
 /**
  * Find the intersections between a arc and a rectangle.
- *
  * @param center
  * @param radius
  * @param start
@@ -723,7 +809,6 @@ export function intersectArcRectangle(
 
 /**
  * Find the intersections between a arc and a bounding box.
- *
  * @param center
  * @param radius
  * @param start
@@ -747,7 +832,6 @@ export function intersectArcBounds(
 
 /**
  * Find the intersections between a circle and a line segment.
- *
  * @param c
  * @param r
  * @param a1
@@ -764,7 +848,6 @@ export function intersectCircleLineSegment(
 
 /**
  * Find the intersections between a circle and a circle.
- *
  * @param c1
  * @param r1
  * @param c2
@@ -776,13 +859,16 @@ export function intersectCircleCircle(
   c2: number[],
   r2: number
 ): TLIntersection {
-  let dx = c2[0] - c1[0]
-  let dy = c2[1] - c1[1]
+  let dx = c2[0] - c1[0],
+    dy = c2[1] - c1[1]
+
   const d = Math.sqrt(dx * dx + dy * dy),
     x = (d * d - r2 * r2 + r1 * r1) / (2 * d),
     y = Math.sqrt(r1 * r1 - x * x)
+
   dx /= d
   dy /= d
+
   return createIntersection(
     'intersection',
     [c1[0] + dx * x - dy * y, c1[1] + dy * x + dx * y],
@@ -792,7 +878,6 @@ export function intersectCircleCircle(
 
 /**
  * Find the intersections between a circle and a rectangle.
- *
  * @param c
  * @param r
  * @param point
@@ -809,7 +894,6 @@ export function intersectCircleRectangle(
 
 /**
  * Find the intersections between a circle and a bounding box.
- *
  * @param c
  * @param r
  * @param bounds
@@ -825,7 +909,6 @@ export function intersectCircleBounds(c: number[], r: number, bounds: TLBounds):
 
 /**
  * Find the intersections between an ellipse and a ray.
- *
  * @param center
  * @param rx
  * @param ry
@@ -846,7 +929,6 @@ export function intersectEllipseRay(
 
 /**
  * Find the intersections between an ellipse and a line segment.
- *
  * @param center
  * @param rx
  * @param ry
@@ -862,13 +944,15 @@ export function intersectEllipseLineSegment(
   a1: number[],
   a2: number[]
 ): TLIntersection {
-  if (rx === ry) return intersectLineSegmentCircle(a1, a2, center, rx)
+  if (rx === ry) {
+    return intersectLineSegmentCircle(a1, a2, center, rx)
+  }
+
   return intersectLineSegmentEllipse(a1, a2, center, rx, ry, rotation)
 }
 
 /**
  * Find the intersections between an ellipse and a rectangle.
- *
  * @param center
  * @param rx
  * @param ry
@@ -884,14 +968,16 @@ export function intersectEllipseRectangle(
   point: number[],
   size: number[]
 ): TLIntersection[] {
-  if (rx === ry) return intersectRectangleCircle(point, size, center, rx)
+  if (rx === ry) {
+    return intersectRectangleCircle(point, size, center, rx)
+  }
+
   return intersectRectangleEllipse(point, size, center, rx, ry, rotation)
 }
 
 /**
- * Find the intersections between an ellipse and an ellipse. Adapted from
- * https://gist.github.com/drawable/92792f59b6ff8869d8b1
- *
+ * Find the intersections between an ellipse and an ellipse.
+ * Adapted from https://gist.github.com/drawable/92792f59b6ff8869d8b1
  * @param _c1
  * @param _rx1
  * @param _ry1
@@ -925,7 +1011,6 @@ export function intersectEllipseEllipse(
 
 /**
  * Find the intersections between an ellipse and a circle.
- *
  * @param c
  * @param rx
  * @param ry
@@ -946,7 +1031,6 @@ export function intersectEllipseCircle(
 
 /**
  * Find the intersections between an ellipse and a bounding box.
- *
  * @param c
  * @param rx
  * @param ry
@@ -966,7 +1050,6 @@ export function intersectEllipseBounds(
 
 /**
  * Find the intersections between a bounding box and a ray.
- *
  * @param bounds
  * @param origin
  * @param direction
@@ -982,7 +1065,6 @@ export function intersectBoundsRay(
 
 /**
  * Find the intersections between a bounding box and a line segment.
- *
  * @param bounds
  * @param a1
  * @param a2
@@ -998,7 +1080,6 @@ export function intersectBoundsLineSegment(
 
 /**
  * Find the intersections between a bounding box and a rectangle.
- *
  * @param bounds
  * @param point
  * @param size
@@ -1014,7 +1095,6 @@ export function intersectBoundsRectangle(
 
 /**
  * Find the intersections between a bounding box and a bounding box.
- *
  * @param bounds1
  * @param bounds2
  */
@@ -1029,7 +1109,6 @@ export function intersectBoundsBounds(bounds1: TLBounds, bounds2: TLBounds): TLI
 
 /**
  * Find the intersections between a bounding box and an arc.
- *
  * @param bounds
  * @param center
  * @param radius
@@ -1049,7 +1128,6 @@ export function intersectBoundsArc(
 
 /**
  * Find the intersections between a bounding box and a circle.
- *
  * @param bounds
  * @param c
  * @param r
@@ -1061,7 +1139,6 @@ export function intersectBoundsCircle(bounds: TLBounds, c: number[], r: number):
 
 /**
  * Find the intersections between a bounding box and an ellipse.
- *
  * @param bounds
  * @param c
  * @param rx
@@ -1081,7 +1158,6 @@ export function intersectBoundsEllipse(
 
 /**
  * Find the intersections between a bounding box and a polyline.
- *
  * @param bounds
  * @param points
  */
@@ -1091,7 +1167,6 @@ export function intersectBoundsPolyline(bounds: TLBounds, points: number[][]): T
 
 /**
  * Find the intersections between a bounding box and a polygon.
- *
  * @param bounds
  * @param points
  */
@@ -1105,7 +1180,6 @@ export function intersectBoundsPolygon(bounds: TLBounds, points: number[][]): TL
 
 /**
  * Find the intersections between a polyline and a line segment.
- *
  * @param points
  * @param a1
  * @param a2
@@ -1120,7 +1194,6 @@ export function intersectPolylineLineSegment(
 
 /**
  * Find the intersections between a polyline and a rectangle.
- *
  * @param points
  * @param point
  * @param size
@@ -1135,7 +1208,6 @@ export function intersectPolylineRectangle(
 
 /**
  * Find the intersections between a polyline and a bounding box.
- *
  * @param points
  * @param bounds
  */
@@ -1153,7 +1225,6 @@ export function intersectPolylineBounds(points: number[][], bounds: TLBounds): T
 
 /**
  * Find the intersections between a polygon nd a line segment.
- *
  * @param points
  * @param a1
  * @param a2
@@ -1168,7 +1239,6 @@ export function intersectPolygonLineSegment(
 
 /**
  * Find the intersections between a polygon and a rectangle.
- *
  * @param points
  * @param point
  * @param size
@@ -1183,7 +1253,6 @@ export function intersectPolygonRectangle(
 
 /**
  * Find the intersections between a polygon and a bounding box.
- *
  * @param points
  * @param bounds
  */
@@ -1197,7 +1266,6 @@ export function intersectPolygonBounds(points: number[][], bounds: TLBounds): TL
 
 /**
  * Find the intersections between a rectangle and a ray.
- *
  * @param point
  * @param size
  * @param rotation
@@ -1209,13 +1277,20 @@ export function intersectRayPolygon(
   direction: number[],
   points: number[][]
 ): TLIntersection[] {
-  return pointsToLineSegments(points, true)
-    .reduce<TLIntersection[]>((acc, [a1, a2], i) => {
+  const sideIntersections = pointsToLineSegments(points, true).reduce<TLIntersection[]>(
+    (acc, [a1, a2], i) => {
       const intersection = intersectRayLineSegment(origin, direction, a1, a2)
-      if (intersection) acc.push(createIntersection(SIDES[i], ...intersection.points))
+
+      if (intersection) {
+        acc.push(createIntersection(i.toString(), ...intersection.points))
+      }
+
       return acc
-    }, [])
-    .filter(int => int.didIntersect)
+    },
+    []
+  )
+
+  return sideIntersections.filter((int) => int.didIntersect)
 }
 
 export function pointsToLineSegments(points: number[][], closed = false) {
@@ -1224,5 +1299,3 @@ export function pointsToLineSegments(points: number[][], closed = false) {
   if (closed) segments.push([points[points.length - 1], points[0]])
   return segments
 }
-
-const SIDES = ['top', 'right', 'bottom', 'left']

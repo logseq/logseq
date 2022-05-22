@@ -13,6 +13,8 @@ export const CARDINAL_DIRECTIONS = ['north', 'east', 'south', 'west'] as const
 
 export const FIT_TO_SCREEN_PADDING = 100
 
+export const BINDING_DISTANCE = 16
+
 export const EMPTY_OBJECT: any = {}
 
 export const EMPTY_ARRAY: any[] = []
