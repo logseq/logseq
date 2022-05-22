@@ -50,7 +50,7 @@ export class PolygonUtils {
       (edge, i, edges) => {
         const intersection = intersectLineLine(edge, edges[(i + 1) % edges.length])
         if (intersection === undefined) throw Error('Expected an intersection')
-        return intersection.points
+        return intersection
       }
     )
   }

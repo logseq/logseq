@@ -1,6 +1,7 @@
 export class Vec {
   /**
    * Clamp a value into a range.
+   *
    * @param n
    * @param min
    */
@@ -12,17 +13,19 @@ export class Vec {
 
   /**
    * Clamp a value into a range.
+   *
    * @param n
    * @param min
    */
   static clampV(A: number[], min: number): number[]
   static clampV(A: number[], min: number, max: number): number[]
   static clampV(A: number[], min: number, max?: number): number[] {
-    return A.map((n) => (max ? Vec.clamp(n, min, max) : Vec.clamp(n, min)))
+    return A.map(n => (max ? Vec.clamp(n, min, max) : Vec.clamp(n, min)))
   }
 
   /**
    * Negate a vector.
+   *
    * @param A
    */
   static neg = (A: number[]): number[] => {
@@ -31,6 +34,7 @@ export class Vec {
 
   /**
    * Add vectors.
+   *
    * @param A
    * @param B
    */
@@ -40,6 +44,7 @@ export class Vec {
 
   /**
    * Add scalar to vector.
+   *
    * @param A
    * @param B
    */
@@ -49,6 +54,7 @@ export class Vec {
 
   /**
    * Subtract vectors.
+   *
    * @param A
    * @param B
    */
@@ -58,6 +64,7 @@ export class Vec {
 
   /**
    * Subtract scalar from vector.
+   *
    * @param A
    * @param B
    */
@@ -67,6 +74,7 @@ export class Vec {
 
   /**
    * Get the vector from vectors A to B.
+   *
    * @param A
    * @param B
    */
@@ -77,6 +85,7 @@ export class Vec {
 
   /**
    * Vector multiplication by scalar
+   *
    * @param A
    * @param n
    */
@@ -86,6 +95,7 @@ export class Vec {
 
   /**
    * Multiple two vectors.
+   *
    * @param A
    * @param B
    */
@@ -95,6 +105,7 @@ export class Vec {
 
   /**
    * Vector division by scalar.
+   *
    * @param A
    * @param n
    */
@@ -104,6 +115,7 @@ export class Vec {
 
   /**
    * Vector division by vector.
+   *
    * @param A
    * @param n
    */
@@ -113,6 +125,7 @@ export class Vec {
 
   /**
    * Perpendicular rotation of a vector A
+   *
    * @param A
    */
   static per = (A: number[]): number[] => {
@@ -121,6 +134,7 @@ export class Vec {
 
   /**
    * Dot product
+   *
    * @param A
    * @param B
    */
@@ -130,6 +144,7 @@ export class Vec {
 
   /**
    * Cross product (outer product) | A X B |
+   *
    * @param A
    * @param B
    */
@@ -137,16 +152,14 @@ export class Vec {
     return A[0] * B[1] - B[0] * A[1]
   }
 
-  /**
-   * Cross (for point in polygon)
-   *
-   */
+  /** Cross (for point in polygon) */
   static cross(x: number[], y: number[], z: number[]): number {
     return (y[0] - x[0]) * (z[1] - x[1]) - (z[0] - x[0]) * (y[1] - x[1])
   }
 
   /**
    * Length of the vector squared
+   *
    * @param A
    */
   static len2 = (A: number[]): number => {
@@ -155,6 +168,7 @@ export class Vec {
 
   /**
    * Length of the vector
+   *
    * @param A
    */
   static len = (A: number[]): number => {
@@ -163,6 +177,7 @@ export class Vec {
 
   /**
    * Project A over B
+   *
    * @param A
    * @param B
    */
@@ -172,6 +187,7 @@ export class Vec {
 
   /**
    * Get normalized / unit vector.
+   *
    * @param A
    */
   static uni = (A: number[]): number[] => {
@@ -180,6 +196,7 @@ export class Vec {
 
   /**
    * Get normalized / unit vector.
+   *
    * @param A
    */
   static normalize = (A: number[]): number[] => {
@@ -188,6 +205,7 @@ export class Vec {
 
   /**
    * Get the tangent between two vectors.
+   *
    * @param A
    * @param B
    * @returns
@@ -198,6 +216,7 @@ export class Vec {
 
   /**
    * Dist length from A to B squared.
+   *
    * @param A
    * @param B
    */
@@ -207,6 +226,7 @@ export class Vec {
 
   /**
    * Dist length from A to B
+   *
    * @param A
    * @param B
    */
@@ -216,6 +236,7 @@ export class Vec {
 
   /**
    * A faster, though less accurate method for testing distances. Maybe faster?
+   *
    * @param A
    * @param B
    * @returns
@@ -230,6 +251,7 @@ export class Vec {
 
   /**
    * Angle between vector A and vector B in radians
+   *
    * @param A
    * @param B
    */
@@ -239,6 +261,7 @@ export class Vec {
 
   /**
    * Angle between vector A and vector B in radians
+   *
    * @param A
    * @param B
    */
@@ -248,6 +271,7 @@ export class Vec {
 
   /**
    * Mean between two vectors or mid vector between two vectors
+   *
    * @param A
    * @param B
    */
@@ -257,8 +281,9 @@ export class Vec {
 
   /**
    * Vector rotation by r (radians)
+   *
    * @param A
-   * @param r rotation in radians
+   * @param r Rotation in radians
    */
   static rot = (A: number[], r = 0): number[] => {
     return [A[0] * Math.cos(r) - A[1] * Math.sin(r), A[0] * Math.sin(r) + A[1] * Math.cos(r)]
@@ -266,9 +291,10 @@ export class Vec {
 
   /**
    * Rotate a vector around another vector by r (radians)
-   * @param A vector
-   * @param C center
-   * @param r rotation in radians
+   *
+   * @param A Vector
+   * @param C Center
+   * @param r Rotation in radians
    */
   static rotWith = (A: number[], C: number[], r = 0): number[] => {
     if (r === 0) return A
@@ -287,6 +313,7 @@ export class Vec {
 
   /**
    * Check of two vectors are identical.
+   *
    * @param A
    * @param B
    */
@@ -296,9 +323,10 @@ export class Vec {
 
   /**
    * Interpolate vector A to B with a scalar t
+   *
    * @param A
    * @param B
-   * @param t scalar
+   * @param t Scalar
    */
   static lrp = (A: number[], B: number[], t: number): number[] => {
     return Vec.add(A, Vec.mul(Vec.sub(B, A), t))
@@ -306,6 +334,7 @@ export class Vec {
 
   /**
    * Interpolate from A to B when curVAL goes fromVAL: number[] => to
+   *
    * @param A
    * @param B
    * @param from Starting value
@@ -319,6 +348,7 @@ export class Vec {
 
   /**
    * Get the angle between the three vectors A, B, and C.
+   *
    * @param p1
    * @param pc
    * @param p2
@@ -332,6 +362,7 @@ export class Vec {
 
   /**
    * Absolute value of a vector.
+   *
    * @param A
    * @returns
    */
@@ -346,6 +377,7 @@ export class Vec {
 
   /**
    * Get whether p1 is left of p2, relative to pc.
+   *
    * @param p1
    * @param pc
    * @param p2
@@ -359,6 +391,7 @@ export class Vec {
 
   /**
    * Get whether p1 is left of p2, relative to pc.
+   *
    * @param p1
    * @param pc
    * @param p2
@@ -369,20 +402,23 @@ export class Vec {
 
   /**
    * Round a vector to two decimal places.
+   *
    * @param a
    */
   static toFixed = (a: number[]): number[] => {
-    return a.map((v) => Math.round(v * 100) / 100)
+    return a.map(v => Math.round(v * 100) / 100)
   }
 
   /**
    * Snap vector to nearest step.
+   *
+   * @example
+   *   ;```ts
+   *   Vec.snap([10.5, 28], 10) // [10, 30]
+   *   ```
+   *
    * @param A
    * @param step
-   * @example
-   * ```ts
-   * Vec.snap([10.5, 28], 10) // [10, 30]
-   * ```
    */
   static snap(a: number[], step = 1) {
     return [Math.round(a[0] / step) * step, Math.round(a[1] / step) * step]
@@ -390,6 +426,7 @@ export class Vec {
 
   /**
    * Get the nearest point on a line with a known unit vector that passes through point A
+   *
    * @param A Any point on the line
    * @param u The unit vector for the line.
    * @param P A point not on the line to test.
@@ -401,6 +438,7 @@ export class Vec {
 
   /**
    * Distance between a point and a line with a known unit vector that passes through a point.
+   *
    * @param A Any point on the line
    * @param u The unit vector for the line.
    * @param P A point not on the line to test.
@@ -412,6 +450,7 @@ export class Vec {
 
   /**
    * Get the nearest point on a line segment between A and B
+   *
    * @param A The start of the line segment
    * @param B The end of the line segment
    * @param P The off-line point
@@ -439,6 +478,7 @@ export class Vec {
 
   /**
    * Distance between a point and the nearest point on a line segment between A and B
+   *
    * @param A The start of the line segment
    * @param B The end of the line segment
    * @param P The off-line point
@@ -451,6 +491,7 @@ export class Vec {
 
   /**
    * Push a point A towards point B by a given distance.
+   *
    * @param A
    * @param B
    * @param d
@@ -463,6 +504,7 @@ export class Vec {
 
   /**
    * Push a point in a given angle by a given distance.
+   *
    * @param A
    * @param B
    * @param d
@@ -473,6 +515,7 @@ export class Vec {
 
   /**
    * Round a vector to a precision length.
+   *
    * @param a
    * @param n
    */
@@ -482,6 +525,7 @@ export class Vec {
 
   /**
    * Get an array of points (with simulated pressure) between two points.
+   *
    * @param A The first point.
    * @param B The second point.
    * @param steps The number of points to return.
@@ -496,6 +540,7 @@ export class Vec {
 
   /**
    * Get the slope between two points.
+   *
    * @param A
    * @param B
    */
@@ -505,17 +550,24 @@ export class Vec {
   }
 
   /**
-   * Get a vector comprised of the maximum of two or more vectors.
+   * Get the angle of a vector.
+   *
+   * @param A
    */
-  static max = (...v: number[][]) => {
-    return [Math.max(...v.map((a) => a[0])), Math.max(...v.map((a) => a[1]))]
+  static toAngle = (A: number[]) => {
+    const angle = Math.atan2(A[1], A[0])
+    if (angle < 0) return angle + Math.PI * 2
+    return angle
   }
 
-  /**
-   * Get a vector comprised of the minimum of two or more vectors.
-   */
+  /** Get a vector comprised of the maximum of two or more vectors. */
+  static max = (...v: number[][]) => {
+    return [Math.max(...v.map(a => a[0])), Math.max(...v.map(a => a[1]))]
+  }
+
+  /** Get a vector comprised of the minimum of two or more vectors. */
   static min = (...v: number[][]) => {
-    return [Math.max(...v.map((a) => a[0])), Math.max(...v.map((a) => a[1]))]
+    return [Math.max(...v.map(a => a[0])), Math.max(...v.map(a => a[1]))]
   }
 }
 

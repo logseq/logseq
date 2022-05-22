@@ -32,7 +32,7 @@
     "test:watch": "lerna run test:watch --stream",
     "docs": "lerna run typedoc",
     "docs:watch": "lerna run typedoc --watch",
-    "postinstall": "yarn build:packages && husky install",
+    "postinstall": "yarn build:packages",
     "pretty-quick": "pretty-quick"
   },
   "devDependencies": {
@@ -48,7 +48,6 @@
     "@typescript-eslint/parser": "^4.19.0",
     "eslint": "^7.32.0",
     "fake-indexeddb": "^3.1.3",
-    "husky": "^7.0.4",
     "init-package-json": "^2.0.4",
     "jest": "^27.3.1",
     "lerna": "^3.22.1",
@@ -60,11 +59,5 @@
     "tslib": "^2.3.0",
     "typedoc": "^0.22.3",
     "typescript": "^4.5.2"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "pretty-quick --staged",
-      "pre-push": "fix:style && eslint && test"
-    }
   }
 }

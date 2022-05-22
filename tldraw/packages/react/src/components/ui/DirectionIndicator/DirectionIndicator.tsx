@@ -24,7 +24,7 @@ export const DirectionIndicator = observer(function DirectionIndicator<
       [12, 12],
       [bounds.width - 24, bounds.height - 24]
     )
-    for (const [A, B] of insetBoundSides) {
+    for (const [_, [A, B]] of insetBoundSides) {
       const int = intersectRayLineSegment(center, direction, A, B)
       if (!int.didIntersect) continue
       const point = int.points[0]
