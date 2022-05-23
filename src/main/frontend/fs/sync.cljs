@@ -1490,48 +1490,49 @@
                          (config/get-repo-dir repo) repo
                          txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                          local-changes-chan)]
-    (go
-      ;; 1. if remote graph has been deleted, clear graphs-txid.edn
-      ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-      (if (not= 3 (count @graphs-txid))
-        (do (clear-graphs-txid! repo)
-            (state/set-file-sync-state repo nil))
-        (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-          (if-not (<! (check-remote-graph-exists graph-uuid))
-            (clear-graphs-txid! repo)
-            (do
-              ;; set-env
-              (set-env rsapi config/FILE-SYNC-PROD?)
-              (state/set-file-sync-state repo @*sync-state)
-              (state/set-file-sync-manager sm)
-              ;; wait seconds to receive all file change events,
-              ;; and then drop all of them.
-              ;; WHY: when opening a graph(or switching to another graph),
-              ;;      file-watcher will send a lot of file-change-events,
-              ;;      actually, each file corresponds to a file-change-event,
-              ;;      we need to ignore all of them.
-              (<! (timeout 5000))
-              (drain-chan local-changes-chan)
-              (poll! stop-sync-chan)
-              (poll! remote->local-sync-chan)
+    (when-not (config/demo-graph? repo)
+      (go
+       ;; 1. if remote graph has been deleted, clear graphs-txid.edn
+       ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
+       (if (not= 3 (count @graphs-txid))
+         (do (clear-graphs-txid! repo)
+             (state/set-file-sync-state repo nil))
+         (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+           (if-not (<! (check-remote-graph-exists graph-uuid))
+             (clear-graphs-txid! repo)
+             (do
+               ;; set-env
+               (set-env rsapi config/FILE-SYNC-PROD?)
+               (state/set-file-sync-state repo @*sync-state)
+               (state/set-file-sync-manager sm)
+               ;; wait seconds to receive all file change events,
+               ;; and then drop all of them.
+               ;; WHY: when opening a graph(or switching to another graph),
+               ;;      file-watcher will send a lot of file-change-events,
+               ;;      actually, each file corresponds to a file-change-event,
+               ;;      we need to ignore all of them.
+               (<! (timeout 5000))
+               (drain-chan local-changes-chan)
+               (poll! stop-sync-chan)
+               (poll! remote->local-sync-chan)
 
-              ;; update global state when *sync-state changes
-              (add-watch *sync-state ::update-global-state
-                         (fn [_ _ _ n]
-                           (state/set-file-sync-state repo n)))
-              (.start sm)
+               ;; update global state when *sync-state changes
+               (add-watch *sync-state ::update-global-state
+                          (fn [_ _ _ n]
+                            (state/set-file-sync-state repo n)))
+               (.start sm)
 
 
-              (offer! remote->local-sync-chan true)
-              (offer! full-sync-chan true)
+               (offer! remote->local-sync-chan true)
+               (offer! full-sync-chan true)
 
-              ;; watch :network/online?
-              (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-                         (fn [_k _r _o n]
-                           (when (false? n)
-                             (sync-stop))))
-              ;; watch :auth/id-token
-              (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-                         (fn [_k _r _o n]
-                           (when (nil? n)
-                             (sync-stop)))))))))))
+               ;; watch :network/online?
+               (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+                          (fn [_k _r _o n]
+                            (when (false? n)
+                              (sync-stop))))
+               ;; watch :auth/id-token
+               (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+                          (fn [_k _r _o n]
+                            (when (nil? n)
+                              (sync-stop))))))))))))
