@@ -43,7 +43,6 @@
   (let [_ (state/sub :auth/id-token)
         toggling? (state/sub :file-sync/toggling?)
         sync-state (state/sub :file-sync/sync-state)
-        remote-graphs (state/sub :file-sync/remote-graphs)
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)
         uploading-files (:current-local->remote-files sync-state)
@@ -118,47 +117,48 @@
          {:links-header
           [:strong.debug-status (str status)]}))]))
 
+(rum/defc pick-local-graph-for-sync [graph]
+  (rum/use-effect!
+   (fn []
+     (file-sync-handler/set-wait-syncing-graph graph)
+     #(file-sync-handler/set-wait-syncing-graph nil))
+   [graph])
+
+  [:div.p-5
+   [:h1.mb-4.text-4xl "Sync a remote graph to local"]
+
+   [:div.py-3
+    [:p.px-2.pb-2
+     [:strong "Name: " (:GraphName graph)] [:br]
+     [:small "UUID: " (:GraphUUID graph)]]
+
+    [:div
+     (ui/button
+       (str "Open a local directory")
+       :on-click #(-> (page-handler/ls-dir-files!
+                       (fn [{:keys [url]}]
+                         (file-sync-handler/init-remote-graph url)
+                         ;; TODO: wait for switch done
+                         (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+
+                       {:empty-dir?-or-pred
+                        (fn [ret]
+                          (when-not (nil? (second ret))
+                            (if-let [root (first ret)]
+                              (do
+                                (js/console.log root)
+                                (-> (ipc/ipc :readGraphTxIdInfo root)
+                                    (p/then (fn [^js info]
+                                              (when (or (nil? info)
+                                                        (nil? (second info))
+                                                        (not= (second info) (:GraphUUID graph)))
+                                                (throw (js/Error. "AssertDirectoryError")))))))
+                              (throw (js/Error. nil)))))})
+
+                      (p/catch (fn [^js e]
+                                 (when (= "AssertDirectoryError" (.-message e))
+                                   (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
+     [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]]])
+
 (defn pick-dest-to-sync-panel [graph]
-  (rum/defc _ [_close]
-
-    (rum/use-effect!
-      (fn []
-        (file-sync-handler/set-wait-syncing-graph graph)
-        #(file-sync-handler/set-wait-syncing-graph nil))
-      [graph])
-
-    [:div.p-5
-    [:h1.mb-4.text-4xl "Sync a remote graph to local"]
-
-     [:div.py-3
-      [:p.px-2.pb-2
-       [:strong "Name: " (:GraphName graph)] [:br]
-       [:small "UUID: " (:GraphUUID graph)]]
-
-      [:div
-       (ui/button
-         (str "Open a local directory")
-         :on-click #(-> (page-handler/ls-dir-files!
-                          (fn [{:keys [url]}]
-                            (file-sync-handler/init-remote-graph url)
-                            ;; TODO: wait for switch done
-                            (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
-
-                          {:empty-dir?-or-pred
-                           (fn [ret]
-                             (when-not (nil? (second ret))
-                               (if-let [root (first ret)]
-                                 (do
-                                   (js/console.log root)
-                                   (-> (ipc/ipc :readGraphTxIdInfo root)
-                                       (p/then (fn [^js info]
-                                                 (when (or (nil? info)
-                                                           (nil? (second info))
-                                                           (not= (second info) (:GraphUUID graph)))
-                                                   (throw (js/Error. "AssertDirectoryError")))))))
-                                 (throw (js/Error. nil)))))})
-
-                        (p/catch (fn [^js e]
-                                   (when (= "AssertDirectoryError" (.-message e))
-                                     (notifications/show! "Please select an empty directory or an existing remote graph!" :error))))))
-       [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]]]))
+  (pick-local-graph-for-sync graph))

@@ -32,9 +32,7 @@
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
-            [cljs-bean.core :as bean]))
+            [promesa.core :as p]))
 
 (defn set-global-error-notification!
   []

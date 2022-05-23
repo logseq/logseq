@@ -132,7 +132,7 @@
       (p/let [result (fs/open-dir (fn [path handle]
                                     (when nfs?
                                       (swap! path-handles assoc path handle))))
-              _ (if-not (nil? empty-dir?-or-pred)
+              _ (when-not (nil? empty-dir?-or-pred)
                   (cond
                     (boolean? empty-dir?-or-pred)
                     (and (not-empty (second result))
