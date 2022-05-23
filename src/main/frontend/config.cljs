@@ -21,7 +21,7 @@
 ;; prod env
 ;; (goog-define FILE-SYNC-PROD? true)
 ;; (goog-define LOGIN-URL
-;;              "https://logseq.auth.us-east-1.amazoncognito.com/login?client_id=7ns5v1pu8nrbs04rvdg67u4a7c&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+;;              "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 ;; (goog-define API-DOMAIN "api-prod.logseq.com")
 ;; (goog-define WS-URL "wss://b2rp13onu2.execute-api.us-east-1.amazonaws.com/production?graphuuid=%s")
 
