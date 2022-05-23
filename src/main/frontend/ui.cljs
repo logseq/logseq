@@ -883,41 +883,57 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner <
+(rum/defcs lazy-visible-inner < rum/reactive
   {:init (fn [state]
            (assoc state
                   ::ref (atom nil)
                   ::height (atom 24)))
    :did-mount (fn [state]
-                (when (last (:rum/args state))
-                  (let [observer (js/ResizeObserver. (fn [entries]
-                                                      (let [entry (first entries)
-                                                            *height (::height state)
-                                                            height' (.-height (.-contentRect entry))]
-                                                        (when (and (> height' @*height)
-                                                                   (not= height' 64))
-                                                          (reset! *height height')))))]
-                   (.observe observer @(::ref state))))
+                (let [element @(::ref state)
+                      observer (js/ResizeObserver.
+                                (fn [entries]
+                                  (let [element @(::ref state)
+                                        entry (first entries)
+                                        *height (::height state)
+                                        height' (.-height (.-contentRect entry))]
+                                    (cond
+                                      (and element
+                                           (zero? (.-length (.-children element))))
+                                      (reset! *height 0)
+
+                                      (:ui/scrolling? @state/state)
+                                      (when (> height' @*height)
+                                        (reset! *height height'))
+
+                                      :else
+                                      (when-not (<= height' 1)
+                                        (reset! *height height'))))))]
+                  (.observe observer element))
                 state)}
-  [state visible? content-fn _reset-height?]
-  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
-                         :style {:min-height @(::height state)}}
-   (if visible?
-     (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:min-height 64}}
-      [:div.animate-pulse.flex.space-x-4
-       [:div.flex-1.space-y-3.py-1
-        [:div.h-2.bg-base-4.rounded]
-        [:div.space-y-3
-         [:div.grid.grid-cols-3.gap-4
-          [:div.h-2.bg-base-4.rounded.col-span-2]
-          [:div.h-2.bg-base-4.rounded.col-span-1]]
-         [:div.h-2.bg-base-4.rounded]]]]])])
+  [state visible? content-fn _opts]
+  (let [height-zero? (zero? (rum/react (::height state)))]
+    [:div.lazy-visibility {:ref #(reset! (::ref state) %)
+                           :style {:height (if (and visible? height-zero?)
+                                             0
+                                             (::height state))}}
+     (if visible?
+       (when (fn? content-fn) (content-fn))
+       [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:height 88}}
+        [:div.animate-pulse.flex.space-x-4
+         [:div.flex-1.space-y-3.py-1
+          [:div.h-2.bg-base-4.rounded]
+          [:div.space-y-3
+           [:div.grid.grid-cols-3.gap-4
+            [:div.h-2.bg-base-4.rounded.col-span-2]
+            [:div.h-2.bg-base-4.rounded.col-span-1]]
+           [:div.h-2.bg-base-4.rounded]]]]])]))
 
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [reset-height? once?]}]
+  [state content-fn sensor-opts
+   {:keys [once?]
+    :as opts}]
   (let [*active? (::active? state)]
     (if (or (util/mobile?) (mobile-util/native-platform?))
       (content-fn)
@@ -935,4 +951,4 @@
            :scrollThrottle 500
            :active @*active?}
           sensor-opts)
-         (lazy-visible-inner @*visible? content-fn reset-height?))))))
+         (lazy-visible-inner @*visible? content-fn opts))))))

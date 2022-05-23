@@ -1326,7 +1326,7 @@
 
       (= name "video")
       (macro-video-cp config arguments)
-      
+
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
@@ -2724,8 +2724,8 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      [:div.custom-query.mt-4 (get config :attr {})
-       (when-not (and built-in? (empty? result))
+      (when-not (and built-in? (empty? result))
+        [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
           [:div.custom-query-title
            [:span.title-text (cond
@@ -2800,7 +2800,7 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true}))])))
+           :title-trigger? true})]))))
 
 (rum/defc custom-query
   [config q]
