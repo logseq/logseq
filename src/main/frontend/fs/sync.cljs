@@ -756,7 +756,7 @@
             repo (state/get-current-repo)
             file-path (config/get-file-path repo path)
             content (<! (p->c (fs/read-file "" file-path)))]
-        (and origin-db-content
+        (and (seq origin-db-content)
              (or (nil? content)
                  (some :removed (diff/diff origin-db-content content))))))))
 
@@ -782,7 +782,7 @@
                                      (remove nil?))]
         (<! (update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
         (doseq [[filetxn origin-db-content] txn->db-content-vec]
-          (when (need-add-version-file? filetxn origin-db-content)
+          (when (<! (need-add-version-file? filetxn origin-db-content))
             (add-new-version-file repo (relative-path filetxn) origin-db-content))))
 
       (.-deleted? (first filetxns))
