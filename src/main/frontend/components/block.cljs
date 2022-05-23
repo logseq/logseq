@@ -883,7 +883,7 @@
 
         (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
-      
+
       (contains? (config/doc-formats) ext)
       (asset-link config label-text s metadata full_text)
 
@@ -1110,42 +1110,80 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
-        (when-not (string/blank? vimeo-id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allow-full-screen "allowfullscreen"
-              :allow
-              "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-              :frame-border "0"
-              :src (str "https://player.vimeo.com/video/" vimeo-id)
-              :height height
-              :width width}]))))))
+    (when-let [vimeo-id (nth (util/safe-re-find text/vimeo-regex url) 5)]
+      (when-not (string/blank? vimeo-id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allow-full-screen "allowfullscreen"
+            :allow
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :frame-border "0"
+            :src (str "https://player.vimeo.com/video/" vimeo-id)
+            :height height
+            :width width}])))))
 
 (defn- macro-bilibili-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
-      (when-let [id (cond
-                      (<= (count url) 15) url
-                      :else
-                      (last (util/safe-re-find id-regex url)))]
-        (when-not (string/blank? id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allowfullscreen true
-              :framespacing "0"
-              :frameborder "no"
-              :border "0"
-              :scrolling "no"
-              :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-              :width width
-              :height (max 500 height)}]))))))
+    (when-let [id (cond
+                    (<= (count url) 15) url
+                    :else
+                    (nth (util/safe-re-find text/bilibili-regex url) 5))]
+      (when-not (string/blank? id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allowfullscreen true
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+            :width width
+            :height (max 500 height)}])))))
+
+(defn- macro-video-cp
+  [_config arguments]
+  (when-let [url (first arguments)]
+    (let [width (min (- (util/get-width) 96)
+                     560)
+          height (int (* width (/ 315 560)))
+          results (text/get-matched-video url)
+          src (match results
+                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                     (if (= (count id) 11) ["youtube-player" id] url)
+
+                     [_ _ _ "youtube-nocookie.com" _ id _]
+                     (str "https://www.youtube-nocookie.com/embed/" id)
+
+                     [_ _ _ "loom.com" _ id _]
+                     (str "https://www.loom.com/embed/" id)
+
+                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                     (str "https://player.vimeo.com/video/" id)
+
+                     [_ _ _ "bilibili.com" _ id _]
+                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+
+                     :else
+                     url)]
+      (if (and (coll? src)
+               (= (first src) "youtube-player"))
+        (youtube/youtube-video (last src))
+        (when src
+          [:iframe
+           {:allowfullscreen true
+            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src src
+            :width width
+            :height height}])))))
 
 (defn- macro-else-cp
   [name config arguments]
@@ -1258,13 +1296,12 @@
 
       (= name "youtube")
       (when-let [url (first arguments)]
-        (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
-          (when-let [youtube-id (cond
-                                  (== 11 (count url)) url
-                                  :else
-                                  (nth (util/safe-re-find YouTube-regex url) 5))]
-            (when-not (string/blank? youtube-id)
-              (youtube/youtube-video youtube-id)))))
+        (when-let [youtube-id (cond
+                                (== 11 (count url)) url
+                                :else
+                                (nth (util/safe-re-find text/youtube-regex url) 5))]
+          (when-not (string/blank? youtube-id)
+            (youtube/youtube-video youtube-id))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp (first arguments)]
@@ -1287,6 +1324,9 @@
       (= name "bilibili")
       (macro-bilibili-cp config arguments)
 
+      (= name "video")
+      (macro-video-cp config arguments)
+      
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
@@ -1866,35 +1906,40 @@
   (.stopPropagation e)
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")
-        shift? (gobj/get e "shiftKey")]
-    (when (contains? #{1 0} button)
-      (when-not (target-forbidden-edit? target)
-        (if (and shift? (state/get-selection-start-block))
-          (editor-handler/highlight-selection-area! block-id)
-          (do
-            (editor-handler/clear-selection!)
-            (editor-handler/unhighlight-blocks!)
-            (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                           cursor-range (util/caret-range (gdom/getElement block-id))
-                           {:block/keys [content format]} block
-                           content (->> content
-                                        (property/remove-built-in-properties format)
-                                        (drawer/remove-logbook))]
-                       ;; save current editing block
-                       (let [{:keys [value] :as state} (editor-handler/get-state)]
-                         (editor-handler/save-block! state value))
-                       (state/set-editing!
-                        edit-input-id
-                        content
-                        block
-                        cursor-range
-                        false))]
-              ;; wait a while for the value of the caret range
-              (if (util/ios?)
-                (f)
-                (js/setTimeout f 5))
+        shift? (gobj/get e "shiftKey")
+        meta? (util/meta-key? e)]
+    (if (and meta? (not (state/get-edit-input-id)))
+      (do
+        (util/stop e)
+        (state/conj-selection-block! (gdom/getElement block-id) :down))
+      (when (contains? #{1 0} button)
+        (when-not (target-forbidden-edit? target)
+          (if (and shift? (state/get-selection-start-block))
+            (editor-handler/highlight-selection-area! block-id)
+            (do
+              (editor-handler/clear-selection!)
+              (editor-handler/unhighlight-blocks!)
+              (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                             cursor-range (util/caret-range (gdom/getElement block-id))
+                             {:block/keys [content format]} block
+                             content (->> content
+                                          (property/remove-built-in-properties format)
+                                          (drawer/remove-logbook))]
+                         ;; save current editing block
+                         (let [{:keys [value] :as state} (editor-handler/get-state)]
+                           (editor-handler/save-block! state value))
+                         (state/set-editing!
+                          edit-input-id
+                          content
+                          block
+                          cursor-range
+                          false))]
+                ;; wait a while for the value of the caret range
+                (if (util/ios?)
+                  (f)
+                  (js/setTimeout f 5))
 
-              (when block-id (state/set-selection-start-block! block-id)))))))))
+                (when block-id (state/set-selection-start-block! block-id))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -1967,7 +2012,8 @@
                              (when (and
                                     (state/in-selection-mode?)
                                     (not (string/includes? content "```"))
-                                    (not (gobj/get e "shiftKey")))
+                                    (not (gobj/get e "shiftKey"))
+                                    (not (util/meta-key? e)))
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
@@ -2224,20 +2270,21 @@
 
 (defn- block-mouse-over
   [uuid e *control-show? block-id doc-mode?]
-  (util/stop e)
-  (when (or
-         (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid {:semantic? true}))
-    (reset! *control-show? true))
-  (when-let [parent (gdom/getElement block-id)]
-    (let [node (.querySelector parent ".bullet-container")]
-      (when doc-mode?
-        (dom/remove-class! node "hide-inner-bullet"))))
-  (when (and
-         (state/in-selection-mode?)
-         (non-dragging? e))
+  (when-not @*dragging?
     (util/stop e)
-    (editor-handler/highlight-selection-area! block-id)))
+    (when (or
+           (model/block-collapsed? uuid)
+           (editor-handler/collapsable? uuid {:semantic? true}))
+      (reset! *control-show? true))
+    (when-let [parent (gdom/getElement block-id)]
+      (let [node (.querySelector parent ".bullet-container")]
+        (when doc-mode?
+          (dom/remove-class! node "hide-inner-bullet"))))
+    (when (and
+           (state/in-selection-mode?)
+           (non-dragging? e))
+      (util/stop e)
+      (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]
@@ -3059,7 +3106,7 @@
                              (when (> (- (util/time-ms) (:start-time config)) 100)
                                (load-more-blocks! config flat-blocks)))
             has-more? (and
-                       (> (count flat-blocks) model/initial-blocks-length)
+                       (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
             dom-id (str "lazy-blocks-" (::id state))]
         [:div {:id dom-id}

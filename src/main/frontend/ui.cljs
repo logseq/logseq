@@ -904,7 +904,7 @@
                          :style {:min-height @(::height state)}}
    (if visible?
      (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto {:style {:height 64}}
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:min-height 64}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]

@@ -123,9 +123,9 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
         reg-number #"^\d+$"
         timestamp (str timestamp)
         total-seconds (-> (re-matches reg-number timestamp)
-                          parse-long)
+                          util/safe-parse-int)
         [_ hours minutes seconds] (re-matches reg timestamp)
-        [hours minutes seconds] (map parse-long [hours minutes seconds])]
+        [hours minutes seconds] (map util/safe-parse-int [hours minutes seconds])]
     (cond
       total-seconds
       total-seconds

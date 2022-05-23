@@ -1346,7 +1346,7 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? url ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
     (case (keyword format)
       :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
@@ -2867,6 +2867,18 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn wrap-macro-url
+  [url]
+  (cond
+    (boolean (text/get-matched-video url))
+    (util/format "{{video %s}}" url)
+
+    (string/includes? url "twitter.com")
+    (util/format "{{twitter %s}}" url)
+
+    :else
+    (notification/show! (util/format "No macro is available for %s" url) :warning)))
+
 (defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
@@ -2894,18 +2906,7 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-
-      (and (gp-util/url? text)
-           (or (string/includes? text "youtube.com")
-               (string/includes? text "youtu.be"))
-           (mobile-util/native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-
-      (and (gp-util/url? text)
-           (string/includes? text "twitter.com")
-           (mobile-util/native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
-
+      
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
@@ -2942,7 +2943,10 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
+       (let [data (if (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data)
+                        clipboard-data)]
+             (state/append-current-edit-content! data))))
    (fn [error]
      (js/console.error error))))
 
@@ -2953,7 +2957,8 @@
     (let [text (.getData (gobj/get e "clipboardData") "text")
           input (state/get-input)]
       (if-not (string/blank? text)
-        (if (thingatpt/org-admonition&src-at-point input)
+        (if (or (thingatpt/markdown-src-at-point input)
+                (thingatpt/org-admonition&src-at-point input))
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))

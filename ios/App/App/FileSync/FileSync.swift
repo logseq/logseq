@@ -17,6 +17,49 @@ var URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
 var BUCKET: String = "logseq-file-sync-bucket"
 var REGION: String = "us-east-2"
 
+
+public struct SyncMetadata: CustomStringConvertible, Equatable {
+    var md5: String
+    var size: Int
+
+    public init?(of fileURL: URL) {
+        do {
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey])
+            guard fileAttributes.isRegularFile! else {
+                return nil
+            }
+            size = fileAttributes.fileSize ?? 0
+            
+            // incremental MD5sum
+            let bufferSize = 1024 * 1024
+            let file = try FileHandle(forReadingFrom: fileURL)
+            defer {
+                file.closeFile()
+            }
+            var ctx = Insecure.MD5.init()
+            while autoreleasepool(invoking: {
+                let data = file.readData(ofLength: bufferSize)
+                if data.count > 0 {
+                    ctx.update(data: data)
+                    return true // continue
+                } else {
+                    return false // eof
+                }
+            }) {}
+            
+            let computed = ctx.finalize()
+            md5 = computed.map { String(format: "%02hhx", $0) }.joined()
+        } catch {
+            return nil
+        }
+    }
+
+    public var description: String {
+        return "SyncMetadata(md5=\(md5), size=\(size))"
+    }
+}
+
+
 // MARK: FileSync Plugin
 
 @objc(FileSync)
@@ -69,16 +112,16 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             return
         }
         
-        var fileMd5Digests: [String: [String: Any]] = [:]
+        var fileMetadataDict: [String: [String: Any]] = [:]
         for filePath in filePaths {
             let url = baseURL.appendingPathComponent(filePath)
-            if let content = try? String(contentsOf: url, encoding: .utf8) {
-                fileMd5Digests[filePath] = ["md5": content.MD5,
-                                            "size": content.lengthOfBytes(using: .utf8)]
+            if let meta = SyncMetadata(of: url) {
+                fileMetadataDict[filePath] = ["md5": meta.md5,
+                                              "size": meta.size]
             }
         }
         
-        call.resolve(["result": fileMd5Digests])
+        call.resolve(["result": fileMetadataDict])
     }
     
     @objc func getLocalAllFilesMeta(_ call: CAPPluginCall) {
@@ -88,21 +131,21 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   return
               }
         
-        var fileMd5Digests: [String: [String: Any]] = [:]
+        var fileMetadataDict: [String: [String: Any]] = [:]
         if let enumerator = FileManager.default.enumerator(at: baseURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsPackageDescendants, .skipsHiddenFiles]) {
             
             for case let fileURL as URL in enumerator {
                 if !fileURL.isSkipped() {
-                    if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
-                        fileMd5Digests[fileURL.relativePath(from: baseURL)!] = ["md5": content.MD5,
-                                                                                "size": content.lengthOfBytes(using: .utf8)]
+                    if let meta = SyncMetadata(of: fileURL) {
+                        fileMetadataDict[fileURL.relativePath(from: baseURL)!] = ["md5": meta.md5,
+                                                                                  "size": meta.size]
                     }
                 } else if fileURL.isICloudPlaceholder() {
                     try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
                 }
             }
         }
-        call.resolve(["result": fileMd5Digests])
+        call.resolve(["result": fileMetadataDict])
     }
     
     

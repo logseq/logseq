@@ -147,7 +147,7 @@
                      :name name
                      :end (+ (:end admonition&src) (count name))))))))
 
-(defn- markdown-src-at-point [& [input]]
+(defn markdown-src-at-point [& [input]]
   (when-let [markdown-src (thing-at-point ["```" "```"] input)]
     (let [language (-> (:full-content markdown-src)
                        string/split-lines

@@ -1,22 +1,23 @@
 (ns frontend.mobile.intent
   (:require ["@capacitor/filesystem" :refer [Filesystem]]
+            ["path" :as path]
             ["send-intent" :refer [^js SendIntent]]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
+            [clojure.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.state :as state]
-            [frontend.date :as date]
-            [frontend.util :as util]
-            [frontend.config :as config]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.config :as gp-config]
-            ["path" :as path]
-            [frontend.mobile.util :as mobile-util]
             [frontend.handler.notification :as notification]
-            [clojure.pprint :as pprint]
-            [clojure.set :as set]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as text]
+            [promesa.core :as p]))
 
 (defn- handle-received-text [result]
   (let [{:keys [title url]} result
@@ -33,9 +34,8 @@
                      (string/split url "\"\n"))
         text (some-> text (string/replace #"^\"" ""))
         url (and url
-                 (cond (or (string/includes? url "youtube.com")
-                           (string/includes? url "youtu.be"))
-                       (util/format "{{youtube %s}}" url)
+                 (cond (boolean (text/get-matched-video url))
+                       (util/format "{{video %s}}" url)
 
                        (and (string/includes? url "twitter.com")
                             (string/includes? url "status"))
@@ -78,10 +78,12 @@
   (p/let [time (date/get-current-time)
           title (some-> (or title (path/basename url))
                         js/decodeURIComponent
-                        util/node-path.name)
+                        util/node-path.name
+                        util/file-name-sanity
+                        (string/replace "." ""))
           path (path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)
-                          (path/basename url))
+                          (str (js/encodeURI title) (path/extname url)))
           _ (p/catch
                 (.copy Filesystem (clj->js {:from url :to path}))
                 (fn [error]
