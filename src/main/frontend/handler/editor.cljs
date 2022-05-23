@@ -2878,6 +2878,18 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn wrap-macro-url
+  [url]
+  (cond
+    (boolean (text/get-matched-video url))
+    (util/format "{{video %s}}" url)
+
+    (string/includes? url "twitter.com")
+    (util/format "{{twitter %s}}" url)
+
+    :else
+    (notification/show! (util/format "No macro is available for %s" url) :warning)))
+
 (defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
@@ -2905,15 +2917,6 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-
-      (and (gp-util/url? text)
-           (boolean (text/get-matched-video text)))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{video %s}}" text) nil)
-      
-      (and (gp-util/url? text)
-           (string/includes? text "twitter.com")
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
 
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
@@ -2951,7 +2954,10 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
+       (let [data (if (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data)
+                        clipboard-data)]
+             (state/append-current-edit-content! data))))
    (fn [error]
      (js/console.error error))))
 
