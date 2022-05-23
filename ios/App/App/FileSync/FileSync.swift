@@ -17,6 +17,9 @@ var URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
 var BUCKET: String = "logseq-file-sync-bucket"
 var REGION: String = "us-east-2"
 
+var ENCRYPTION_KEY: String? = nil
+
+// MARK: Metadata type
 
 public struct SyncMetadata: CustomStringConvertible, Equatable {
     var md5: String
@@ -24,34 +27,15 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 
     public init?(of fileURL: URL) {
         do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey])
-            guard fileAttributes.isRegularFile! else {
-                return nil
+            let rawData = try Data(contentsOf: fileURL)
+            if let encrypted = maybeEncrypt(rawData) {
+                size = encrypted.count
+                md5 = encrypted.MD5
             }
-            size = fileAttributes.fileSize ?? 0
-            
-            // incremental MD5sum
-            let bufferSize = 1024 * 1024
-            let file = try FileHandle(forReadingFrom: fileURL)
-            defer {
-                file.closeFile()
-            }
-            var ctx = Insecure.MD5.init()
-            while autoreleasepool(invoking: {
-                let data = file.readData(ofLength: bufferSize)
-                if data.count > 0 {
-                    ctx.update(data: data)
-                    return true // continue
-                } else {
-                    return false // eof
-                }
-            }) {}
-            
-            let computed = ctx.finalize()
-            md5 = computed.map { String(format: "%02hhx", $0) }.joined()
         } catch {
             return nil
         }
+        return nil
     }
 
     public var description: String {
@@ -59,6 +43,36 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
     }
 }
 
+// MARK: encryption helper
+
+func maybeEncrypt(_ plaindata: Data) -> Data! {
+    if plaindata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) {
+        return plaindata
+    }
+    if let passphrase = ENCRYPTION_KEY {
+        var ret = Data(hexEncoded: "4c530031")! // LS\x001
+        if let combined = plaindata.sealChaChaPoly(with: passphrase) {
+            ret.append(combined)
+            return ret
+        }
+        return nil // encryption fail
+    }
+    return plaindata
+}
+
+func maybeDecrypt(_ cipherdata: Data) -> Data! {
+    if cipherdata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) {
+        return cipherdata
+    }
+    if cipherdata.starts(with: Data(hexEncoded: "4c530031")!) {
+        if let passphrase = ENCRYPTION_KEY {
+            let combined = cipherdata[4...]
+            return combined.openChaChaPoly(with: passphrase)
+        }
+        return nil
+    }
+    return cipherdata
+}
 
 // MARK: FileSync Plugin
 
@@ -84,6 +98,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("required parameter: env")
             return
         }
+        
         switch env {
         case "production", "product", "prod":
             URL_BASE = URL(string: "https://api-prod.logseq.com/file-sync/")!
@@ -97,6 +112,13 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             call.reject("invalid env: \(env)")
             return
         }
+        
+        if let passphrase = call.getString("passphrase") {
+            ENCRYPTION_KEY = passphrase
+        } else {
+            ENCRYPTION_KEY = nil
+        }
+        
         self.debugNotification(["event": "setenv:\(env)"])
         call.resolve(["ok": true])
     }
@@ -280,8 +302,6 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         guard !filePaths.isEmpty else {
             return call.reject("empty filePaths")
         }
-        
-        print("debug begin updateRemoteFiles \(filePaths)")
         
         let client = SyncClient(token: token, graphUUID: graphUUID, txid: txid)
         client.delegate = self

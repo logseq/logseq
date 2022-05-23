@@ -58,6 +58,11 @@ extension Data {
     var hexDescription: String {
         return map { String(format: "%02hhx", $0) }.joined()
     }
+    
+    var MD5: String {
+        let computed = Insecure.MD5.hash(data: self)
+        return computed.map { String(format: "%02hhx", $0) }.joined()
+    }
 }
 
 extension String {
@@ -136,12 +141,12 @@ extension URL {
                 if FileManager.default.fileExists(atPath: file.path) {
                     try FileManager.default.removeItem(at: file)
                 }
+                let rawData = try Data(contentsOf: tempURL)
+                guard let decryptedRawData = maybeDecrypt(rawData) else {
+                    throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "can not decrypt remote file"])
+                }
                 
-                // Copy the tempURL to file
-                try FileManager.default.copyItem(
-                    at: tempURL,
-                    to: file
-                )
+                try decryptedRawData.write(to: file, options: .atomic)
                 
                 completion(nil)
             }
@@ -161,11 +166,11 @@ extension URL {
 
 extension SymmetricKey {
     public init(passwordString keyString: String) throws {
-        // let size = SymmetricKeySize.bits256
         guard let keyData = keyString.data(using: .utf8) else {
-            print("Could not create raw Data from String")
+            print("ERROR: Could not create raw Data from String")
             throw CryptoKitError.incorrectParameterSize
         }
+        // SymmetricKeySize.bits256
         let keyDigest = SHA256.hash(data: keyData)
         
         self.init(data: keyDigest)
