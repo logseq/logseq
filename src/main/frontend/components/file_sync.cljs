@@ -138,4 +138,5 @@
      [:p.text-xs.opacity-50.px-1 (ui/icon "alert-circle") " An empty directory or an existing remote graph!"]]]])
 
 (defn pick-dest-to-sync-panel [graph]
-  (pick-local-graph-for-sync graph))
+  (fn []
+    (pick-local-graph-for-sync graph)))
