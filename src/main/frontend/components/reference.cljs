@@ -12,8 +12,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
-            [medley.core :as medley]
             [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
@@ -83,8 +81,7 @@
           default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
-          block? (gp-util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
+          block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
           scheduled-or-deadlines (when (and journal?
@@ -94,8 +91,8 @@
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
-        [:div.references.mt-6.flex-1.flex-row
-         [:div.content
+        [:div.references.flex-1.flex-row
+         [:div.content.pt-6
           (when (seq scheduled-or-deadlines)
             (ui/foldable
              [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
@@ -143,8 +140,8 @@
                                   (db/get-block-referenced-blocks block-id)
                                   (db/get-page-referenced-blocks page-name))
                      filters (when (seq filter-state)
-                               (->> (group-by second filter-state)
-                                    (medley/map-vals #(map first %))))
+                               (-> (group-by second filter-state)
+                                   (update-vals #(map first %))))
                      filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
                              (for [[_ rfs] filtered-ref-blocks]
@@ -166,16 +163,14 @@
               :title-trigger? true}))]]))))
 
 (rum/defc references
-  [page-name sidebar?]
+  [page-name]
   (ui/catch-error
    (ui/component-error "Linked References: Unexpected error")
    (ui/lazy-visible
-    (if (or sidebar? (gp-util/uuid-string? page-name))
-      nil
-      "loading references...")
     (fn []
       (references* page-name))
-    nil)))
+    nil
+    {:reset-height? false})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

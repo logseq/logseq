@@ -10,6 +10,9 @@
 			"androidScaleType": "CENTER_CROP",
 			"splashImmersive": false,
 			"backgroundColor": "#002b36"
+		},
+		"Keyboard": {
+			"resize": "none"
 		}
 	},
 	"ios": {

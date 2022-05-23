@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
@@ -23,6 +22,7 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [electron.ipc :as ipc]
             [clojure.set :as set]
             [clojure.core.async :as async]
@@ -217,8 +217,8 @@
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (format/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} config/mldoc-support-formats) format)))
+                         (let [format (gp-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
@@ -295,7 +295,7 @@
                      (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
-                                 (string/replace (str (config/get-local-dir repo-url) "/") "")))
+                                 (string/replace (js/decodeURI (config/get-local-dir repo-url)) "")))
         nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
         diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
         load-contents (fn [files option]

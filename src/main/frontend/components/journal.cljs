@@ -8,7 +8,8 @@
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -51,7 +52,7 @@
                          :page))
                       (.preventDefault e)))}
        [:h1.title
-        (util/capitalize-all title)]]
+        (gp-util/capitalize-all title)]]
 
       (blocks-cp repo page format)
 
@@ -60,12 +61,13 @@
      (page/today-queries repo today? false)
 
      (rum/with-key
-       (reference/references title false)
+       (reference/references title)
        (str title "-refs"))]))
 
 (rum/defc journal-cp
   [journal]
-  (ui/lazy-visible nil (fn [] (journal-cp-inner journal)) nil))
+  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil
+                   {:reset-height? true}))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

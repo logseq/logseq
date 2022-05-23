@@ -12,8 +12,8 @@
    [frontend.modules.outliner.transaction :as outliner-tx]
    [frontend.state :as state]
    [frontend.util :as util]
-   [goog.dom :as gdom]))
-
+   [goog.dom :as gdom]
+   [logseq.graph-parser.block :as gp-block]))
 
 ;;  Fns
 
@@ -89,7 +89,7 @@
   [block typ]
   (walk-block block
               (fn [x]
-                (and (block/timestamp-block? x)
+                (and (gp-block/timestamp-block? x)
                      (= typ (first (second x)))))
               #(second (second %))))
 

@@ -4,28 +4,34 @@
             [frontend.components.command-palette :as command-palette]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
+            [frontend.components.onboarding :as onboarding]
+            [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.select :as select]
+            [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.plugins :as plugins]
-            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.srs :as srs]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
+            [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.footer :as footer]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
@@ -36,6 +42,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.action-bar :as action-bar]))
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -301,8 +308,11 @@
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
-       
-       (when (and (not (mobile-util/is-native-platform?))
+
+       (mobile-bar)
+       (footer/footer)
+
+       (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
        
@@ -345,6 +355,20 @@
                        (:current-parsing-file state))]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
+(rum/defc file-sync-download-progress < rum/static
+  [state]
+  (let [finished (or (:finished state) 0)
+        total (:total state)
+        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
+        left-label [:div.flex.flex-row.font-bold
+                    "Downloading"
+                    [:div.hidden.md:flex.flex-row
+                     [:span.mr-1 ": "]
+                     [:ul
+                      (for [file (:downloading-files state)]
+                        [:li file])]]]]
+    (ui/progress-bar-with-label width left-label (str finished "/" total))))
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -361,15 +385,26 @@
                                               [page :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           state)}
+           state)
+   :did-mount (fn [state]
+                (state/set-state! :mobile/show-tabbar? true)
+                state)}
   []
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])
+        graph-file-sync-download-init-state (state/sub [:file-sync/download-init-progress current-repo])]
     (cond
+      (or
+       (:downloading? graph-file-sync-download-init-state)
+       (not= (:total graph-file-sync-download-init-state) (:finished graph-file-sync-download-init-state)))
+      [:div.flex.items-center.justify-center.full-height-without-header
+       [:div.flex-1
+        (file-sync-download-progress graph-file-sync-download-init-state)]]
+
       (or
        (:graph-loading? graph-parsing-state)
        (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
@@ -440,7 +475,8 @@
 (defn- hide-context-menu-and-clear-selection
   [e]
   (state/hide-custom-context-menu!)
-  (when-not (gobj/get e "shiftKey")
+  (when-not (or (gobj/get e "shiftKey")
+                (util/meta-key? e))
     (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
@@ -526,13 +562,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content
-               :show-action-bar?    show-action-bar?})
-
-        (when (and (mobile-util/is-native-platform?)
-                   current-repo
-                   (not (state/sub :modal/show?)))
-          (footer/footer))]
+               :main-content        main-content})]
 
        (right-sidebar/sidebar)
 

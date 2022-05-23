@@ -6,15 +6,15 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [frontend.state :as state]
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.db.rules :as rules]
             [frontend.template :as template]
-            [frontend.text :as text]
-            [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.text :as text]
+            [frontend.util :as util]))
 
 
 ;; Query fields:
@@ -67,7 +67,7 @@
           (date/journal-title->int input)))
 
       :else
-      (let [duration (util/parse-int (subs input 0 (dec (count input))))
+      (let [duration (parse-long (subs input 0 (dec (count input))))
             kind (last input)
             tf (case kind
                  "y" t/years
@@ -99,7 +99,7 @@
           (date/journal-title->long input)))
 
       :else
-      (let [duration (util/parse-int (subs input 0 (dec (count input))))
+      (let [duration (parse-long (subs input 0 (dec (count input))))
             kind (last input)
             tf (case kind
                  "y" t/years
@@ -238,7 +238,7 @@
   (let [k (string/replace (name (nth e 1)) "_" "-")
         v (nth e 2)
         v (if-not (nil? v)
-            (text/parse-property k v)
+            (text/parse-property k v (state/get-config))
             v)
         v (if (coll? v) (first v) v)]
     {:query (list 'property '?b (keyword k) v)
@@ -283,7 +283,7 @@
   (let [[k v] (rest e)
         k (string/replace (name k) "_" "-")]
     (if (some? v)
-      (let [v' (text/parse-property k v)
+      (let [v' (text/parse-property k v (state/get-config))
             val (if (coll? v') (first v') v')]
         {:query (list 'page-property '?p (keyword k) val)
          :rules [:page-property]})
@@ -310,8 +310,8 @@
   [e sample]
   (when-let [num (second e)]
     (when (integer? num)
-      (reset! sample num))
-    nil))
+      (reset! sample num)
+      {:query [['?p :block/uuid]]})))
 
 (defn- build-sort-by
   [e sort-by_]
@@ -448,7 +448,7 @@ Some bindings in this fn:
                                                  (remove string/blank?)
                                                  (map (fn [x]
                                                         (if (or (contains? #{"+" "-"} (first x))
-                                                                (and (gp-util/safe-re-find #"\d" (first x))
+                                                                (and (util/safe-re-find #"\d" (first x))
                                                                      (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
                                                           (keyword (name x))
                                                           x)))

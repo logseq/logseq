@@ -12,7 +12,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.format :as format]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
@@ -294,7 +293,7 @@
       (:block/format page)
       (when-let [file (:block/file page)]
         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-          (format/get-format path)))))
+          (gp-util/get-format path)))))
    (state/get-preferred-format)
    :markdown))
 
@@ -409,6 +408,29 @@
                            (assoc :block/children (sort-by-left children f))))
                      f))
                  form))
+
+(defn get-sorted-page-block-ids
+  [page-id]
+  (let [root (db-utils/entity page-id)]
+    (loop [result []
+           children (sort-by-left (:block/_parent root) root)]
+      (if (seq children)
+        (let [child (first children)]
+          (recur (conj result (:db/id child))
+                 (concat
+                  (sort-by-left (:block/_parent child) child)
+                  (rest children))))
+        result))))
+
+(defn sort-page-random-blocks
+  "Blocks could be non consecutive."
+  [blocks]
+  (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
+  (let [page-id (:db/id (:block/page (first blocks)))
+        ;; TODO: there's no need to sort all the blocks
+        sorted-ids (get-sorted-page-block-ids page-id)
+        blocks-map (zipmap (map :db/id blocks) blocks)]
+    (keep blocks-map sorted-ids)))
 
 (defn has-children?
   ([block-id]
@@ -585,13 +607,68 @@
               (recur parent)))
           false)))))
 
+(defn get-prev-sibling
+  [db id]
+  (when-let [e (d/entity db id)]
+    (let [left (:block/left e)]
+      (when (not= (:db/id left) (:db/id (:block/parent e)))
+        left))))
+
+(defn get-right-sibling
+  [db db-id]
+  (when-let [block (d/entity db db-id)]
+    (get-by-parent-&-left db
+                          (:db/id (:block/parent block))
+                          db-id)))
+
+(defn last-child-block?
+  "The child block could be collapsed."
+  [db parent-id child-id]
+  (when-let [child (d/entity db child-id)]
+    (cond
+      (= parent-id child-id)
+      true
+
+      (get-right-sibling db child-id)
+      false
+
+      :else
+      (last-child-block? db parent-id (:db/id (:block/parent child))))))
+
+(defn- consecutive-block?
+  [block-1 block-2]
+  (let [db (conn/get-db)
+        aux-fn (fn [block-1 block-2]
+                 (and (= (:block/page block-1) (:block/page block-2))
+                      (or
+                       ;; sibling or child
+                       (= (:db/id (:block/left block-2)) (:db/id block-1))
+                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
+                         (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
+    (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
+
+(defn get-non-consecutive-blocks
+  [blocks]
+  (vec
+   (keep-indexed
+    (fn [i _block]
+      (when (< (inc i) (count blocks))
+        (when-not (consecutive-block? (nth blocks i)
+                                      (nth blocks (inc i)))
+          (nth blocks i))))
+    blocks)))
+
 (defn- get-start-id-for-pagination-query
   [repo-url current-db {:keys [db-before tx-meta] :as tx-report}
    result outliner-op page-id block-id tx-block-ids]
   (let [db-before (or db-before current-db)
         cached-ids (map :db/id @result)
         cached-ids-set (set (conj cached-ids page-id))
-        first-changed-id (if (= outliner-op :move-blocks)
+        first-changed-id (cond
+                           (= (:real-outliner-op tx-meta) :indent-outdent)
+                           (last (:move-blocks tx-meta))
+
+                           (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
                              (cond
                                (= page-id target) ; move to the first block
@@ -612,6 +689,7 @@
                                        (when (seq others)
                                          (recur others)))
                                      nil)))))
+                           :else
                            (let [insert? (= :insert-blocks outliner-op)]
                              (some #(when (and (or (and insert? (not (contains? cached-ids-set %)))
                                                    true)
@@ -636,7 +714,6 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  previous-count (count previous-blocks)
                   limit 25
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
@@ -913,8 +990,8 @@
 
 (defn get-page
   [page-name]
-  (if (gp-util/uuid-string? page-name)
-    (db-utils/entity [:block/uuid (uuid page-name)])
+  (if-let [id (parse-uuid page-name)]
+    (db-utils/entity [:block/uuid id])
     (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn get-redirect-page-name
@@ -1222,9 +1299,8 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (gp-util/uuid-string? (str page-name-or-block-uuid))
-    (let [id (uuid page-name-or-block-uuid)]
-      (get-block-referenced-blocks-ids id))
+  (if-let [id (parse-uuid (str page-name-or-block-uuid))]
+    (get-block-referenced-blocks-ids id)
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn get-matched-blocks

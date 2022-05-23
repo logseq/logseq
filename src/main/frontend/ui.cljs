@@ -46,7 +46,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 23 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -290,39 +290,13 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-visual-viewport-state!
-  []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
-                             (mobile-util/native-ios?))
-                         js/window.visualViewport)]
-    (let [raf-pending? (atom false)
-          set-raf-pending! #(reset! raf-pending? %)
-          on-viewport-changed
-          (fn []
-            (let [update-vw-state
-                  (debounce
-                   (fn []
-                     (state/set-visual-viewport-state {:height     (.-height vp)
-                                                       :page-top   (.-pageTop vp)
-                                                       :offset-top (.-offsetTop vp)})
-                     (state/set-state! :ui/visual-viewport-pending? false))
-                   20)]
-              (when-not @raf-pending?
-                (let [f (fn []
-                          (set-raf-pending! false)
-                          (update-vw-state))]
-                  (set-raf-pending! true)
-                  (state/set-state! :ui/visual-viewport-pending? true)
-                  (js/window.requestAnimationFrame f)))))]
-
-      (.addEventListener vp "resize" on-viewport-changed)
-      (.addEventListener vp "scroll" on-viewport-changed)
-
-      (fn []
-        (.removeEventListener vp "resize" on-viewport-changed)
-        (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil))))
-  #())
+(defn apply-custom-theme-effect! [theme]
+  (when plugin-handler/lsp-enabled?
+    (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
+      (when-let [url (:url custom-theme)]
+        (js/LSPluginCore.selectTheme (bean/->js custom-theme)
+                                     (bean/->js {:effect false :emit false}))
+        (state/set-state! :plugin/selected-theme (:url url))))))
 
 (defn setup-system-theme-effect!
   []
@@ -676,7 +650,7 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        (when-not (mobile-util/is-native-platform?)
+        (when-not (mobile-util/native-platform?)
           [:a.block-control.opacity-50.hover:opacity-100.mr-2
            (cond->
             {:style    {:width       14
@@ -829,11 +803,9 @@
                     :open (if manual open? @*mounted?)
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
-                    :popperOptions (if fixed-position?
-                                     {:modifiers {:flip {:enabled false}
-                                                  :hide {:enabled false}
-                                                  :preventOverflow {:enabled false}}}
-                                     {})
+                    :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
+                                                :hide {:enabled false}
+                                                :preventOverflow {:enabled false}}}
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
@@ -911,23 +883,56 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defc lazy-visible-inner
-  [visible? content-fn loading-label]
-  [:div.lazy-visibility
+(rum/defcs lazy-visible-inner <
+  {:init (fn [state]
+           (assoc state
+                  ::ref (atom nil)
+                  ::height (atom 24)))
+   :did-mount (fn [state]
+                (when (last (:rum/args state))
+                  (let [observer (js/ResizeObserver. (fn [entries]
+                                                      (let [entry (first entries)
+                                                            *height (::height state)
+                                                            height' (.-height (.-contentRect entry))]
+                                                        (when (and (> height' @*height)
+                                                                   (not= height' 64))
+                                                          (reset! *height height')))))]
+                   (.observe observer @(::ref state))))
+                state)}
+  [state visible? content-fn _reset-height?]
+  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
+                         :style {:min-height @(::height state)}}
    (if visible?
      (when (fn? content-fn) (content-fn))
-     (when loading-label [:span.text-sm.font-medium
-                          loading-label]))])
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:min-height 64}}
+      [:div.animate-pulse.flex.space-x-4
+       [:div.flex-1.space-y-3.py-1
+        [:div.h-2.bg-base-4.rounded]
+        [:div.space-y-3
+         [:div.grid.grid-cols-3.gap-4
+          [:div.h-2.bg-base-4.rounded.col-span-2]
+          [:div.h-2.bg-base-4.rounded.col-span-1]]
+         [:div.h-2.bg-base-4.rounded]]]]])])
 
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
-  [state loading-label content-fn sensor-opts]
-  (let [*visible? (::visible? state)]
-    (visibility-sensor
-     (merge
-      {:on-change #(reset! *visible? %)
-       :partialVisibility true
-       :offset {:top -300
-                :bottom -300}}
-      sensor-opts)
-     (lazy-visible-inner @*visible? content-fn loading-label))))
+  (rum/local true ::active?)
+  [state content-fn sensor-opts {:keys [reset-height? once?]}]
+  (let [*active? (::active? state)]
+    (if (or (util/mobile?) (mobile-util/native-platform?))
+      (content-fn)
+      (let [*visible? (::visible? state)]
+        (visibility-sensor
+         (merge
+          {:on-change (fn [v]
+                        (reset! *visible? v)
+                        (when (and once? v)
+                          (reset! *active? false)))
+           :partialVisibility true
+           :offset {:top -300
+                    :bottom -300}
+           :scrollCheck true
+           :scrollThrottle 500
+           :active @*active?}
+          sensor-opts)
+         (lazy-visible-inner @*visible? content-fn reset-height?))))))

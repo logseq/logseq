@@ -18,18 +18,23 @@
     (delete-blocks! ...))"
   [opts & body]
   (assert (map? opts))
-  `(if (some? frontend.modules.outliner.core/*transaction-data*)
-     (do ~@body)
-     (binding [frontend.modules.outliner.core/*transaction-data* (transient [])]
-       ~@body
-       (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
-             tx# (mapcat :tx-data r#)
-             ;; FIXME: should we merge all the tx-meta?
-             tx-meta# (first (map :tx-meta r#))
-             all-tx# (concat tx# (:additional-tx ~opts))
-             opts# (merge (dissoc ~opts :additional-tx) tx-meta#)]
-         (when (seq all-tx#)
-           (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts#)]
-             {:tx-report result#
-              :tx-data all-tx#
-              :tx-meta tx-meta#}))))))
+  `(let [transact-data# frontend.modules.outliner.core/*transaction-data*
+         opts# (if transact-data#
+                 (assoc ~opts :nested-transaction? true)
+                 ~opts)]
+     (if transact-data#
+       (do ~@body)
+       (binding [frontend.modules.outliner.core/*transaction-data* (transient [])]
+         ~@body
+         (let [r# (persistent! frontend.modules.outliner.core/*transaction-data*)
+               tx# (mapcat :tx-data r#)
+               ;; FIXME: should we merge all the tx-meta?
+               tx-meta# (first (map :tx-meta r#))
+               all-tx# (concat tx# (:additional-tx opts#))
+               opts## (merge (dissoc opts# :additional-tx) tx-meta#)]
+           (when (seq all-tx#)
+             (when-not (:nested-transaction? opts#) ; transact only for the whole transaction
+               (let [result# (frontend.modules.outliner.datascript/transact! all-tx# opts##)]
+                 {:tx-report result#
+                  :tx-data all-tx#
+                  :tx-meta tx-meta#}))))))))

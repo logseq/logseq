@@ -1,10 +1,10 @@
 (ns frontend.util.thingatpt
   (:require [clojure.string :as string]
             [frontend.state :as state]
-            [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.property :as gp-property]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
 
@@ -69,8 +69,8 @@
   (when-let [properties
              (case (state/get-preferred-format) ;; TODO fix me to block's format
                :org (thing-at-point
-                     [property-util/properties-start
-                      property-util/properties-end]
+                     [gp-property/properties-start
+                      gp-property/properties-end]
                      input)
                (when-let [line (line-at-point input)]
                  (when (re-matches #"^[^\s.]+:: .*$" (:raw-content line))
@@ -147,7 +147,7 @@
                      :name name
                      :end (+ (:end admonition&src) (count name))))))))
 
-(defn- markdown-src-at-point [& [input]]
+(defn markdown-src-at-point [& [input]]
   (when-let [markdown-src (thing-at-point ["```" "```"] input)]
     (let [language (-> (:full-content markdown-src)
                        string/split-lines

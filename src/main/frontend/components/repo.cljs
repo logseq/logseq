@@ -14,7 +14,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
@@ -44,7 +44,7 @@
        [:div.pl-1.content.mt-3
         [:div.flex.flex-row.my-4
          (when (or (nfs-handler/supported?)
-                   (mobile-util/is-native-platform?))
+                   (mobile-util/native-platform?))
            [:div.mr-8
             (ui/button
               (t :open-a-directory)
@@ -102,7 +102,7 @@
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
                                   (or (nfs-handler/supported?)
-                                      (mobile-util/is-native-platform?)))
+                                      (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)
                           :options {:on-click

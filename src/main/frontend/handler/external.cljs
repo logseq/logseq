@@ -9,6 +9,8 @@
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.date-time-util :as date-time-util]
             [frontend.handler.page :as page]
             [frontend.handler.editor :as editor]
             [frontend.util :as util]))
@@ -26,7 +28,7 @@
                                       (when journal?
                                         (date/journal-title->default title))
                                       (string/replace title "/" "-"))
-                               title (-> (util/page-name-sanity title)
+                               title (-> (gp-util/page-name-sanity title)
                                          (string/replace "\n" " "))
                                path (str (if journal?
                                            (config/get-journals-directory)
@@ -49,7 +51,7 @@
                              (map
                               (fn [title]
                                 (let [day (date/journal-title->int title)
-                                      page-name (util/page-name-sanity-lc (date/int->journal-title day))]
+                                      page-name (util/page-name-sanity-lc (date-time-util/int->journal-title day (state/get-date-formatter)))]
                                   {:block/name page-name
                                    :block/journal? true
                                    :block/journal-day day}))

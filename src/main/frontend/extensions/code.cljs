@@ -132,7 +132,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
             [frontend.config :as config]
             [goog.dom :as gdom]

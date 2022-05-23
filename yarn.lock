@@ -573,6 +573,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/keyboard/-/keyboard-1.2.2.tgz#7be5d2e4956b77e5eb7235ec020d131c9f87f30a"
   integrity sha512-dOZSXJTY/tTbRQ+Neiny72BIXN2Hvf/2AgPpMdTErDfaQM7C2MMgtJrm+Mi+YUeT6AnJFmt68nHJGImAL4lzmA==
 
+"@capacitor/share@^1.1.2":
+  version "1.1.2"
+  resolved "https://registry.npmmirror.com/@capacitor/share/-/share-1.1.2.tgz#7e35c2c3bccc9955e852d3dd401afe7bd5a69b7e"
+  integrity sha512-FUTdjA7MAiD1tkGVZ+C3gs7a4fyEhXojDO2HkZ954oupG1cQ51dEJ1xTNnR9BAmCwUJO4sa91cxy7SMyCDPuGg==
+
 "@capacitor/splash-screen@1.1.3":
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/@capacitor/splash-screen/-/splash-screen-1.1.3.tgz#024bc91b2b521b9f1d5e86f16a114f294bf326fa"
@@ -720,10 +725,10 @@
   resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.1.tgz#dd8fdd3133992c42bf68c0086d8cad40a13bc329"
   integrity sha512-sYi4F2mL6Mpcz7zbS4myasw11xLBEbgZkDMRVg9jNxTKt6Ct/LT7/vCHDmEzAFcPcPqixD5De6Ql3bJijAX0/w==
 
-"@logseq/nbb-logseq@^0.3.10":
-  version "0.3.10"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.3.10.tgz#74534f9d263eb2105a41143a55425d0910d43eb8"
-  integrity sha512-y7/VJ99WCoNpQMqQOOBobKzNrRz4IcG85HggAkIaUtNwJ/Adb5fA28ZKP5ttEpqWLXTbAyqbBObD5q/xJLLD8w==
+"@logseq/nbb-logseq@^0.5.103":
+  version "0.5.103"
+  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-0.5.103.tgz#1084380cd54c92ca8cc94a8934cc777206e45cc0"
+  integrity sha512-V9UW0XrCaaadHUc6/Hp9wfGpQqkzqzoqnDGeSVZkWR6l3QwyqGi9mkhnhVcfTwAvxIfOgrfz93GcaeepV4pYNA==
   dependencies:
     import-meta-resolve "^1.1.1"
 
@@ -6815,6 +6820,11 @@ react-grid-layout@0.16.6:
     prop-types "15.x"
     react-draggable "3.x"
     react-resizable "1.x"
+
+react-icon-base@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
+  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
 
 react-icon-base@^2.1.2:
   version "2.1.2"
