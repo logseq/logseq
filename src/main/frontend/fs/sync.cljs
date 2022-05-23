@@ -140,7 +140,8 @@
 
 (defn- ws-stop! [*ws]
   (swap! *ws (fn [o] (assoc o :stop true)))
-  (.close (:ws @*ws)))
+  (when-let [ws' @*ws]
+    (.close (:ws ws'))))
 
 (defn- ws-listen!*
   [graph-uuid *ws remote-changes-chan]

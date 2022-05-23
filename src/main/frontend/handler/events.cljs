@@ -111,8 +111,7 @@
          (p/do!
           (repo-handler/persist-db! current-repo persist-db-noti-m)
           (repo-handler/broadcast-persist-db! graph))))
-     (when persist?
-       (repo-handler/restore-and-setup-repo! graph))
+     (repo-handler/restore-and-setup-repo! graph)
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
