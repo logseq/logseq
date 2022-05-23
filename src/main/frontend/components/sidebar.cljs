@@ -25,6 +25,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.mobile-bar :refer [mobile-bar]]
@@ -35,13 +36,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [frontend.extensions.srs :as srs]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.mobile.swipe :as swipe]
-            [frontend.components.onboarding :as onboarding]
-            [frontend.mobile.footer :as footer]
-            [frontend.mobile.action-bar :as action-bar]))
             [reitit.frontend.easy :as rfe]))
 
 (rum/defc nav-content-item
@@ -562,7 +556,8 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})]
+               :main-content        main-content
+               :show-action-bar?    show-action-bar?})]
 
        (right-sidebar/sidebar)
 

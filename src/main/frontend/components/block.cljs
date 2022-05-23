@@ -2350,8 +2350,6 @@
           (str (:block/uuid block)))))
 
 (rum/defc ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
-  (rum/local false ::show-block-left-menu?) 
-  (rum/local false ::show-block-right-menu?)
   [state repo config block]
   (let [ref? (:ref? config)
         custom-query? (boolean (:custom-query? config))
@@ -2459,7 +2457,7 @@
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
-
+      
       (when @*show-left-menu?
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
@@ -2471,6 +2469,8 @@
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs block-container < rum/reactive
+  (rum/local false ::show-block-left-menu?) 
+  (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
