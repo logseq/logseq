@@ -46,7 +46,8 @@
 
 (rum/defc footer < rum/reactive
   []
-  (when (and (state/sub :mobile/show-tabbar?)
+  (when (and (state/mobile?)
+             (state/sub :mobile/show-tabbar?)
              (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
