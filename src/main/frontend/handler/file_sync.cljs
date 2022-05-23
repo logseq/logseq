@@ -81,7 +81,7 @@
           ;; TODO: add re-download button
           (notification/show! (str "Download graph failed: " (ex-cause r)) :warning)
           (do (state/reset-file-sync-download-init-state!)
-              (sync/update-graphs-txid! latest-txid graph-uuid user-uuid repo)))))))
+              (<! (sync/update-graphs-txid! latest-txid graph-uuid user-uuid repo))))))))
 
 (defn load-session-graphs
   []
@@ -99,9 +99,11 @@
         base-path (config/get-repo-dir repo)
         user-uuid (user/user-uuid)]
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
-    (download-all-files repo graph-uuid user-uuid base-path)
-    (swap! refresh-file-sync-component not)
-    (state/pub-event! [:graph/switch repo {:persist? false}])))
+    (go (sync/sync-stop)
+        (<! (download-all-files repo graph-uuid user-uuid base-path))
+        (println :debug sync/graphs-txid)
+        (swap! refresh-file-sync-component not)
+        (state/pub-event! [:graph/switch repo {:persist? false}]))))
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
   (go
