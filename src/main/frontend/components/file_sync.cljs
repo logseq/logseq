@@ -15,28 +15,6 @@
             [electron.ipc :as ipc]
             [cljs.core.async :as as]))
 
-(rum/defcs file-sync-remote-graphs <
-  (rum/local nil ::remote-graphs)
-  [state]
-  (let [*remote-graphs (::remote-graphs state)
-        refresh-list-fn #(as/go (reset! *remote-graphs (as/<! (file-sync-handler/list-graphs))))]
-    (when (nil? @*remote-graphs)
-      (refresh-list-fn))
-    [:div
-     [:div.flex
-      [:h1.title "Remote Graphs"]
-      [:div
-       {:on-click refresh-list-fn}
-       svg/refresh]]
-     [:p.text-sm "click to delete the selected graph"]
-     [:ul
-      (for [graph @*remote-graphs]
-        [:li.mb-4
-         [:a.font-medium
-          {:on-click #(do (println "delete graph" (:GraphName graph) (:GraphUUID graph))
-                          (file-sync-handler/delete-graph (:GraphUUID graph)))}
-          (:GraphName graph)]])]]))
-
 (rum/defcs indicator <
   rum/reactive
   [_state]
