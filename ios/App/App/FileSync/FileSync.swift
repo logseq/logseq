@@ -31,11 +31,12 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
             if let encrypted = maybeEncrypt(rawData) {
                 size = encrypted.count
                 md5 = encrypted.MD5
+            } else {
+                return nil
             }
         } catch {
             return nil
         }
-        return nil
     }
 
     public var description: String {
@@ -50,10 +51,8 @@ func maybeEncrypt(_ plaindata: Data) -> Data! {
         return plaindata
     }
     if let passphrase = ENCRYPTION_KEY {
-        var ret = Data(hexEncoded: "4c530031")! // LS\x001
-        if let combined = plaindata.sealChaChaPoly(with: passphrase) {
-            ret.append(combined)
-            return ret
+        if let cipherdata = plaindata.sealChaChaPoly(with: passphrase) {
+            return cipherdata
         }
         return nil // encryption fail
     }
@@ -66,8 +65,7 @@ func maybeDecrypt(_ cipherdata: Data) -> Data! {
     }
     if cipherdata.starts(with: Data(hexEncoded: "4c530031")!) {
         if let passphrase = ENCRYPTION_KEY {
-            let combined = cipherdata[4...]
-            return combined.openChaChaPoly(with: passphrase)
+            return cipherdata.openChaChaPoly(with: passphrase)
         }
         return nil
     }
