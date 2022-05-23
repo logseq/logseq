@@ -1,6 +1,8 @@
 (ns frontend.util.fs
-  (:require [clojure.string :as string]
-            ["path" :as path]))
+  (:require ["path" :as path]
+            [clojure.string :as string]
+            [frontend.fs :as fs]
+            [promesa.core :as p]))
 
 ;; TODO: move all file path related util functions to here
 
@@ -30,3 +32,13 @@
          (not
           (some #(string/ends-with? path %)
                 [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
+
+(defn inflate-graphs-info
+  [graphs]
+  (if (seq graphs)
+    (for [{:keys [root] :as graph} graphs]
+      (p/let [sync-meta (fs/read-file root nil)]
+        (if sync-meta
+          (assoc graph :sync-meta sync-meta)
+          graph)))
+    []))

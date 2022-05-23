@@ -17,6 +17,7 @@
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.fs :as util-fs]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
@@ -27,7 +28,8 @@
             [clojure.set :as set]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -458,7 +460,14 @@
                           :nfs? true}) nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        ;; TODO: mobile
-                       (ipc/ipc :inflateGraphsInfo nfs-dbs))
+                       (cond (util/electron?)
+                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
+
+                             (mobile-util/is-native-platform?)
+                             (util-fs/inflate-graphs-info nfs-dbs)
+
+                             :else
+                             nil))
           nfs-dbs (seq (bean/->clj nfs-dbs))]
 
          (cond
