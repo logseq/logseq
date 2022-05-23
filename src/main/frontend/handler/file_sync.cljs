@@ -87,6 +87,8 @@
   (let [repo (state/get-current-repo)
         base-path (config/get-repo-dir repo)
         user-uuid (user/user-uuid)]
+    ;; FIXME: when switching graph, sync-start is not called. set-env is not called as well.
+    (sync/set-env sync/rsapi config/FILE-SYNC-PROD? "hello-world")
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
     (download-all-files repo graph-uuid user-uuid base-path)
     (swap! refresh-file-sync-component not)))
