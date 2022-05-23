@@ -1,13 +1,15 @@
 (ns frontend.handler.editor
   (:require ["/frontend/utils" :as utils]
+            ["path" :as path]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands
-                     *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos
+                     *show-block-commands *show-commands
+                     *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -25,12 +27,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.image :as image]
             [frontend.idb :as idb]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -40,21 +42,20 @@
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
-            [frontend.util.marker :as marker]
-            [frontend.util.property :as property]
-            [frontend.util.priority :as priority]
-            [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
+            [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            ["path" :as path]))
+            [logseq.graph-parser.block :as gp-block]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1411,7 +1412,7 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       (mobile-util/convert-file-src (str repo-dir path))
 
       :else
@@ -1677,7 +1678,8 @@
             (move-nodes blocks))
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
-              (.focus input))))
+              (.focus input)
+              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2630,7 +2632,7 @@
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work sometimes in an empty block, hence the empty block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/is-native-platform?)
+        (and (mobile-util/native-platform?)
              (= key "Backspace")
              (= value ""))
         (do
@@ -2813,23 +2815,8 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
+      (util/scroll-editor-cursor input)
       (close-autocomplete-if-outside input))))
-
-(defonce mobile-toolbar-height 40)
-(defn editor-on-height-change!
-  [id]
-  (fn [box-height ^js row-height]
-    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
-          input (gdom/getElement id)
-          caret (cursor/get-caret-pos input)
-          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
-          box-top (gobj/get (.getBoundingClientRect input) "top")
-          cursor-y (+ cursor-bottom box-top)
-          vw-height (.-height js/window.visualViewport)]
-      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
-        (let [main-node (gdom/getElement "main-content-container")
-              scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]
@@ -2842,7 +2829,9 @@
                 (js/setTimeout
                  #(edit-box-on-change! e block id)
                  timeout)))
-      (edit-box-on-change! e block id))))
+      (let [input (gdom/getElement id)]
+        (edit-box-on-change! e block id)
+        (util/scroll-editor-cursor input)))))
 
 (defn- paste-text-parseable
   [format text]
@@ -2917,7 +2906,7 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-
+      
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)

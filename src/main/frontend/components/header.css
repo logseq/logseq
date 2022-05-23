@@ -16,6 +16,7 @@
   user-select: none;
   line-height: 1;
   white-space: nowrap;
+  background-color: var(--ls-primary-background-color);
 
   > .l {
     width: var(--ls-left-sidebar-width);
@@ -221,7 +222,9 @@ html.is-native-iphone-without-notch,
 html.is-native-ipad {
 
      #main-container {
-        padding-top: 0px;
+         padding-top: 0px;
+         display: flex;
+         flex-direction: column;
     }
 
      #main-content-container {

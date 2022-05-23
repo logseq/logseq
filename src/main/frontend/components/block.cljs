@@ -264,14 +264,14 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
+    (when (or granted? (util/electron?) (mobile-util/native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
             share-fn (fn [event]
                        (util/stop event)
-                       (when (mobile-util/is-native-platform?)
+                       (when (mobile-util/native-platform?)
                          (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
                            (.share Share #js {:url url
                                               :title "Open file with your favorite app"}))))]
@@ -881,7 +881,7 @@
                              (state/set-state! :pdf/current current)))}
          label-text]
 
-        (mobile-util/is-native-platform?)
+        (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
       (contains? (config/doc-formats) ext)
@@ -1572,7 +1572,7 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (or (mobile-util/is-native-platform?)
+         (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
               (not doc-mode?))
          bullet
