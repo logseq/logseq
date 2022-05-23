@@ -183,7 +183,7 @@
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
          [:ul.mt-2
-          (for [[original-name name] (sort pages)]
+          (for [[original-name name] (sort-by last pages)]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
               original-name]])]
@@ -231,7 +231,6 @@
                     (when (gp-util/wrapped-by-quotes? @*title-value)
                       (swap! *title-value gp-util/unquote-string)
                       (gobj/set (rum/deref input-ref) "value" @*title-value))
-                    (state/set-state! :editor/editing-page-title? false)
                     (cond
                       (= old-name @*title-value)
                       (reset! *edit? false)
@@ -266,7 +265,6 @@
                               (reset! *title-value old-name)
                               (reset! *edit? false)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
-                                         (state/set-state! :editor/editing-page-title? true)
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
                         :on-click (fn [e]
@@ -364,7 +362,7 @@
        [:div.relative
         (when (and (not sidebar?) (not block?))
           [:div.flex.flex-row.space-between
-           (when (or (mobile-util/is-native-platform?) (util/mobile?))
+           (when (or (mobile-util/native-platform?) (util/mobile?))
              [:div.flex.flex-row.pr-2
               {:style {:margin-left -15}
                :on-mouse-over (fn [e]

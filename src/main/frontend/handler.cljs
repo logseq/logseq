@@ -93,7 +93,7 @@
            (and (not (seq (db/get-files config/local-repo)))
                 ;; Not native local directory
                 (not (some config/local-db? (map :url repos)))
-                (not (mobile-util/is-native-platform?)))
+                (not (mobile-util/native-platform?)))
            ;; will execute `(state/set-db-restoring! false)` inside
            (repo-handler/setup-local-repo-if-not-exists!)
 
@@ -193,7 +193,7 @@
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! repos db-schema)
-      (when (mobile-util/is-native-platform?)
+      (when (mobile-util/native-platform?)
         (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)

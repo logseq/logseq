@@ -273,20 +273,15 @@
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
+     
      ["draw" (draw-handler/initialize-excalidarw-file) "Draw a graph with Excalidraw"]
-
-     (when (util/zh-CN-supported?)
-       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
-                                                                :backward-pos 2}]]])
+     
      ["Embed HTML " (->inline "html")]
 
-     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern (state/get-editor-command-trigger)
-                                                            :backward-pos 2}]]]
+     ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
+                                                    :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
-
-     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern (state/get-editor-command-trigger)
-                                                        :backward-pos 2}]]]
 
      ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
                                                           :backward-pos 2}]]]]

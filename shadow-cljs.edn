@@ -35,7 +35,8 @@
                            :source-map         true
                            :externs            ["datascript/externs.js"
                                                 "externs.js"]
-                           :warnings           {:fn-deprecated false}}
+                           :warnings           {:fn-deprecated false
+                                                :redef false}}
         :closure-defines  {goog.debug.LOGGING_ENABLED      true}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
@@ -60,7 +61,8 @@
 
                                 :externs  ["datascript/externs.js"
                                            "externs.js"]
-                                :warnings {:fn-deprecated false}}}
+                                :warnings {:fn-deprecated false
+                                           :redef false}}}
 
   :test {:target          :node-test
          :output-to       "static/tests.js"
@@ -96,7 +98,8 @@
                                   :output-feature-set :es-next
                                   :externs            ["datascript/externs.js"
                                                        "externs.js"]
-                                  :warnings           {:fn-deprecated false}}
+                                  :warnings           {:fn-deprecated false
+                                                       :redef false}}
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
                                   :preloads    [devtools.preload]}}

@@ -1,5 +1,6 @@
 (ns frontend.mobile.core
   (:require ["@capacitor/app" :refer [^js App]]
+            ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.handler.editor :as editor-handler]
@@ -80,6 +81,15 @@
                 (fn [event]
                   (state/pub-event! [:file-watcher/changed event])))
 
+  (.addListener Keyboard "keyboardWillShow"
+                  (fn [^js info]
+                    (let [keyboard-height (.-keyboardHeight info)]
+                      (state/pub-event! [:mobile/keyboard-will-show keyboard-height]))))
+
+  (.addListener Keyboard "keyboardWillHide"
+                  (fn []
+                    (state/pub-event! [:mobile/keyboard-will-hide])))
+
   (.addEventListener js/window "statusTap"
                      #(util/scroll-to-top true))
 
@@ -96,6 +106,6 @@
 
   (when (mobile-util/native-ios?)
     (ios-init))
-
-  (when (mobile-util/is-native-platform?)
+  
+  (when (mobile-util/native-platform?)
     (general-init)))
