@@ -68,5 +68,5 @@
     (when-not (and (config/local-db? repo)
                    (not granted?)
                    (not (util/electron?))
-                   (not (mobile-util/is-native-platform?)))
+                   (not (mobile-util/native-platform?)))
       (draw-container option draw-inner))))
