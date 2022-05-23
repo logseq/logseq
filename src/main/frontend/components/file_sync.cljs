@@ -19,7 +19,7 @@
   [_state]
   (let [_ (state/sub :auth/id-token)
         toggling? (state/sub :file-sync/toggling?)
-        sync-state (state/sub :file-sync/sync-state)
+        sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)
         uploading-files (:current-local->remote-files sync-state)

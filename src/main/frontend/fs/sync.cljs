@@ -139,9 +139,10 @@
               (recur)))))))
 
 (defn- ws-stop! [*ws]
-  (swap! *ws (fn [o] (assoc o :stop true)))
-  (when-let [ws' @*ws]
-    (.close (:ws ws'))))
+  (when *ws
+    (swap! *ws (fn [o] (assoc o :stop true)))
+    (when-let [ws (:ws @*ws)]
+      (.close ws))))
 
 (defn- ws-listen!*
   [graph-uuid *ws remote-changes-chan]
@@ -891,11 +892,12 @@
 (defn file-watch-handler
   "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
-
-  (when (some-> (state/get-file-sync-state)
-                sync-state--stopped?
-                not)
-    (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))
+  (when-let [current-graph (state/get-current-repo)]
+    (when (string/ends-with? current-graph dir)
+      (when (some-> (state/get-file-sync-state current-graph)
+                    sync-state--stopped?
+                    not)
+        (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))))
 
 ;;; ### sync state
 
@@ -1420,7 +1422,7 @@
         (set! stopped true)
         (ws-stop! _*ws)
         (offer! stop-sync-chan true)
-        (async/close! ops-chan)
+        (when ops-chan (async/close! ops-chan))
         (stop-local->remote! local->remote-syncer)
         (stop-remote->local! remote->local-syncer)
         (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
@@ -1493,14 +1495,14 @@
       ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
       (if (not= 3 (count @graphs-txid))
         (do (clear-graphs-txid! repo)
-            (state/set-file-sync-state nil))
+            (state/set-file-sync-state repo nil))
         (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
           (if-not (<! (check-remote-graph-exists graph-uuid))
             (clear-graphs-txid! repo)
             (do
               ;; set-env
               (set-env rsapi config/FILE-SYNC-PROD?)
-              (state/set-file-sync-state @*sync-state)
+              (state/set-file-sync-state repo @*sync-state)
               (state/set-file-sync-manager sm)
               ;; wait seconds to receive all file change events,
               ;; and then drop all of them.
@@ -1516,7 +1518,7 @@
               ;; update global state when *sync-state changes
               (add-watch *sync-state ::update-global-state
                          (fn [_ _ _ n]
-                           (state/set-file-sync-state n)))
+                           (state/set-file-sync-state repo n)))
               (.start sm)
 
 

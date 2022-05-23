@@ -210,10 +210,11 @@
 (defn- read-txid-info!
   [root]
   (try
-    (let [sf #(.join path % "logseq/graphs-txid.edn")]
-      (when-let [sync-meta (and (not (string/blank? root))
-                                (.toString (.readFileSync fs (sf root))))]
-        (reader/read-string sync-meta)))
+    (let [txid-path (.join path root "logseq/graphs-txid.edn")]
+      (when (fs/existsSync txid-path)
+        (when-let [sync-meta (and (not (string/blank? root))
+                                  (.toString (.readFileSync fs txid-path)))]
+          (reader/read-string sync-meta))))
     (catch js/Error _e
       (js/console.debug "[read txid meta] #" root (.-message _e)))))
 

@@ -1675,15 +1675,15 @@
 
 (defn set-file-sync-manager [v]
   (set-state! :file-sync/sync-manager v))
-(defn set-file-sync-state [v]
+(defn set-file-sync-state [graph v]
   (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! :file-sync/sync-state v))
+  (set-state! [:file-sync/sync-state graph] v))
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
 
-(defn get-file-sync-state []
-  (:file-sync/sync-state @state))
+(defn get-file-sync-state [repo]
+  (get-in @state [:file-sync/sync-state repo]))
 
 (defn reset-file-sync-download-init-state!
   []
