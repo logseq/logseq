@@ -2,7 +2,6 @@
   (:require [frontend.state :as state]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.fs.sync :as fs-sync]
-            [frontend.components.svg :as svg]
             [frontend.handler.notification :as notifications]
             [frontend.ui :as ui]
             [frontend.handler.page :as page-handler]
