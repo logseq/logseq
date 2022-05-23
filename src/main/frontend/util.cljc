@@ -1040,29 +1040,6 @@
       (string/replace "&quot;" "\"")
       (string/replace "&apos;" "'")))
 
-#?(:cljs
-   (defn system-locales
-     []
-     (when-not node-test?
-       (when-let [navigator (and js/window (.-navigator js/window))]
-         ;; https://zzz.buzz/2016/01/13/detect-browser-language-in-javascript/
-         (when navigator
-           (let [v (js->clj
-                    (or
-                     (.-languages navigator)
-                     (.-language navigator)
-                     (.-userLanguage navigator)
-                     (.-browserLanguage navigator)
-                     (.-systemLanguage navigator)))]
-             (if (string? v) [v] v)))))))
-
-#?(:cljs
-   (defn zh-CN-supported?
-     []
-     (let [system-locales (set (system-locales))]
-       (or (contains? system-locales "zh-CN")
-           (contains? system-locales "zh-Hans-CN")))))
-
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")
