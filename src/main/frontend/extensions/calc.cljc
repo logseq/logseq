@@ -32,32 +32,31 @@
 (defn eval* [env ast]
   (insta/transform
    {:number     (comp bn/BigNumber #(str/replace % "," ""))
-    :percent    (fn percent [a] (/ a 100.00))
-    :scientific edn/read-string
-    :negterm    (fn neg [a] (- a))
+    :percent    (fn percent [a] (-> a (.dividedBy 100.00)))
+    :scientific (comp bn/BigNumber edn/read-string)
+    :negterm    (fn neg [a] (-> a (.negated)))
     :expr       identity
     :add        (fn add [a b] (-> a (.plus b)))
     :sub        (fn sub [a b] (-> a (.minus b)))
     :mul        (fn mul [a b] (-> a (.multipliedBy b)))
     :div        (fn div [a b] (-> a (.dividedBy b)))
-    :pow        (fn pow [a b]
-                  #?(:clj (java.lang.Math/pow a b) :cljs (js/Math.pow a b)))
+    :pow        (fn pow [a b] (-> a (.exponentiatedBy b)))
     :log        (fn log [a]
-                  #?(:clj (java.lang.Math/log10 a) :cljs (js/Math.log10 a)))
+                  #?(:clj (java.lang.Math/log10 a) :cljs (bn/BigNumber (js/Math.log10 a))))
     :ln         (fn ln [a]
-                  #?(:clj (java.lang.Math/log a) :cljs (js/Math.log a)))
+                  #?(:clj (java.lang.Math/log a) :cljs (bn/BigNumber (js/Math.log a))))
     :sin        (fn sin [a]
-                  #?(:clj (java.lang.Math/sin a) :cljs (js/Math.sin a)))
+                  #?(:clj (java.lang.Math/sin a) :cljs (bn/BigNumber(js/Math.sin a))))
     :cos        (fn cos [a]
-                  #?(:clj (java.lang.Math/cos a) :cljs (js/Math.cos a)))
+                  #?(:clj (java.lang.Math/cos a) :cljs (bn/BigNumber(js/Math.cos a))))
     :tan        (fn tan [a]
-                  #?(:clj (java.lang.Math/tan a) :cljs (js/Math.tan a)))
+                  #?(:clj (java.lang.Math/tan a) :cljs (bn/BigNumber(js/Math.tan a))))
     :atan       (fn atan [a]
-                  #?(:clj (java.lang.Math/atan a) :cljs (js/Math.atan a)))
+                  #?(:clj (java.lang.Math/atan a) :cljs (bn/BigNumber(js/Math.atan a))))
     :asin       (fn asin [a]
-                  #?(:clj (java.lang.Math/asin a) :cljs (js/Math.asin a)))
+                  #?(:clj (java.lang.Math/asin a) :cljs (bn/BigNumber(js/Math.asin a))))
     :acos       (fn acos [a]
-                  #?(:clj (java.lang.Math/acos a) :cljs (js/Math.acos a)))
+                  #?(:clj (java.lang.Math/acos a) :cljs (bn/BigNumber(js/Math.acos a))))
     :assignment (fn assign! [var val]
                   (swap! env assoc var val)
                   val)
