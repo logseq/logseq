@@ -105,7 +105,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
     const enableTlEvents = () => {
-      return isMoving.current || isEditing || isSelected || app.selectedTool.id !== 'select'
+      return isMoving || isEditing || isSelected || app.selectedTool.id !== 'select'
     }
 
     const stop = React.useCallback(

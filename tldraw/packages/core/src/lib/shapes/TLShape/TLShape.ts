@@ -313,7 +313,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this
   }
 
-  onHandleChange = (initialShape: P, { index, delta }: TLHandleChangeInfo) => {
+  onHandleChange = (initialShape: any, { index, delta }: TLHandleChangeInfo) => {
     if (initialShape.handles === undefined) return
     const nextHandles = [...initialShape.handles]
     nextHandles[index] = {

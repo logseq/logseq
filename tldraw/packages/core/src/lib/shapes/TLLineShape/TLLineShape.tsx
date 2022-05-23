@@ -4,12 +4,8 @@ import type { TLHandle } from '~types'
 import { BoundsUtils, deepMerge } from '~utils'
 import { TLPolylineShape, TLPolylineShapeProps } from '../TLPolylineShape'
 
-interface TLLineHandle extends TLHandle {
-  id: 'start' | 'end'
-}
-
 export interface TLLineShapeProps extends TLPolylineShapeProps {
-  handles: TLLineHandle[]
+  handles: TLHandle[]
 }
 
 export class TLLineShape<
@@ -41,7 +37,7 @@ export class TLLineShape<
     return props
   }
 
-  getHandlesChange = (initialShape: P, handles: Partial<TLLineHandle>[]): P | void => {
+  getHandlesChange = (initialShape: P, handles: Partial<TLHandle>[]): P | void => {
     let nextHandles = handles.map((h, i) => deepMerge(initialShape.handles[i] ?? {}, h))
     nextHandles = nextHandles.map(h => ({ ...h, point: Vec.toFixed(h.point) }))
 

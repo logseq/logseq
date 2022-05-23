@@ -23,7 +23,7 @@ export class TLInputs<K extends TLEventMap> {
   @observable originPoint = [0, 0]
   pointerIds = new Set<number>()
 
-  @observable state: 'pointing' | 'pinching' | 'idle' = 'idle'
+  @observable state: 'pointing' | 'pinching' | 'idle' | 'panning' = 'idle'
 
   @action private updateModifiers(
     event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
@@ -45,6 +45,9 @@ export class TLInputs<K extends TLEventMap> {
     this.updateModifiers(event)
     this.previousPoint = this.currentPoint
     this.currentPoint = pagePoint
+    // start panning = true here in panCamera (called in TLApp)
+    this.state = 'panning'
+    // otherwise, set panning = false?
   }
 
   @action onPointerDown = (pagePoint: number[], event: K['pointer']) => {
@@ -61,6 +64,9 @@ export class TLInputs<K extends TLEventMap> {
     event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
   ) => {
     if (this.state === 'pinching') return
+    if (this.state === 'panning') {
+      this.state = 'idle'
+    }
     // if ('pointerId' in event && !this.pointerIds.has(event.pointerId)) return
     this.updateModifiers(event)
     this.previousPoint = this.currentPoint
