@@ -589,3 +589,19 @@ html.is-native-ios {
         width: 300px;
     }
 }
+
+html:not(.is-mac) {
+    body[data-active-keystroke="Control"] {
+        .block-content {
+            cursor: pointer;
+        }
+    }
+}
+
+html.is-mac {
+    body[data-active-keystroke="Meta"] {
+        .block-content {
+            cursor: pointer;
+        }
+    }
+}
