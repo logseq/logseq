@@ -187,3 +187,10 @@
 (defn extract-all-block-refs
   [content]
   (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))
+
+#?(:org.babashka/nbb
+   (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
+   :default
+   ;; TODO: Properly fix this circular dependency:
+   ;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
+   (set! gp-mldoc/parse-property text/parse-property))

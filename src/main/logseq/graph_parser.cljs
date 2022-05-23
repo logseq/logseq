@@ -60,14 +60,6 @@
                                (assoc :file/created-at (date-time-util/time-ms)))])]
     (d/transact! db (gp-util/remove-nils tx) (when new-graph? {:new-graph? true}))))
 
-(defn init-db
-  []
-  ;; TODO: Reuse code from frontend
-  (let [conn (d/create-conn db-schema/schema)]
-    (d/transact! conn [{:schema/version db-schema/version}])
-    (d/transact! conn default-db/built-in-pages)
-    conn))
-
 (defn parse
   [db files]
   (doseq [{:file/keys [path content]} files]

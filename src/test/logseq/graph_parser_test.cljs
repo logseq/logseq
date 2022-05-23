@@ -2,6 +2,7 @@
   "TODO: Should I reuse repo-test or split it?"
   (:require [cljs.test :refer [deftest is testing]]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.db :as gp-db]
             [frontend.test.docs-graph-helper :as docs-graph-helper]
             [datascript.core :as d]))
 
@@ -35,7 +36,7 @@
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (docs-graph-helper/build-graph-files graph-dir)
-        conn (graph-parser/init-db)
+        conn (gp-db/start-conn) 
         ; _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
         _ (graph-parser/parse conn files)
         db @conn]
