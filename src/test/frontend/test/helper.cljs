@@ -7,7 +7,7 @@
 
 (defn start-test-db!
   []
-  (conn/start! nil test-db))
+  (conn/start! test-db))
 
 (defn destroy-test-db!
   []

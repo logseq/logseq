@@ -27,7 +27,6 @@
   get-short-repo-name
   datascript-db
   get-db
-  me-tx
   remove-conn!]
 
  [frontend.db.utils
@@ -153,16 +152,16 @@
     (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
-  ([me repo]
-   (start-db-conn! me repo {}))
-  ([me repo option]
-   (conn/start! me repo
+  ([repo]
+   (start-db-conn! repo {}))
+  ([repo option]
+   (conn/start! repo
                 (assoc option
                        :listen-handler listen-and-persist!))))
 
 (defn restore-graph!
   "Restore db from serialized db cache, and swap into the current db status"
-  [repo me]
+  [repo]
   (p/let [db-name (datascript-db repo)
           db-conn (d/create-conn db-schema/schema)
           _ (swap! conns assoc db-name db-conn)
@@ -172,9 +171,8 @@
                                    (catch js/Error _e
                                      (js/console.warn "Invalid graph cache")
                                      (d/empty-db db-schema/schema)))
-                    attached-db (d/db-with stored-db (concat
-                                                      [(me-tx stored-db me)]
-                                                      default-db/built-in-pages)) ;; TODO bug overriding uuids?
+                    attached-db (d/db-with stored-db
+                                           default-db/built-in-pages) ;; TODO bug overriding uuids?
                     db (if (old-schema? attached-db)
                          (db-migrate/migrate attached-db)
                          attached-db)]
@@ -182,10 +180,10 @@
     (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn restore!
-  [{:keys [repos] :as me} _old-db-schema restore-config-handler]
+  [{:keys [repos]} _old-db-schema restore-config-handler]
   (let [repo (or (state/get-current-repo) (:url (first repos)))]
     (when repo
-      (p/let [_ (restore-graph! repo me)]
+      (p/let [_ (restore-graph! repo)]
         (restore-config-handler repo)
         (listen-and-persist! repo)))))
 

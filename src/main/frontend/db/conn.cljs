@@ -6,9 +6,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.db :as gp-db]
-            [logseq.graph-parser.util :as gp-util]
-            [datascript.core :as d]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (defonce conns (atom {}))
 
@@ -67,21 +65,13 @@
   [repo]
   (swap! conns dissoc (datascript-db repo)))
 
-(defn me-tx
-  [_db {:keys [name email avatar]}]
-  (gp-util/remove-nils {:me/name name
-                     :me/email email
-                     :me/avatar avatar}))
-
 (defn start!
-  ([me repo]
-   (start! me repo {}))
-  ([me repo {:keys [listen-handler]}]
+  ([repo]
+   (start! repo {}))
+  ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
          db-conn (gp-db/start-conn)]
      (swap! conns assoc db-name db-conn)
-     (when me
-       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
      (when listen-handler
        (listen-handler repo)))))
 

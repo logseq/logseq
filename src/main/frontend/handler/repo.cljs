@@ -356,7 +356,7 @@
 (defn start-repo-db-if-not-exists!
   [repo option]
   (state/set-current-repo! repo)
-  (db/start-db-conn! nil repo option))
+  (db/start-db-conn! repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
@@ -364,7 +364,7 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! nil repo)
+             (db/start-db-conn! repo)
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -380,19 +380,16 @@
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn restore-and-setup-repo!
-  "Restore the db of a graph from the persisted data, and setup.
-   Create a new conn, or replace the conn in state with a new one.
-   me: optional, identity data, can be retrieved from `(state/get-me)` or `nil`"
-  ([repo]
-   (restore-and-setup-repo! repo (state/get-me)))
-  ([repo me]
-   (p/let [_ (state/set-db-restoring! true)
-           _ (db/restore-graph! repo me)]
-     (file-handler/restore-config! repo false)
-     ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
-     (db/listen-and-persist! repo)
-     (ui-handler/add-style-if-exists!)
-     (state/set-db-restoring! false))))
+  "Restore the db of a graph from the persisted data, and setup. Create a new
+  conn, or replace the conn in state with a new one."
+  [repo]
+  (p/let [_ (state/set-db-restoring! true)
+          _ (db/restore-graph! repo)]
+         (file-handler/restore-config! repo false)
+         ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+         (db/listen-and-persist! repo)
+         (ui-handler/add-style-if-exists!)
+         (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]

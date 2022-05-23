@@ -9,4 +9,4 @@
   (let [current-repo (state/get-current-repo)]
     (db-persist/delete-graph! current-repo)
     (destroy-db!)
-    (conn/start! nil current-repo)))
+    (conn/start! current-repo)))
