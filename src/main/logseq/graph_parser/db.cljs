@@ -7,10 +7,7 @@
   "Create datascript conn with schema and default data"
   []
   (let [db-conn (d/create-conn db-schema/schema)]
-    (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
-                                  ;; TODO: Handle this
-                                  #_db-type
-                                  #_(assoc :db/type db-type))
+    (d/transact! db-conn [{:schema/version db-schema/version}
                           {:block/name "card"
                            :block/original-name "card"
                            :block/uuid (d/squuid)}])

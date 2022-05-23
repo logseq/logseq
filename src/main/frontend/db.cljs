@@ -38,28 +38,27 @@
 
  [frontend.db.model
   blocks-count blocks-count-cache clean-export! delete-blocks get-pre-block
-  delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
+  delete-file-blocks! delete-page-blocks delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-children-ids get-block-immediate-children get-block-page
-  get-blocks-contents get-custom-css
-  get-date-scheduled-or-deadlines get-db-type
-  get-file-blocks get-file-contents get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
-  get-file-pages get-files get-files-blocks get-files-full get-journals-length
-  get-latest-journals get-matched-blocks get-page get-page-alias get-page-alias-names get-paginated-blocks get-page-linked-refs-refed-pages
+  get-custom-css get-date-scheduled-or-deadlines
+  get-file-blocks get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
+  get-files get-files-blocks get-files-full get-journals-length
+  get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks get-page-linked-refs-refed-pages
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? page-alias-set pull-block
-  set-file-last-modified-at! transact-files-db! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
+  set-file-last-modified-at! page-empty? page-exists? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
  [frontend.db.react
   get-current-page set-key-value
   remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! kv q
-  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh!]
+  query-state query-components remove-custom-query! set-new-result! sub-key-value refresh!]
 
  [frontend.db.query-custom
   custom-query]

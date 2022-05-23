@@ -354,9 +354,9 @@
         (delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
-  [repo option]
+  [repo]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo option))
+  (db/start-db-conn! repo))
 
 (defn setup-local-repo-if-not-exists!
   []

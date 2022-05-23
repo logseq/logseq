@@ -174,7 +174,7 @@
                                (assoc file :file/content content))) markup-files))
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
-                           (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
+                           (repo-handler/start-repo-db-if-not-exists! repo)
                            (async/go
                              (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
                                                                                        {:new-graph?   true
