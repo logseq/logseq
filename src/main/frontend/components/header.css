@@ -338,3 +338,16 @@ html.is-native-iphone-without-notch {
         }
     }
 }
+
+html.is-zoomed-native-ios {
+    --ls-headbar-inner-top-padding: 30px;
+
+     @media (orientation: landscape) {
+        --ls-headbar-inner-top-padding: 8px;
+        --ls-headbar-height: 2.5rem;
+
+        .cp__header {
+            @apply shadow z-10;
+        }
+    }
+}

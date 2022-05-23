@@ -21,7 +21,7 @@
   []
   (let [path (fs/iOS-ensure-documents!)]
     (println "iOS container path: " path))
-
+  
   (.addEventListener js/window
                      "load"
                      (fn [_event]
@@ -29,6 +29,8 @@
                          (js/setTimeout #(deeplink/deeplink @*url)
                                         1000))))
 
+  (mobile-util/check-ios-zoomed-display)
+  
   (.removeAllListeners mobile-util/file-sync)
 
   (.addListener mobile-util/file-sync "debug"

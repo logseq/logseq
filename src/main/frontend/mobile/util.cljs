@@ -1,7 +1,8 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [promesa.core :as p]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -23,6 +24,7 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
   (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
+  (defonce ios-utils (registerPlugin "Utils"))
   (defonce ios-file-container (registerPlugin "FileContainer"))
   (defonce file-sync (registerPlugin "FileSync")))
 
@@ -121,6 +123,15 @@
   []
   (when-let [model (get-idevice-model)]
     (string/starts-with? (first model) "iPad")))
+
+(defn check-ios-zoomed-display
+  "Detect whether iOS device is in Zoom Display"
+  []
+  (p/let [is-zoomed? (p/chain (.isZoomed ios-utils)
+                              #(js->clj % :keywordize-keys true))]
+    (when (:isZoomed is-zoomed?)
+      (let [^js cl (.-classList js/document.documentElement)]
+        (.add cl "is-zoomed-native-ios")))))
 
 (defn get-idevice-statusbar-height
   []
