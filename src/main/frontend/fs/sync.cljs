@@ -406,7 +406,7 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
-  (set-env [this prod?] "set environment")
+  (set-env [this prod? passphrase] "set environment and passphrase")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -463,7 +463,10 @@
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
   IRSAPI
-  (set-env [_ prod?] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev"))))))
+  (set-env [_ prod? passphrase]
+    (when (not-empty passphrase)
+      (print "[sync] setting sync passphrase..."))
+    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") passphrase)))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -531,8 +534,9 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (set-env [_ prod?]
-    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
+  (set-env [_ prod? passphrase]
+    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
+                                                           :passphrase passphrase}))))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
     (go
@@ -889,7 +893,7 @@
 (def local-changes-chan (chan 100))
 (defn file-watch-handler
   "file-watcher callback"
-  [type {:keys [dir path _content stat] :as _payload}]
+  [type {:keys [dir path stat] :as _payload}]
 
   (when (some-> (state/get-file-sync-state)
                 sync-state--stopped?
@@ -1165,7 +1169,7 @@
                             (map #(relative-path %))
                             (filter #(not (contains-path? ignore-files %))))
               paths (sequence es->paths-xf es)]
-          (println "sync-local->remote" paths)
+          (println "sync-local->remote" type paths)
           (let [r (case type
                     ("add" "change")
                     (update-remote-files rsapi graph-uuid base-path paths @*txid)
@@ -1486,7 +1490,7 @@
             (clear-graphs-txid! repo)
             (do
               ;; set-env
-              (set-env rsapi config/FILE-SYNC-PROD?)
+              (set-env rsapi config/FILE-SYNC-PROD? "hello-world")
               (state/set-file-sync-state @*sync-state)
               (state/set-file-sync-manager sm)
               ;; wait seconds to receive all file change events,
