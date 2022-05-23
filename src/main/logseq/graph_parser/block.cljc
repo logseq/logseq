@@ -509,7 +509,9 @@
                 (seq (:properties-order properties))
                 (assoc :properties-order (:properties-order properties)))
         block (if (get-in block [:properties :collapsed])
-                (assoc block :collapsed? true)
+                (-> (assoc block :collapsed? true)
+                    (update :properties (fn [m] (dissoc m :collapsed)))
+                    (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
         block (assoc block
                      :content (get-block-content encoded-content block format pos-meta block-pattern))
