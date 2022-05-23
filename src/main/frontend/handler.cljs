@@ -33,8 +33,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
-            [goog.events :as goog-events]))
+            [frontend.db.persist :as db-persist]))
 
 (defn set-global-error-notification!
   []
@@ -49,18 +48,6 @@
             ;;  false)
             ))))
 
-(defn listen-to-scroll!
-  []
-  (let [*scroll-timer (atom nil)]
-    (goog-events/listen js/window
-                        "scroll"
-                        (fn []
-                          (when @*scroll-timer
-                            (js/clearTimeout @*scroll-timer))
-                          (state/set-state! :ui/scrolling? true)
-                          (reset! *scroll-timer (js/setTimeout
-                                                 (fn [] (state/set-state! :ui/scrolling? false)) 500)))
-                        false)))
 
 (defn- watch-for-date!
   []
@@ -199,8 +186,6 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
-
-    (listen-to-scroll!)
 
     (react/run-custom-queries-when-idle!)
 

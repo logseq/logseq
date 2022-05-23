@@ -2479,7 +2479,7 @@
        (fn []
          (block-container-inner state repo config block))
        nil
-       {:reset-height? false})
+       {})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2809,8 +2809,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     nil
-    {:reset-height? true})))
-
+    {})))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
