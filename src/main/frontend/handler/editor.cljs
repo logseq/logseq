@@ -2964,7 +2964,8 @@
     (let [text (.getData (gobj/get e "clipboardData") "text")
           input (state/get-input)]
       (if-not (string/blank? text)
-        (if (thingatpt/org-admonition&src-at-point input)
+        (if (or (thingatpt/markdown-src-at-point input)
+                (thingatpt/org-admonition&src-at-point input))
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
