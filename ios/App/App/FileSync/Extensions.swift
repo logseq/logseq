@@ -140,14 +140,16 @@ extension URL {
                 // Remove any existing document at file
                 if FileManager.default.fileExists(atPath: file.path) {
                     try FileManager.default.removeItem(at: file)
+                } else {
+                    let baseURL = file.deletingLastPathComponent()
+                    try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true, attributes: nil)
                 }
                 let rawData = try Data(contentsOf: tempURL)
                 guard let decryptedRawData = maybeDecrypt(rawData) else {
                     throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "can not decrypt remote file"])
                 }
-                
                 try decryptedRawData.write(to: file, options: .atomic)
-                
+
                 completion(nil)
             }
             
