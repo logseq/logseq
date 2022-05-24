@@ -6,7 +6,6 @@
    [frontend.db.model :as db-model]
    [frontend.db.react :as react]
    [frontend.db.utils :as db-utils]
-   [frontend.format.block :as block]
    [frontend.mobile.haptics :as haptics]
    [frontend.modules.outliner.core :as outliner-core]
    [frontend.modules.outliner.transaction :as outliner-tx]
