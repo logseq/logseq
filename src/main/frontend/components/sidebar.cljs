@@ -379,10 +379,9 @@
                                               [page :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           state)
-   :did-mount (fn [state]
-                (state/set-state! :mobile/show-tabbar? true)
-                state)}
+           (when (state/mobile?)
+                  (state/set-state! :mobile/show-tabbar? true))
+           state)}
   []
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
