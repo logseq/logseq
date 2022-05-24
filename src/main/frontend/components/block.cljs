@@ -3173,17 +3173,24 @@
 
 (rum/defcs breadcrumb-with-container < rum/reactive
   {:init (fn [state]
-           (assoc state ::navigating-block (atom (:block/uuid (ffirst (:rum/args state))))))}
+           (let [first-block (ffirst (:rum/args state))]
+             (assoc state
+                    ::initial-block    first-block
+                    ::navigating-block (atom (:block/uuid first-block)))))}
   [state blocks config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
+        navigating-block-entity (db/entity [:block/uuid navigating-block])
         block (first blocks)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        navigated? (and
+                    navigating-block
+                    (not= (:db/id (:block/parent (::initial-block state)))
+                          (:db/id (:block/parent navigating-block-entity))))
         blocks (if navigated?
-                 (let [block (db/pull [:block/uuid navigating-block])]
+                 (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
-                                           {:scoped-block-id (:db/id block)}))
+                                            {:scoped-block-id (:db/id block)}))
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)

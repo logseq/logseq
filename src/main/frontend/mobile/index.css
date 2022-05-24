@@ -184,3 +184,14 @@ html.is-native-android {
     }
 }
 
+html.is-zoomed-native-ios {
+    .cp__footer {
+        height: 60px;
+    }
+    
+    @media (orientation: landscape) {
+        .cp__footer {
+            height: 50px;
+        }
+    }
+}
