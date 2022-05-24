@@ -15,8 +15,7 @@
   []
   (try
     (comp
-      (ui/setup-active-keystroke!)
-      (ui/setup-patch-ios-visual-viewport-state!))
+     (ui/setup-active-keystroke!))
     (catch js/Error _e
       nil)))
 

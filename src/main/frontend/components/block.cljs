@@ -264,14 +264,14 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
+    (when (or granted? (util/electron?) (mobile-util/native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
             share-fn (fn [event]
                        (util/stop event)
-                       (when (mobile-util/is-native-platform?)
+                       (when (mobile-util/native-platform?)
                          (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
                            (.share Share #js {:url url
                                               :title "Open file with your favorite app"}))))]
@@ -881,7 +881,7 @@
                              (state/set-state! :pdf/current current)))}
          label-text]
 
-        (mobile-util/is-native-platform?)
+        (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
       (contains? (config/doc-formats) ext)
@@ -1326,7 +1326,7 @@
 
       (= name "video")
       (macro-video-cp config arguments)
-      
+
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
@@ -1572,7 +1572,7 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (or (mobile-util/is-native-platform?)
+         (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
               (not doc-mode?))
          bullet
@@ -2479,7 +2479,7 @@
        (fn []
          (block-container-inner state repo config block))
        nil
-       {:reset-height? false})
+       {})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2724,8 +2724,8 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      [:div.custom-query.mt-4 (get config :attr {})
-       (when-not (and built-in? (empty? result))
+      (when-not (and built-in? (empty? result))
+        [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
           [:div.custom-query-title
            [:span.title-text (cond
@@ -2800,7 +2800,7 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true}))])))
+           :title-trigger? true})]))))
 
 (rum/defc custom-query
   [config q]
@@ -2809,8 +2809,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     nil
-    {:reset-height? true})))
-
+    {})))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))

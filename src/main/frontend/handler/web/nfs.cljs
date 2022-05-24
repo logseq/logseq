@@ -122,7 +122,7 @@
   [ok-handler]
   (let [path-handles (atom {})
         electron? (util/electron?)
-        mobile-native? (mobile-util/is-native-platform?)
+        mobile-native? (mobile-util/native-platform?)
         nfs? (and (not electron?)
                   (not mobile-native?))
         *repo (atom nil)]
@@ -282,7 +282,7 @@
            handle-path (str config/local-handle-prefix dir-name)
            path-handles (atom {})
            electron? (util/electron?)
-           mobile-native? (mobile-util/is-native-platform?)
+           mobile-native? (mobile-util/native-platform?)
            nfs? (and (not electron?)
                      (not mobile-native?))]
        (when re-index?

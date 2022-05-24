@@ -132,7 +132,7 @@
                               :href     href
                               :on-click on-click))]
     (when-not (or (util/mobile?)
-                  (mobile-util/is-native-platform?))
+                  (mobile-util/native-platform?))
       [:div.text-sm desc])]])
 
 (defn edit-config-edn []
@@ -161,7 +161,7 @@
      (ui/toggle show-brackets?
                 config-handler/toggle-ui-show-brackets!
                 true)]]
-   (when (not (or (util/mobile?) (mobile-util/is-native-platform?)))
+   (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
@@ -543,9 +543,9 @@
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
-     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+     (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
-     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+     (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)
@@ -595,7 +595,7 @@
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
-     (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+     (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (plugin-system-switcher-row))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
@@ -633,7 +633,7 @@
         (for [[label text icon]
               [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
                [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-               (when-not (mobile-util/is-native-platform?)
+               (when-not (mobile-util/native-platform?)
                  [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
                (when plugins-of-settings

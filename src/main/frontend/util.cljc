@@ -11,7 +11,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
-            [frontend.mobile.util :refer [is-native-platform?]]
+            [frontend.mobile.util :refer [native-platform?]]
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -89,7 +89,7 @@
 
 #?(:cljs
    (def nfs? (and (not (electron?))
-                  (not (is-native-platform?)))))
+                  (not (native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -1207,42 +1207,53 @@
        (or (= which 3)
            (= button 2)))))
 
+(def keyboard-height (atom nil))
 #?(:cljs
-   (defn make-el-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+   (defn scroll-editor-cursor
+     [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
+     (when (and el (or (native-platform?) mobile?))
+       (let [box-rect    (.getBoundingClientRect el)
+             box-top     (.-top box-rect)
+             box-bottom  (.-bottom box-rect)
 
-#?(:cljs
-   (defn make-el-cursor-position-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (let [main-node (gdom/getElement "main-content-container")
-             pos (get-selection-start el)
-             cursor-top (some-> (gdom/getElement "mock-text")
-                                gdom/getChildren
-                                array-seq
-                                (nth-safe pos)
-                                .-offsetTop)
-             box-caret (.getBoundingClientRect el)
-             box-top (.-top box-caret)
-             box-bottom (.-bottom box-caret)
-             vw-height (or (.-height js/window.visualViewport)
-                           (.-clientHeight js/document.documentElement))
-             scroll-top (.-scrollTop main-node)
-             cursor-y (if cursor-top (+ cursor-top box-top) box-bottom)
-             scroll (- cursor-y (/ vw-height 2))]
-         (when (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top scroll)))))))
+             header-height (-> (gdom/getElementByClass "cp__header")
+                               .-clientHeight)
 
-#?(:cljs
-   (defn make-el-center-if-near-top
-     ([^js/HTMLElement el]
-      (make-el-center-if-near-top el 80))
-     ([^js/HTMLElement el offset]
-      (let [target-top (.-top (.getBoundingClientRect el))]
-        (when (<= target-top (or (safe-parse-int offset) 0))
-          (make-el-into-center-viewport el))))))
+             main-node   (app-scroll-container-node)
+             scroll-top  (.-scrollTop main-node)
+
+             current-pos (get-selection-start el)
+             mock-text   (some-> (gdom/getElement "mock-text")
+                                 gdom/getChildren
+                                 array-seq
+                                 (nth-safe current-pos))
+             offset-top   (and mock-text (.-offsetTop mock-text))
+             offset-height (and mock-text (.-offsetHeight mock-text))
+
+             cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
+             vw-height   (or (.-height js/window.visualViewport)
+                             (.-clientHeight js/document.documentElement))
+             ;; mobile toolbar height: 40px
+             scroll      (- cursor-y (- vw-height (+ @keyboard-height 40)))]
+         (cond
+           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
+           (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
+
+           (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
+                (>= cursor-y header-height))
+           (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
+
+           (< cursor-y header-height)
+           (let [_ (.scrollIntoView el true)
+                 main-node (app-scroll-container-node)
+                 scroll-top (.-scrollTop main-node)]
+             (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
+
+           (> scroll 0)
+           (set! (.-scrollTop main-node) (+ scroll-top scroll))
+
+           :else
+           nil)))))
 
 #?(:cljs
    (defn sm-breakpoint?

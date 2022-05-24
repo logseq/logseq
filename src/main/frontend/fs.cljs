@@ -32,7 +32,7 @@
       (and (util/electron?) (not bfs-local?))
       node-record
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       mobile-record
 
       (local-db? dir)
@@ -109,7 +109,7 @@
 
     :else
     (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
+          (map #(if (or (util/electron?) (mobile-util/native-platform?))
                   %
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])]
@@ -125,7 +125,7 @@
     (util/electron?)
     node-record
 
-    (mobile-util/is-native-platform?)
+    (mobile-util/native-platform?)
     mobile-record
 
     :else
@@ -136,7 +136,7 @@
   (let [record (get-record)]
     (p/let [result (protocol/open-dir record ok-handler)]
       (if (or (util/electron?)
-              (mobile-util/is-native-platform?))
+              (mobile-util/native-platform?))
         (let [[dir & paths] (bean/->clj result)]
           [(:path dir) paths])
         result))))
@@ -145,7 +145,7 @@
   [path-or-handle ok-handler]
   (let [record (get-record)
         electron? (util/electron?)
-        mobile? (mobile-util/is-native-platform?)]
+        mobile? (mobile-util/native-platform?)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
       (if (or electron? mobile?)
         (let [result (bean/->clj result)]

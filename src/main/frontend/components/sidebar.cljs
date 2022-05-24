@@ -4,37 +4,38 @@
             [frontend.components.command-palette :as command-palette]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
+            [frontend.components.onboarding :as onboarding]
+            [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.select :as select]
+            [frontend.components.svg :as svg]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.plugins :as plugins]
-            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as db-model]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.srs :as srs]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
+            [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.footer :as footer]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]
-            [frontend.extensions.srs :as srs]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.mobile.swipe :as swipe]
-            [frontend.components.onboarding :as onboarding]
-            [frontend.mobile.footer :as footer]))
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -298,7 +299,10 @@
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
-       (when (and (not (mobile-util/is-native-platform?))
+       (mobile-bar)
+       (footer/footer)
+
+       (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
 
@@ -371,7 +375,10 @@
                                               [page :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           state)}
+           state)
+   :did-mount (fn [state]
+                (state/set-state! :mobile/show-tabbar? true)
+                state)}
   []
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
@@ -544,12 +551,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})
-
-        (when (and (mobile-util/is-native-platform?)
-                   current-repo
-                   (not (state/sub :modal/show?)))
-          (footer/footer))]
+               :main-content        main-content})]
 
        (right-sidebar/sidebar)
 
