@@ -8,7 +8,7 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -16,7 +16,7 @@
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db.rules :refer [rules]]
-            [frontend.db.default :as default-db]
+            [logseq.graph-parser.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 
 ;; lazy loading

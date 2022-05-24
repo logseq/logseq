@@ -4,7 +4,7 @@
             [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]

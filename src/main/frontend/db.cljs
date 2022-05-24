@@ -1,9 +1,9 @@
 (ns frontend.db
   (:require [clojure.core.async :as async]
             [datascript.core :as d]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
-            [frontend.db.default :as default-db]
+            [logseq.graph-parser.db.default :as default-db]
             [frontend.db.model]
             [frontend.db.query-custom]
             [frontend.db.query-react]
@@ -66,7 +66,7 @@
  [frontend.db.query-react
   react-query custom-query-result-transform]
 
- [frontend.db.default built-in-pages-names built-in-pages])
+ [logseq.graph-parser.db.default built-in-pages-names built-in-pages])
 
 (defn get-schema-version [db]
   (d/q

@@ -12,7 +12,7 @@
             [frontend.components.search :as search]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.extensions.srs :as srs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.watcher-handler :as fs-watcher]
