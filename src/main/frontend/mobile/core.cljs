@@ -1,5 +1,6 @@
 (ns frontend.mobile.core
   (:require ["@capacitor/app" :refer [^js App]]
+            ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
             [frontend.fs.capacitor-fs :as fs]
             [frontend.handler.editor :as editor-handler]
@@ -21,7 +22,7 @@
   []
   (let [path (fs/iOS-ensure-documents!)]
     (println "iOS container path: " path))
-
+  
   (.addEventListener js/window
                      "load"
                      (fn [_event]
@@ -29,6 +30,8 @@
                          (js/setTimeout #(deeplink/deeplink @*url)
                                         1000))))
 
+  (mobile-util/check-ios-zoomed-display)
+  
   (.removeAllListeners mobile-util/file-sync)
 
   (.addListener mobile-util/file-sync "debug"
@@ -80,6 +83,15 @@
                 (fn [event]
                   (state/pub-event! [:file-watcher/changed event])))
 
+  (.addListener Keyboard "keyboardWillShow"
+                  (fn [^js info]
+                    (let [keyboard-height (.-keyboardHeight info)]
+                      (state/pub-event! [:mobile/keyboard-will-show keyboard-height]))))
+
+  (.addListener Keyboard "keyboardWillHide"
+                  (fn []
+                    (state/pub-event! [:mobile/keyboard-will-hide])))
+
   (.addEventListener js/window "statusTap"
                      #(util/scroll-to-top true))
 
@@ -96,6 +108,6 @@
 
   (when (mobile-util/native-ios?)
     (ios-init))
-
-  (when (mobile-util/is-native-platform?)
+  
+  (when (mobile-util/native-platform?)
     (general-init)))

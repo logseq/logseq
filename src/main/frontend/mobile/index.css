@@ -1,9 +1,10 @@
 .cp__footer {
     position: absolute;
     bottom: 0px;
+    left: 0px;
     padding: 10px 20px;
     background-color: var(--ls-primary-background-color);
-    z-index: 1000;
+    z-index: 10;
     display: flex;
     flex: 0 0 auto;
     white-space: nowrap;
@@ -21,6 +22,56 @@
         left: 40px;
     }
 }
+
+#mobile-editor-toolbar {
+  position: fixed;
+  bottom: 0;
+  transition: bottom 260ms;
+  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
+  /* transition-timing-function: steps(10, jump-end); */
+  /* transition-timing-function: steps(5, end); */
+  transition-timing-function: ease-out;
+  left: 0;
+  width: 100%;
+  z-index: 9999;
+  display: flex;
+  justify-content: space-between;
+
+  button {
+      padding: 7px 10px;
+
+      .submenu {
+          background-color: red;
+          z-index: 100;
+          background-color: var(--ls-secondary-background-color);
+          border-radius: 5px;
+          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
+          overflow-x: overlay;
+          overflow-y: hidden;
+          left: 0px;
+          height: 40px;
+      }
+      
+      .show-submenu {
+          display: block;
+      }
+  }
+  
+  .toolbar-commands {
+    justify-content: space-between;
+    display: flex;
+    align-items: center;
+    overflow-x: overlay;
+    overflow-y: hidden;
+    width: 95%;
+  }
+
+  .toolbar-hide-keyboard {
+    border-left: 1px solid;
+    border-color: var(--ls-quaternary-background-color);
+  }
+}
+
 
 html.is-native-ipad {
     .cp__footer {
@@ -48,3 +99,14 @@ html.is-native-android {
     }
 }
 
+html.is-zoomed-native-ios {
+    .cp__footer {
+        height: 60px;
+    }
+    
+    @media (orientation: landscape) {
+        .cp__footer {
+            height: 50px;
+        }
+    }
+}

@@ -22,7 +22,7 @@
   (when-let [page-e (db/pull [:block/name (util/page-name-sanity-lc page)])]
     (page/page-blocks-cp repo page-e {})))
 
-(rum/defc journal-cp-inner < rum/reactive
+(rum/defc journal-cp < rum/reactive
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
@@ -54,7 +54,12 @@
        [:h1.title
         (gp-util/capitalize-all title)]]
 
-      (blocks-cp repo page format)
+      (if today?
+        (blocks-cp repo page format)
+        (ui/lazy-visible (fn []
+                           (blocks-cp repo page format))
+                         nil
+                         {}))
 
       {})
 
@@ -63,11 +68,6 @@
      (rum/with-key
        (reference/references title)
        (str title "-refs"))]))
-
-(rum/defc journal-cp
-  [journal]
-  (ui/lazy-visible (fn [] (journal-cp-inner journal)) nil
-                   {:reset-height? true}))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

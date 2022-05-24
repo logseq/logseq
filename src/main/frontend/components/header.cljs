@@ -140,11 +140,10 @@
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
-        vw-state (state/sub :ui/visual-viewport-state)
         show-open-folder? (and (nfs/supported?)
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
-                               (not (mobile-util/is-native-platform?))
+                               (not (mobile-util/native-platform?))
                                (not config/publishing?))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
@@ -155,8 +154,7 @@
                            (when (and (util/electron?)
                                       (.. target -classList (contains "cp__header")))
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
-      :style           {:fontSize  50
-                        :transform (str "translateY(" (or (:offset-top vw-state) 0) "px)")}}
+      :style           {:fontSize  50}}
      [:div.l.flex
       (left-menu-button {:on-click (fn []
                                      (open-fn)
@@ -188,7 +186,7 @@
                 (mobile-util/native-ios?))
         (back-and-forward))
 
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         (new-block-mode))
 
       (when show-open-folder?

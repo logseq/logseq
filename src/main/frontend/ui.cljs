@@ -46,7 +46,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 23 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -289,40 +289,6 @@
         (set! (.-id node) "dynamic-style-scope")
         (.appendChild js/document.head node))
       style)))
-
-(defn setup-patch-ios-visual-viewport-state!
-  []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
-                             (mobile-util/native-ios?))
-                         js/window.visualViewport)]
-    (let [raf-pending? (atom false)
-          set-raf-pending! #(reset! raf-pending? %)
-          on-viewport-changed
-          (fn []
-            (let [update-vw-state
-                  (debounce
-                   (fn []
-                     (state/set-visual-viewport-state {:height     (.-height vp)
-                                                       :page-top   (.-pageTop vp)
-                                                       :offset-top (.-offsetTop vp)})
-                     (state/set-state! :ui/visual-viewport-pending? false))
-                   20)]
-              (when-not @raf-pending?
-                (let [f (fn []
-                          (set-raf-pending! false)
-                          (update-vw-state))]
-                  (set-raf-pending! true)
-                  (state/set-state! :ui/visual-viewport-pending? true)
-                  (js/window.requestAnimationFrame f)))))]
-
-      (.addEventListener vp "resize" on-viewport-changed)
-      (.addEventListener vp "scroll" on-viewport-changed)
-
-      (fn []
-        (.removeEventListener vp "resize" on-viewport-changed)
-        (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil))))
-  #())
 
 (defn apply-custom-theme-effect! [theme]
   (when plugin-handler/lsp-enabled?
@@ -684,7 +650,7 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        (when-not (mobile-util/is-native-platform?)
+        (when-not (mobile-util/native-platform?)
           [:a.block-control.opacity-50.hover:opacity-100.mr-2
            (cond->
             {:style    {:width       14
@@ -919,28 +885,17 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner <
+(rum/defcs lazy-visible-inner < rum/reactive
   {:init (fn [state]
            (assoc state
-                  ::ref (atom nil)
-                  ::height (atom 24)))
-   :did-mount (fn [state]
-                (when (last (:rum/args state))
-                  (let [observer (js/ResizeObserver. (fn [entries]
-                                                      (let [entry (first entries)
-                                                            *height (::height state)
-                                                            height' (.-height (.-contentRect entry))]
-                                                        (when (and (> height' @*height)
-                                                                   (not= height' 64))
-                                                          (reset! *height height')))))]
-                   (.observe observer @(::ref state))))
-                state)}
-  [state visible? content-fn _reset-height?]
-  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
-                         :style {:min-height @(::height state)}}
+                  ::ref (atom nil)))}
+  [state visible? content-fn]
+  [:div.lazy-visibility
+   {:ref #(reset! (::ref state) %)
+    :style {:min-height 24}}
    (if visible?
      (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:min-height 64}}
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5 {:style {:height 88}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]
@@ -953,9 +908,9 @@
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [reset-height? once?]}]
+  [state content-fn sensor-opts {:keys [once?]}]
   (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/is-native-platform?))
+    (if (or (util/mobile?) (mobile-util/native-platform?))
       (content-fn)
       (let [*visible? (::visible? state)]
         (visibility-sensor
@@ -971,4 +926,4 @@
            :scrollThrottle 500
            :active @*active?}
           sensor-opts)
-         (lazy-visible-inner @*visible? content-fn reset-height?))))))
+         (lazy-visible-inner @*visible? content-fn))))))
