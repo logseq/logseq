@@ -2686,7 +2686,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query view collapsed? children? breadcrumb-show?] :as q}]
+  [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         current-block-uuid (or (:block/uuid (:block config))
@@ -2695,7 +2695,8 @@
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         query-result (and query-atom (rum/react query-atom))
-        table? (or (get-in current-block [:block/properties :query-table])
+        table? (or table-view?
+                   (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         transformed-query-result (when query-result
                                    (db/custom-query-result-transform query-result remove-blocks q))
@@ -2738,7 +2739,7 @@
             (str (count transformed-query-result) " results")]]
           (fn []
             [:div
-             (when current-block
+             (when (and current-block (not view-f) (nil? table-view?))
                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                 (when-not page-list?
                   [:div.flex.flex-row
@@ -3217,3 +3218,4 @@
 
      :else
      (blocks-container blocks config))])
+     
