@@ -22,7 +22,9 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            ["aes-js" :as aesjs]
+            [goog.crypt.base64 :as base64]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -49,8 +51,6 @@
 ;; - every 20s, flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
-;; TODO: currently, renaming a page produce 2 file-watch event: unlink & add,
-;;       we need to a new type event 'rename'
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
 ;;       and re-produce a new same-file-delete diff.
 
@@ -917,6 +917,54 @@
                     sync-state--stopped?
                     not)
         (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))))
+
+
+;;; ### encryption
+(def default-key-for-test (array 1 2 3 4 1 2 3 4 1 2 3 4 1 2 3 4))
+(def check-decrypt-succ-str
+  "append to pwd when encrypt, and check it exists after decryption
+  to make sure decrypt success"
+  "LOGSEQ!")
+
+(def check-decrypt-succ-str-count (count check-decrypt-succ-str))
+
+(defn- aes-ctr
+  [key*]
+  (aesjs/ModeOfOperation.ctr. key*))
+
+(defn encrypt-pwd
+  [pwd key*]
+  (let [pwd (str pwd check-decrypt-succ-str)
+        ctr (aes-ctr key*)
+        encrypted-bytes (.encrypt ctr (-> aesjs .-utils .-utf8 (.toBytes pwd)))]
+    (-> aesjs .-utils .-hex (.fromBytes encrypted-bytes))))
+
+(defn decrypt-pwd
+  "return nil when decryption failed"
+  [encrypted-pwd key*]
+  (let [ctr (aes-ctr key*)
+        decrypted-bytes (.decrypt ctr (-> aesjs .-utils .-hex (.toBytes encrypted-pwd)))
+        pwd (-> aesjs .-utils .-utf8 (.fromBytes decrypted-bytes))
+        count-pwd (count pwd)]
+    (when (and (> count-pwd check-decrypt-succ-str-count)
+               (= check-decrypt-succ-str (subs pwd (- count-pwd check-decrypt-succ-str-count))))
+      (subs pwd 0 (- count-pwd check-decrypt-succ-str-count)))))
+
+(defn encrypt+persist-pwd!
+  [pwd graph-uuid]
+  (go
+    (let [[value expired-at gone?]
+          ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
+           (<! (get-graph-salt remoteapi graph-uuid)))
+          [salt-value _expired-at]
+          (if gone?
+            ((juxt :value :expired-at) (<! (create-graph-salt remoteapi graph-uuid)))
+            [value expired-at])
+          salt-value-bytes (-> salt-value base64/decodeStringToByteArray vec (subvec 0 32) clj->js)
+          encrypted-pwd (encrypt-pwd pwd salt-value-bytes)]
+      ;; TODO persist encrypt-pwd
+      encrypted-pwd)))
+
 
 ;;; ### sync state
 
