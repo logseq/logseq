@@ -463,7 +463,7 @@
                        (cond (util/electron?)
                              (ipc/ipc :inflateGraphsInfo nfs-dbs)
 
-                             (mobile-util/is-native-platform?)
+                             (mobile-util/native-platform?)
                              (util-fs/inflate-graphs-info nfs-dbs)
 
                              :else
