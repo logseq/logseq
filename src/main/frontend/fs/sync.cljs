@@ -429,7 +429,9 @@
   (create-graph [this graph-name] "create graph")
   (delete-graph [this graph-uuid] "delete graph")
   (get-graph-salt [this graph-uuid] "return httpcode 410 when salt expired")
-  (create-graph-salt [this graph-uuid] "return httpcode 409 when salt already exists and not expired yet"))
+  (create-graph-salt [this graph-uuid] "return httpcode 409 when salt already exists and not expired yet")
+  (get-graph-encrypt-keys [this graph-uuid])
+  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
 
 (defprotocol IToken
   (get-token [this])
@@ -732,7 +734,15 @@
     (.request this "get_graph_salt" {:GraphUUID graph-uuid}))
 
   (create-graph-salt [this graph-uuid]
-    (.request this "create_graph_salt" {:GraphUUID graph-uuid})))
+    (.request this "create_graph_salt" {:GraphUUID graph-uuid}))
+
+  (get-graph-encrypt-keys [this graph-uuid]
+    (.request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))
+
+  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
+    (.request this "create_graph_encrypt_keys" {:GraphUUID graph-uuid
+                                                :public-key public-key
+                                                :encrypted-private-key encrypted-private-key})))
 
 (def remoteapi (->RemoteAPI))
 
