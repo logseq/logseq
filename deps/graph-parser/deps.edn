@@ -1,0 +1,10 @@
+{:paths ["src"
+         ;; Needed for logseq tests to pull in logseq.graph-parser.test*
+         "test"]
+ :deps
+ ;; Deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
+ {datascript/datascript {:mvn/version "1.3.8"}
+  frankiesardo/linked {:mvn/version "1.3.0"}
+  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
+                               :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
+  com.lambdaisland/glogi {:mvn/version "1.1.144"}}}

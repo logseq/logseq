@@ -3,7 +3,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.db :as gp-db]
-            [frontend.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [datascript.core :as d]))
 
 (defn- get-top-block-properties

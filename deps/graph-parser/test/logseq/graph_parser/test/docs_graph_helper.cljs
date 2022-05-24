@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible frontend.test.docs-graph-helper
+(ns ^:nbb-compatible logseq.graph-parser.test.docs-graph-helper
   "Helper fns for running tests against docs graph"
   (:require ["fs" :as fs]
             ["child_process" :as child-process]

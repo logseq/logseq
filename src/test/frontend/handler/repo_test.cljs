@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest use-fixtures is testing]]
             [frontend.handler.repo :as repo-handler]
             [frontend.test.helper :as test-helper]
-            [frontend.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [datascript.core :as d]
             [frontend.db.conn :as conn]))
 

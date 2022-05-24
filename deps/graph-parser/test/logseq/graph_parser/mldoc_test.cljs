@@ -1,7 +1,7 @@
 (ns logseq.graph-parser.mldoc-test
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
             [clojure.string :as string]
-            [frontend.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [cljs.test :refer [testing deftest are is]]))
 
 (deftest test-link
