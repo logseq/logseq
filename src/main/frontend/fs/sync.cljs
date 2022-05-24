@@ -427,7 +427,9 @@
   (list-remote-graphs [this] "list all remote graphs")
   (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid, min-txid]")
   (create-graph [this graph-name] "create graph")
-  (delete-graph [this graph-uuid] "delete graph"))
+  (delete-graph [this graph-uuid] "delete graph")
+  (get-graph-salt [this graph-uuid])
+  (create-graph-salt [this graph-uuid]))
 
 (defprotocol IToken
   (get-token [this])
@@ -724,7 +726,13 @@
     (.request this "create_graph" {:GraphName graph-name}))
 
   (delete-graph [this graph-uuid]
-    (.request this "delete_graph" {:GraphUUID graph-uuid})))
+    (.request this "delete_graph" {:GraphUUID graph-uuid}))
+
+  (get-graph-salt [this graph-uuid]
+    (.request this "get_graph_salt" {:GraphUUID graph-uuid}))
+
+  (create-graph-salt [this graph-uuid]
+    (.request this "create_graph_salt" {:GraphUUID graph-uuid})))
 
 (def remoteapi (->RemoteAPI))
 
