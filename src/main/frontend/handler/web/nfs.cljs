@@ -26,12 +26,12 @@
             [frontend.encrypt :as encrypt]))
 
 (defn remove-ignore-files
-  [files]
+  [files dir-name nfs?]
   (let [files (remove (fn [f]
                         (let [path (:file/path f)]
                           (or (string/starts-with? path ".git/")
                               (string/includes? path ".git/")
-                              (and (util-fs/ignored-path? "" path)
+                              (and (util-fs/ignored-path? (if nfs? "" dir-name) path)
                                    (not= (:file/name f) ".gitignore")))))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
@@ -55,7 +55,7 @@
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
-       result)
+          result)
 
      electron?
      (map (fn [{:keys [path stat content]}]
@@ -64,7 +64,7 @@
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
-       result)
+          result)
 
      :else
      (let [result (flatten (bean/->clj result))]
@@ -122,7 +122,7 @@
   [ok-handler]
   (let [path-handles (atom {})
         electron? (util/electron?)
-        mobile-native? (mobile-util/is-native-platform?)
+        mobile-native? (mobile-util/native-platform?)
         nfs? (and (not electron?)
                   (not mobile-native?))
         *repo (atom nil)]
@@ -147,7 +147,7 @@
                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
                  result (nth result 1)
                  files (-> (->db-files mobile-native? electron? dir-name result)
-                           remove-ignore-files)
+                           (remove-ignore-files dir-name nfs?))
                  _ (when nfs?
                      (let [file-paths (set (map :file/path files))]
                        (swap! path-handles (fn [handles]
@@ -282,7 +282,7 @@
            handle-path (str config/local-handle-prefix dir-name)
            path-handles (atom {})
            electron? (util/electron?)
-           mobile-native? (mobile-util/is-native-platform?)
+           mobile-native? (mobile-util/native-platform?)
            nfs? (and (not electron?)
                      (not mobile-native?))]
        (when re-index?
@@ -297,7 +297,7 @@
                                                  (when nfs?
                                                    (swap! path-handles assoc path handle))))
                     new-files (-> (->db-files mobile-native? electron? dir-name files-result)
-                                  remove-ignore-files)
+                                  (remove-ignore-files dir-name nfs?))
                     _ (when nfs?
                         (let [file-paths (set (map :file/path new-files))]
                           (swap! path-handles (fn [handles]

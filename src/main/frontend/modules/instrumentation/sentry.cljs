@@ -18,7 +18,7 @@
    :initialScope {:tags
                   {:platform (cond
                                (util/electron?) "electron"
-                               (mobile-util/is-native-platform?) "mobile"
+                               (mobile-util/native-platform?) "mobile"
                                :else "web")
                    :publishing config/publishing?}}
    :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)

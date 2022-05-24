@@ -416,26 +416,21 @@ export function transformableEvent(target: HTMLElement, e: Event) {
   return obj
 }
 
-let injectedThemeEffect: any = null
-
-export function setupInjectedTheme(url?: string) {
-  injectedThemeEffect?.call()
-
-  if (!url) return
-
+export function injectTheme(url: string) {
   const link = document.createElement('link')
   link.rel = 'stylesheet'
   link.href = url
   document.head.appendChild(link)
 
-  return (injectedThemeEffect = () => {
+  const ejectTheme = () => {
     try {
       document.head.removeChild(link)
     } catch (e) {
       console.error(e)
     }
-    injectedThemeEffect = null
-  })
+  }
+
+  return ejectTheme
 }
 
 export function mergeSettingsWithSchema(

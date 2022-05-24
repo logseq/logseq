@@ -84,7 +84,7 @@
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
 
-          (when-not (mobile-util/is-native-platform?)
+          (when-not (mobile-util/native-platform?)
             {:title (t :page/presentation-mode)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
@@ -102,10 +102,11 @@
              {:title   (t :page/open-with-default-app)
               :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-          (when (util/electron?)
+          (when (or (util/electron?)
+                    (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-              :options {:on-click #(util/copy-to-clipboard!
-                                    (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
+             :options {:on-click #(util/copy-to-clipboard!
+                                   (url-util/get-logseq-graph-page-url nil repo page-original-name))}})
 
           (when-not contents?
             {:title   (t :page/delete)
@@ -146,7 +147,7 @@
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
               {:title label
                :options {:on-click #(commands/exec-plugin-simple-command!
-                                     pid (assoc cmd :page (state/get-current-page)) action)}}))
+                                     pid (assoc cmd :page page-name) action)}}))
 
           (when developer-mode?
             {:title   "(Dev) Show page data"

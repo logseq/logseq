@@ -92,7 +92,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:doc :docx :xls :xlsx :ppt :pptx :one :epub})))
+     #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})))
 
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
@@ -316,7 +316,7 @@
     (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 
-    (and (mobile-util/is-native-platform?) (local-db? repo-url))
+    (and (mobile-util/native-platform?) (local-db? repo-url))
     (let [dir (get-local-dir repo-url)]
       (if (string/starts-with? dir "file:")
         dir
@@ -329,7 +329,7 @@
 
 (defn get-repo-path
   [repo-url path]
-  (if (and (or (util/electron?) (mobile-util/is-native-platform?))
+  (if (and (or (util/electron?) (mobile-util/native-platform?))
            (local-db? repo-url))
     path
     (util/node-path.join (get-repo-dir repo-url) path)))

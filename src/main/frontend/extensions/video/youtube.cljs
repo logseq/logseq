@@ -109,7 +109,7 @@
 (defn gen-youtube-ts-macro []
   (if-let [player (get-player (state/get-input))]
     (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))
-    (when (mobile-util/is-native-platform?)
+    (when (mobile-util/native-platform?)
       (notification/show!
        "Please embed a YouTube video at first, then use this icon.
 Remember: You can paste a raw YouTube url as embedded video on mobile."

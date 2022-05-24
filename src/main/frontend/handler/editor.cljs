@@ -1,13 +1,15 @@
 (ns frontend.handler.editor
   (:require ["/frontend/utils" :as utils]
+            ["path" :as path]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands
-                     *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos
+                     *show-block-commands *show-commands
+                     *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -25,12 +27,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.image :as image]
             [frontend.idb :as idb]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -40,22 +42,20 @@
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
-            [frontend.util.marker :as marker]
-            [frontend.util.property :as property]
-            [frontend.util.priority :as priority]
-            [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
+            [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            ["path" :as path]))
+            [logseq.graph-parser.block :as gp-block]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -256,10 +256,9 @@
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
-  (and (string? block-id)
-       (util/uuid-string? block-id)
-       (not= current-id (cljs.core/uuid block-id))
-       (db/entity [:block/uuid (cljs.core/uuid block-id)])))
+  (when-let [id (and (string? block-id) (parse-uuid block-id))]
+    (and (not= current-id id)
+         (db/entity [:block/uuid id]))))
 
 (defn- attach-page-properties-if-exists!
   [block]
@@ -481,14 +480,9 @@
 (defn- block-self-alone-when-insert?
   [config uuid]
   (let [current-page (state/get-current-page)
-        block-id (or
-                  (and (:id config)
-                       (util/uuid-string? (:id config))
-                       (:id config))
-                  (and current-page
-                       (util/uuid-string? current-page)
-                       current-page))]
-    (= uuid (and block-id (medley/uuid block-id)))))
+        block-id (or (some-> (:id config) parse-uuid)
+                     (some-> current-page parse-uuid))]
+    (= uuid block-id)))
 
 (defn insert-new-block-before-block-aux!
   [config block _value {:keys [ok-handler]}]
@@ -1175,10 +1169,7 @@
   []
   (if (state/editing?)
     (let [page (state/get-current-page)
-          block-id (and
-                    (string? page)
-                    (util/uuid-string? page)
-                    (medley/uuid page))]
+          block-id (and (string? page) (parse-uuid page))]
       (when block-id
         (let [block-parent (db/get-block-parent block-id)]
           (if-let [id (and
@@ -1355,7 +1346,7 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? url ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
     (case (keyword format)
       :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
@@ -1421,7 +1412,7 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       (mobile-util/convert-file-src (str repo-dir path))
 
       :else
@@ -1687,7 +1678,8 @@
             (move-nodes blocks))
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
-              (.focus input))))
+              (.focus input)
+              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2042,8 +2034,8 @@
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
   (when id
-    (when-let [entity (if (util/uuid-string? (str id))
-                        (db/entity [:block/uuid (uuid id)])
+    (when-let [entity (if-let [id' (parse-uuid (str id))]
+                        (db/entity [:block/uuid id'])
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
@@ -2640,7 +2632,7 @@
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work sometimes in an empty block, hence the empty block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/is-native-platform?)
+        (and (mobile-util/native-platform?)
              (= key "Backspace")
              (= value ""))
         (do
@@ -2823,23 +2815,8 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
+      (util/scroll-editor-cursor input)
       (close-autocomplete-if-outside input))))
-
-(defonce mobile-toolbar-height 40)
-(defn editor-on-height-change!
-  [id]
-  (fn [box-height ^js row-height]
-    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
-          input (gdom/getElement id)
-          caret (cursor/get-caret-pos input)
-          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
-          box-top (gobj/get (.getBoundingClientRect input) "top")
-          cursor-y (+ cursor-bottom box-top)
-          vw-height (.-height js/window.visualViewport)]
-      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
-        (let [main-node (gdom/getElement "main-content-container")
-              scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]
@@ -2852,7 +2829,9 @@
                 (js/setTimeout
                  #(edit-box-on-change! e block id)
                  timeout)))
-      (edit-box-on-change! e block id))))
+      (let [input (gdom/getElement id)]
+        (edit-box-on-change! e block id)
+        (util/scroll-editor-cursor input)))))
 
 (defn- paste-text-parseable
   [format text]
@@ -2888,6 +2867,18 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn wrap-macro-url
+  [url]
+  (cond
+    (boolean (text/get-matched-video url))
+    (util/format "{{video %s}}" url)
+
+    (string/includes? url "twitter.com")
+    (util/format "{{twitter %s}}" url)
+
+    :else
+    (notification/show! (util/format "No macro is available for %s" url) :warning)))
+
 (defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
@@ -2915,18 +2906,7 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-
-      (and (gp-util/url? text)
-           (or (string/includes? text "youtube.com")
-               (string/includes? text "youtu.be"))
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-
-      (and (gp-util/url? text)
-           (string/includes? text "twitter.com")
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
-
+      
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
@@ -2963,7 +2943,10 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
+       (let [data (if (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data)
+                        clipboard-data)]
+             (state/append-current-edit-content! data))))
    (fn [error]
      (js/console.error error))))
 
@@ -2974,7 +2957,8 @@
     (let [text (.getData (gobj/get e "clipboardData") "text")
           input (state/get-input)]
       (if-not (string/blank? text)
-        (if (thingatpt/org-admonition&src-at-point input)
+        (if (or (thingatpt/markdown-src-at-point input)
+                (thingatpt/org-admonition&src-at-point input))
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
@@ -3110,7 +3094,7 @@
   (when-let [block-id (some-> (state/get-selection-blocks)
                               first
                               (dom/attr "blockid")
-                              medley/uuid)]
+                              uuid)]
     (util/stop e)
     (let [block    {:block/uuid block-id}
           block-id (-> (state/get-selection-blocks)
@@ -3222,8 +3206,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [block? (util/uuid-string? page)
-          block-id (or root-block (and block? (uuid page)))
+    (let [block-id (or root-block (parse-uuid page))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page))
@@ -3320,7 +3303,7 @@
        (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
-                       medley/uuid
+                       uuid
                        expand-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
@@ -3353,7 +3336,7 @@
        (->> (get-selected-blocks)
             (map (fn [dom]
                    (-> (dom/attr dom "blockid")
-                       medley/uuid
+                       uuid
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))

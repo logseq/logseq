@@ -44,7 +44,7 @@
        [:div.pl-1.content.mt-3
         [:div.flex.flex-row.my-4
          (when (or (nfs-handler/supported?)
-                   (mobile-util/is-native-platform?))
+                   (mobile-util/native-platform?))
            [:div.mr-8
             (ui/button
               (t :open-a-directory)
@@ -102,7 +102,7 @@
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
                                   (or (nfs-handler/supported?)
-                                      (mobile-util/is-native-platform?)))
+                                      (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)
                           :options {:on-click

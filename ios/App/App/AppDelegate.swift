@@ -1,19 +1,14 @@
 import UIKit
 import Capacitor
-import SendIntent
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
-    let store = ShareStore.store
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
-        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
-            NotificationCenter.default
-                .post(name: Notification.Name("triggerSendIntent"), object: nil )
-        }
+        
         return true
     }
     
@@ -33,6 +28,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        
+        
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -45,33 +42,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             if CAPBridge.handleOpenUrl(url, options) {
                 success = ApplicationDelegateProxy.shared.application(app, open: url, options: options)
             }
-            
-            guard let components = NSURLComponents(url: url, resolvingAgainstBaseURL: true),
-                  let params = components.queryItems else {
-                      return false
-                  }
-            let titles = params.filter { $0.name == "title" }
-            let descriptions = params.filter { $0.name == "description" }
-            let types = params.filter { $0.name == "type" }
-            let urls = params.filter { $0.name == "url" }
-            
-            store.shareItems.removeAll()
-        
-            if(titles.count > 0){
-                for index in 0...titles.count-1 {
-                    var shareItem: JSObject = JSObject()
-                    shareItem["title"] = titles[index].value!
-                    shareItem["description"] = descriptions[index].value!
-                    shareItem["type"] = types[index].value!
-                    shareItem["url"] = urls[index].value!
-                    store.shareItems.append(shareItem)
-                }
-            }
-            
-            store.processed = false
-            
-            NotificationCenter.default.post(name: Notification.Name("triggerSendIntent"), object: nil )
-            
             return success
         }
 
