@@ -3154,7 +3154,6 @@
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
-        block (first blocks)
         navigated? (and
                     navigating-block
                     (not= (:db/id (:block/parent (::initial-block state)))
@@ -3218,4 +3217,3 @@
 
      :else
      (blocks-container blocks config))])
-     
