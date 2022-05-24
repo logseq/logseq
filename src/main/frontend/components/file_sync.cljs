@@ -107,7 +107,7 @@
    [:div.py-3
     [:p.px-2.pb-2
      [:strong "Name: " (:GraphName graph)] [:br]
-     [:small "UUID: " (:GraphUUID graph)]]
+     [:small.italic "UUID: " (:GraphUUID graph)]]
 
     [:div
      (ui/button

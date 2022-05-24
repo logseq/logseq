@@ -51,10 +51,10 @@
 (rum/defcs input-password-inner <
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  [state repo-url close-fn]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)]
-    [:div
+    [:div.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
@@ -64,6 +64,12 @@
       :warning
       [:div.opacity-70
        "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
+
+     (when (= :remote type)
+       [:p.px-2.pb-2
+        [:strong "Name: " GraphName] [:br]
+        [:small.italic "UUID: " GraphUUID]])
+
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
       {:type "password"
        :placeholder "Password"
@@ -79,7 +85,7 @@
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
+        {:type     "button"
          :on-click (fn []
                      (let [value @password]
                        (cond
@@ -90,16 +96,25 @@
                          (notification/show! "The passwords are not matched." :error)
 
                          :else
-                         (p/let [keys (e/generate-key-pair-and-save! repo-url)
-                                 db-encrypted-secret (e/encrypt-with-passphrase value keys)]
-                           (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
-                           (close-fn true)))))}
+                         (case type
+                           :local
+                           (p/let [keys (e/generate-key-pair-and-save! repo-url)
+                                   db-encrypted-secret (e/encrypt-with-passphrase value keys)]
+                                  (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
+                                  (close-fn true))
+
+                           :remote
+                           (notification/show!
+                             [:p (str "pw: " @password)
+                              [:p (str "name: " GraphName)]
+                              [:p (str "uuid: " GraphUUID)]] :warning)))))}
         "Submit"]]]]))
 
 (defn input-password
-  [repo-url close-fn]
-  (fn [_close-fn]
-    (input-password-inner repo-url close-fn)))
+  ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
+  ([repo-url close-fn opts]
+   (fn [_close-fn]
+     (input-password-inner repo-url close-fn opts))))
 
 (rum/defcs encryption-setup-dialog-inner
   [state repo-url close-fn]

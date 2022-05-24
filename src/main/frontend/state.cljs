@@ -1108,7 +1108,7 @@
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
           :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?)))
+          :modal/close-btn? close-btn?) nil))
 
 (defn close-modal!
   []
