@@ -120,6 +120,7 @@ html.is-native-ipad {
     
     .action-bar {
         width: 70%;
+        min-width:450px;
 
         .action-bar-commands {
             width: 100%;
@@ -148,6 +149,7 @@ html.is-native-iphone {
             left: 15%;
             right: 15%;
             width: 70%;
+            min-width: 450px;
 
             .action-bar-commands {
                 width: 100%;
