@@ -428,8 +428,8 @@
   (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid, min-txid]")
   (create-graph [this graph-name] "create graph")
   (delete-graph [this graph-uuid] "delete graph")
-  (get-graph-salt [this graph-uuid])
-  (create-graph-salt [this graph-uuid]))
+  (get-graph-salt [this graph-uuid] "return httpcode 410 when salt expired")
+  (create-graph-salt [this graph-uuid] "return httpcode 409 when salt already exists and not expired yet"))
 
 (defprotocol IToken
   (get-token [this])
