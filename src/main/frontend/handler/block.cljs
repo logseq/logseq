@@ -188,16 +188,15 @@
                      (> (. js/Math abs dx) 10))
             (let [left (gdom/getElement (str "block-left-menu-" uuid))
                   right (gdom/getElement (str "block-right-menu-" uuid))]
-
+              
               (cond
                 (= direction :right)
                 (do
                   (reset! *show-left-menu? true)
                   (when left
-                    (when (>= 55 dx 0)
+                    (when (>= dx 0)
                       (set! (.. left -style -width) (str dx "px")))
-
-                    (when (> 0 dx -55)
+                    (when (< dx 0)
                       (set! (.. left -style -width) (str (max (+ 50 dx) 0) "px")))
                     
                     (let [indent (gdom/getFirstElementChild left)]
@@ -210,15 +209,13 @@
                 (do
                   (reset! *show-right-menu? true)
                   (when right
-                    (when (<= -85 dx 0)
+                    (when (<= dx 0)
                       (set! (.. right -style -width) (str (- dx) "px")))
-
-                    (when (> 85 dx 0)
-                        (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
+                    (when (> dx 0)
+                      (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
 
                     (let [outdent (gdom/getFirstElementChild right)
                           more (gdom/getLastElementChild right)]
-
                       (when (outdentable? block)
                         (if (and (>= (.-clientWidth right) 40)
                                  (< (.-clientWidth right) 80))
