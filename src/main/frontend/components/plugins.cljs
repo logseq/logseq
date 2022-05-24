@@ -248,7 +248,7 @@
          :on-click #(when-not has-other-pending?
                       (plugin-handler/check-or-update-marketplace-plugin
                         (assoc item :only-check (not new-version))
-                        (fn [e] (notification/show! e :error))))}
+                        (fn [^js e] (notification/show! (.toString e) :error))))}
 
         (if installing-or-updating?
           (t :plugin/updating)
@@ -780,7 +780,7 @@
              (if-let [n (state/get-next-selected-coming-update)]
                (plugin-handler/check-or-update-marketplace-plugin
                  (assoc n :only-check false)
-                 (fn [^js e] (notification/show! e :error)))
+                 (fn [^js e] (notification/show! (.toString e) :error)))
                (plugin-handler/close-updates-downloading)))
 
           :disabled
