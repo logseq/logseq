@@ -36,7 +36,7 @@
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (docs-graph-helper/build-graph-files graph-dir)
-        conn (gp-db/start-conn) 
+        conn (gp-db/start-conn)
         ; _ (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false})
         _ (graph-parser/parse conn files)
         db @conn]
@@ -99,7 +99,6 @@
 
       (is (= {:title 98 :id 98
               :updated-at 47 :created-at 47
-              :collapsed 22
               :card-last-score 6 :card-repeats 6 :card-next-schedule 6
               :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
               :alias 6}

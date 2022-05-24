@@ -25,7 +25,7 @@
                           (fn [formatter]
                             (try
                               (tf/parse (tf/formatter formatter) (gp-util/capitalize-all journal-title))
-                              (catch js/Error _e
+                              (catch :default _e
                                 nil)))
                           formatters)
                          (filter some?)

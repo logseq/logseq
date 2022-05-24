@@ -279,7 +279,7 @@
           (contains? config/audio-formats ext)
           (audio-cp @src)
 
-          (contains? (config/img-formats) ext)
+          (contains? (gp-config/img-formats) ext)
           (resizable-image config title @src metadata full_text true)
 
           (= ext :pdf)

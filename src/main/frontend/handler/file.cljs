@@ -16,6 +16,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser :as graph-parser]))
 
 ;; TODO: extract all git ops using a channel
@@ -45,11 +46,11 @@
 
 (defn- only-text-formats
   [files]
-  (keep-formats files (config/text-formats)))
+  (keep-formats files (gp-config/text-formats)))
 
 (defn- only-image-formats
   [files]
-  (keep-formats files (config/img-formats)))
+  (keep-formats files (gp-config/img-formats)))
 
 (defn restore-config!
   ([repo-url project-changed-check?]
@@ -142,7 +143,7 @@
                                 :date-formatter (state/get-date-formatter)
                                 :page-name-order (state/page-name-order)
                                 :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                :supported-formats (config/supported-formats)}})))))
+                                :supported-formats (gp-config/supported-formats)}})))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file

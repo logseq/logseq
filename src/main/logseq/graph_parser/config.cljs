@@ -1,6 +1,7 @@
 (ns ^:nbb-compatible logseq.graph-parser.config
   "Config that is shared between graph-parser and rest of app"
   (:require [logseq.graph-parser.util :as gp-util]
+            [clojure.set :as set]
             [clojure.string :as string]))
 
 (defonce local-assets-dir "assets")
@@ -22,3 +23,34 @@
 (defn mldoc-support?
   [format]
   (contains? mldoc-support-formats (keyword format)))
+
+(defn text-formats
+  []
+  #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
+    :excalidraw})
+
+(defn img-formats
+  []
+  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
+
+(defn supported-formats
+  []
+  (set/union (text-formats)
+             (img-formats)))
+
+(defn get-date-formatter
+  [config]
+  (or
+   (:journal/page-title-format config)
+   ;; for compatibility
+   (:date-formatter config)
+   "MMM do, yyyy"))
+
+(defn get-block-pattern
+  [format]
+  (let [format' (keyword format)]
+    (case format'
+      :org
+      "*"
+
+      "-")))

@@ -7,9 +7,6 @@
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
-  (when-not (string? s)
-    ;; TODO: sentry
-    (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
 
@@ -65,7 +62,7 @@
        (try
          (js/URL. s)
          true
-         (catch js/Error _e
+         (catch :default _e
            false))))
 
 (defn json->clj

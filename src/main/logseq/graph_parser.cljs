@@ -14,30 +14,25 @@
                  :file/content content}]
     (d/transact! db [tx-data] {:skip-refresh? true})))
 
-;; TODO: Reuse from frontend.config
-(def supported-formats
-   #{:dat :markdown :bmp :js :png :gif :txt :yml :erl :excalidraw :css :webp :asciidoc :ts :rb :ml :java :c :org :ex :edn :svg :php :rst :json :jpeg :ico :jpg :clj :adoc :html :md})
-
 (defn parse-file
   "Parse file and save parsed data to the given db"
   [db file content {:keys [new? delete-blocks-fn new-graph? extract-options]
                     :or {new? true
                          new-graph? false
-                         delete-blocks-fn (constantly [])
-                         ;; TODO: Reuse these options from state and config
-                         extract-options {:block-pattern "-"
-                                          :date-formatter "MMM do, yyyy"
-                                          :supported-formats supported-formats}}}]
-
+                         delete-blocks-fn (constantly [])}}]
   (db-set-file-content! db file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
         tx (if (contains? gp-config/mldoc-support-formats format)
-             (let [[pages blocks]
+             (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+                                            :date-formatter "MMM do, yyyy"
+                                            :supported-formats (gp-config/supported-formats)}
+                                           extract-options)
+                   [pages blocks]
                    (extract/extract-blocks-pages
                     file
                     content
-                    (merge extract-options {:db @db}))
+                    (merge extract-options' {:db @db}))
                    delete-blocks (delete-blocks-fn (first pages) file)
                    block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                    block-refs-ids (->> (mapcat :block/refs blocks)
@@ -59,6 +54,10 @@
     (d/transact! db (gp-util/remove-nils tx) (when new-graph? {:new-graph? true}))))
 
 (defn parse
-  [db files]
-  (doseq [{:file/keys [path content]} files]
-    (parse-file db path content {})))
+  "Main parse fn"
+  ([db files]
+   (parse db files {}))
+  ([db files {:keys [config]}]
+   (let [extract-options {:date-formatter (gp-config/get-date-formatter config)}]
+     (doseq [{:file/keys [path content]} files]
+       (parse-file db path content {:extract-options extract-options})))))

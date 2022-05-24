@@ -44,7 +44,6 @@
 (defn- extract-pages-and-blocks
   [format ast properties file content {:keys [date-formatter page-name-order db] :as options}]
   (try
-    #_:clj-kondo/ignore ;;clj-kondo bug
     (let [page (get-page-name file ast page-name-order)
           [_original-page-name page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           blocks (->> (gp-block/extract-blocks ast content false format (dissoc options :page-name-order))

@@ -30,6 +30,7 @@
              frontend.format.mldoc mldoc
              frontend.format.block block
              frontend.handler.extract extract
+             logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
