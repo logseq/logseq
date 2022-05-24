@@ -27,27 +27,35 @@
     position: absolute;
     bottom: 100px;
     height: 70px;
-    background-color: var(--ls-secondary-background-color);
-    display: flex;
-    justify-content: space-around;
+    padding: 6px;
     border-radius: 10px;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
-    z-index: 100;
+    background-color: var(--ls-secondary-background-color);
     overflow-x: overlay;
-    
-    .ti {
-        color: var(--ls-primary-text-color);
-        opacity: 50%;
-    }
-
-    .description {
-        color: var(--ls-primary-text-color);
-        font-size: 12px;
-        opacity: 60%;
-    }
-
-    button {
-        padding: 5px 6px;
+    box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
+    z-index: 100;
+        
+    .action-bar-commands {
+        position: relative;
+        display: flex;
+        justify-content: space-around;
+        width: 120%;
+        
+        
+        .ti {
+            color: var(--ls-primary-text-color);
+            font-size: 23px;
+            opacity: 50%;
+        }
+        
+        .description {
+            color: var(--ls-primary-text-color);
+            font-size: 13px;
+            opacity: 60%;
+        }
+        
+        button {
+            padding: 5px 10px
+        }
     }
 }
 
@@ -111,7 +119,15 @@ html.is-native-ipad {
     }
     
     .action-bar {
-        width: 50%;
+        width: 70%;
+
+        .action-bar-commands {
+            width: 100%;
+        }
+
+        @media (orientation: landscape) {
+            width: 50%;
+        }
     }
 }
 
@@ -126,6 +142,17 @@ html.is-native-iphone {
         .cp__footer {
             height: 45px;
         }
+
+        .action-bar {
+            bottom: 50px;
+            left: 15%;
+            right: 15%;
+            width: 70%;
+
+            .action-bar-commands {
+                width: 100%;
+            }
+        }
     }
 }
 
@@ -138,6 +165,20 @@ html.is-native-android {
     .action-bar {
         left: 5%;
         right: 5%;
+    }
+
+    @media (orientation: landscape) {
+        
+        .action-bar {
+            bottom: 50px;
+            left: 15%;
+            right: 15%;
+            width: 70%;
+
+            .action-bar-commands {
+                width: 100%;
+            }
+        }
     }
 }
 
