@@ -390,7 +390,7 @@
               (recur (conj result next) next)))
           result)))))
 
-(deftest ^:long random-inserts
+#_(deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
@@ -402,7 +402,7 @@
       (let [total (get-blocks-count)]
         (is (= total (+ c1 @*random-count)))))))
 
-(deftest ^:long random-deletes
+#_(deftest ^:long random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
     (dotimes [_i 100]
@@ -412,7 +412,7 @@
           (outliner-tx/transact! {:graph test-db}
             (outliner-core/delete-blocks! blocks {})))))))
 
-(deftest ^:long random-moves
+#_(deftest ^:long random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)
