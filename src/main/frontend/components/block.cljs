@@ -509,6 +509,7 @@
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
+                 :in-editor?      true
                  :html            html-template
                  :interactive     true
                  :delay           [1000, 100]
@@ -761,6 +762,7 @@
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
                         :interactive true
+                        :in-editor?  true
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
@@ -1056,7 +1058,8 @@
      (when-not (string/blank? query)
        (custom-query (assoc config :dsl-query? true)
                      {:title (ui/tippy {:html commands/query-doc
-                                        :interactive true}
+                                        :interactive true
+                                        :in-editor?  true}
                                        [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
                                         (str "Query: " query)])
                       :query query})))])
@@ -1981,6 +1984,7 @@
                                          (for [clock (take 10 (reverse clocks))]
                                            [:li clock])]])))
                     :interactive true
+                    :in-editor?  true
                     :delay       [1000, 100]}
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link

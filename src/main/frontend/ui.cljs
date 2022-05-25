@@ -787,12 +787,13 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tippy < rum/static
+(rum/defcs tippy < rum/reactive
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open?] :as opts} child]
+  [state {:keys [fixed-position? open? in-editor?] :as opts} child]
   (let [*mounted? (::mounted? state)
         mounted? @*mounted?
-        manual (not= open? nil)]
+        manual (not= open? nil)
+        editing? (state/sub :editor/editing?)]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
@@ -800,7 +801,8 @@
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
-                    :open (if manual open? @*mounted?)
+                    :open (when-not (and in-editor? editing?)
+                            (if manual open? @*mounted?))
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
