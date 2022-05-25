@@ -868,7 +868,7 @@
 (rum/defc progress-bar
   [width]
   {:pre (integer? width)}
-  [:div.w-full.bg-indigo-200.rounded-full.h-2.5
+  [:div.w-full.bg-indigo-200.rounded-full.h-2.5.animate-pulse
    [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
                                            :transition "width 1s"}]])
 
@@ -892,8 +892,9 @@
    {:ref #(reset! (::ref state) %)
     :style {:min-height 24}}
    (if visible?
-     (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5 {:style {:height 88}}
+     (when (fn? content-fn)
+       [:div.fade-in.faster-fade-in (content-fn)])
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]
