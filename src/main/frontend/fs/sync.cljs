@@ -21,10 +21,9 @@
             [frontend.diff :as diff]
             [frontend.db :as db]
             [frontend.fs :as fs]
+            [frontend.encrypt :as encrypt]
             [medley.core :refer [dedupe-by]]
-            [rum.core :as rum]
-            ["aes-js" :as aesjs]
-            [goog.crypt.base64 :as base64]))
+            [rum.core :as rum]))
 
 ;;; ### Commentary
 ;; file-sync related local files/dirs:
@@ -920,38 +919,30 @@
 
 
 ;;; ### encryption
-(def default-key-for-test (array 1 2 3 4 1 2 3 4 1 2 3 4 1 2 3 4))
-(def check-decrypt-succ-str
-  "append to pwd when encrypt, and check it exists after decryption
-  to make sure decrypt success"
-  "LOGSEQ!")
+(def pwd-map
+  "graph-uuid->pwd"
+  (atom {}))
 
-(def check-decrypt-succ-str-count (count check-decrypt-succ-str))
-
-(defn- aes-ctr
-  [key*]
-  (aesjs/ModeOfOperation.ctr. key*))
-
-(defn encrypt-pwd
+(defn- encrypt-pwd
   [pwd key*]
-  (let [pwd (str pwd check-decrypt-succ-str)
-        ctr (aes-ctr key*)
-        encrypted-bytes (.encrypt ctr (-> aesjs .-utils .-utf8 (.toBytes pwd)))]
-    (-> aesjs .-utils .-hex (.fromBytes encrypted-bytes))))
+  (p->c (encrypt/encrypt-with-passphrase key* pwd)))
 
-(defn decrypt-pwd
+(defn- decrypt-pwd
   "return nil when decryption failed"
   [encrypted-pwd key*]
-  (let [ctr (aes-ctr key*)
-        decrypted-bytes (.decrypt ctr (-> aesjs .-utils .-hex (.toBytes encrypted-pwd)))
-        pwd (-> aesjs .-utils .-utf8 (.fromBytes decrypted-bytes))
-        count-pwd (count pwd)]
-    (when (and (> count-pwd check-decrypt-succ-str-count)
-               (= check-decrypt-succ-str (subs pwd (- count-pwd check-decrypt-succ-str-count))))
-      (subs pwd 0 (- count-pwd check-decrypt-succ-str-count)))))
+  (go
+    (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-pwd)))]
+      (when-not (instance? ExceptionInfo r) r))))
+
+(defn- persist-pwd!
+  [pwd repo]
+  (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))]
+    (p->c (fs/write-file! repo (config/get-repo-dir repo) path pwd nil))))
 
 (defn encrypt+persist-pwd!
-  [pwd graph-uuid]
+  "- store pwd in `pwd-map`
+  - persist encrypted pwd at 'logseq/encrypted-password.txt'"
+  [pwd graph-uuid repo]
   (go
     (let [[value expired-at gone?]
           ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
@@ -960,14 +951,27 @@
           (if gone?
             ((juxt :value :expired-at) (<! (create-graph-salt remoteapi graph-uuid)))
             [value expired-at])
-          salt-value-bytes (-> salt-value base64/decodeStringToByteArray vec (subvec 0 32) clj->js)
-          encrypted-pwd (encrypt-pwd pwd salt-value-bytes)]
-      ;; TODO persist encrypt-pwd
-      encrypted-pwd)))
+          encrypted-pwd (<! (encrypt-pwd pwd salt-value))]
+      (<! (persist-pwd! encrypted-pwd repo)))))
 
+(defn restore-pwd!
+  "restore pwd from persisted encrypted-pwd, update `pwd-map`"
+  [repo graph-uuid]
+  (go
+    (let [encrypted-pwd (<! (p->c (fs/read-file "" (config/get-file-path repo "logseq/encrypted-password.txt"))))]
+      (if (instance? ExceptionInfo encrypted-pwd)
+        {:restore-pwd-failed encrypted-pwd}
+        (let [[salt-value _expired-at gone?]
+              ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
+               (<! (get-graph-salt remoteapi graph-uuid)))]
+          (if (or gone? (empty? salt-value))
+            {:restore-pwd-failed "expired salt"}
+            (let [pwd (<! (decrypt-pwd encrypted-pwd salt-value))]
+              (if (nil? pwd)
+                {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
+                (swap! pwd-map assoc graph-uuid pwd)))))))))
 
 ;;; ### sync state
-
 
 (defn sync-state
   "create a new sync-state"
@@ -1196,7 +1200,11 @@
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
     ILocal->RemoteSync
-    (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*" #"logseq/version-files/.*" #"logseq/\.recycle/.*"
+    (get-ignore-files [_] #{#"logseq/graphs-txid.edn$"
+                            #"logseq/bak/.*"
+                            #"logseq/version-files/.*"
+                            #"logseq/encrypted-password.txt$"
+                            #"logseq/\.recycle/.*"
                             #"\.DS_Store$"})
     (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
     (stop-local->remote! [_]

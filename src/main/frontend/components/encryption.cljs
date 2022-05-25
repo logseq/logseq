@@ -4,10 +4,12 @@
             [frontend.encrypt :as e]
             [frontend.handler.metadata :as metadata-handler]
             [frontend.handler.notification :as notification]
+            [frontend.fs.sync :as sync]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
+            [cljs.core.async :as a]
             [rum.core :as rum]))
 
 (rum/defcs encryption-dialog-inner <
@@ -51,7 +53,7 @@
 (rum/defcs input-password-inner <
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  [state repo-url close-fn {:keys [type GraphName GraphUUID]}]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID repo]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)]
     [:div.sm:max-w-2xl
@@ -104,11 +106,10 @@
                                   (close-fn true))
 
                            :remote
-                           ;; TODO: debug
-                           (notification/show!
-                             [:p (str "pw: " @password)
-                              [:p (str "name: " GraphName)]
-                              [:p (str "uuid: " GraphUUID)]] :warning)))))}
+                           (a/go
+                             (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))
+                             (notification/show! (str "Successfully set the password for graph: " GraphName) :success)
+                             (close-fn true))))))}
         "Submit"]]]]))
 
 (defn input-password
