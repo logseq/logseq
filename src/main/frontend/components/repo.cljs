@@ -14,7 +14,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.text :as text]
+            [frontend.util.text :as text-util]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
@@ -54,7 +54,7 @@
             [:div.flex.justify-between.mb-4 {:key id}
              (if local?
                (let [local-dir (config/get-local-dir url)
-                     graph-name (text/get-graph-name-from-path local-dir)]
+                     graph-name (text-util/get-graph-name-from-path local-dir)]
                  [:a {:title local-dir
                       :on-click #(state/pub-event! [:graph/switch url])}
                   graph-name])
@@ -89,7 +89,7 @@
         repo-links (mapv
                     (fn [{:keys [url]}]
                       (let [repo-path (db/get-repo-name url)
-                            short-repo-name (text/get-graph-name-from-path repo-path)]
+                            short-repo-name (text-util/get-graph-name-from-path repo-path)]
                         {:title short-repo-name
                          :hover-detail repo-path ;; show full path on hover
                          :options {:class "ml-1"

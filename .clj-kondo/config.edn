@@ -26,6 +26,7 @@
              frontend.db.query-react query-react
              frontend.util util
              frontend.util.property property
+             frontend.util.text text-util
              frontend.config config
              frontend.format.mldoc mldoc
              frontend.format.block block
@@ -40,7 +41,7 @@
              logseq.graph-parser.date-time-util date-time-util}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                         rum.core/defcs hooks.rum/defcs}}
+                        rum.core/defcs hooks.rum/defcs}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur

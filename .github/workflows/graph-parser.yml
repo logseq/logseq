@@ -1,0 +1,56 @@
+name: logseq graph-parser CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'deps/graph-parser/**'
+      - '!deps/graph-parser/**.md'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'deps/graph-parser/**'
+      - '!deps/graph-parser/**.md'
+
+env:
+  CLOJURE_VERSION: '1.10.1.727'
+  # setup-java@v2 dropped support for legacy Java version syntax.
+  # This is the same as 1.8.
+  JAVA_VERSION: '8'
+  # This is the latest node version we can run.
+  NODE_VERSION: '16'
+  BABASHKA_VERSION: '0.8.1'
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.3.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+
+      - name: Run clj-kondo lint
+        run: cd deps/graph-parser && clojure -M:clj-kondo --parallel --lint src test
+
+      - name: Lint for vars that are too large
+        run: scripts/large_vars.clj deps/graph-parser/src
+
+      - name: Carve lint for unused vars
+        run: cd deps/graph-parser && ../../scripts/carve.clj

@@ -183,10 +183,6 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
-(defn extract-all-block-refs
-  [content]
-  (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))
-
 #?(:org.babashka/nbb
    (alter-var-root #'gp-mldoc/parse-property (constantly text/parse-property))
    :default

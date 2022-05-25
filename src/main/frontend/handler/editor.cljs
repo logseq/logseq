@@ -48,6 +48,7 @@
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -814,7 +815,7 @@
               tail-len (count value)
               pos (max
                    (if original-content
-                     (utf8/length (utf8/encode original-content))
+                     (gobj/get (utf8/encode original-content) "length")
                      0)
                    0)]
           (edit-block! block pos id
@@ -934,8 +935,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
             content (or content (state/get-edit-content))
-            new-content (-> (text/remove-timestamp content key)
-                            (text/add-timestamp key value))]
+            new-content (-> (text-util/remove-timestamp content key)
+                            (text-util/add-timestamp key value))]
         (when (not= content new-content)
           (let [input-id (state/get-edit-input-id)]
             (if (and input-id
@@ -1566,7 +1567,7 @@
   (when input
     (let [value (gobj/get input "value")
           pos (cursor/pos input)]
-      (text/surround-by? value pos before end))))
+      (text-util/surround-by? value pos before end))))
 
 (defn wrapped-by?
   [input before end]
@@ -1574,7 +1575,7 @@
     (let [value (gobj/get input "value")
           pos (dec (cursor/pos input))]
       (when (>= pos 0)
-        (text/wrapped-by? value pos before end)))))
+        (text-util/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
   "Return matched page names"
@@ -2873,7 +2874,7 @@
 (defn wrap-macro-url
   [url]
   (cond
-    (boolean (text/get-matched-video url))
+    (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
     (string/includes? url "twitter.com")

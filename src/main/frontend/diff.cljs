@@ -6,7 +6,7 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.text :as text]))
+            [frontend.util.text :as text-util]))
 
 (defn diff
   [s1 s2]
@@ -47,7 +47,7 @@
 
                       :else
                       (recur r1 t2 (inc i1) i2))))
-            current-line (text/get-current-line-by-pos markup pos)]
+            current-line (text-util/get-current-line-by-pos markup pos)]
         (cond
           (= (util/nth-safe markup pos)
              (util/nth-safe markup (inc pos))

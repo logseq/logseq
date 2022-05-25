@@ -35,7 +35,8 @@
        (into {})))
 
 ;; Integration test that test parsing a large graph like docs
-(deftest ^:integration parse-and-load-files-to-db
+;; TODO: remove large-var and finish delete testing
+(deftest ^:large-vars/cleanup-todo ^:integration parse-and-load-files-to-db
   (let [graph-dir "src/test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (docs-graph-helper/build-graph-files graph-dir)

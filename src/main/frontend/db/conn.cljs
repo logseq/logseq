@@ -5,6 +5,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -21,7 +22,7 @@
   [repo]
   (cond
     (mobile-util/native-platform?)
-    (text/get-graph-name-from-path repo)
+    (text-util/get-graph-name-from-path repo)
 
     (config/local-db? repo)
     (config/get-local-dir repo)

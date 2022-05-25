@@ -1,0 +1,20 @@
+{:linters
+ {:unresolved-symbol {:exclude [;; TODO: Remove parse-* and update-* when https://github.com/clj-kondo/clj-kondo/issues/1694 is done
+                                parse-long
+                                parse-double
+                                parse-uuid
+                                update-keys
+                                update-vals]}
+
+  :consistent-alias
+  {:aliases {datascript.core d
+             logseq.graph-parser graph-parser
+             logseq.graph-parser.text text
+             logseq.graph-parser.block gp-block
+             logseq.graph-parser.mldoc gp-mldoc
+             logseq.graph-parser.util gp-util
+             logseq.graph-parser.property gp-property
+             logseq.graph-parser.config gp-config
+             logseq.graph-parser.date-time-util date-time-util}}}
+ :lint-as {promesa.core/let clojure.core/let}
+ :skip-comments true}

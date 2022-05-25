@@ -13,10 +13,10 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
             [promesa.core :as p]))
 
 (defn- handle-received-text [result]
@@ -34,7 +34,7 @@
                      (string/split url "\"\n"))
         text (some-> text (string/replace #"^\"" ""))
         url (and url
-                 (cond (boolean (text/get-matched-video url))
+                 (cond (boolean (text-util/get-matched-video url))
                        (util/format "{{video %s}}" url)
 
                        (and (string/includes? url "twitter.com")

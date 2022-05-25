@@ -1,5 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.utf8
-  (:require [goog.object :as gobj]))
+(ns ^:nbb-compatible logseq.graph-parser.utf8)
 
 (defonce encoder
   (js/TextEncoder. "utf-8"))
@@ -22,7 +21,3 @@
    (if end
      (decode (.subarray arr start end))
      (decode (.subarray arr start)))))
-
-(defn length
-  [arr]
-  (gobj/get arr "length"))
