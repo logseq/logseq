@@ -98,7 +98,7 @@
               [:a.control {:title    "Show encryption information about this graph"
                            :on-click (fn []
                                        (if remote?
-                                         (state/pub-event! [:modal/remote-encryption-input-pw-dialog url (assoc repo :type :remote)])
+                                         (state/pub-event! [:modal/remote-encryption-input-pw-dialog url repo])
                                          (state/set-modal! (encryption/encryption-dialog url))))}
                "🔐"])
 
