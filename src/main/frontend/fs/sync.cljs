@@ -59,6 +59,7 @@
                  ;; - drop redundant file-change-events
                  ;; - setup states in `frontend.state`
                  ::starting
+                 ::need-password
                  ::idle
                  ;; sync local-changed files
                  ::local->remote
@@ -922,13 +923,16 @@
 (def pwd-map
   "graph-uuid->pwd"
   (atom {}))
+(def pwd-map-changed-chan
+  (chan (async/sliding-buffer 1)))
+
+(add-watch pwd-map :pwd-map-changed #(offer! pwd-map-changed-chan true))
 
 (defn- encrypt-pwd
   [pwd key*]
   (p->c (encrypt/encrypt-with-passphrase key* pwd)))
 
 (defn- decrypt-pwd
-  "return nil when decryption failed"
   [encrypted-pwd key*]
   (go
     (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-pwd)))]
@@ -959,8 +963,8 @@
   [repo graph-uuid]
   (go
     (let [encrypted-pwd (<! (p->c (fs/read-file "" (config/get-file-path repo "logseq/encrypted-password.txt"))))]
-      (if (instance? ExceptionInfo encrypted-pwd)
-        {:restore-pwd-failed encrypted-pwd}
+      (if (or (nil? encrypted-pwd) (instance? ExceptionInfo encrypted-pwd))
+        {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
               ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
                (<! (get-graph-salt remoteapi graph-uuid)))]
@@ -970,6 +974,22 @@
               (if (nil? pwd)
                 {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
                 (swap! pwd-map assoc graph-uuid pwd)))))))))
+
+(defn ensure-pwd-exists!
+  [repo graph-uuid]
+  (go
+    (let [pwd (get @pwd-map graph-uuid)]
+      (when (nil? pwd)
+        (let [{restore-pwd-failed :restore-pwd-failed}
+              (<! (restore-pwd! repo graph-uuid))]
+          (when restore-pwd-failed
+            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid}
+                               #(restore-pwd! repo graph-uuid)])))
+        (loop []
+          (<! pwd-map-changed-chan)
+          (let [pwd (get @pwd-map graph-uuid)]
+            (when (nil? pwd) (recur)))))
+      (get @pwd-map graph-uuid))))
 
 ;;; ### sync state
 
@@ -1348,6 +1368,8 @@
       (swap! *sync-state sync-state--update-state next-state)
       (go
         (case state
+          ::need-password
+          (<! (.need-password this))
           ::idle
           (<! (.idle this))
           ::local->remote
@@ -1378,9 +1400,8 @@
                 :priority true)]
           (cond
             stop
-            (do
-              (drain-chan ops-chan)
-              (>! ops-chan {:stop true}))
+            (do (drain-chan ops-chan)
+                (>! ops-chan {:stop true}))
             remote->local
             (let [txid
                   (if (true? remote->local)
@@ -1396,7 +1417,12 @@
             (do (drain-chan ops-chan)
                 (>! ops-chan {:local->remote-full-sync true})
                 (recur)))))
-      (.schedule this ::idle nil))
+      (.schedule this ::need-password nil))
+
+    (need-password [this]
+      (go
+        (<! (ensure-pwd-exists! (state/get-current-repo) graph-uuid))
+        (.schedule this ::idle nil)))
 
     (idle [this]
       (go

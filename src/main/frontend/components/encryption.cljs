@@ -107,8 +107,10 @@
 
                            :remote
                            (a/go
-                             (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))
-                             (notification/show! (str "Successfully set the password for graph: " GraphName) :success)
+                             (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))]
+                               (if (instance? ExceptionInfo persist-r)
+                                 (js/console.error persist-r)
+                                 (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
                              (close-fn true))))))}
         "Submit"]]]]))
 

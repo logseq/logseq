@@ -58,6 +58,7 @@
 (defn download-all-files
   [repo graph-uuid user-uuid base-path]
   (go
+    (<! (sync/ensure-pwd-exists! repo graph-uuid))
     (state/reset-file-sync-download-init-state!)
     (state/set-file-sync-download-init-state! {:total :unknown :finished 0 :downloading? true})
     (let [remote-all-files-meta (<! (sync/get-remote-all-files-meta sync/remoteapi graph-uuid))
