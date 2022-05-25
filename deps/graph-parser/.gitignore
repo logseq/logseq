@@ -1,1 +1,3 @@
-.clj-kondo/.cache
+/.clj-kondo/.cache
+cljs-test-runner-out
+/test/docs

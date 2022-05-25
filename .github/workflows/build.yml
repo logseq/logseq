@@ -79,8 +79,6 @@ jobs:
           yarn cljs:test
           node static/tests.js
 
-      - name: Run nbb tests for graph-parser
-        run: yarn nbb-logseq -cp deps/graph-parser/src:deps/graph-parser/test -m logseq.graph-parser.nbb-test-runner/run-tests
       # In this job because it depends on an npm package
       - name: Load nbb compatible namespaces
         run: bb test:load-nbb-compatible-namespaces

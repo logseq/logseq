@@ -2,7 +2,8 @@
   "Property fns needed by graph-parser"
   (:require [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
-            [goog.string :as gstring]))
+            [goog.string :as gstring]
+            [goog.string.format]))
 
 (defn properties-ast?
   [block]

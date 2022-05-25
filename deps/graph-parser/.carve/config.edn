@@ -3,5 +3,7 @@
                   ;; carve doesn't detect nbb only usage
                   logseq.graph-parser.log
                   ;; Used by logseq but not worth splitting up
-                  logseq.graph-parser.db.schema]
+                  logseq.graph-parser.db.schema
+                  ;; Used in tests
+                  logseq.graph-parser.test.docs-graph-helper]
  :report {:format :ignore}}

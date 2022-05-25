@@ -98,7 +98,7 @@
 : definition" md-config {})))))
 
 (deftest ^:integration test->edn
-  (let [graph-dir "src/test/docs"
+  (let [graph-dir "test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
         files (docs-graph-helper/build-graph-files graph-dir)
         asts-by-file (->> files

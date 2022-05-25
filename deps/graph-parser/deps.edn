@@ -1,14 +1,23 @@
-{:paths ["src"
-         ;; Needed for logseq tests to pull in logseq.graph-parser.test*
-         "test"]
+{:paths ["src"]
  :deps
  ;; Deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {datascript/datascript {:mvn/version "1.3.8"}
   frankiesardo/linked {:mvn/version "1.3.0"}
   com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  com.lambdaisland/glogi {:mvn/version "1.1.144"}}
+  ;; stubbed in nbb
+  com.lambdaisland/glogi {:mvn/version "1.1.144"}
+  ;; built in to nbb
+  cljs-bean/cljs-bean {:mvn/version "1.5.0"}}
 
  :aliases
- {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.04.25"}}
+ ;; This runs tests with nodejs. Would be nice to run this with a headless env since
+ ;; this is how its normally run in the app but this requires more setup with
+ ;; karma and shadow-cljs.edn
+ {:test {:extra-paths ["test"]
+         :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}
+                      org.clojure/clojurescript {:mvn/version "1.11.54"}}
+         :main-opts ["-m" "cljs-test-runner.main"]}
+
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.04.25"}}
               :main-opts  ["-m" "clj-kondo.main"]}}}
