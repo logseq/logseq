@@ -104,6 +104,7 @@
                                   (close-fn true))
 
                            :remote
+                           ;; TODO: debug
                            (notification/show!
                              [:p (str "pw: " @password)
                               [:p (str "name: " GraphName)]
@@ -114,7 +115,11 @@
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
   ([repo-url close-fn opts]
    (fn [_close-fn]
-     (input-password-inner repo-url close-fn opts))))
+     (let [close-fn' (if (fn? close-fn)
+                       #(do (close-fn %)
+                            (_close-fn))
+                       _close-fn)]
+       (input-password-inner repo-url close-fn' opts)))))
 
 (rum/defcs encryption-setup-dialog-inner
   [state repo-url close-fn]

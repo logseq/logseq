@@ -94,10 +94,12 @@
                                            (state/pub-event! [:graph/switch url])))
 
            [:div.controls
-            (when (e/encrypted-db? url)
+            (when (or (e/encrypted-db? url) (and url remote?))
               [:a.control {:title    "Show encryption information about this graph"
                            :on-click (fn []
-                                       (state/set-modal! (encryption/encryption-dialog url)))}
+                                       (if remote?
+                                         (state/pub-event! [:modal/remote-encryption-input-pw-dialog url (assoc repo :type :remote)])
+                                         (state/set-modal! (encryption/encryption-dialog url))))}
                "🔐"])
 
             [:a.text-gray-400.ml-4.font-medium.text-sm
