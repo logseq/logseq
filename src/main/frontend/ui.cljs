@@ -791,18 +791,27 @@
   (rum/local false ::mounted?)
   [state {:keys [fixed-position? open? in-editor?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?
         manual (not= open? nil)
-        editing? (state/sub :editor/editing?)]
+        edit-id (ffirst (state/sub :editor/editing?))
+        editing-node (when edit-id (gdom/getElement edit-id))
+        editing? (some? editing-node)
+        scrolling? (state/sub :ui/scrolling?)
+        open? (if manual open? @*mounted?)
+        disabled? (boolean
+                   (or
+                    (and in-editor?
+                         ;; editing in non-preview containers or scrolling
+                         (not (util/rec-get-tippy-container editing-node))
+                         (or editing? scrolling?))
+                    (not (state/enable-tooltip?))))]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :delay 600
                     :theme "customized"
-                    :disabled (not (state/enable-tooltip?))
+                    :disabled disabled?
                     :unmountHTMLWhenHide true
-                    :open (when-not (and in-editor? editing?)
-                            (if manual open? @*mounted?))
+                    :open (if disabled? false open?)
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
@@ -811,18 +820,19 @@
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if (or open? mounted?)
-                           (try
-                             (when-let [html (:html opts)]
-                               (if (fn? html)
-                                 (html)
-                                 [:div.px-2.py-1
-                                  html]))
-                             (catch js/Error e
-                               (log/error :exception e)
-                               [:div]))
-                           [:div {:key "tippy"} ""])))
-            (rum/fragment {:key "tippy-children"} child))))
+            (assoc :html (or
+                          (when open?
+                            (try
+                              (when-let [html (:html opts)]
+                                (if (fn? html)
+                                  (html)
+                                  [:div.px-2.py-1
+                                   html]))
+                              (catch js/Error e
+                                (log/error :exception e)
+                                [:div])))
+                          [:div {:key "tippy"} ""])))
+           (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
