@@ -424,10 +424,10 @@
     db-encrypted-secret
     close-fn)))
 
-(defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info close-fn]]
+(defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type close-fn]]
   (state/set-modal!
     (encryption/input-password
-      repo-url close-fn (assoc remote-graph-info :type :remote :repo repo-url))))
+      repo-url close-fn (assoc remote-graph-info :type (or type :create-remote) :repo repo-url))))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]

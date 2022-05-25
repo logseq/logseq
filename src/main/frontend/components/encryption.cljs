@@ -55,19 +55,22 @@
   (rum/local "" ::password-confirm)
   [state repo-url close-fn {:keys [type GraphName GraphUUID repo]}]
   (let [password (get state ::password)
-        password-confirm (get state ::password-confirm)]
+        password-confirm (get state ::password-confirm)
+        local-pw?  (= type :local)
+        verify-pw? (= type :clone-remote)]
     [:div.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
-        "Enter a password"]]]
+        (if verify-pw? "What's the password of your remote graph?" "Enter a password")]]]
 
-     (ui/admonition
-      :warning
-      [:div.opacity-70
-       "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
+     (when-not verify-pw?
+       (ui/admonition
+         :warning
+         [:div.opacity-70
+          "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."]))
 
-     (when (= :remote type)
+     (when-not local-pw?
        [:p.px-2.pb-2
         [:strong "Name: " GraphName] [:br]
         [:small.italic "UUID: " GraphUUID]])
@@ -78,11 +81,13 @@
        :auto-focus true
        :on-change (fn [e]
                     (reset! password (util/evalue e)))}]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:type "password"
-       :placeholder "Re-enter the password"
-       :on-change (fn [e]
-                    (reset! password-confirm (util/evalue e)))}]
+
+     (when-not verify-pw?
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:type        "password"
+         :placeholder "Re-enter the password"
+         :on-change   (fn [e]
+                        (reset! password-confirm (util/evalue e)))}])
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -94,7 +99,8 @@
                          (string/blank? value)
                          nil
 
-                         (not= @password @password-confirm)
+                         (and (not verify-pw?)
+                              (not= @password @password-confirm))
                          (notification/show! "The passwords are not matched." :error)
 
                          :else
@@ -105,13 +111,16 @@
                                   (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
                                   (close-fn true))
 
-                           :remote
+                           :create-remote
                            (a/go
                              (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))]
                                (if (instance? ExceptionInfo persist-r)
                                  (js/console.error persist-r)
                                  (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
-                             (close-fn true))))))}
+                             (close-fn true))
+
+                           :clone-remote
+                           (close-fn {:password @password})))))}
         "Submit"]]]]))
 
 (defn input-password

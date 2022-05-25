@@ -12,14 +12,16 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [electron.ipc :as ipc]
-            [cljs.core.async :as as]))
+            [cljs.core.async :as as]
+            [clojure.string :as string]))
 
 (rum/defcs indicator <
   rum/reactive
   [_state]
   (let [_ (state/sub :auth/id-token)
         toggling? (state/sub :file-sync/toggling?)
-        sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+        current-repo (state/get-current-repo)
+        sync-state (state/sub [:file-sync/sync-state current-repo])
         _ (rum/react file-sync-handler/refresh-file-sync-component)
         graph-txid-exists? (file-sync-handler/graph-txid-exists?)
         uploading-files (:current-local->remote-files sync-state)
@@ -32,6 +34,7 @@
         full-syncing? (contains? #{:local->remote-full-sync :remote->local-full-sync} status)
         syncing? (or full-syncing? (contains? #{:local->remote :remote->local} status))
         idle? (contains? #{:idle} status)
+        need-password? (contains? #{:need-password} status)
         queuing? (and idle? (boolean (seq queuing-files)))
 
         turn-on #(when-not toggling?
@@ -78,6 +81,13 @@
               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
 
          (cond-> []
+                 need-password?
+                 (conj {:title   [:strong "Set a password to start"]
+                        :icon    (ui/icon "lock-off")
+                        :options {:on-click #(let [current-graph (repo-handler/get-detail-graph-info current-repo)]
+                                               (state/pub-event!
+                                                 [:modal/remote-encryption-input-pw-dialog current-repo current-graph]))}})
+
                  graph-txid-exists?
                  (concat
                    (map (fn [f] {:title [:div.file-item f]
@@ -120,16 +130,45 @@
 
                        {:empty-dir?-or-pred
                         (fn [ret]
-                          (when-not (nil? (second ret))
+                          (let [empty-dir? (nil? (second ret))]
                             (if-let [root (first ret)]
-                              (do
-                                (js/console.log root)
-                                (-> (ipc/ipc :readGraphTxIdInfo root)
-                                    (p/then (fn [^js info]
-                                              (when (or (nil? info)
-                                                        (nil? (second info))
-                                                        (not= (second info) (:GraphUUID graph)))
-                                                (throw (js/Error. "AssertDirectoryError")))))))
+
+                              ;; verify directory
+                              (-> (if empty-dir?
+                                    (p/resolved nil)
+                                    (ipc/ipc :readGraphTxIdInfo root))
+
+                                  (p/then (fn [^js info]
+                                            (when (and (not empty-dir?)
+                                                       (or (nil? info)
+                                                           (nil? (second info))
+                                                           (not= (second info) (:GraphUUID graph))))
+                                              (throw (js/Error. "AssertDirectoryError")))
+
+                                            ;; always verify password
+                                            (p/create
+                                              (fn [_resolve reject]
+                                                (state/pub-event!
+                                                  [:modal/remote-encryption-input-pw-dialog nil graph :clone-remote
+
+                                                   ;; callback if set up password
+                                                   (fn [{:keys [password]}]
+                                                     (when-not (string/blank? password)
+                                                       ;; TODO: wait for backend to verify password correct or not!
+                                                       (notifications/show!
+                                                         [:div
+                                                          [:p "====Go to verify user's PW===="]
+                                                          [:p "PW:" password]
+                                                          [:p "UUID:" (:GraphUUID graph)]] :warning)
+
+                                                       ;; TODO: if correct
+                                                       ;(resolve)
+
+                                                       ;; TODO: if incorrect
+                                                       (reject (js/Error. "!!!!Verify Password Error!!!!"))))])
+                                                )))))
+
+                              ;; cancel pick a directory
                               (throw (js/Error. nil)))))})
 
                       (p/catch (fn [^js e]

@@ -478,6 +478,27 @@
            [{:url config/local-repo
              :example? true}])))
 
+(defn combine-local-&-remote-graphs
+  [local-repos remote-repos]
+  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
+                                         (assoc % :GraphUUID (second sync-meta)) %)
+                                      local-repos)
+                                 (some->> remote-repos
+                                          (map #(assoc % :remote? true)))))]
+    (let [repos' (group-by :GraphUUID repos')]
+      (mapcat (fn [[k vs]]
+                (if-not (nil? k)
+                  [(merge (first vs) (second vs))] vs))
+              repos'))))
+
+(defn get-detail-graph-info
+  [url]
+  (when-let [graphs (seq (and url (combine-local-&-remote-graphs
+                                    (state/get-repos)
+                                    (state/get-remote-repos))))]
+    (first (filter #(when-let [url' (:url %)]
+                      (= url url')) graphs))))
+
 (defn refresh-repos!
   []
   (p/let [repos (get-repos)]

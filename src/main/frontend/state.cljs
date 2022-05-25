@@ -477,6 +477,10 @@
   []
   (:page-name-order (get-config)))
 
+(defn get-remote-repos
+  []
+  (get-in @state [:file-sync/remote-graphs :graphs]))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))

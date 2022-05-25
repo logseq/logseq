@@ -32,19 +32,6 @@
         (widgets/add-graph :graph-types graph-types-s)))
     (widgets/add-graph)))
 
-(defn combine-local-&-remote-graphs
-  [local-repos remote-repos]
-  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
-                                         (assoc % :GraphUUID (second sync-meta)) %)
-                                      local-repos)
-                                 (some->> remote-repos
-                                          (map #(assoc % :remote? true)))))]
-    (let [repos' (group-by :GraphUUID repos')]
-      (mapcat (fn [[k vs]]
-                (if-not (nil? k)
-                  [(merge (first vs) (second vs))] vs))
-              repos'))))
-
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
@@ -70,7 +57,7 @@
         repos (util/distinct-by :url repos)
         remotes (state/sub [:file-sync/remote-graphs :graphs])
         repos (if (and login? (seq remotes))
-                (combine-local-&-remote-graphs repos remotes) repos)
+                (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
         repos (remove #(= (:url %) config/local-repo) repos)]
     (if (seq repos)
       [:div#graphs
@@ -199,7 +186,7 @@
       (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
             repos (if (and (seq remotes) login?)
-                    (combine-local-&-remote-graphs repos remotes) repos)
+                    (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
             links (repos-dropdown-links repos current-repo multiple-windows?)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [valid-remotes-but-locals? (and (seq repos) (not (some :url repos)))
