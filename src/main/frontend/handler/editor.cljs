@@ -2633,49 +2633,49 @@
         nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
-        ;; does not work sometimes in an empty block, hence the empty block
+        ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
         (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (= value ""))
+             (zero? pos))
         (do
           (util/stop e)
-          (delete-block! (state/get-current-repo) false))
+          (let [block (state/get-edit-block)
+                top-block? (= (:block/left block) (:block/page block))
+                root-block? (= (:block/container block) (str (:block/uuid block)))
+                repo (state/get-current-repo)]
+           (when (and (if top-block? (string/blank? value) true)
+                      (not root-block?))
+             (delete-block! repo false))))
 
         (and (= key "#")
-             (and
-              (> pos 0)
-              (= "#" (util/nth-safe value (dec pos)))))
+             (and (> pos 0)
+                  (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (and
-         (contains? (set/difference (set (keys reversed-autopair-map))
-                                    #{"`"})
-                    key)
+        (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                        #{"`"})
+                        key)
          (= (get-current-input-char input) key))
-        (do
-          (util/stop e)
-          (cursor/move-cursor-forward input))
+        (do (util/stop e)
+            (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
-        (do
-          (autopair input-id "[" format nil)
-          (util/stop e))
+        (do (autopair input-id "[" format nil)
+            (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-paren-keys key))
-        (do
-          (util/stop e)
-          (autopair input-id "(" format nil))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
         (contains? (set (keys autopair-map)) key)
-        (do
-          (util/stop e)
-          (autopair input-id key format nil))
+        (do (util/stop e)
+            (autopair input-id key format nil))
 
         hashtag?
         (do
