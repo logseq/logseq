@@ -437,16 +437,6 @@
   (get-token [this])
   (refresh-token [this]))
 
-(declare rsapi)
-(defn- check-files-exists [base-path file-paths]
-  (go
-    (let [cause (ex-cause (<! (get-local-files-meta rsapi "" base-path file-paths)))]
-      (assert (nil? cause) (str cause base-path file-paths)))))
-
-(defn- check-files-not-exists [base-path file-paths]
-  (go
-    (let [cause (ex-cause (<! (get-local-files-meta rsapi "" base-path file-paths)))]
-      (assert (some? cause)))))
 
 (defn- retry-rsapi [f]
   (go-loop [n 3]
@@ -498,13 +488,11 @@
       (let [token (<! (get-token this))
             r (<! (retry-rsapi
                    #(p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))]
-        (when (state/developer-mode?) (check-files-exists base-path filepaths))
         r)))
 
   (delete-local-files [_ graph-uuid base-path filepaths]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path filepaths))))]
-        (when (state/developer-mode?) (check-files-not-exists base-path filepaths))
         r)))
 
   (update-remote-file [this graph-uuid base-path filepath local-txid]
@@ -580,7 +568,6 @@
                                                                              :basePath base-path
                                                                              :filePaths filepaths
                                                                              :token token})))))]
-        (when (state/developer-mode?) (check-files-exists base-path filepaths))
         r)))
 
   (delete-local-files [_ _graph-uuid base-path filepaths]
@@ -588,7 +575,6 @@
       (let [r (<! (retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
                                                          (clj->js {:basePath base-path
                                                                    :filePaths filepaths})))))]
-        (when (state/developer-mode?) (check-files-not-exists base-path filepaths))
         r)))
 
   (update-remote-file [this graph-uuid base-path filepath local-txid]

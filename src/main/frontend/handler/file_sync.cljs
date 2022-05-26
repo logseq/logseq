@@ -108,7 +108,7 @@
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
   (go
-    (let [key (path/join "logseq/version-files" file-uuid version-uuid)
+    (let [key (path/join "version-files" file-uuid version-uuid)
           r (<! (sync/update-local-files
                  sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
       (if (instance? ExceptionInfo r)
@@ -117,7 +117,7 @@
                              [:div "Downloaded version file at: "]
                              [:div key]] :success false))
       (when-not (instance? ExceptionInfo r)
-        key))))
+        (path/join "logseq" key)))))
 
 (defn- list-file-local-versions
   [page]
@@ -176,10 +176,10 @@
                                         {:on-click #(if local?
                                                       (js/window.apis.openPath (:path version))
                                                       (go
-                                                        (let [relative-path
-                                                              (<! (download-version-file graph-uuid
-                                                                                         (:FileUUID version)
-                                                                                         (:VersionUUID version)))]
+                                                        (when-let [relative-path
+                                                                   (<! (download-version-file graph-uuid
+                                                                                              (:FileUUID version)
+                                                                                              (:VersionUUID version)))]
                                                           (js/window.apis.openPath (path/join base-path relative-path)))))}
                                         version-uuid]
                                        (when-not local?
