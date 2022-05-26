@@ -57,7 +57,7 @@
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
-        verify-pw? (= type :clone-remote)]
+        verify-pw? (= type :input-pwd-remote)]
     [:div.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -111,16 +111,13 @@
                                   (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
                                   (close-fn true))
 
-                           :create-remote
+                           (:create-pwd-remote :input-pwd-remote)
                            (a/go
                              (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))]
                                (if (instance? ExceptionInfo persist-r)
                                  (js/console.error persist-r)
                                  (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
-                             (close-fn true))
-
-                           :clone-remote
-                           (close-fn {:password @password})))))}
+                             (close-fn true))))))}
         "Submit"]]]]))
 
 (defn input-password

@@ -983,7 +983,7 @@
         (let [{restore-pwd-failed :restore-pwd-failed}
               (<! (restore-pwd! repo graph-uuid))]
           (when restore-pwd-failed
-            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid}
+            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
                                #(restore-pwd! repo graph-uuid)])))
         (loop []
           (<! pwd-map-changed-chan)

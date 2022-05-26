@@ -149,7 +149,7 @@
                                             (p/create
                                               (fn [_resolve reject]
                                                 (state/pub-event!
-                                                  [:modal/remote-encryption-input-pw-dialog nil graph :clone-remote
+                                                  [:modal/remote-encryption-input-pw-dialog nil graph :input-pwd-remote
 
                                                    ;; callback if set up password
                                                    (fn [{:keys [password]}]
