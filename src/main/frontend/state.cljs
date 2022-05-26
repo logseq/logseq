@@ -89,6 +89,7 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
+     :ui/scrolling?                         false
      :document/mode?                        document-mode?
 
      :config                                {}

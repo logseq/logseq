@@ -24,6 +24,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -279,7 +280,8 @@
                    {:drop (fn [_e files]
                             (when-let [id (state/get-edit-input-id)]
                               (let [format (:block/format (state/get-edit-block))]
-                                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
+                                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
+                  (common-handler/listen-to-scroll! element))
                 state)}
   [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
