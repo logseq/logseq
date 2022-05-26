@@ -143,30 +143,7 @@
                                                        (or (nil? info)
                                                            (nil? (second info))
                                                            (not= (second info) (:GraphUUID graph))))
-                                              (throw (js/Error. "AssertDirectoryError")))
-
-                                            ;; always verify password
-                                            (p/create
-                                              (fn [_resolve reject]
-                                                (state/pub-event!
-                                                  [:modal/remote-encryption-input-pw-dialog nil graph :input-pwd-remote
-
-                                                   ;; callback if set up password
-                                                   (fn [{:keys [password]}]
-                                                     (when-not (string/blank? password)
-                                                       ;; TODO: wait for backend to verify password correct or not!
-                                                       (notifications/show!
-                                                         [:div
-                                                          [:p "====Go to verify user's PW===="]
-                                                          [:p "PW:" password]
-                                                          [:p "UUID:" (:GraphUUID graph)]] :warning)
-
-                                                       ;; TODO: if correct
-                                                       ;(resolve)
-
-                                                       ;; TODO: if incorrect
-                                                       (reject (js/Error. "!!!!Verify Password Error!!!!"))))])
-                                                )))))
+                                              (throw (js/Error. "AssertDirectoryError"))))))
 
                               ;; cancel pick a directory
                               (throw (js/Error. nil)))))})

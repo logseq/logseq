@@ -409,7 +409,7 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
-  (set-env [this prod?] "set environment")
+  (set-env [this prod? passphrase] "set environment")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -470,7 +470,7 @@
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
   IRSAPI
-  (set-env [_ prod?] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev"))))))
+  (set-env [_ prod? passphrase] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") passphrase)))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -538,7 +538,7 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (set-env [_ prod?]
+  (set-env [_ prod? _passphrase]      ;; TODO passphrase
     (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
@@ -940,8 +940,12 @@
 
 (defn- persist-pwd!
   [pwd repo]
-  (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))]
-    (p->c (fs/write-file! repo (config/get-repo-dir repo) path pwd nil))))
+  (go
+    (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))
+          repo-dir (config/get-repo-dir repo)]
+      (println :debug "persist-pwd!" (str repo-dir "/" config/app-name))
+      (<! (p->c (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))))
+      (<! (p->c (fs/write-file! repo repo-dir path pwd nil))))))
 
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
@@ -1422,6 +1426,7 @@
     (need-password [this]
       (go
         (<! (ensure-pwd-exists! (state/get-current-repo) graph-uuid))
+        (<! (set-env rsapi config/FILE-SYNC-PROD? (get @pwd-map graph-uuid)))
         (.schedule this ::idle nil)))
 
     (idle [this]
@@ -1603,7 +1608,7 @@
              (clear-graphs-txid! repo)
              (do
                ;; set-env
-               (set-env rsapi config/FILE-SYNC-PROD?)
+               (<! (set-env rsapi config/FILE-SYNC-PROD? ""))
                (state/set-file-sync-state repo @*sync-state)
                (state/set-file-sync-manager sm)
                ;; wait seconds to receive all file change events,
