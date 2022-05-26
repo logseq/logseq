@@ -943,9 +943,8 @@
   (go
     (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))
           repo-dir (config/get-repo-dir repo)]
-      (println :debug "persist-pwd!" (str repo-dir "/" config/app-name))
       (<! (p->c (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))))
-      (<! (p->c (fs/write-file! repo repo-dir path pwd nil))))))
+      (<! (p->c (fs/write-file! repo repo-dir path pwd {:skip-compare? true}))))))
 
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
