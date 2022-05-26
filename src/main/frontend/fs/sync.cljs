@@ -640,8 +640,9 @@
   (refresh-token [_]
     (go
       (<! (user/refresh-id-token&access-token))
-      (state/get-auth-id-token)))
+      (state/get-auth-id-token))))
 
+(extend-type RemoteAPI
   IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid]
     (let [file-meta-list (transient #{})]
@@ -729,6 +730,7 @@
     (.request this "create_graph_encrypt_keys" {:GraphUUID graph-uuid
                                                 :public-key public-key
                                                 :encrypted-private-key encrypted-private-key})))
+
 
 (def remoteapi (->RemoteAPI))
 

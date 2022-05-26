@@ -12,8 +12,7 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [electron.ipc :as ipc]
-            [cljs.core.async :as as]
-            [clojure.string :as string]))
+            [cljs.core.async :as as]))
 
 (rum/defcs indicator <
   rum/reactive
