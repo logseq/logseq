@@ -17,10 +17,10 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     parentId: 'page',
     type: 'line',
     point: [0, 0],
-    handles: [
-      { id: 'start', canBind: true, point: [0, 0] },
-      { id: 'end', canBind: true, point: [1, 1] },
-    ],
+    handles: {
+      start: { id: 'start', canBind: true, point: [0, 0] },
+      end: { id: 'end', canBind: true, point: [1, 1] },
+    },
     stroke: '#000000',
     fill: '#ffffff',
     strokeWidth: 2,

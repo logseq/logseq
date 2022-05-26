@@ -9,7 +9,7 @@ import Vec from '@tldraw/vec'
 import { action, computed, makeObservable, observable, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
-import { BoundsUtils, PointUtils } from '~utils'
+import { BoundsUtils, deepCopy, PointUtils } from '~utils'
 
 export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
   nonce?: number
@@ -30,7 +30,7 @@ export interface TLShapeProps {
   point: number[]
   scale?: number[]
   rotation?: number
-  handles?: TLHandle[]
+  handles?: Record<string, TLHandle>
   label?: string
   labelPosition?: number[]
   clipping?: number | number[]
@@ -64,7 +64,7 @@ export interface TLResetBoundsInfo<T extends TLAsset> {
 }
 
 export interface TLHandleChangeInfo {
-  index: number
+  id: string
   delta: number[]
 }
 
@@ -313,17 +313,20 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this
   }
 
-  onHandleChange = (initialShape: any, { index, delta }: TLHandleChangeInfo) => {
+  onHandleChange = (initialShape: any, { id, delta }: TLHandleChangeInfo) => {
     if (initialShape.handles === undefined) return
-    const nextHandles = [...initialShape.handles]
-    nextHandles[index] = {
-      ...nextHandles[index],
-      point: Vec.add(delta, initialShape.handles[index].point),
+    const nextHandles: Record<string, TLHandle> = deepCopy(initialShape.handles)
+    nextHandles[id] = {
+      ...nextHandles[id],
+      point: Vec.add(delta, initialShape.handles[id].point),
     }
-    const topLeft = BoundsUtils.getCommonTopLeft(nextHandles.map(h => h.point))
+    const topLeft = BoundsUtils.getCommonTopLeft(Object.values(nextHandles).map(h => h.point))
+    Object.values(nextHandles).forEach(h => {
+      h.point = Vec.sub(h.point, topLeft)
+    })
     this.update({
       point: Vec.add(initialShape.point, topLeft),
-      handles: nextHandles.map(h => ({ ...h, point: Vec.sub(h.point, topLeft) })),
+      handles: nextHandles
     })
   }
 }

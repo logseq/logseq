@@ -36,8 +36,8 @@ export const SelectionDetail = observer(function SelectionDetail<S extends TLRea
       >
         {isLine
           ? `${Vec.dist(
-              shapes[0].props.handles![0].point,
-              shapes[0].props.handles![1].point
+              shapes[0].props.handles!.start.point,
+              shapes[0].props.handles!.end.point
             ).toFixed()}`
           : detail === 'size'
           ? `${bounds.width.toFixed()} × ${bounds.height.toFixed()}`

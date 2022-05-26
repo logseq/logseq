@@ -15,9 +15,8 @@ export class TranslatingHandleState<
 
   private offset = [0, 0]
   private initialTopLeft = [0, 0]
-  private index = 0
+  private handleId = 'start'
   private shape: S = {} as S
-  private handleId: 'start' | 'end' = 'start'
   private initialShape: S['props'] = {} as S['props']
   private handle: TLHandle = {} as TLHandle
   private bindableShapeIds: string[] = []
@@ -29,7 +28,7 @@ export class TranslatingHandleState<
   ) => {
     this.app.history.pause()
     this.offset = [0, 0]
-    this.index = info.index
+    this.handleId = info.id
     this.shape = info.shape
     this.handle = info.handle
     this.initialShape = deepCopy({ ...this.shape.props })
@@ -75,8 +74,8 @@ export class TranslatingHandleState<
         delta[1] = 0
       }
     }
-    const { shape, initialShape, index } = this
-    shape.onHandleChange(initialShape, { index, delta })
+    const { shape, initialShape, handleId: id } = this
+    shape.onHandleChange(initialShape, { id, delta })
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {

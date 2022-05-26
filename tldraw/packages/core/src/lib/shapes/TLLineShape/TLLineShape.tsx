@@ -5,7 +5,7 @@ import { BoundsUtils, deepMerge } from '~utils'
 import { TLPolylineShape, TLPolylineShapeProps } from '../TLPolylineShape'
 
 export interface TLLineShapeProps extends TLPolylineShapeProps {
-  handles: TLHandle[]
+  handles: Record<'start' | 'end' | string, TLHandle>
 }
 
 export class TLLineShape<
@@ -24,38 +24,45 @@ export class TLLineShape<
     type: 'line',
     parentId: 'page',
     point: [0, 0],
-    handles: [
-      { id: 'start', canBind: true, point: [0, 0] },
-      { id: 'end', canBind: true, point: [1, 1] },
-    ],
+    handles: {
+      start: { id: 'start', canBind: true, point: [0, 0] },
+      end: { id: 'end', canBind: true, point: [1, 1] },
+    },
   }
 
   validateProps = (props: Partial<P>) => {
     if (props.point) props.point = [0, 0]
-    if (props.handles !== undefined && props.handles.length < 1)
-      props.handles = [{ point: [0, 0], id: 'start' }]
+    if (props.handles !== undefined && Object.values(props.handles).length < 1)
+      props.handles = TLLineShape.defaultProps['handles']
     return props
   }
 
-  getHandlesChange = (initialShape: P, handles: Partial<TLHandle>[]): P | void => {
-    let nextHandles = handles.map((h, i) => deepMerge(initialShape.handles[i] ?? {}, h))
-    nextHandles = nextHandles.map(h => ({ ...h, point: Vec.toFixed(h.point) }))
+  getHandlesChange = (shape: P, handles: Partial<P['handles']>): Partial<P> | undefined => {
+    let nextHandles = deepMerge(shape.handles, handles)
 
-    if (nextHandles.length !== 2 || Vec.isEqual(nextHandles[0].point, nextHandles[1].point)) {
-      return
-    }
+    nextHandles = deepMerge(nextHandles, {
+      start: {
+        point: Vec.toFixed(nextHandles.start.point),
+      },
+      end: {
+        point: Vec.toFixed(nextHandles.end.point),
+      },
+    })
+
+    // This will produce NaN values
+    if (Vec.isEqual(nextHandles.start.point, nextHandles.end.point)) return
 
     const nextShape = {
-      ...initialShape,
+      point: shape.point,
       handles: nextHandles,
     }
 
     // Zero out the handles to prevent handles with negative points. If a handle's x or y
     // is below zero, we need to move the shape left or up to make it zero.
-    const topLeft = initialShape.point
+    const topLeft = shape.point
 
     const nextBounds = BoundsUtils.translateBounds(
-      BoundsUtils.getBoundsFromPoints(nextHandles.map(h => h.point)),
+      BoundsUtils.getBoundsFromPoints(Object.values(nextHandles).map(h => h.point)),
       nextShape.point
     )
 
@@ -67,6 +74,8 @@ export class TLLineShape<
       })
       nextShape.point = Vec.toFixed(Vec.add(nextShape.point, offset))
     }
+
+    // @ts-expect-error ???
     return nextShape
   }
 }

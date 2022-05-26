@@ -223,7 +223,7 @@ export class TLApp<
   /* ---------------------- Pages --------------------- */
 
   @observable pages: Map<string, TLPage<S, K>> = new Map([
-    ['page', new TLPage(this, { id: 'page', name: 'page', shapes: [], bindings: [] })],
+    ['page', new TLPage(this, { id: 'page', name: 'page', shapes: [], bindings: {} })],
   ])
 
   @observable currentPageId = 'page'

@@ -11,7 +11,7 @@ import { BoundsUtils, PointUtils, PolygonUtils } from '~utils'
 import { TLShapeProps, TLResizeInfo, TLShape } from '../TLShape'
 
 export interface TLPolylineShapeProps extends TLShapeProps {
-  handles: TLHandle[]
+  handles: Record<string, TLHandle>
 }
 
 export class TLPolylineShape<
@@ -30,11 +30,11 @@ export class TLPolylineShape<
     type: 'polyline',
     parentId: 'page',
     point: [0, 0],
-    handles: [{ id: '0', point: [0, 0] }],
+    handles: {},
   }
 
   @computed get points() {
-    return this.props.handles.map(h => h.point)
+    return Object.values(this.props.handles).map(h => h.point)
   }
 
   @computed get centroid() {
@@ -48,7 +48,7 @@ export class TLPolylineShape<
       props: { handles, rotation },
     } = this
     if (!rotation) return this.points
-    return handles.map(h => Vec.rotWith(h.point, centroid, rotation))
+    return Object.values(handles).map(h => Vec.rotWith(h.point, centroid, rotation))
   }
 
   getBounds = (): TLBounds => {
@@ -76,7 +76,7 @@ export class TLPolylineShape<
     } = this
     this.scale = [...(this.props.scale ?? [1, 1])]
     const size = [bounds.width, bounds.height]
-    this.normalizedHandles = handles.map(h => Vec.divV(h.point, size))
+    this.normalizedHandles = Object.values(handles).map(h => Vec.divV(h.point, size))
     return this
   }
 
@@ -95,7 +95,7 @@ export class TLPolylineShape<
     if (scaleY < 0) nextScale[1] *= -1
     return this.update({
       point: [bounds.minX, bounds.minY],
-      handles: handles.map((handle, i) => ({
+      handles: Object.values(handles).map((handle, i) => ({
         ...handle,
         point: Vec.mulV(normalizedHandles[i], size),
       })),
@@ -146,7 +146,8 @@ export class TLPolylineShape<
 
   validateProps = (props: Partial<P>) => {
     if (props.point) props.point = [0, 0]
-    if (props.handles !== undefined && props.handles.length < 1) props.handles = [{ point: [0, 0] }]
+    if (props.handles !== undefined && Object.values(props.handles).length < 1)
+      props.handles = TLPolylineShape.defaultProps['handles']
     return props
   }
 }

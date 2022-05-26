@@ -2,13 +2,13 @@
 import { action, observable, makeObservable, computed, observe } from 'mobx'
 import { TLBinding, TLEventMap, TLResizeCorner } from '~types'
 import type { TLApp, TLShape, TLShapeModel } from '~lib'
-import { BoundsUtils } from '~utils'
+import { BoundsUtils, deepCopy } from '~utils'
 
 export interface TLPageModel<S extends TLShape = TLShape> {
   id: string
   name: string
   shapes: TLShapeModel<S['props']>[]
-  bindings: TLBinding[]
+  bindings: Record<string, TLBinding>
   nonce?: number
 }
 
@@ -16,12 +16,12 @@ export interface TLPageProps<S> {
   id: string
   name: string
   shapes: S[]
-  bindings: TLBinding[]
+  bindings: Record<string, TLBinding>
 }
 
 export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, E>, props = {} as TLPageProps<S>) {
-    const { id, name, shapes = [], bindings = [] } = props
+    const { id, name, shapes = [], bindings = {} } = props
     this.id = id
     this.name = name
     this.bindings = bindings
@@ -38,14 +38,14 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @observable shapes: S[] = []
 
-  @observable bindings: TLBinding[]
+  @observable bindings: Record<string, TLBinding>
 
   @computed get serialized(): TLPageModel<S> {
     return {
       id: this.id,
       name: this.name,
       shapes: this.shapes.map(shape => shape.serialized),
-      bindings: this.bindings.map(binding => ({ ...binding })),
+      bindings: deepCopy(this.bindings),
       nonce: this.nonce,
     }
   }

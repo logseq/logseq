@@ -13,10 +13,10 @@ describe('A minimal test', () => {
         type: 'dot',
         parentId: 'page',
         point: [0, 0],
-        handles: [
-          { id: 'start', point: [0, 0] },
-          { id: 'end', point: [0, 0] },
-        ],
+        handles: {
+          start: { id: 'start', canBind: true, point: [0, 0] },
+          end: { id: 'end', canBind: true, point: [1, 1] },
+        },
         stroke: 'black',
       }
     }

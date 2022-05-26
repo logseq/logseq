@@ -8,9 +8,9 @@ import type { TLHandleComponentProps } from '~types'
 export const Handle = observer(function Handle<S extends TLReactShape, H extends TLHandle>({
   shape,
   handle,
-  index,
+  id,
 }: TLHandleComponentProps<S, H>) {
-  const events = useHandleEvents(shape, index)
+  const events = useHandleEvents(shape, id)
   const [x, y] = handle.point
 
   return (

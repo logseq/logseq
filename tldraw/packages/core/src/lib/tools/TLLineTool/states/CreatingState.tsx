@@ -1,9 +1,9 @@
-import type { TLLineTool } from '../TLLineTool'
-import { TLShape, TLApp, TLToolState, TLLineShape, TLLineShapeProps } from '~lib'
-import type { TLEventMap, TLLineBinding, TLStateEvents } from '~types'
 import Vec from '@tldraw/vec'
-import { deepCopy, deepMerge, GeomUtils, PointUtils, uniqueId } from '~utils'
 import { toJS } from 'mobx'
+import { TLApp, TLLineShape, TLLineShapeProps, TLShape, TLToolState } from '~lib'
+import type { TLEventMap, TLLineBinding, TLStateEvents } from '~types'
+import { deepMerge, GeomUtils, PointUtils, uniqueId } from '~utils'
+import type { TLLineTool } from '../TLLineTool'
 
 export class CreatingState<
   S extends TLShape,
@@ -24,15 +24,13 @@ export class CreatingState<
   onEnter = () => {
     const { Shape } = this.tool
     const { originPoint } = this.app.inputs
+
     const shape = new Shape({
+      ...Shape.defaultProps,
       id: uniqueId(),
       type: Shape.id,
       parentId: this.app.currentPage.id,
       point: originPoint,
-      handles: [
-        { id: 'start', canBind: true, point: [0, 0] },
-        { id: 'end', canBind: true, point: [1, 1] },
-      ],
     })
     this.initialShape = toJS(shape.props)
     this.creatingShape = shape
@@ -63,26 +61,29 @@ export class CreatingState<
     const shape = this.app.getShapeById<TLLineShape>(this.initialShape.id)
 
     const { handles } = this.initialShape
-    const curIndex = 1
-    const oppIndex = 0
+    const handleId = 'start'
+    const otherHandleId = 'end'
     if (Vec.isEqual(previousPoint, currentPoint)) return
     let delta = Vec.sub(currentPoint, originPoint)
 
     if (shiftKey) {
-      const A = handles[oppIndex].point
-      const B = handles[curIndex].point
+      const A = handles[otherHandleId].point
+      const B = handles[handleId].point
       const C = Vec.add(B, delta)
       const angle = Vec.angle(A, C)
       const adjusted = Vec.rotWith(C, A, GeomUtils.snapAngleToSegments(angle, 24) - angle)
       delta = Vec.add(delta, Vec.sub(adjusted, C))
     }
 
-    const nextPoint = Vec.add(handles[curIndex].point, delta)
+    const nextPoint = Vec.add(handles[handleId].point, delta)
 
-    const handleChanges = deepCopy(handles)
-    handleChanges[curIndex].point = showGrid
-      ? Vec.snap(nextPoint, currentGrid)
-      : Vec.toFixed(nextPoint)
+    const handleChanges = {
+      [handleId]: {
+        ...handles[handleId],
+        point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint),
+        bindingId: undefined,
+      },
+    }
 
     let updated = this.creatingShape.getHandlesChange(this.initialShape, handleChanges)
 
@@ -93,22 +94,15 @@ export class CreatingState<
     // before. If it does change, we'll redefine this later on. And if we've
     // made it this far, the shape should be a new object reference that
     // incorporates the changes we've made due to the handle movement.
-    const next: { props: TLLineShapeProps; bindings: Record<string, TLLineBinding> } = {
-      props: {
-        ...deepCopy(shape.props),
-        ...updated,
-        handles: updated.handles.map((h, idx) => deepMerge(shape.props.handles[idx], h)),
-      },
-      bindings: this.app.currentPage.bindings.reduce(
-        (acc, binding) => ({ ...acc, [binding.id]: binding }),
-        {}
-      ),
+    const next: { shape: TLLineShapeProps; bindings: Record<string, TLLineBinding> } = {
+      shape: deepMerge(shape.props, updated),
+      bindings: {},
     }
 
     let draggedBinding: TLLineBinding | undefined
 
-    const draggingHandle = next.props.handles[curIndex]
-    const oppositeHandle = next.props.handles[oppIndex]
+    const draggingHandle = next.shape.handles[handleId]
+    const oppositeHandle = next.shape.handles[otherHandleId]
 
     // START BINDING
     // If we have a start binding shape id, the recompute the binding
@@ -120,10 +114,10 @@ export class CreatingState<
       const startTarget = this.app.getShapeById(this.startBindingShapeId)
       const center = startTarget.getCenter()
 
-      const startHandle = next.props.handles[0]
-      const endHandle = next.props.handles[1]
+      const startHandle = next.shape.handles.start
+      const endHandle = next.shape.handles.end
 
-      const rayPoint = Vec.add(startHandle.point, next.props.point)
+      const rayPoint = Vec.add(startHandle.point, next.shape.point)
 
       if (Vec.isEqual(rayPoint, center)) rayPoint[1]++ // Fix bug where ray and center are identical
 
@@ -133,12 +127,10 @@ export class CreatingState<
 
       const rayDirection = Vec.uni(Vec.sub(rayPoint, rayOrigin))
 
-      const hasStartBinding = this.app.currentPage.bindings.some(
-        b => b.id === this.newStartBindingId
-      )
+      const hasStartBinding = this.app.currentPage.bindings[this.newStartBindingId] !== undefined
 
       // Don't bind the start handle if both handles are inside of the target shape.
-      if (!modKey && !startTarget.hitTestPoint(Vec.add(next.props.point, endHandle.point))) {
+      if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {
         nextStartBinding = this.findBindingPoint(
           shape.props,
           startTarget,
@@ -153,18 +145,18 @@ export class CreatingState<
 
       if (nextStartBinding && !hasStartBinding) {
         next.bindings[this.newStartBindingId] = nextStartBinding
-        next.props.handles[0].bindingId = nextStartBinding.id
+        next.shape.handles.start.bindingId = nextStartBinding.id
       } else if (!nextStartBinding && hasStartBinding) {
         delete next.bindings[this.newStartBindingId]
-        next.props.handles[0].bindingId = undefined
+        next.shape.handles.start.bindingId = undefined
       }
     }
 
-    updated = this.creatingShape.getHandlesChange(next.props, next.props.handles)
+    updated = this.creatingShape.getHandlesChange(next.shape, next.shape.handles)
 
     if (updated) {
       this.creatingShape.update(updated)
-      this.app.currentPage.bindings = Object.values(next.bindings)
+      Object.assign(this.app.currentPage.bindings, next.bindings)
     }
   }
 

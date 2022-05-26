@@ -64,7 +64,7 @@ export interface TLHandleComponentProps<
 > {
   shape: S
   handle: H
-  index: number
+  id: string
 }
 
 export type TLHandleComponent<

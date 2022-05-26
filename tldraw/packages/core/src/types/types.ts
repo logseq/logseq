@@ -233,7 +233,7 @@ export type TLEventHandleInfo<S extends TLShape = TLShape> = {
   type: TLTargetType.Handle
   shape: S
   handle: TLHandle
-  index: number
+  id: string
   order?: number
 }
 

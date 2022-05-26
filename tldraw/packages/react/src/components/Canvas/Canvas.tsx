@@ -165,13 +165,14 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               {showHandles && onlySelectedShapeWithHandles && components.Handle && (
                 <Container bounds={selectionBounds} zIndex={10003}>
                   <SVGContainer>
-                    {onlySelectedShapeWithHandles.props.handles!.map((handle, i) =>
-                      React.createElement(components.Handle!, {
-                        key: `${handle.id}_handle_${i}`,
-                        shape: onlySelectedShapeWithHandles,
-                        handle,
-                        index: i,
-                      })
+                    {Object.entries(onlySelectedShapeWithHandles.props.handles!).map(
+                      ([id, handle]) =>
+                        React.createElement(components.Handle!, {
+                          key: `${handle.id}_handle_${handle.id}`,
+                          shape: onlySelectedShapeWithHandles,
+                          handle,
+                          id,
+                        })
                     )}
                   </SVGContainer>
                 </Container>
