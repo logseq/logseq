@@ -61,8 +61,8 @@ export class CreatingState<
     const shape = this.app.getShapeById<TLLineShape>(this.initialShape.id)
 
     const { handles } = this.initialShape
-    const handleId = 'start'
-    const otherHandleId = 'end'
+    const handleId = 'end'
+    const otherHandleId = 'start'
     if (Vec.isEqual(previousPoint, currentPoint)) return
     let delta = Vec.sub(currentPoint, originPoint)
 
@@ -80,6 +80,7 @@ export class CreatingState<
     const handleChanges = {
       [handleId]: {
         ...handles[handleId],
+        // FIXMEL Snap not working properly
         point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint),
         bindingId: undefined,
       },
@@ -128,6 +129,13 @@ export class CreatingState<
       const rayDirection = Vec.uni(Vec.sub(rayPoint, rayOrigin))
 
       const hasStartBinding = this.app.currentPage.bindings[this.newStartBindingId] !== undefined
+
+      console.log(
+        isInsideShape,
+        startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point)),
+        endHandle.point,
+        next.shape.point
+      )
 
       // Don't bind the start handle if both handles are inside of the target shape.
       if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {

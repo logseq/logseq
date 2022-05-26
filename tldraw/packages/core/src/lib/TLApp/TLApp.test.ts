@@ -793,7 +793,7 @@ describe('app.loadDocumentModel', () => {
               parentId: 'page1',
             },
           ],
-          bindings: [],
+          bindings: {},
         },
       ],
     })

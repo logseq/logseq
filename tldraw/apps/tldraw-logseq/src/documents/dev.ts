@@ -26,7 +26,7 @@ const documentModel: TLDocumentModel<Shape, any> = {
           embedId: '',
         },
       ],
-      bindings: [],
+      bindings: {},
     },
   ],
   assets: [],

@@ -52,7 +52,7 @@ const documentModel: TLDocumentModel = {
           point: [0, 0],
         },
       ],
-      bindings: [],
+      bindings: {},
     },
   ],
 }

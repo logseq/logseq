@@ -1,7 +1,7 @@
 import Vec from '@tldraw/vec'
 import { makeObservable } from 'mobx'
 import type { TLHandle } from '~types'
-import { BoundsUtils, deepMerge } from '~utils'
+import { BoundsUtils, deepCopy, deepMerge } from '~utils'
 import { TLPolylineShape, TLPolylineShapeProps } from '../TLPolylineShape'
 
 export interface TLLineShapeProps extends TLPolylineShapeProps {
@@ -54,7 +54,7 @@ export class TLLineShape<
 
     const nextShape = {
       point: shape.point,
-      handles: nextHandles,
+      handles: deepCopy(nextHandles),
     }
 
     // Zero out the handles to prevent handles with negative points. If a handle's x or y

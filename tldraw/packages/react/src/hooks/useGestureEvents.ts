@@ -34,7 +34,7 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
       const elm = ref.current
       const { event } = gesture
       if (!(event.target === elm || elm?.contains(event.target as Node))) return
-      if (inputs.state !== 'idle') return
+      if (!['idle', 'panning'].includes(inputs.state)) return
       callbacks.onPinchStart?.(
         {
           type: TLTargetType.Canvas,

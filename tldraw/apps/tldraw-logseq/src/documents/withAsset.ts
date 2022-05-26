@@ -18,7 +18,7 @@ const documentModel: TLDocumentModel<Shape, any> = {
           assetId: 'INqnNUPQR1bAgabRmWH3O',
         },
       ],
-      bindings: [],
+      bindings: {},
     },
   ],
   assets: [

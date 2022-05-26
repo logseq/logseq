@@ -9,7 +9,7 @@ const documentModel: TLDocumentModel<Shape, any> = {
       name: 'Page',
       id: 'page1',
       shapes: [],
-      bindings: [],
+      bindings: {},
     },
   ],
   assets: [],

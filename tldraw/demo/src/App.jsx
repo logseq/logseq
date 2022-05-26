@@ -36,7 +36,7 @@ const documentModel = onLoad() ?? {
           embedId: '',
         },
       ],
-      bindings: [],
+      bindings: {},
     },
   ],
   assets: [],

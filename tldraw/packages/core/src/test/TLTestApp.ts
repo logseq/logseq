@@ -330,7 +330,7 @@ const defaultModel: TLDocumentModel = {
           point: [300, 300], // Overlapping box2
         },
       ],
-      bindings: [],
+      bindings: {},
     },
   ],
 }
