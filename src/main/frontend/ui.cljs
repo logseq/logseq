@@ -295,7 +295,7 @@
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       (when-let [url (:url custom-theme)]
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:effect false :emit false}))
+                                     (bean/->js {:emit false}))
         (state/set-state! :plugin/selected-theme url)))))
 
 (defn setup-system-theme-effect!
