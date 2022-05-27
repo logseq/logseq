@@ -88,9 +88,6 @@ export interface TLBinding {
   id: string
   toId: string
   fromId: string
-}
-
-export interface TLLineBinding extends TLBinding {
   handleId: 'start' | 'end'
   distance: number
   point: number[]
@@ -260,3 +257,7 @@ export function isStringArray(arr: string[] | any[]): asserts arr is string[] {
 /* ---------------------- Misc ---------------------- */
 
 export type AnyObject = { [key: string]: any }
+
+export enum Decoration {
+  Arrow = 'arrow',
+}

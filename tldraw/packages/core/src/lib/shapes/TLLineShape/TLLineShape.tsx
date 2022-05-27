@@ -1,11 +1,15 @@
 import Vec from '@tldraw/vec'
 import { makeObservable } from 'mobx'
-import type { TLHandle } from '~types'
+import type { Decoration, TLHandle } from '~types'
 import { BoundsUtils, deepCopy, deepMerge } from '~utils'
 import { TLPolylineShape, TLPolylineShapeProps } from '../TLPolylineShape'
 
 export interface TLLineShapeProps extends TLPolylineShapeProps {
   handles: Record<'start' | 'end' | string, TLHandle>
+  decorations?: {
+    start?: Decoration
+    end?: Decoration
+  }
 }
 
 export class TLLineShape<

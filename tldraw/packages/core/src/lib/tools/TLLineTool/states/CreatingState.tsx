@@ -1,7 +1,7 @@
 import Vec from '@tldraw/vec'
 import { toJS } from 'mobx'
 import { TLApp, TLLineShape, TLLineShapeProps, TLShape, TLToolState } from '~lib'
-import type { TLEventMap, TLLineBinding, TLStateEvents } from '~types'
+import type { TLEventMap, TLBinding, TLStateEvents } from '~types'
 import { deepMerge, GeomUtils, PointUtils, uniqueId } from '~utils'
 import type { TLLineTool } from '../TLLineTool'
 
@@ -36,6 +36,8 @@ export class CreatingState<
     this.creatingShape = shape
     this.app.currentPage.addShapes(shape)
     this.app.setSelectedShapes([shape])
+    this.newStartBindingId = uniqueId()
+    this.draggedBindingId = uniqueId()
 
     const page = this.app.currentPage
 
@@ -80,7 +82,7 @@ export class CreatingState<
     const handleChanges = {
       [handleId]: {
         ...handles[handleId],
-        // FIXMEL Snap not working properly
+        // FIXME Snap not working properly
         point: showGrid ? Vec.snap(nextPoint, currentGrid) : Vec.toFixed(nextPoint),
         bindingId: undefined,
       },
@@ -95,12 +97,12 @@ export class CreatingState<
     // before. If it does change, we'll redefine this later on. And if we've
     // made it this far, the shape should be a new object reference that
     // incorporates the changes we've made due to the handle movement.
-    const next: { shape: TLLineShapeProps; bindings: Record<string, TLLineBinding> } = {
+    const next: { shape: TLLineShapeProps; bindings: Record<string, TLBinding> } = {
       shape: deepMerge(shape.props, updated),
       bindings: {},
     }
 
-    let draggedBinding: TLLineBinding | undefined
+    let draggedBinding: TLBinding | undefined
 
     const draggingHandle = next.shape.handles[handleId]
     const oppositeHandle = next.shape.handles[otherHandleId]
@@ -110,7 +112,7 @@ export class CreatingState<
     // point based on the current end handle position
 
     if (this.startBindingShapeId) {
-      let nextStartBinding: TLLineBinding | undefined
+      let nextStartBinding: TLBinding | undefined
 
       const startTarget = this.app.getShapeById(this.startBindingShapeId)
       const center = startTarget.getCenter()
@@ -148,6 +150,7 @@ export class CreatingState<
         next.bindings[this.newStartBindingId] = nextStartBinding
         next.shape.handles.start.bindingId = nextStartBinding.id
       } else if (!nextStartBinding && hasStartBinding) {
+        console.log('removing start binding')
         delete next.bindings[this.newStartBindingId]
         next.shape.handles.start.bindingId = undefined
       }
@@ -157,7 +160,7 @@ export class CreatingState<
 
     if (updated) {
       this.creatingShape.update(updated)
-      Object.assign(this.app.currentPage.bindings, next.bindings)
+      this.app.currentPage.updateBindings(next.bindings)
     }
   }
 

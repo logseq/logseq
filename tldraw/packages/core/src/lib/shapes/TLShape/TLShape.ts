@@ -6,7 +6,7 @@ import {
   intersectRayBounds,
 } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import { action, computed, makeObservable, observable, toJS } from 'mobx'
+import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
 import { BoundsUtils, deepCopy, PointUtils } from '~utils'
@@ -106,7 +106,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   bindingDistance = BINDING_DISTANCE
 
   private isDirty = false
-  private lastSerialized = {} as TLShapeModel<P>
+  private lastSerialized: TLShapeModel<P> | undefined
 
   abstract getBounds: () => TLBounds
 
@@ -259,7 +259,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   }
 
   protected getCachedSerialized = (): TLShapeModel<P> => {
-    if (this.isDirty || Object.keys(this.lastSerialized).length === 0) {
+    if (this.isDirty || !this.lastSerialized) {
       this.nonce++
       this.isDirty = false
       this.lastSerialized = this.getSerialized()

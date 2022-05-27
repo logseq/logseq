@@ -41,6 +41,7 @@
     "@tldraw/vec": "2.0.0-alpha.1",
     "@use-gesture/react": "^10.1.3",
     "fast-copy": "^2.1.3",
+    "fast-deep-equal": "^3.1.3",
     "hotkeys-js": "^3.8.7",
     "is-plain-object": "^5.0.0",
     "mobx": "^6.3.8",

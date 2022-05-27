@@ -1,5 +1,6 @@
 import { isPlainObject } from 'is-plain-object'
 import copy from 'fast-copy'
+export { default as deepEqual } from 'fast-deep-equal'
 import deepmerge from 'deepmerge'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
