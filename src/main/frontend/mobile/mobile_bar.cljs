@@ -15,7 +15,7 @@
 
 (def ^:private icons-keywords
   [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
-   :brand-youtube :link :rotate :rotate-clockwise :code :calendar :bold :italic :strikethrough :paint])
+   :brand-youtube :link :rotate :rotate-clockwise :calendar :code :bold :italic :strikethrough :paint])
 
 (def ^:private commands-stats
   (atom (into {}
