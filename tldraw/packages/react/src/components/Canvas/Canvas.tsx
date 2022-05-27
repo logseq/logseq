@@ -37,7 +37,7 @@ export interface TLCanvasProps<S extends TLReactShape> {
   theme: TLTheme
   hoveredShape: S
   editingShape: S
-  bindingShape: S
+  bindingShapes: S[]
   selectionDirectionHint: number[]
   selectionBounds: TLBounds
   selectedShapes: S[]
@@ -64,7 +64,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   brush,
   shapes,
   assets,
-  bindingShape,
+  bindingShapes,
   editingShape,
   hoveredShape,
   selectionBounds,
@@ -127,7 +127,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 asset={assets && shape.props.assetId ? assets[shape.props.assetId] : undefined}
                 isEditing={shape === editingShape}
                 isHovered={shape === hoveredShape}
-                isBinding={shape === bindingShape}
+                isBinding={bindingShapes?.includes(shape)}
                 isSelected={selectedShapesSet.has(shape)}
                 isErasing={erasingShapesSet.has(shape)}
                 meta={meta}

@@ -13,7 +13,12 @@ import deepmerge from 'deepmerge'
  * @see Code pen https://codepen.io/erikvullings/pen/ejyBYg
  */
 export const deepCopy = copy
-export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
+
+type Patch<T> = Partial<{ [P in keyof T]: T | Partial<T> | Patch<T[P]> }>
+
+
+export function deepMerge<T>(a: T, b: Patch<T>): T {
+  // @ts-expect-error ???
   return deepmerge(a, b, {
     arrayMerge: (destinationArray, sourceArray, options) => sourceArray,
   })

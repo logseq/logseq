@@ -463,20 +463,22 @@ export class TLApp<
 
   /* ------------------ Binding Shape ----------------- */
 
-  @observable bindingId?: string
+  @observable bindingIds?: string[]
 
-  @computed get bindingShape(): S | undefined {
-    const { bindingId, currentPage } = this
-    return bindingId ? currentPage.shapes.find(shape => shape.id === bindingId) : undefined
+  @computed get bindingShapes(): S[] | undefined {
+    const { bindingIds, currentPage } = this
+    return bindingIds
+      ? currentPage.shapes.filter(shape => bindingIds?.includes(shape.id))
+      : undefined
   }
 
-  @action readonly setBindingShape = (shape?: string | S): this => {
-    this.bindingId = typeof shape === 'string' ? shape : shape?.id
+  @action readonly setBindingShapes = (ids?: string[]): this => {
+    this.bindingIds = ids
     return this
   }
 
   readonly clearBindingShape = (): this => {
-    return this.setBindingShape()
+    return this.setBindingShapes()
   }
 
   /* ---------------------- Brush --------------------- */
