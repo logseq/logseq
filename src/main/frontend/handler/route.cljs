@@ -16,7 +16,6 @@
   [{:keys [to path-params query-params push]
     :or {push true}}]
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
-    (state/save-scroll-position! (util/scroll-top))
     (route-fn to path-params query-params))
   ;; force return nil for usage in render phase of React
   nil)
@@ -126,9 +125,10 @@
     (update-page-label! route)
     (if-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
-      (util/scroll-to (util/app-scroll-container-node)
-                      (state/get-saved-scroll-position)
-                      false))))
+      (js/setTimeout #(util/scroll-to (util/app-scroll-container-node)
+                                      (state/get-saved-scroll-position)
+                                      true)
+                     100))))
 
 (defn go-to-search!
   [search-mode]
