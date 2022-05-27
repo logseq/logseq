@@ -1735,7 +1735,7 @@
         elem (if heading-level
                (keyword (str "h" heading-level
                              (when block-ref? ".inline")))
-               :span.inline-flex.items-center)]
+               :span.inline.items-center)]
     (->elem
      elem
      (merge
