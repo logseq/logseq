@@ -53,7 +53,7 @@
          (state/mobile?)
          (state/sub :mobile/show-tabbar?)
          (state/get-current-repo))
-    [:div.cp__footer.w-full.bottom-0.justify-between.items-center
+    [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
      (mobile-bar-command #(state/toggle-document-mode!) "notes")
      (mobile-bar-command
