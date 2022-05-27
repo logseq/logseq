@@ -2094,8 +2094,8 @@
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
    [:div.commands-button.w-0.flex.flew-col.rounded-md
     {:id (str "block-right-menu-" uuid)}
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
-    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]]])
+    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)

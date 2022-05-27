@@ -187,7 +187,7 @@
                      (> (. js/Math abs dx) 10))
             (let [left (gdom/getElement (str "block-left-menu-" uuid))
                   right (gdom/getElement (str "block-right-menu-" uuid))]
-              
+
               (cond
                 (= direction :right)
                 (do
@@ -197,7 +197,7 @@
                       (set! (.. left -style -width) (str dx "px")))
                     (when (< dx 0)
                       (set! (.. left -style -width) (str (max (+ 50 dx) 0) "px")))
-                    
+
                     (let [indent (gdom/getFirstElementChild left)]
                       (when (indentable? block)
                         (if (>= (.-clientWidth left) 50)
@@ -215,15 +215,18 @@
 
                     (let [outdent (gdom/getFirstElementChild right)
                           more (gdom/getLastElementChild right)]
-                      (when (outdentable? block)
-                        (if (and (>= (.-clientWidth right) 40)
-                                 (< (.-clientWidth right) 80))
-                          (set! (.. outdent -style -opacity) "100%")
-                          (set! (.. outdent -style -opacity) "30%")))
+                      (if (and (>= (.-clientWidth right) 40)
+                               (< (.-clientWidth right) 80))
+                        (set! (.. outdent -style -opacity) "100%")
+                        (set! (.. outdent -style -opacity) "30%"))
 
-                      (if (>= (.-clientWidth right) 80)
-                        (set! (.. more -style -opacity) "100%")
-                        (set! (.. more -style -opacity) "30%")))))
+                      (when (outdentable? block)
+                        (if (>= (.-clientWidth right) 80)
+                          (set! (.. more -style -opacity) "100%")
+                          (set! (.. more -style -opacity) "30%") 
+                        ;; (set! (.. outdent -style -opacity) "100%")
+                          ;; (set! (.. outdent -style -opacity) "30%")
+                        )))))
                 :else
                 nil))))))))
 
@@ -244,17 +247,17 @@
                 :light))
 
             (and right-menu (< 40 (.-clientWidth right-menu) 80))
-            (when (outdentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-block! block :left)
-                :light))
-
-            (and right-menu (>= (.-clientWidth right-menu) 80))
             (haptics/with-haptics-impact
               (do (state/set-state! :mobile/show-action-bar? true)
                   (state/set-state! :mobile/actioned-block block)
                   (select-block! uuid))
               :light)
+
+            (and right-menu (>= (.-clientWidth right-menu) 80))
+            (when (outdentable? block)
+              (haptics/with-haptics-impact
+                (indent-outdent-block! block :left)
+                :light))
 
             :else
             nil))
