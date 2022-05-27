@@ -2,13 +2,7 @@
  {:unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
-                                object
-                                ;; TODO: Remove parse-* and update-* when https://github.com/clj-kondo/clj-kondo/issues/1694 is done
-                                parse-long
-                                parse-double
-                                parse-uuid
-                                update-keys
-                                update-vals]}
+                                object]}
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
@@ -45,8 +39,6 @@
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
-           garden.def/defstyles clojure.core/def
-           garden.def/defkeyframes clojure.core/def
            rum.core/defcc rum.core/defc
            rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
@@ -57,4 +49,5 @@
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.react/defc clojure.core/defn}
- :skip-comments true}
+ :skip-comments true
+ :output {:progress true}}

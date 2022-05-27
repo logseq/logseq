@@ -21,7 +21,8 @@
 (defn- validate-namespaces
   [namespaces classpath dir]
   (assert (seq namespaces) "There must be some namespaces to check")
-  (doseq [n namespaces]
+  ;; distinct b/c sometimes namespaces are duplicated with .cljc analysis
+  (doseq [n (distinct namespaces)]
     (println "Requiring" n "...")
     (shell {:dir dir} "yarn nbb-logseq -cp" classpath "-e" (format "(require '[%s])" n)))
   (println "Success!"))
