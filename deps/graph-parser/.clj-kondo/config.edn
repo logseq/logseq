@@ -16,5 +16,4 @@
              logseq.graph-parser.property gp-property
              logseq.graph-parser.config gp-config
              logseq.graph-parser.date-time-util date-time-util}}}
- :lint-as {promesa.core/let clojure.core/let}
  :skip-comments true}

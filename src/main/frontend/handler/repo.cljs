@@ -22,9 +22,8 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser :as graph-parser]
             [electron.ipc :as ipc]
-            [clojure.set :as set]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]))
 
@@ -215,30 +214,19 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
-  (let [support-files (filter
-                       (fn [file]
-                         (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
-                       files)
-        support-files (sort-by :file/path support-files)
-        {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
-        {built-in true others false} (group-by (fn [file]
-                                                 (or (string/includes? (:file/path file) "contents.")
-                                                     (string/includes? (:file/path file) ".edn")
-                                                     (string/includes? (:file/path file) "custom.css"))) non-journals)
-        support-files' (concat (reverse journals) built-in others)
+  (let [supported-files (graph-parser/filter-files files)
         new-graph? (:new-graph? opts)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
-        chan (async/to-chan! support-files')
+        chan (async/to-chan! supported-files)
         graph-added-chan (async/promise-chan)]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
-    (state/set-parsing-state! {:total (count support-files')})
+    (state/set-parsing-state! {:total (count supported-files)})
     ;; Synchronous for tests for not breaking anything
     (if util/node-test?
       (do
-        (doseq [file support-files']
+        (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
                                       (assoc m :current-parsing-file (:file/path file))))
           (parse-and-load-file! repo-url file new-graph?))

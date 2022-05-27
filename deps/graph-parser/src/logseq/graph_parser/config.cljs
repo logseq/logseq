@@ -1,8 +1,12 @@
-(ns ^:nbb-compatible logseq.graph-parser.config
+(ns logseq.graph-parser.config
   "Config that is shared between graph-parser and rest of app"
   (:require [logseq.graph-parser.util :as gp-util]
             [clojure.set :as set]
             [clojure.string :as string]))
+
+(def app-name
+  "Copy of frontend.config/app-name. Too small to couple to main app"
+  "logseq")
 
 (defonce local-assets-dir "assets")
 

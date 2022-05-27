@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.db.schema)
+(ns logseq.graph-parser.db.schema)
 
 (defonce version 1)
 (defonce ast-version 1)

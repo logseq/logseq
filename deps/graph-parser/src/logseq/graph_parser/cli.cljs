@@ -1,20 +1,66 @@
 (ns logseq.graph-parser.cli
-  "Ns only for use by CLIs as it uses node.js libraries"
+  "Primary ns to parse graphs with node.js based CLIs"
   (:require ["fs" :as fs]
+            ["child_process" :as child-process]
             [clojure.edn :as edn]
-            [logseq.graph-parser :as graph-parser]))
+            [clojure.string :as string]
+            [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.db :as gp-db]))
+
+(defn- slurp
+  "Like clojure.core/slurp"
+  [file]
+  (str (fs/readFileSync file)))
+
+(defn- sh
+  "Run shell cmd synchronously and print to inherited streams by default. Aims
+    to be similar to babashka.tasks/shell
+TODO: Fail fast when process exits 1"
+  [cmd opts]
+  (child-process/spawnSync (first cmd)
+                           (clj->js (rest cmd))
+                           (clj->js (merge {:stdio "inherit"} opts))))
+
+(defn build-graph-files
+  "Given a git graph directory, returns allowed file paths and their contents in
+  preparation for parsing"
+  [dir]
+  (let [files (->> (str (.-stdout (sh ["git" "ls-files"]
+                                      {:cwd dir :stdio nil})))
+                   string/split-lines
+                   (map #(hash-map :file/path (str dir "/" %)))
+                   graph-parser/filter-files)]
+    (mapv #(assoc % :file/content (slurp (:file/path %))) files)))
 
 (defn- read-config
   "Commandline version of frontend.handler.common/read-config without graceful
   handling of broken config. Config is assumed to be at $dir/logseq/config.edn "
   [dir]
-  (if (fs/existsSync (str dir "/logseq/config.edn"))
-    (-> (str dir "/logseq/config.edn") fs/readFileSync str edn/read-string)
-    {}))
+  (let [config-file (str dir "/" gp-config/app-name "/config.edn")]
+    (if (fs/existsSync config-file)
+     (-> config-file fs/readFileSync str edn/read-string)
+     {})))
 
-(defn parse
-  "Main entry point for parsing"
-  [dir db files]
-  (graph-parser/parse db
-                      files
-                      {:config (read-config dir)}))
+(defn- parse-files
+  [conn files {:keys [config] :as options}]
+  (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)}
+                               (select-keys options [:verbose]))]
+    (doseq [{:file/keys [path content]} files]
+      (graph-parser/parse-file conn path content {:extract-options extract-options}))))
+
+(defn parse-graph
+  "Parses a given graph directory and returns a datascript connection and all
+  files that were processed. The directory is parsed as if it were a new graph
+  as it can't assume that the metadata in logseq/ is up to date. Directory is
+  assumed to be using git"
+  ([dir]
+   (parse-graph dir {}))
+  ([dir options]
+   (let [files (build-graph-files dir)
+         conn (gp-db/start-conn)
+         config (read-config dir)]
+     (println "Parsing" (count files) "files...")
+     (parse-files conn files (merge options {:config config}))
+     {:conn conn
+      :files (map :file/path files)})))

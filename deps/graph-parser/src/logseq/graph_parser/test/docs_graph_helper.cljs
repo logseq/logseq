@@ -1,18 +1,14 @@
-(ns ^:nbb-compatible logseq.graph-parser.test.docs-graph-helper
+(ns logseq.graph-parser.test.docs-graph-helper
   "Helper fns for setting up and running tests against docs graph"
   (:require ["fs" :as fs]
             ["child_process" :as child-process]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
+            [logseq.graph-parser.config :as gp-config]
             [datascript.core :as d]))
 
 ;; Helper fns for test setup
 ;; =========================
-(defn slurp
-  "Like clojure.core/slurp"
-  [file]
-  (str (fs/readFileSync file)))
-
 (defn- sh
   "Run shell cmd synchronously and print to inherited streams by default. Aims
     to be similar to babashka.tasks/shell"
@@ -20,15 +16,6 @@
   (child-process/spawnSync (first cmd)
                            (clj->js (rest cmd))
                            (clj->js (merge {:stdio "inherit"} opts))))
-
-(defn build-graph-files
-  [dir]
-  (let [files (->> (str (.-stdout (sh ["git" "ls-files"]
-                                      {:cwd dir :stdio nil})))
-                   string/split-lines
-                   (filter #(re-find #"^(pages|journals)" %))
-                   (map #(str dir "/" %)))]
-    (mapv #(hash-map :file/path % :file/content (slurp %)) files)))
 
 (defn clone-docs-repo-if-not-exists
   [dir]
@@ -64,42 +51,29 @@
        (apply merge-with +)
        (into {})))
 
-(defn docs-graph-assertions
-  "These are common assertions that should pass in both graph-parser and main
-  logseq app. It is important to run these in both contexts to ensure that the
-  functionality in frontend.handler.repo and logseq.graph-parser remain the
-  same"
+(defn- get-block-format-counts
+  [db]
+  (->> (d/q '[:find (pull ?b [*]) :where [?b :block/format]] db)
+       (map first)
+       (group-by :block/format)
+       (map (fn [[k v]] [k (count v)]))
+       (into {})))
+
+(defn- query-assertions
   [db files]
-  ;; Counts assertions help check for no major regressions. These counts should
-  ;; only increase over time as the docs graph rarely has deletions
-  (testing "Counts"
-    (is (= 206 (count files)) "Correct file count")
-    (is (= 40888 (count (d/datoms db :eavt))) "Correct datoms count")
-
-    (is (= 3597
-           (ffirst
-            (d/q '[:find (count ?b)
-                   :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
-        "Correct referenced blocks count")
-    (is (= 21
-           (ffirst
-            (d/q '[:find (count ?b)
-                   :where [?b :block/content ?content]
-                   [(clojure.string/includes? ?content "+BEGIN_QUERY")]]
-                 db)))
-        "Advanced query count"))
-
   (testing "Query based stats"
-    (is (= (set (map :file/path files))
+    (is (= (->> files
+                ;; logseq files aren't saved under :block/file
+                (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
                      db)
                 (map (comp #(get-in % [:block/file :file/path]) first))
                 set))
-        "Journal and pages files on disk should equal ones in db")
+        "Files on disk should equal ones in db")
 
-    (is (= (count (filter #(re-find #"journals/" (:file/path %))
-                          files))
+    (is (= (count (filter #(re-find #"journals/" %) files))
            (->> (d/q '[:find (count ?b)
                        :where
                        [?b :block/journal? true]
@@ -118,12 +92,8 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3140 :org 460}
-           (->> (d/q '[:find (pull ?b [*]) :where [?b :block/format]] db)
-                (map first)
-                (group-by :block/format)
-                (map (fn [[k v]] [k (count v)]))
-                (into {})))
+    (is (= {:markdown 3143 :org 460}
+           (get-block-format-counts db))
         "Block format counts")
 
     (is (= {:title 98 :id 98
@@ -145,7 +115,7 @@
             :block/priority 4
             :block/deadline 1
             :block/collapsed? 22
-            :block/heading-level 57
+            :block/heading-level 60
             :block/repeated? 1}
            (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
                  :block/heading-level :block/repeated?]
@@ -161,3 +131,30 @@
                 (map (comp :block/original-name first))
                 set))
         "Has correct namespaces")))
+
+(defn docs-graph-assertions
+  "These are common assertions that should pass in both graph-parser and main
+  logseq app. It is important to run these in both contexts to ensure that the
+  functionality in frontend.handler.repo and logseq.graph-parser remain the
+  same"
+  [db files]
+  ;; Counts assertions help check for no major regressions. These counts should
+  ;; only increase over time as the docs graph rarely has deletions
+  (testing "Counts"
+    (is (= 211 (count files)) "Correct file count")
+    (is (= 40943 (count (d/datoms db :eavt))) "Correct datoms count")
+
+    (is (= 3600
+           (ffirst
+            (d/q '[:find (count ?b)
+                   :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+        "Correct referenced blocks count")
+    (is (= 21
+           (ffirst
+            (d/q '[:find (count ?b)
+                   :where [?b :block/content ?content]
+                   [(clojure.string/includes? ?content "+BEGIN_QUERY")]]
+                 db)))
+        "Advanced query count"))
+
+  (query-assertions db files))

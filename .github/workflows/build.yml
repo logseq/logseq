@@ -81,7 +81,7 @@ jobs:
 
       # In this job because it depends on an npm package
       - name: Load nbb compatible namespaces
-        run: bb test:load-nbb-compatible-namespaces
+        run: bb test:load-namespaces-with-nbb
 
   lint:
     runs-on: ubuntu-latest

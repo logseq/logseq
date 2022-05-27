@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.text
+(ns logseq.graph-parser.text
   (:require ["path" :as path]
             [goog.string :as gstring]
             [clojure.string :as string]

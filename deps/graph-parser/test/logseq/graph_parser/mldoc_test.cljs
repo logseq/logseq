@@ -2,6 +2,7 @@
   (:require [logseq.graph-parser.mldoc :as gp-mldoc]
             [clojure.string :as string]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.cli :as gp-cli]
             [cljs.test :refer [testing deftest are is]]))
 
 (deftest test-link
@@ -100,7 +101,7 @@
 (deftest ^:integration test->edn
   (let [graph-dir "test/docs"
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir)
-        files (docs-graph-helper/build-graph-files graph-dir)
+        files (gp-cli/build-graph-files graph-dir)
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
                                  (let [format (if (string/ends-with? path ".org")
@@ -116,10 +117,10 @@
             "Drawer" 1,
             "Example" 20,
             "Footnote_Definition" 2,
-            "Heading" 3493,
+            "Heading" 3496,
             "Hiccup" 15,
-            "List" 36,
-            "Paragraph" 411,
+            "List" 37,
+            "Paragraph" 417,
             "Properties" 104,
             "Property_Drawer" 188,
             "Quote" 9,

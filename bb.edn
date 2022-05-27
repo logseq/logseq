@@ -26,8 +26,11 @@
   dev:lint
   logseq.tasks.dev/lint
 
-  test:load-nbb-compatible-namespaces
+  test:load-namespaces-with-nbb
   logseq.tasks.nbb/load-compatible-namespaces
+
+  test:load-all-namespaces-with-nbb
+  logseq.tasks.nbb/load-all-namespaces
 
   lang:list
   logseq.tasks.lang/list-langs

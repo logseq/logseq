@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.date-time-util
+(ns logseq.graph-parser.date-time-util
   "cljs-time util fns for graph-parser"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]

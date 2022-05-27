@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.utf8)
+(ns logseq.graph-parser.utf8)
 
 (defonce encoder
   (js/TextEncoder. "utf-8"))

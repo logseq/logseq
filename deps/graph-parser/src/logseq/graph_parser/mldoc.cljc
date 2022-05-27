@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.mldoc
+(ns logseq.graph-parser.mldoc
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})

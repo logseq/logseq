@@ -1,6 +1,7 @@
 name: logseq graph-parser CI
 
 on:
+  # Path filters ensure jobs only kick off if a change is made to graph-parser
   push:
     branches: [master]
     paths:
@@ -47,10 +48,10 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      # - name: Setup Babashka
-      #   uses: turtlequeue/setup-babashka@v1.3.0
-      #   with:
-      #     babashka-version: ${{ env.BABASHKA_VERSION }}
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.3.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
         uses: actions/cache@v2
@@ -64,20 +65,20 @@ jobs:
 
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:test -P
+        run: cd deps/graph-parser && clojure -A:test -P
 
       - name: Fetch yarn deps
         run: cd deps/graph-parser && yarn install --frozen-lockfile
 
       - name: Run ClojureScript tests
-        run: clojure -M:test
+        run: cd deps/graph-parser && clojure -M:test
 
       - name: Run nbb-logseq tests
         run: cd deps/graph-parser && yarn nbb-logseq -cp src:test -m logseq.graph-parser.nbb-test-runner/run-tests
 
-      # # In this job because it depends on an npm package
-      # - name: Load nbb compatible namespaces
-      #   run: bb test:load-nbb-compatible-namespaces
+      # In this job because it depends on an npm package
+      - name: Load namespaces into nbb-logseq
+        run: bb test:load-all-namespaces-with-nbb deps/graph-parser src
 
   lint:
     runs-on: ubuntu-latest
@@ -105,8 +106,8 @@ jobs:
       - name: Run clj-kondo lint
         run: cd deps/graph-parser && clojure -M:clj-kondo --parallel --lint src test
 
-      - name: Lint for vars that are too large
-        run: scripts/large_vars.clj deps/graph-parser/src
-
       - name: Carve lint for unused vars
         run: cd deps/graph-parser && ../../scripts/carve.clj
+
+      - name: Lint for vars that are too large
+        run: scripts/large_vars.clj deps/graph-parser/src '{:max-lines-count 75}'

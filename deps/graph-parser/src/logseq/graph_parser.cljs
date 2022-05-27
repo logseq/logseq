@@ -1,38 +1,37 @@
-(ns ^:nbb-compatible logseq.graph-parser
-  "Main ns for parsing graph from source files"
+(ns logseq.graph-parser
+  "Main ns used by logseq app to parse graph from source files"
   (:require [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.date-time-util :as date-time-util]
             [logseq.graph-parser.config :as gp-config]
+            [clojure.string :as string]
             [clojure.set :as set]))
 
 (defn- db-set-file-content!
   "Modified copy of frontend.db.model/db-set-file-content!"
-  [db path content]
+  [conn path content]
   (let [tx-data {:file/path path
                  :file/content content}]
-    (d/transact! db [tx-data] {:skip-refresh? true})))
+    (d/transact! conn [tx-data] {:skip-refresh? true})))
 
 (defn parse-file
-  "Parse file and save parsed data to the given db"
-  [db file content {:keys [new? delete-blocks-fn new-graph? extract-options]
+  "Parse file and save parsed data to the given db. Main parse fn used by logseq app"
+  [conn file content {:keys [new? delete-blocks-fn new-graph? extract-options]
                     :or {new? true
                          new-graph? false
                          delete-blocks-fn (constantly [])}}]
-  (db-set-file-content! db file content)
+  (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
         tx (if (contains? gp-config/mldoc-support-formats format)
              (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
                                             :date-formatter "MMM do, yyyy"
                                             :supported-formats (gp-config/supported-formats)}
-                                           extract-options)
+                                           extract-options
+                                           {:db @conn})
                    [pages blocks]
-                   (extract/extract-blocks-pages
-                    file
-                    content
-                    (merge extract-options' {:db @db}))
+                   (extract/extract-blocks-pages file content extract-options')
                    delete-blocks (delete-blocks-fn (first pages) file)
                    block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                    block-refs-ids (->> (mapcat :block/refs blocks)
@@ -51,13 +50,21 @@
                                new?
                                ;; TODO: use file system timestamp?
                                (assoc :file/created-at (date-time-util/time-ms)))])]
-    (d/transact! db (gp-util/remove-nils tx) (when new-graph? {:new-graph? true}))))
+    (d/transact! conn (gp-util/remove-nils tx) (when new-graph? {:new-graph? true}))))
 
-(defn parse
-  "Main parse fn"
-  ([db files]
-   (parse db files {}))
-  ([db files {:keys [config]}]
-   (let [extract-options {:date-formatter (gp-config/get-date-formatter config)}]
-     (doseq [{:file/keys [path content]} files]
-       (parse-file db path content {:extract-options extract-options})))))
+(defn filter-files
+  "Filters files in preparation for parsing. Only includes files that are
+  supported by parser"
+  [files]
+  (let [support-files (filter
+                       (fn [file]
+                         (let [format (gp-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
+                       files)
+        support-files (sort-by :file/path support-files)
+        {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
+        {built-in true others false} (group-by (fn [file]
+                                                 (or (string/includes? (:file/path file) "contents.")
+                                                     (string/includes? (:file/path file) ".edn")
+                                                     (string/includes? (:file/path file) "custom.css"))) non-journals)]
+    (concat (reverse journals) built-in others)))

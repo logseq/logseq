@@ -94,8 +94,6 @@
                         (db/delete-file-blocks! repo-url file)
                         (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
                        (distinct))]
-    ;; TODO: Remove
-    (when (seq delete-blocks) (prn :DELETE-BLOCKS (count delete-blocks)))
     (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
       (when (not= file current-file)
         (let [error (str "Page already exists with another file: " current-file ", current file: " file)]

@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.util
+(ns logseq.graph-parser.util
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]

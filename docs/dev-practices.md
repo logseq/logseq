@@ -62,7 +62,7 @@ scripts/lint_rules.clj
 
 Namespaces have the metadata flag `^:nbb-compatible` indicate they are compatible with https://github.com/logseq/nbb-logseq. This compatibility is necessary in order for namespaces to be reused by the frontend and CLIs. To confirm these compatibilities, run:
 ```
-bb test:load-nbb-compatible-namespaces
+bb test:load-namespaces-with-nbb
 ```
 
 ## Testing
