@@ -8,12 +8,12 @@
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.db :as gp-db]))
 
-(defn- slurp
-  "Like clojure.core/slurp"
+(defn slurp
+  "Return file contents like clojure.core/slurp"
   [file]
   (str (fs/readFileSync file)))
 
-(defn- sh
+(defn sh
   "Run shell cmd synchronously and print to inherited streams by default. Aims
     to be similar to babashka.tasks/shell
 TODO: Fail fast when process exits 1"
@@ -53,14 +53,16 @@ TODO: Fail fast when process exits 1"
   "Parses a given graph directory and returns a datascript connection and all
   files that were processed. The directory is parsed as if it were a new graph
   as it can't assume that the metadata in logseq/ is up to date. Directory is
-  assumed to be using git"
+  assumed to be using git. This fn takes the following options:
+* :verbose - When enabled prints more information during parsing. Defaults to true
+* :files - Specific files to parse instead of parsing the whole directory"
   ([dir]
    (parse-graph dir {}))
   ([dir options]
-   (let [files (build-graph-files dir)
+   (let [files (or (:files options) (build-graph-files dir))
          conn (gp-db/start-conn)
          config (read-config dir)]
-     (println "Parsing" (count files) "files...")
+     (when-not (:files options) (println "Parsing" (count files) "files..."))
      (parse-files conn files (merge options {:config config}))
      {:conn conn
       :files (map :file/path files)})))
