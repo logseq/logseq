@@ -120,8 +120,8 @@ html.is-native-ipad {
     
     .action-bar {
         width: 70%;
-        min-width:450px;
-
+        min-width:550px;
+        
         .action-bar-commands {
             width: 100%;
         }

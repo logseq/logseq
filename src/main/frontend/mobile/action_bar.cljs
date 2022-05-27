@@ -10,7 +10,8 @@
    [frontend.util.url :as url-util]
    [goog.dom :as gdom]
    [goog.object :as gobj]
-   [rum.core :as rum]))
+   [rum.core :as rum]
+   [frontend.mobile.util :as mobile-util]))
 
 (defn- action-command
   [icon description command-handler]
@@ -67,4 +68,11 @@
                         (fn [_event] (let [current-repo (state/get-current-repo)
                                            tap-f (fn [block-id]
                                                    (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
-                                       (editor-handler/copy-block-ref! uuid tap-f))))]])))
+                                       (editor-handler/copy-block-ref! uuid tap-f))))
+        (when (mobile-util/native-ipad?)
+          (action-command "text-direction-ltr" "Right sidebar"
+                          (fn [_event]
+                            (let [current-repo (state/get-current-repo)]
+                              (state/sidebar-add-block! current-repo uuid :block-ref)))))]])))
+
+
