@@ -505,6 +505,7 @@ export class TLApp<
     return Vec.mul(Vec.add(point, camera.point), camera.zoom)
   }
 
+  @computed
   get currentGrid() {
     const { zoom } = this.viewport.camera
     if (zoom < 0.15) {

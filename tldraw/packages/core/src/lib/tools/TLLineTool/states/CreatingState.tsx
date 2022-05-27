@@ -130,13 +130,6 @@ export class CreatingState<
 
       const hasStartBinding = this.app.currentPage.bindings[this.newStartBindingId] !== undefined
 
-      console.log(
-        isInsideShape,
-        startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point)),
-        endHandle.point,
-        next.shape.point
-      )
-
       // Don't bind the start handle if both handles are inside of the target shape.
       if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {
         nextStartBinding = this.findBindingPoint(

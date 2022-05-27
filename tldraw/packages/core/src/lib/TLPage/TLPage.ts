@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { action, observable, makeObservable, computed, observe } from 'mobx'
+import { action, observable, makeObservable, computed, observe, reaction, toJS } from 'mobx'
 import { TLBinding, TLEventMap, TLResizeCorner } from '~types'
 import type { TLApp, TLShape, TLShapeModel } from '~lib'
 import { BoundsUtils, deepCopy } from '~utils'
@@ -28,6 +28,14 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     this.app = app
     this.addShapes(...shapes)
     makeObservable(this)
+
+    reaction(
+      () => this.shapes.map(shape => toJS(shape.props)),
+      // todo: recalculate binding positions
+      (curr, prev) => {
+        console.log(curr, prev)
+      }
+    )
   }
 
   app: TLApp<S, E>
