@@ -168,6 +168,7 @@
               new-content (if (string/blank? value)
                             (str prefix surfix)
                             (str prefix value "\n" surfix))]
+          (state/set-edit-content! (state/get-edit-input-id) new-content)
           (editor-handler/save-block-if-changed! block new-content))
 
         (:file-path config)

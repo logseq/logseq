@@ -58,7 +58,7 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
-     
+
      ;; right sidebar
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
@@ -89,6 +89,7 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
+     :ui/scrolling?                         false
      :document/mode?                        document-mode?
 
      :config                                {}
@@ -147,7 +148,7 @@
      :mobile/show-toolbar?                  false
      ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
      ;;; add a random in (<= 1000000) to observer its update
-     :mobile/toolbar-update-observer        0 
+     :mobile/toolbar-update-observer        0
      :mobile/show-tabbar?                   false
 
      ;; plugin
@@ -1192,9 +1193,13 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
 (defn enable-tooltip?
   []
-  (if (or (util/mobile?) (mobile-util/native-platform?))
+  (if (mobile?)
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?

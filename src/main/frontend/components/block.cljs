@@ -509,6 +509,7 @@
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
+                 :in-editor?      true
                  :html            html-template
                  :interactive     true
                  :delay           [1000, 100]
@@ -764,6 +765,7 @@
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
                         :interactive true
+                        :in-editor?  true
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
@@ -1059,7 +1061,8 @@
      (when-not (string/blank? query)
        (custom-query (assoc config :dsl-query? true)
                      {:title (ui/tippy {:html commands/query-doc
-                                        :interactive true}
+                                        :interactive true
+                                        :in-editor?  true}
                                        [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
                                         (str "Query: " query)])
                       :query query})))])
@@ -1329,7 +1332,7 @@
 
       (= name "video")
       (macro-video-cp config arguments)
-      
+
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
@@ -1984,6 +1987,7 @@
                                          (for [clock (take 10 (reverse clocks))]
                                            [:li clock])]])))
                     :interactive true
+                    :in-editor?  true
                     :delay       [1000, 100]}
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
@@ -2482,7 +2486,7 @@
        (fn []
          (block-container-inner state repo config block))
        nil
-       {:reset-height? false})
+       {})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2689,7 +2693,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query view collapsed? children? breadcrumb-show?] :as q}]
+  [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         current-block-uuid (or (:block/uuid (:block config))
@@ -2698,7 +2702,8 @@
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         query-result (and query-atom (rum/react query-atom))
-        table? (or (get-in current-block [:block/properties :query-table])
+        table? (or table-view?
+                   (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         transformed-query-result (when query-result
                                    (db/custom-query-result-transform query-result remove-blocks q))
@@ -2727,8 +2732,8 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      [:div.custom-query.mt-4 (get config :attr {})
-       (when-not (and built-in? (empty? result))
+      (when-not (and built-in? (empty? result))
+        [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
           [:div.custom-query-title
            [:span.title-text (cond
@@ -2741,7 +2746,7 @@
             (str (count transformed-query-result) " results")]]
           (fn []
             [:div
-             (when current-block
+             (when (and current-block (not view-f) (nil? table-view?))
                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                 (when-not page-list?
                   [:div.flex.flex-row
@@ -2803,7 +2808,7 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true}))])))
+           :title-trigger? true})]))))
 
 (rum/defc custom-query
   [config q]
@@ -2812,8 +2817,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     nil
-    {:reset-height? true})))
-
+    {})))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
@@ -3148,17 +3152,23 @@
 
 (rum/defcs breadcrumb-with-container < rum/reactive
   {:init (fn [state]
-           (assoc state ::navigating-block (atom (:block/uuid (ffirst (:rum/args state))))))}
+           (let [first-block (ffirst (:rum/args state))]
+             (assoc state
+                    ::initial-block    first-block
+                    ::navigating-block (atom (:block/uuid first-block)))))}
   [state blocks config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
-        block (first blocks)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        navigating-block-entity (db/entity [:block/uuid navigating-block])
+        navigated? (and
+                    navigating-block
+                    (not= (:db/id (:block/parent (::initial-block state)))
+                          (:db/id (:block/parent navigating-block-entity))))
         blocks (if navigated?
-                 (let [block (db/pull [:block/uuid navigating-block])]
+                 (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
-                                           {:scoped-block-id (:db/id block)}))
+                                            {:scoped-block-id (:db/id block)}))
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)

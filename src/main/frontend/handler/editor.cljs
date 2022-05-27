@@ -590,6 +590,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
+          sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (util/page-name-sanity-lc page)])
@@ -1290,21 +1291,23 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (or (:block/content current-block)
-                           (and elem (gobj/get elem "value")))]
-             (cond
-               force?
-               (save-block-aux! db-block value opts)
+                 value (if (= (:block/uuid current-block) (:block/uuid block))
+                         (:block/content current-block)
+                         (and elem (gobj/get elem "value")))]
+             (when value
+               (cond
+                 force?
+                 (save-block-aux! db-block value opts)
 
-               (and skip-properties?
-                    (db-model/top-block? block)
-                    (when elem (thingatpt/properties-at-point elem)))
-               nil
+                 (and skip-properties?
+                      (db-model/top-block? block)
+                      (when elem (thingatpt/properties-at-point elem)))
+                 nil
 
-               (and block value db-content-without-heading
-                    (not= (string/trim db-content-without-heading)
-                          (string/trim value)))
-               (save-block-aux! db-block value opts)))
+                 (and block value db-content-without-heading
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value)))
+                 (save-block-aux! db-block value opts))))
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
@@ -2571,7 +2574,7 @@
 
       ;; just delete
       :else
-      (do
+      (when-not (mobile-util/native-ios?)
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
@@ -2906,7 +2909,7 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-      
+
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)

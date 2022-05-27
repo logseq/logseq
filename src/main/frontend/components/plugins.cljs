@@ -81,10 +81,10 @@
               group-first?      (:group-first opt)
               plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
           [:div
+           {:key (str idx (:name opt))}
            (when (and group-first? (not= idx 0)) [:hr.my-2])
            [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
-            {:key      (str idx (:url opt))
-             :title    (:description opt)
+            {:title    (:description opt)
              :class    (util/classnames
                         [{:is-selected current-selected?
                           :is-active   (= idx @*cursor)}])
@@ -248,7 +248,7 @@
          :on-click #(when-not has-other-pending?
                       (plugin-handler/check-or-update-marketplace-plugin
                         (assoc item :only-check (not new-version))
-                        (fn [e] (notification/show! e :error))))}
+                        (fn [^js e] (notification/show! (.toString e) :error))))}
 
         (if installing-or-updating?
           (t :plugin/updating)
@@ -780,7 +780,7 @@
              (if-let [n (state/get-next-selected-coming-update)]
                (plugin-handler/check-or-update-marketplace-plugin
                  (assoc n :only-check false)
-                 (fn [^js e] (notification/show! e :error)))
+                 (fn [^js e] (notification/show! (.toString e) :error)))
                (plugin-handler/close-updates-downloading)))
 
           :disabled

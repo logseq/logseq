@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [logseq.graph-parser.text :as text]
             [frontend.util :as util]
+            [frontend.date :as date]
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
@@ -28,17 +29,19 @@
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
     (= :current-page input)
-    ;; This sometimes runs when there isn't a current page e.g. :home route
-    (some-> (state/get-current-page) string/lower-case)
+    (some-> (or (state/get-current-page)
+                (:page (state/get-default-home))
+                (date/today)) string/lower-case)
+
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
-          days (parse-long (subs input 0 (dec (count input))))]
+          days (parse-long (re-find #"^\d+" input))]
       (date->int (t/minus (t/today) (t/days days))))
     (and (keyword? input)
          (util/safe-re-find #"^\d+d(-after)?$" (name input)))
     (let [input (name input)
-          days (parse-long (subs input 0 (dec (count input))))]
+          days (parse-long (re-find #"^\d+" input))]
       (date->int (t/plus (t/today) (t/days days))))
 
     (and (string? input) (text/page-ref? input))

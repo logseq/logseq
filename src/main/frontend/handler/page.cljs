@@ -98,8 +98,12 @@
                                                 (or
                                                  (:block/original-name page)
                                                  (:block/name page)))
-          page (if (seq properties) (assoc page :block/properties properties) page)]
+          page (if (seq properties) (assoc page :block/properties properties) page)
+          page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
+        (not page-empty?)
+        [page]
+
         create-title?
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page

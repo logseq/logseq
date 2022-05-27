@@ -1,7 +1,7 @@
 .cp__header {
   @apply shadow z-10;
   -webkit-app-region: drag;
-  
+
   padding-top: var(--ls-headbar-inner-top-padding);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
@@ -9,14 +9,12 @@
   justify-content: space-between;
   flex: 0 0 auto;
   position: sticky;
-  position: -webkit-sticky;
   top: 0;
   left: 0;
   right: 0;
   user-select: none;
   line-height: 1;
   white-space: nowrap;
-  background-color: var(--ls-primary-background-color);
 
   > .l {
     width: var(--ls-left-sidebar-width);
@@ -207,7 +205,6 @@ a.button {
 }
 
 html.is-ios.is-safari {
-    
   .cp__header {
     background-color: var(--ls-primary-background-color);
   }
@@ -241,7 +238,7 @@ html.is-native-ipad {
              margin-top: 24px;
          }
     }
-    
+
     .cp__header > .r {
         display: flex;
     }
@@ -250,11 +247,11 @@ html.is-native-ipad {
 html.is-native-ipad {
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
-    
+
     .cp__header {
       background-color: transparent !important;
       display: flex;
-      
+
       > .l {
         /* background-color: var(--ls-primary-background-color); */
         padding-top: 20px;
@@ -269,7 +266,7 @@ html.is-native-ipad {
         align-items: center;
       }
     }
-    
+
     .left-sidebar-inner  {
         > .wrap {
             padding-top: 20px;
@@ -291,7 +288,7 @@ html.is-native-ipad {
                 width: 12px;
                 height: 40vh;
             }
-            
+
             .resizer:hover {
                 background-color: var(--ls-guideline-color, #ddd);
             }
@@ -311,11 +308,11 @@ html.is-native-iphone {
             padding-bottom: 12px;
         }
     }
-    
+
     .ui__notifications {
         top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
     }
-    
+
     @media (orientation: landscape) {
         --ls-headbar-inner-top-padding: 8px;
         --ls-headbar-height: 2.5rem;
@@ -327,7 +324,7 @@ html.is-native-iphone {
 }
 
 html.is-native-iphone-without-notch {
-    
+
     --ls-headbar-inner-top-padding: 15px;
     --ls-headbar-height: 2.5rem;
 
@@ -335,7 +332,20 @@ html.is-native-iphone-without-notch {
 
         --ls-headbar-inner-top-padding: 0px;
         --ls-headbar-height: 2.5rem;
-     
+
+        .cp__header {
+            @apply shadow z-10;
+        }
+    }
+}
+
+html.is-zoomed-native-ios {
+    --ls-headbar-inner-top-padding: 30px;
+
+     @media (orientation: landscape) {
+        --ls-headbar-inner-top-padding: 8px;
+        --ls-headbar-height: 2.5rem;
+
         .cp__header {
             @apply shadow z-10;
         }

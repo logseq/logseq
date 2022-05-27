@@ -30,6 +30,9 @@
 }
 
 #main-container {
+    /* Hack: (overflow-y) to fix sticky header not working */
+    /* To reproduce: quick creating blocks */
+    overflow-y: hidden;
     position: relative;
     height: 100%;
     transition: padding-left .3s;

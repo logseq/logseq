@@ -170,7 +170,7 @@
     (fn []
       (references* page-name))
     nil
-    {:reset-height? false})))
+    {})))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
