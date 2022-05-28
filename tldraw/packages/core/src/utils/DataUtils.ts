@@ -16,7 +16,6 @@ export const deepCopy = copy
 
 type Patch<T> = Partial<{ [P in keyof T]: T | Partial<T> | Patch<T[P]> }>
 
-
 export function deepMerge<T>(a: T, b: Patch<T>): T {
   // @ts-expect-error ???
   return deepmerge(a, b, {
@@ -87,4 +86,33 @@ export function getSizeFromSrc(dataURL: string): Promise<number[]> {
 
 export function getFirstFromSet<T = unknown>(set: Set<T>): T {
   return set.values().next().value
+}
+
+/**
+ * Seeded random number generator, using [xorshift](https://en.wikipedia.org/wiki/Xorshift). The
+ * result will always be betweeen -1 and 1.
+ *
+ * Adapted from [seedrandom](https://github.com/davidbau/seedrandom).
+ */
+export function rng(seed = ''): () => number {
+  let x = 0
+  let y = 0
+  let z = 0
+  let w = 0
+
+  function next() {
+    const t = x ^ (x << 11)
+    x = y
+    y = z
+    z = w
+    w ^= ((w >>> 19) ^ t ^ (t >>> 8)) >>> 0
+    return w / 0x100000000
+  }
+
+  for (let k = 0; k < seed.length + 64; k++) {
+    x ^= seed.charCodeAt(k) | 0
+    next()
+  }
+
+  return next
 }

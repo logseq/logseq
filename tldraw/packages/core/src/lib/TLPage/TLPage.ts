@@ -203,9 +203,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       .map(s => s.id)
   }
 
-  getShapeById = <T extends S>(id: string): T => {
+  getShapeById = <T extends S>(id: string): T | undefined => {
     const shape = this.shapes.find(shape => shape.id === id) as T
-    if (!shape) throw Error(`Could not find that shape: ${id}`)
     return shape
   }
 
@@ -279,7 +278,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         })
 
         updated.shapes.forEach(shape => {
-          this.getShapeById(shape.id).update(shape)
+          this.getShapeById(shape.id)?.update(shape)
         })
       })
     }
@@ -322,62 +321,68 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       const hasDecoration = lineShape.props.decorations?.start !== undefined
       const handle = lineShape.props.handles.start
       const binding = this.bindings[lineShape.props.handles.start.bindingId]
-      if (!binding) throw Error("Could not find a binding to match the start handle's bindingId")
-      const target = this.getShapeById(binding.toId)
-      const bounds = target.getBounds()
-      const expandedBounds = target.getExpandedBounds()
-      const intersectBounds = BoundsUtils.expandBounds(bounds, hasDecoration ? binding.distance : 1)
-      const { minX, minY, width, height } = expandedBounds
-      const anchorPoint = Vec.add(
-        [minX, minY],
-        Vec.mulV(
-          [width, height],
-          Vec.rotWith(binding.point, [0.5, 0.5], target.props.rotation || 0)
+      // if (!binding) throw Error("Could not find a binding to match the start handle's bindingId")
+      const target = this.getShapeById(binding?.toId)
+      if (target) {
+        const bounds = target.getBounds()
+        const expandedBounds = target.getExpandedBounds()
+        const intersectBounds = BoundsUtils.expandBounds(
+          bounds,
+          hasDecoration ? binding.distance : 1
         )
-      )
-      start = {
-        isBound: true,
-        hasDecoration,
-        binding,
-        handle,
-        point: anchorPoint,
-        target,
-        bounds,
-        expandedBounds,
-        intersectBounds,
-        center: target.getCenter(),
+        const { minX, minY, width, height } = expandedBounds
+        const anchorPoint = Vec.add(
+          [minX, minY],
+          Vec.mulV(
+            [width, height],
+            Vec.rotWith(binding.point, [0.5, 0.5], target.props.rotation || 0)
+          )
+        )
+        start = {
+          isBound: true,
+          hasDecoration,
+          binding,
+          handle,
+          point: anchorPoint,
+          target,
+          bounds,
+          expandedBounds,
+          intersectBounds,
+          center: target.getCenter(),
+        }
       }
     }
     if (lineShape.props.handles.end.bindingId) {
       const hasDecoration = lineShape.props.decorations?.end !== undefined
       const handle = lineShape.props.handles.end
       const binding = this.bindings[lineShape.props.handles.end.bindingId]
-      if (!binding) throw Error("Could not find a binding to match the end handle's bindingId")
-      const target = this.getShapeById(binding.toId)
-      const bounds = target.getBounds()
-      const expandedBounds = target.getExpandedBounds()
-      const intersectBounds = hasDecoration
-        ? BoundsUtils.expandBounds(bounds, binding.distance)
-        : bounds
-      const { minX, minY, width, height } = expandedBounds
-      const anchorPoint = Vec.add(
-        [minX, minY],
-        Vec.mulV(
-          [width, height],
-          Vec.rotWith(binding.point, [0.5, 0.5], target.props.rotation || 0)
+      const target = this.getShapeById(binding?.toId)
+      if (target) {
+        const bounds = target.getBounds()
+        const expandedBounds = target.getExpandedBounds()
+        const intersectBounds = hasDecoration
+          ? BoundsUtils.expandBounds(bounds, binding.distance)
+          : bounds
+        const { minX, minY, width, height } = expandedBounds
+        const anchorPoint = Vec.add(
+          [minX, minY],
+          Vec.mulV(
+            [width, height],
+            Vec.rotWith(binding.point, [0.5, 0.5], target.props.rotation || 0)
+          )
         )
-      )
-      end = {
-        isBound: true,
-        hasDecoration,
-        binding,
-        handle,
-        point: anchorPoint,
-        target,
-        bounds,
-        expandedBounds,
-        intersectBounds,
-        center: target.getCenter(),
+        end = {
+          isBound: true,
+          hasDecoration,
+          binding,
+          handle,
+          point: anchorPoint,
+          target,
+          bounds,
+          expandedBounds,
+          intersectBounds,
+          center: target.getCenter(),
+        }
       }
     }
 

@@ -1,3 +1,5 @@
+import Vec from '@tldraw/vec'
+
 export class SvgPathUtils {
   static getCurvedPathForPolygon(points: number[][]) {
     if (points.length < 3) {
@@ -32,5 +34,34 @@ export class SvgPathUtils {
       d.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2)
     }
     return d.join(' ')
+  }
+
+  // Regex to trim numbers to 2 decimal places
+  static TRIM_NUMBERS = /(\s?[A-Z]?,?-?[0-9]*\.[0-9]{0,2})(([0-9]|e|-)*)/g
+
+  /**
+   * Turn an array of points into a path of quadradic curves.
+   *
+   * @param stroke ;
+   */
+  static getSvgPathFromStroke(points: number[][], closed = true): string {
+    if (!points.length) {
+      return ''
+    }
+
+    const max = points.length - 1
+
+    return points
+      .reduce(
+        (acc, point, i, arr) => {
+          if (i === max) {
+            if (closed) acc.push('Z')
+          } else acc.push(point, Vec.med(point, arr[i + 1]))
+          return acc
+        },
+        ['M', points[0], 'Q']
+      )
+      .join(' ')
+      .replaceAll(this.TRIM_NUMBERS, '$1')
   }
 }

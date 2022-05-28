@@ -257,9 +257,8 @@ export class TLApp<
 
   /* --------------------- Shapes --------------------- */
 
-  getShapeById = <T extends S>(id: string, pageId = this.currentPage.id): T => {
+  getShapeById = <T extends S>(id: string, pageId = this.currentPage.id): T | undefined => {
     const shape = this.getPageById(pageId)?.shapes.find(shape => shape.id === id) as T
-    if (!shape) throw Error(`Could not find that shape: ${id} on page ${pageId}`)
     return shape
   }
 

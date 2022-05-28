@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLLineShape, TLLineShapeProps } from '@tldraw/core'
+import { Decoration, TLLineShape, TLLineShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
+import { getArrowPath } from './arrow/arrowHelpers'
+import { StraightArrow } from './arrow/StraightArrow'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
@@ -25,36 +27,55 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     fill: '#ffffff',
     strokeWidth: 2,
     opacity: 1,
+    decorations: {
+      end: Decoration.Arrow,
+    },
   }
 
   hideSelection = true
 
   ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
     const {
-      points,
-      props: { stroke, fill, strokeWidth, opacity },
-    } = this
-    const path = points.join()
+      stroke,
+      fill,
+      strokeWidth,
+      decorations,
+      handles: { start, end },
+      opacity,
+    } = this.props
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        <g>
-          <polygon className={isSelected ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'} points={path} />
-          <polygon
-            points={path}
-            stroke={stroke}
-            fill={fill}
-            strokeWidth={strokeWidth}
-            strokeLinejoin="round"
+        <g pointerEvents="none">
+          <StraightArrow
+            style={{
+              stroke,
+              fill,
+              strokeWidth,
+            }}
+            start={start.point}
+            end={end.point}
+            decorationStart={decorations?.start}
+            decorationEnd={decorations?.end}
           />
         </g>
       </SVGContainer>
     )
   })
 
-  ReactIndicator = observer(() => {
-    const { points } = this
-    const path = points.join()
-    return <polygon points={path} />
+  ReactIndicator = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
+    const {
+      stroke,
+      fill,
+      strokeWidth,
+      decorations,
+      handles: { start, end },
+      opacity,
+    } = this.props
+    return (
+      <>
+        <path d={getArrowPath(start.point, end.point, decorations?.start, decorations?.end)} />
+      </>
+    )
   })
 
   validateProps = (props: Partial<LineShapeProps>) => {

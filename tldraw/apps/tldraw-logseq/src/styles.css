@@ -282,3 +282,12 @@
 .logseq-tldraw .tl-positioned-inner:focus-within {
   box-shadow: 0 0 12px var(--ls-active-primary-color);
 }
+
+.logseq-tldraw .tl-stroke-hitarea {
+  fill: none;
+  stroke: transparent;
+  stroke-width: calc(24px * var(--tl-scale));
+  pointer-events: stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
