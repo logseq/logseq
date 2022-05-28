@@ -46,7 +46,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 25 20))
 
 (rum/defc ls-textarea
   < rum/reactive
