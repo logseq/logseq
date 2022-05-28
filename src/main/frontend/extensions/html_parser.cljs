@@ -24,7 +24,9 @@
   [format hiccup]
   (let [transform-fn (fn [hiccup]
                        (hiccup->doc-inner format hiccup))
-        block-pattern (config/get-block-pattern format)
+        block-pattern (if (= format :markdown)
+                        "#"
+                        (config/get-block-pattern format))
         map-join (fn [children] (apply str (map transform-fn children)))
         block-transform (fn [level children]
                           (str (apply str (repeat level block-pattern))
