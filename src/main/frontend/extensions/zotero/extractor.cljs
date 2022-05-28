@@ -140,7 +140,7 @@
 (defmethod extract "note"
   [item]
   (let [note-html (-> item :data :note)]
-    (html-parser/parse :markdown note-html)))
+    (html-parser/convert :markdown note-html)))
 
 (defn zotero-imported-file-macro [item-key filename]
   (util/format "{{zotero-imported-file %s, %s}}" item-key (pr-str filename)))
