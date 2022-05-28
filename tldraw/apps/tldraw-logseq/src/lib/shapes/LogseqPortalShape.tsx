@@ -3,13 +3,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { HTMLContainer, SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 import { TextInput } from '~components/inputs/TextInput'
 import { LogseqContext } from '~lib/logseq-context'
 import type { Shape } from '~lib'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
+import { BindingIndicator } from './BindingIndicator'
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -95,9 +96,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isEditing, isErasing }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isEditing, isErasing, isBinding }: TLComponentProps) => {
     const {
-      props: { opacity, pageId },
+      props: { opacity, pageId, size, strokeWidth },
     } = this
 
     const app = useApp<Shape>()
@@ -125,7 +126,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const logseqLink = this.props.logseqLink
     if (logseqLink) {
       const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
-      linkButton = <a className='ml-2' onMouseDown={f}>🔗 {logseqLink}</a>
+      linkButton = (
+        <a className="ml-2" onMouseDown={f}>
+          🔗 {logseqLink}
+        </a>
+      )
     }
 
     return (
@@ -136,6 +141,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           opacity: isErasing ? 0.2 : opacity,
           border: '1px solid rgb(52, 52, 52)',
           backgroundColor: '#ffffff',
+          boxShadow: isBinding ? '0px 0px 0 16px var(--tl-binding)' : '',
         }}
         {...events}
       >

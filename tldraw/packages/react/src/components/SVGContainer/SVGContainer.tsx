@@ -7,11 +7,11 @@ interface SvgContainerProps extends React.SVGProps<SVGGElement> {
 }
 
 export const SVGContainer = React.forwardRef<SVGSVGElement, SvgContainerProps>(
-  function SVGContainer({ id, className = '', children, ...rest }, ref) {
+  function SVGContainer({ id, className = '', style, children, ...rest }, ref) {
     return (
       <Observer>
         {() => (
-          <svg ref={ref} className={`tl-positioned-svg ${className}`}>
+          <svg ref={ref} style={style} className={`tl-positioned-svg ${className}`}>
             <g id={id} className="tl-centered-g" {...rest}>
               {children}
             </g>

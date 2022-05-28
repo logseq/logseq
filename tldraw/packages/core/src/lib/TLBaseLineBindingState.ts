@@ -28,7 +28,7 @@ export class TLBaseLineBindingState<
       currentGrid,
     } = this.app
     // @ts-expect-error just ignore
-    const shape = this.app.getShapeById<TLLineShape>(this.initialShape.id)
+    const shape = this.app.getShapeById<TLLineShape>(this.initialShape.id)!
 
     const { handles } = this.initialShape
     const handleId = this.handleId
@@ -83,44 +83,46 @@ export class TLBaseLineBindingState<
       let nextStartBinding: TLBinding | undefined
 
       const startTarget = this.app.getShapeById(this.startBindingShapeId)
-      const center = startTarget.getCenter()
+      if (startTarget) {
+        const center = startTarget.getCenter()
 
-      const startHandle = next.shape.handles.start
-      const endHandle = next.shape.handles.end
+        const startHandle = next.shape.handles.start
+        const endHandle = next.shape.handles.end
 
-      const rayPoint = Vec.add(startHandle.point, next.shape.point)
+        const rayPoint = Vec.add(startHandle.point, next.shape.point)
 
-      if (Vec.isEqual(rayPoint, center)) rayPoint[1]++ // Fix bug where ray and center are identical
+        if (Vec.isEqual(rayPoint, center)) rayPoint[1]++ // Fix bug where ray and center are identical
 
-      const rayOrigin = center
+        const rayOrigin = center
 
-      const isInsideShape = startTarget.hitTestPoint(currentPoint)
+        const isInsideShape = startTarget.hitTestPoint(currentPoint)
 
-      const rayDirection = Vec.uni(Vec.sub(rayPoint, rayOrigin))
+        const rayDirection = Vec.uni(Vec.sub(rayPoint, rayOrigin))
 
-      const hasStartBinding = this.app.currentPage.bindings[this.newStartBindingId] !== undefined
+        const hasStartBinding = this.app.currentPage.bindings[this.newStartBindingId] !== undefined
 
-      // Don't bind the start handle if both handles are inside of the target shape.
-      if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {
-        nextStartBinding = this.findBindingPoint(
-          shape.props,
-          startTarget,
-          'start',
-          this.newStartBindingId,
-          center,
-          rayOrigin,
-          rayDirection,
-          isInsideShape
-        )
-      }
+        // Don't bind the start handle if both handles are inside of the target shape.
+        if (!modKey && !startTarget.hitTestPoint(Vec.add(next.shape.point, endHandle.point))) {
+          nextStartBinding = this.findBindingPoint(
+            shape.props,
+            startTarget,
+            'start',
+            this.newStartBindingId,
+            center,
+            rayOrigin,
+            rayDirection,
+            isInsideShape
+          )
+        }
 
-      if (nextStartBinding && !hasStartBinding) {
-        next.bindings[this.newStartBindingId] = nextStartBinding
-        next.shape.handles.start.bindingId = nextStartBinding.id
-      } else if (!nextStartBinding && hasStartBinding) {
-        console.log('removing start binding')
-        delete next.bindings[this.newStartBindingId]
-        next.shape.handles.start.bindingId = undefined
+        if (nextStartBinding && !hasStartBinding) {
+          next.bindings[this.newStartBindingId] = nextStartBinding
+          next.shape.handles.start.bindingId = nextStartBinding.id
+        } else if (!nextStartBinding && hasStartBinding) {
+          console.log('removing start binding')
+          delete next.bindings[this.newStartBindingId]
+          next.shape.handles.start.bindingId = undefined
+        }
       }
     }
 
@@ -136,7 +138,7 @@ export class TLBaseLineBindingState<
       const endPoint = Vec.add(next.shape.point, next.shape.handles.end.point)
 
       const targets = this.bindableShapeIds
-        .map(id => this.app.getShapeById(id))
+        .map(id => this.app.getShapeById(id)!)
         .sort((a, b) => b.nonce - a.nonce)
         .filter(shape => {
           return ![startPoint, endPoint].every(point => shape.hitTestPoint(point))
@@ -191,6 +193,11 @@ export class TLBaseLineBindingState<
     if (updated) {
       this.currentShape.update(updated)
       this.app.currentPage.updateBindings(next.bindings)
+      this.app.setBindingShapes(
+        Object.values(updated.handles ?? {})
+          .map(h => next.bindings[h.bindingId!]?.toId)
+          .filter(Boolean)
+      )
     }
   }
 

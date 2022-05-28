@@ -34,7 +34,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   hideSelection = true
 
-  ReactComponent = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing }: TLComponentProps) => {
     const {
       stroke,
       fill,
@@ -62,20 +62,12 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     )
   })
 
-  ReactIndicator = observer(({ events, isErasing, isSelected }: TLComponentProps) => {
+  ReactIndicator = observer(() => {
     const {
-      stroke,
-      fill,
-      strokeWidth,
       decorations,
       handles: { start, end },
-      opacity,
     } = this.props
-    return (
-      <>
-        <path d={getArrowPath(start.point, end.point, decorations?.start, decorations?.end)} />
-      </>
-    )
+    return <path d={getArrowPath(start.point, end.point, decorations?.start, decorations?.end)} />
   })
 
   validateProps = (props: Partial<LineShapeProps>) => {

@@ -38,7 +38,7 @@ export class CreatingState<
     this.app.setSelectedShapes([shape])
 
     this.startBindingShapeId = this.bindableShapeIds
-      .map(id => this.app.getShapeById(id))
+      .map(id => this.app.getShapeById(id)!)
       .filter(s => PointUtils.pointInBounds(originPoint, s.bounds))[0]?.id
 
     if (this.startBindingShapeId) {

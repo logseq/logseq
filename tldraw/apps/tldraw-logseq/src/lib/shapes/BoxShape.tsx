@@ -4,6 +4,7 @@ import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+import { BindingIndicator } from './BindingIndicator'
 
 export interface BoxShapeProps extends TLBoxShapeProps, CustomStyleProps {
   borderRadius: number
@@ -37,8 +38,10 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
         opacity,
       },
     } = this
+
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
+        {isBinding && <BindingIndicator strokeWidth={strokeWidth} size={[w, h]} />}
         <rect
           className={isSelected ? 'tl-hitarea-fill' : 'tl-hitarea-stroke'}
           x={strokeWidth / 2}
@@ -58,7 +61,7 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
           height={Math.max(0.01, h - strokeWidth)}
           strokeWidth={strokeWidth}
           stroke={stroke}
-          fill={!isBinding ? fill : 'red'}
+          fill={fill}
         />
       </SVGContainer>
     )
