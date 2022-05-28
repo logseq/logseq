@@ -99,7 +99,7 @@
                            :h5 (block-transform 5 children)
                            :h6 (block-transform 6 children)
                            :a (let [href (:href attrs)
-                                    label (map-join children)
+                                    label (or (map-join children) "")
                                     has-img-tag? (util/safe-re-find #"\[:img" (str x))]
                                 (if has-img-tag?
                                   (export-hiccup x)
@@ -108,7 +108,7 @@
                                     :org (util/format "[[%s][%s]]" href label)
                                     nil)))
                            :img (let [src (:src attrs)
-                                      alt (:alt attrs)]
+                                      alt (or (:alt attrs) "")]
                                   (case format
                                     :markdown (util/format "![%s](%s)" alt src)
                                     :org (util/format "[[%s][%s]]" src alt)
