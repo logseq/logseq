@@ -256,7 +256,8 @@
 
 (rum/defc audio-cp [src]
   [:audio {:src src
-           :controls true}])
+           :controls true
+           :on-touch-start #(util/stop %)}])
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
