@@ -186,13 +186,11 @@ html.is-native-android {
 
 html.is-zoomed-native-ios {
     .cp__footer {
-        bottom: 70px;
         height: 70px;
     }
     
     @media (orientation: landscape) {
         .cp__footer {
-            bottom: 50px;
             height: 50px;
         }
     }
