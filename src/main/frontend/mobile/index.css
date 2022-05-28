@@ -9,6 +9,7 @@
     flex: 0 0 auto;
     white-space: nowrap;
     height: 80px;
+    align-items: start;
     /* border-top: 1.5px solid var(--ls-tertiary-border-color); */
     box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.10);
 
