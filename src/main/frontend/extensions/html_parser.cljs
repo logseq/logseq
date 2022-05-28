@@ -21,17 +21,17 @@
                (str (hiccup-without-style hiccup))))
 
 (defn ^:large-vars/cleanup-todo hiccup->doc-inner
-  [format hiccup]
-  (let [transform-fn (fn [hiccup]
-                       (hiccup->doc-inner format hiccup))
+  [format hiccup opts]
+  (let [transform-fn (fn [hiccup opts]
+                       (hiccup->doc-inner format hiccup opts))
         block-pattern (if (= format :markdown)
                         "#"
                         (config/get-block-pattern format))
-        map-join (fn [children] (apply str (map transform-fn children)))
+        map-join (fn [children] (apply str (map #(transform-fn % opts) children)))
         block-transform (fn [level children]
                           (str (apply str (repeat level block-pattern))
                                " "
-                               (->> (map transform-fn children)
+                               (->> (map #(transform-fn % opts) children)
                                     (string/join " "))
                                "\n"))
         emphasis-transform (fn [tag attrs children]
@@ -75,6 +75,9 @@
                                     (if (string? pattern) pattern (apply str (reverse pattern))))))
         wrapper (fn [tag content]
                   (cond
+                    (and (= tag :p) (:in-table? opts))
+                    content
+
                     (contains? #{:p :hr :ul :ol :dl :table :pre :blockquote :aside :canvas
                                  :center :figure :figcaption :fieldset :div :footer
                                  :header} tag)
@@ -185,7 +188,7 @@
                              nil)
                            :tr
                            (str "| "
-                                (->> (map transform-fn children)
+                                (->> (map #(transform-fn % (assoc opts :in-table? true)) children)
                                      (string/join " | "))
                                 " |")
 
@@ -208,7 +211,7 @@
 
 (defn hiccup->doc
   [format hiccup]
-  (let [s (hiccup->doc-inner format hiccup)]
+  (let [s (hiccup->doc-inner format hiccup {})]
     (if (string/blank? s)
       ""
       (-> s
