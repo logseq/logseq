@@ -2966,6 +2966,7 @@
                  (html-parser/convert format html)
                  initial-text)
           input (state/get-input)]
+      ;; (def html html)
       (if-not (string/blank? text)
         (if (or (thingatpt/markdown-src-at-point input)
                 (thingatpt/org-admonition&src-at-point input))
