@@ -11,11 +11,10 @@
     height: 80px;
     align-items: start;
     /* border-top: 1.5px solid var(--ls-tertiary-border-color); */
-    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.10);
-
+    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
+                                                             
     .ti, .timer {
         color: var(--ls-primary-text-color);
-        opacity: 0.5;
     }
 
     .timer {
