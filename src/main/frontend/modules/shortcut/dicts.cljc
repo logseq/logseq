@@ -661,7 +661,9 @@
              :command.graph/save                      "Salvar gráfico atual no computador"
              :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
              :command.ui/goto-plugins                 "Ir para o painel de plugins"
-             :command.ui/open-new-window              "Abra uma nova janela"}
+             :command.ui/open-new-window              "Abra uma nova janela"
+             :command.editor/select-down              "Selecione o conteúdo abaixo"
+             :command.editor/select-up                "Selecione o conteúdo acima"}
 
    :ja      {:shortcut.category/formatting                "フォーマット"
              :shortcut.category/basics                "基本操作"

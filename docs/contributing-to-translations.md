@@ -14,9 +14,9 @@ In order to run the commands in this doc, you will need to install
 ## Where to Contribute
 
 Language translations are in two files,
-[frontend/dicts.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljs)
+[frontend/dicts.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/dicts.cljc)
 and
-[shortcut/dict.cljs](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljs).
+[shortcut/dict.cljc](https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/dicts.cljc).
 
 ## Language Overview
 
