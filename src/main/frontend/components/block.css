@@ -586,7 +586,8 @@ a.cloze-revealed {
 
 html.is-native-ios {
     audio {
-        width: 300px;
+        width: 100%;
+        max-width: 350px;
     }
 }
 
