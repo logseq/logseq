@@ -6,15 +6,17 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.components.svg :as svg]))
 
 (rum/defc mobile-bar-command [command-handler icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (command-handler))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+  [:button.bottom-action
+   {:on-mouse-down (fn [e]
+                     (util/stop e)
+                     (command-handler))}
+   (if (= icon "player-stop")
+     svg/circle-stop
+     (ui/icon icon {:style {:fontSize ui/icon-size}}))])
 
 (defn seconds->minutes:seconds
   [seconds]
@@ -35,14 +37,15 @@
   [state]
   (when (= (state/sub :editor/record-status) "RECORDING")
     (swap! *record-start inc))
-  [:div.flex.flex-row
-   (if (= (state/sub :editor/record-status) "NONE")
-     (do
-       (reset! *record-start -1)
-       (mobile-bar-command #(record/start-recording) "microphone"))
-     [:div.flex.flex-row
-      (mobile-bar-command #(record/stop-recording) "player-stop")
-      [:div.timer.pl-2 (seconds->minutes:seconds @*record-start)]])])
+  (if (= (state/sub :editor/record-status) "NONE")
+    (do
+      (reset! *record-start -1)
+      (mobile-bar-command record/start-recording "microphone"))
+    [:div.flex.flex-row.items-center
+     (mobile-bar-command record/stop-recording "player-stop")
+     [:div.timer.pl-2
+      {:on-click record/stop-recording}
+      (seconds->minutes:seconds @*record-start)]]))
 
 (rum/defc footer < rum/reactive
   []
@@ -55,8 +58,8 @@
       #(let [page (or (state/get-current-page)
                       (string/lower-case (date/journal-name)))]
          (editor-handler/api-insert-new-block!
-                    ""
-                    {:page page
-                     :edit-block? true
-                     :replace-empty-target? true}))
+          ""
+          {:page page
+           :edit-block? true
+           :replace-empty-target? true}))
       "edit")]))
