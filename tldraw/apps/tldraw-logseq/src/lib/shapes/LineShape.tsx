@@ -4,7 +4,7 @@ import { SVGContainer, TLComponentProps } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { getArrowPath } from './arrow/arrowHelpers'
-import { StraightArrow } from './arrow/StraightArrow'
+import { Arrow } from './arrow/Arrow'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
@@ -25,7 +25,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     },
     stroke: '#000000',
     fill: '#ffffff',
-    strokeWidth: 2,
+    strokeWidth: 1,
     opacity: 1,
     decorations: {
       end: Decoration.Arrow,
@@ -46,7 +46,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
         <g pointerEvents="none">
-          <StraightArrow
+          <Arrow
             style={{
               stroke,
               fill,
@@ -65,9 +65,20 @@ export class LineShape extends TLLineShape<LineShapeProps> {
   ReactIndicator = observer(() => {
     const {
       decorations,
+      strokeWidth,
       handles: { start, end },
     } = this.props
-    return <path d={getArrowPath(start.point, end.point, decorations?.start, decorations?.end)} />
+    return (
+      <path
+        d={getArrowPath(
+          { strokeWidth },
+          start.point,
+          end.point,
+          decorations?.start,
+          decorations?.end
+        )}
+      />
+    )
   })
 
   validateProps = (props: Partial<LineShapeProps>) => {

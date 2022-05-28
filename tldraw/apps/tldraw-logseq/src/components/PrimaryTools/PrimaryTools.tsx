@@ -2,17 +2,14 @@ import * as React from 'react'
 import { useApp } from '@tldraw/react'
 import {
   CursorArrowIcon,
-  CircleIcon,
   Pencil1Icon,
-  VercelLogoIcon,
   ShadowIcon,
-  BoxIcon,
   VideoIcon,
   TextIcon,
 } from '@radix-ui/react-icons'
 import { observer } from 'mobx-react-lite'
 import { Button } from '~components/Button'
-import { EraserIcon, LineIcon, LogseqIcon } from '~components/icons'
+import { EraserIcon, ArrowIcon, LogseqIcon } from '~components/icons'
 
 export const PrimaryTools = observer(function PrimaryTools() {
   const app = useApp()
@@ -64,36 +61,12 @@ export const PrimaryTools = observer(function PrimaryTools() {
           <EraserIcon />
         </Button>
         <Button
-          data-tool="box"
-          data-selected={selectedToolId === 'box'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <BoxIcon />
-        </Button>
-        <Button
-          data-tool="ellipse"
-          data-selected={selectedToolId === 'ellipse'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <CircleIcon />
-        </Button>
-        <Button
-          data-tool="polygon"
-          data-selected={selectedToolId === 'polygon'}
-          onClick={handleToolClick}
-          onDoubleClick={handleToolDoubleClick}
-        >
-          <VercelLogoIcon />
-        </Button>
-        <Button
           data-tool="line"
           data-selected={selectedToolId === 'line'}
           onClick={handleToolClick}
           onDoubleClick={handleToolDoubleClick}
         >
-          <LineIcon />
+          <ArrowIcon />
         </Button>
         <Button
           data-tool="text"

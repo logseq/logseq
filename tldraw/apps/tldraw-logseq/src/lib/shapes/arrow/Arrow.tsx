@@ -18,7 +18,7 @@ interface ArrowSvgProps {
   decorationEnd: Decoration | undefined
 }
 
-export const StraightArrow = React.memo(function StraightArrow({
+export const Arrow = React.memo(function StraightArrow({
   style,
   start,
   end,
