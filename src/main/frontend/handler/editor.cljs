@@ -55,7 +55,8 @@
             [promesa.core :as p]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.extensions.html-parser :as html-parser]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2887,8 +2888,8 @@
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)
-        *stop-event? (atom true)]
+        input (state/get-input)]
+    (util/stop e)
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
@@ -2916,7 +2917,8 @@
 
       :else
       ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+            text (string/trim text)]
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
@@ -2928,18 +2930,16 @@
           (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:markdown true _ true]
-          (reset! *stop-event? false)
+          (commands/simple-insert! (state/get-edit-input-id) text nil)
 
           [:org _ true false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:org _ true true]
-          (reset! *stop-event? false))))
-    (when @*stop-event?
-      (util/stop e))))
+          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -2957,7 +2957,14 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")
+    (let [clipboard-data (gobj/get e "clipboardData")
+          html (.getData clipboard-data "text/html")
+          edit-block (state/get-edit-block)
+          format (or (:block/format edit-block) :markdown)
+          initial-text (.getData clipboard-data "text")
+          text (if-not (string/blank? html)
+                 (html-parser/convert format html)
+                 initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
         (if (or (thingatpt/markdown-src-at-point input)
