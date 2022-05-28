@@ -188,10 +188,6 @@ a.button {
   &:hover, &.active {
     opacity: 1;
     background: none;
-
-    @screen md {
-        background: var(--ls-tertiary-background-color);
-    }
   }
 
   &:active {

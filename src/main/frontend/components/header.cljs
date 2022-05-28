@@ -258,7 +258,7 @@
         (ui/with-shortcut :go/backward "bottom"
           [:a.it.navigation.nav-left.button
            {:title "Go back" :on-click #(js/window.history.back)}
-           (ui/icon "chevron-left" {:style {:fontSize ui/icon-size}})]))]
+           (ui/icon "chevron-left" {:style {:fontSize 25}})]))]
 
      [:div.r.flex
       (when-not file-sync-handler/hiding-login&file-sync
