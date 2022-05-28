@@ -984,7 +984,8 @@
           content (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+        (let [html (export/export-blocks-as-html repo ids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content html))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
 
@@ -1192,9 +1193,10 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          md-content (compose-copied-blocks-contents repo [block-id])]
+          md-content (compose-copied-blocks-contents repo [block-id])
+          html (export/export-blocks-as-html repo [block-id])]
       (state/set-copied-full-blocks md-content [block])
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -2964,7 +2966,6 @@
                  (html-parser/convert format html)
                  initial-text)
           input (state/get-input)]
-      ;; (def html html)
       (if-not (string/blank? text)
         (if (or (thingatpt/markdown-src-at-point input)
                 (thingatpt/org-admonition&src-at-point input))
