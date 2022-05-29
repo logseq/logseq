@@ -81,7 +81,7 @@
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
-(defn- handle-export-publish-assets [_event html export-css-path repo-path asset-filenames output-path]
+(defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
           asset-filenames (js->clj asset-filenames)
           root-dir (or output-path (handler/open-dir-dialog))]
@@ -89,7 +89,8 @@
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")]
+            index-html-path (path/join root-dir "index.html")
+            export-or-custom-css-path (if (fs/existsSync export-css-path) export-css-path custom-css-path)]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
@@ -111,7 +112,7 @@
                            (fn [part]
                              (. fs copy (path/join app-path part) (path/join static-dir part)))
                            ["css" "fonts" "icons" "img" "js"])))
-                export-css (. fs readFile export-css-path)
+                export-css (. fs readFile export-or-custom-css-path)
                 _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
