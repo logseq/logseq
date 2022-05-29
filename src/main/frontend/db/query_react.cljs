@@ -126,8 +126,8 @@
     (let [query (resolve-query query)
           resolved-inputs (mapv resolve-input inputs)
           inputs (cond-> resolved-inputs
-                   rules
-                   (conj rules))
+                         rules
+                         (conj rules))
           repo (or repo (state/get-current-repo))
           k [:custom query']]
       (pprint "inputs (post-resolution):" resolved-inputs)

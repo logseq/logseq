@@ -115,8 +115,8 @@
 
  ;; Pre-defined :result-transform function to use in Query
  :result-transform
- {:sort-by-updated
-  (fn [result] (sort-by (fn [h] (get h :block/updated-at)) result))}
+ {:sort-by-priority
+  (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 
  ;; The app will show those queries in today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
