@@ -185,25 +185,25 @@
      (ui/resize-consumer
       (if-not (mobile-util/native-ios?)
         (cond->
-            {:className "resize image-resize"
-             :onSizeChanged (fn [value]
-                              (when (and (not @*resizing-image?)
-                                         (some? @size)
-                                         (not= value @size))
-                                (reset! *resizing-image? true))
-                              (reset! size value))
-             :onMouseUp (fn []
-                          (when (and @size @*resizing-image?)
-                            (when-let [block-id (:block/uuid config)]
-                              (let [size (bean/->clj @size)]
-                                (editor-handler/resize-image! block-id metadata full_text size))))
-                          (when @*resizing-image?
+         {:className "resize image-resize"
+          :onSizeChanged (fn [value]
+                           (when (and (not @*resizing-image?)
+                                      (some? @size)
+                                      (not= value @size))
+                             (reset! *resizing-image? true))
+                           (reset! size value))
+          :onMouseUp (fn []
+                       (when (and @size @*resizing-image?)
+                         (when-let [block-id (:block/uuid config)]
+                           (let [size (bean/->clj @size)]
+                             (editor-handler/resize-image! block-id metadata full_text size))))
+                       (when @*resizing-image?
                             ;; TODO: need a better way to prevent the clicking to edit current block
-                            (js/setTimeout #(reset! *resizing-image? false) 200)))
-             :onClick (fn [e]
-                        (when @*resizing-image? (util/stop e)))}
-            (and (:width metadata) (not (util/mobile?)))
-            (assoc :style {:width (:width metadata)}))
+                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+          :onClick (fn [e]
+                     (when @*resizing-image? (util/stop e)))}
+          (and (:width metadata) (not (util/mobile?)))
+          (assoc :style {:width (:width metadata)}))
         {})
       [:div.asset-container {:key "resize-asset-container"}
        [:img.rounded-sm.shadow-xl.relative
@@ -464,48 +464,48 @@
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
         _  #_:clj-kondo/ignore (rum/defc html-template []
-                        (let [*el-popup (rum/use-ref nil)]
+                                 (let [*el-popup (rum/use-ref nil)]
 
-                          (rum/use-effect!
-                            (fn []
-                              (let [el-popup (rum/deref *el-popup)
-                                    cb (fn [^js e]
-                                         (when-not (:editor/editing? @state/state)
+                                   (rum/use-effect!
+                                    (fn []
+                                      (let [el-popup (rum/deref *el-popup)
+                                            cb (fn [^js e]
+                                                 (when-not (:editor/editing? @state/state)
                                            ;; Esc
-                                           (and (= e.which 27)
-                                                (when-let [tp (rum/deref *tippy-ref)]
-                                                  (.hideTooltip tp)))))]
+                                                   (and (= e.which 27)
+                                                        (when-let [tp (rum/deref *tippy-ref)]
+                                                          (.hideTooltip tp)))))]
 
-                                (js/setTimeout #(.focus el-popup))
-                                (.addEventListener el-popup "keyup" cb)
-                                #(.removeEventListener el-popup "keyup" cb)))
-                            [])
+                                        (js/setTimeout #(.focus el-popup))
+                                        (.addEventListener el-popup "keyup" cb)
+                                        #(.removeEventListener el-popup "keyup" cb)))
+                                    [])
 
-                          (when redirect-page-name
-                            [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none
-                             {:ref   *el-popup
-                              :tab-index -1
-                              :style {:width          600
-                                      :text-align     "left"
-                                      :font-weight    500
-                                      :max-height     600
-                                      :padding-bottom 64}}
-                             (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                               [:div.my-2
-                                (->>
-                                  (for [page (string/split page-original-name #"/")]
-                                    (when (and (string? page) page)
-                                      (page-reference false page {} nil)))
-                                  (interpose [:span.mx-2.opacity-30 "/"]))]
-                               [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                        page-original-name
-                                                        [:span
-                                                         [:span.text-sm.mr-2 "Alias:"]
-                                                         page-original-name])])
-                             (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
-                               (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
-                               (when-let [f (state/get-page-blocks-cp)]
-                                 (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])))]
+                                   (when redirect-page-name
+                                     [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none
+                                      {:ref   *el-popup
+                                       :tab-index -1
+                                       :style {:width          600
+                                               :text-align     "left"
+                                               :font-weight    500
+                                               :max-height     600
+                                               :padding-bottom 64}}
+                                      (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                                        [:div.my-2
+                                         (->>
+                                          (for [page (string/split page-original-name #"/")]
+                                            (when (and (string? page) page)
+                                              (page-reference false page {} nil)))
+                                          (interpose [:span.mx-2.opacity-30 "/"]))]
+                                        [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
+                                                                 page-original-name
+                                                                 [:span
+                                                                  [:span.text-sm.mr-2 "Alias:"]
+                                                                  page-original-name])])
+                                      (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+                                        (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
+                                        (when-let [f (state/get-page-blocks-cp)]
+                                          (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])))]
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
@@ -1156,23 +1156,23 @@
           height (int (* width (/ 315 560)))
           results (text/get-matched-video url)
           src (match results
-                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                     (if (= (count id) 11) ["youtube-player" id] url)
+                [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                (if (= (count id) 11) ["youtube-player" id] url)
 
-                     [_ _ _ "youtube-nocookie.com" _ id _]
-                     (str "https://www.youtube-nocookie.com/embed/" id)
+                [_ _ _ "youtube-nocookie.com" _ id _]
+                (str "https://www.youtube-nocookie.com/embed/" id)
 
-                     [_ _ _ "loom.com" _ id _]
-                     (str "https://www.loom.com/embed/" id)
+                [_ _ _ "loom.com" _ id _]
+                (str "https://www.loom.com/embed/" id)
 
-                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                     (str "https://player.vimeo.com/video/" id)
+                [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                (str "https://player.vimeo.com/video/" id)
 
-                     [_ _ _ "bilibili.com" _ id _]
-                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+                [_ _ _ "bilibili.com" _ id _]
+                (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
 
-                     :else
-                     url)]
+                :else
+                url)]
       (if (and (coll? src)
                (= (first src) "youtube-player"))
         (youtube/youtube-video (last src))
@@ -1365,103 +1365,103 @@
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
-         [(:or "Plain" "Spaces") s]
-         s
+    [(:or "Plain" "Spaces") s]
+    s
 
-         ["Superscript" l]
-         (->elem :sup (map-inline config l))
-         ["Subscript" l]
-         (->elem :sub (map-inline config l))
+    ["Superscript" l]
+    (->elem :sup (map-inline config l))
+    ["Subscript" l]
+    (->elem :sub (map-inline config l))
 
-         ["Tag" _]
-         (when-let [s (gp-block/get-tag item)]
-           (let [s (text/page-ref-un-brackets! s)]
-             (page-cp (assoc config :tag? true) {:block/name s})))
+    ["Tag" _]
+    (when-let [s (gp-block/get-tag item)]
+      (let [s (text/page-ref-un-brackets! s)]
+        (page-cp (assoc config :tag? true) {:block/name s})))
 
-         ["Emphasis" [[kind] data]]
-         (emphasis-cp config kind data)
+    ["Emphasis" [[kind] data]]
+    (emphasis-cp config kind data)
 
-         ["Entity" e]
-         [:span {:dangerouslySetInnerHTML
-                 {:__html (:html e)}}]
+    ["Entity" e]
+    [:span {:dangerouslySetInnerHTML
+            {:__html (:html e)}}]
 
-         ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
-         (if html-export?
-           (latex/html-export s false true)
-           (latex/latex (str (d/squuid)) s false (not= display "Inline")))
+    ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
+    (if html-export?
+      (latex/html-export s false true)
+      (latex/latex (str (d/squuid)) s false (not= display "Inline")))
 
-         [(:or "Target" "Radio_Target") s]
-         [:a {:id s} s]
+    [(:or "Target" "Radio_Target") s]
+    [:a {:id s} s]
 
-         ["Email" address]
-         (let [{:keys [local_part domain]} address
-               address (str local_part "@" domain)]
-           [:a {:href (str "mailto:" address)} address])
+    ["Email" address]
+    (let [{:keys [local_part domain]} address
+          address (str local_part "@" domain)]
+      [:a {:href (str "mailto:" address)} address])
 
-         ["Nested_link" link]
-         (nested-link config html-export? link)
+    ["Nested_link" link]
+    (nested-link config html-export? link)
 
-         ["Link" link]
-         (link-cp config html-export? link)
+    ["Link" link]
+    (link-cp config html-export? link)
 
-         [(:or "Verbatim" "Code") s]
-         [:code s]
+    [(:or "Verbatim" "Code") s]
+    [:code s]
 
-         ["Inline_Source_Block" x]
-         [:code (:code x)]
+    ["Inline_Source_Block" x]
+    [:code (:code x)]
 
-         ["Export_Snippet" "html" s]
-         (when (not html-export?)
-           [:span {:dangerouslySetInnerHTML
-                   {:__html s}}])
+    ["Export_Snippet" "html" s]
+    (when (not html-export?)
+      [:span {:dangerouslySetInnerHTML
+              {:__html s}}])
 
-         ["Inline_Hiccup" s] ;; String to hiccup
-         (ui/catch-error
-          [:div.warning {:title "Invalid hiccup"} s]
-          (-> (safe-read-string s)
-              (security/remove-javascript-links-in-href)))
+    ["Inline_Hiccup" s] ;; String to hiccup
+    (ui/catch-error
+     [:div.warning {:title "Invalid hiccup"} s]
+     (-> (safe-read-string s)
+         (security/remove-javascript-links-in-href)))
 
-         ["Inline_Html" s]
-         (when (not html-export?)
+    ["Inline_Html" s]
+    (when (not html-export?)
            ;; TODO: how to remove span and only export the content of `s`?
-           [:span {:dangerouslySetInnerHTML {:__html s}}])
+      [:span {:dangerouslySetInnerHTML {:__html s}}])
 
-         [(:or "Break_Line" "Hard_Break_Line")]
-         [:br]
+    [(:or "Break_Line" "Hard_Break_Line")]
+    [:br]
 
-         ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
-         nil
-         ["Timestamp" ["Date" t]]
-         (timestamp t "Date")
-         ["Timestamp" ["Closed" t]]
-         (timestamp t "Closed")
-         ["Timestamp" ["Range" t]]
-         (range t false)
-         ["Timestamp" ["Clock" ["Stopped" t]]]
-         (range t true)
-         ["Timestamp" ["Clock" ["Started" t]]]
-         (timestamp t "Started")
+    ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
+    nil
+    ["Timestamp" ["Date" t]]
+    (timestamp t "Date")
+    ["Timestamp" ["Closed" t]]
+    (timestamp t "Closed")
+    ["Timestamp" ["Range" t]]
+    (range t false)
+    ["Timestamp" ["Clock" ["Stopped" t]]]
+    (range t true)
+    ["Timestamp" ["Clock" ["Started" t]]]
+    (timestamp t "Started")
 
-         ["Cookie" ["Percent" n]]
-         [:span {:class "cookie-percent"}
-          (util/format "[d%%]" n)]
-         ["Cookie" ["Absolute" current total]]
-         [:span {:class "cookie-absolute"}
-          (util/format "[%d/%d]" current total)]
+    ["Cookie" ["Percent" n]]
+    [:span {:class "cookie-percent"}
+     (util/format "[d%%]" n)]
+    ["Cookie" ["Absolute" current total]]
+    [:span {:class "cookie-absolute"}
+     (util/format "[%d/%d]" current total)]
 
-         ["Footnote_Reference" options]
-         (let [{:keys [name]} options
-               encode-name (util/url-encode name)]
-           [:sup.fn
-            [:a {:id (str "fnr." encode-name)
-                 :class "footref"
-                 :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
-             name]])
+    ["Footnote_Reference" options]
+    (let [{:keys [name]} options
+          encode-name (util/url-encode name)]
+      [:sup.fn
+       [:a {:id (str "fnr." encode-name)
+            :class "footref"
+            :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
+        name]])
 
-         ["Macro" options]
-         (macro-cp config options)
+    ["Macro" options]
+    (macro-cp config options)
 
-         :else ""))
+    :else ""))
 
 (rum/defc block-child
   [block]
@@ -2385,9 +2385,9 @@
         children (if (and ref-or-custom-query?
                           (not collapsed?))
                    (map
-                     (fn [b] (assoc b
-                                    :block/level (inc (:block/level block))))
-                     (model/sub-block-direct-children repo uuid))
+                    (fn [b] (assoc b
+                                   :block/level (inc (:block/level block))))
+                    (model/sub-block-direct-children repo uuid))
                    children)
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
@@ -2406,16 +2406,16 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-       {:id block-id
-        :data-refs data-refs
-        :data-refs-self data-refs-self
-        :data-collapsed (and collapsed? has-child?)
-        :class (str uuid
-                    (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl")
-                    (when (:ui/selected? block) " selected noselect"))
-        :blockid (str uuid)
-        :haschild (str has-child?)}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
+       :class (str uuid
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-xl")
+                   (when (:ui/selected? block) " selected noselect"))
+       :blockid (str uuid)
+       :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2704,6 +2704,8 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
+        repo (state/get-current-repo)
+        view-fn (if (keyword? view) (state/sub [:config repo :view view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
@@ -2724,7 +2726,7 @@
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
-        view-f (and view (sci/eval-string (pr-str view)))
+        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and (seq result)
                                      (not not-grouped-by-page?)
