@@ -334,6 +334,12 @@
     (when-not (string/blank? template)
       (string/trim template))))
 
+(defn get-default-page-template
+  []
+  (when-let [template (get-in (get-config) [:default-templates :pages])]
+    (when-not (string/blank? template)
+      (string/trim template))))
+
 (defn all-pages-public?
   []
   (let [value (:publishing/all-pages-public? (get-config))

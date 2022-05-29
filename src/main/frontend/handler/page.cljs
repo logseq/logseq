@@ -153,7 +153,13 @@
          (when (or
                 (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
                 (create-title-property? journal? page-name))
-           (editor-handler/api-insert-new-block! "" {:page page-name}))))
+           (editor-handler/api-insert-new-block! "" {:page page-name})))
+           
+        (when-not journal (state/pub-event! [:journal/insert-template title])
+        
+        )
+           
+      )
 
      (when redirect?
        (route-handler/redirect-to-page! page-name))
