@@ -127,7 +127,7 @@
       (jump-to-anchor! anchor)
       (js/setTimeout #(util/scroll-to (util/app-scroll-container-node)
                                       (state/get-saved-scroll-position)
-                                      true)
+                                      false)
                      100))))
 
 (defn go-to-search!
