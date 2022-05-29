@@ -11,7 +11,7 @@
     height: 80px;
     /* border-top: 1.5px solid var(--ls-tertiary-border-color); */
     box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.10);
-    
+
     .ti, .timer {
         color: var(--ls-primary-text-color);
         opacity: 0.5;
@@ -51,12 +51,12 @@
           left: 0px;
           height: 40px;
       }
-      
+
       .show-submenu {
           display: block;
       }
   }
-  
+
   .toolbar-commands {
     justify-content: space-between;
     display: flex;
@@ -103,10 +103,14 @@ html.is-zoomed-native-ios {
     .cp__footer {
         height: 60px;
     }
-    
+
     @media (orientation: landscape) {
         .cp__footer {
             height: 50px;
         }
     }
+}
+
+.bottom-action {
+    line-height: 1.15;
 }

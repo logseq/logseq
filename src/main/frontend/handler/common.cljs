@@ -139,3 +139,16 @@
       (log/error :parse/config-failed e)
       (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
       (rewrite/parse-string config/config-default-content))))
+
+(defn listen-to-scroll!
+  [element]
+  (let [*scroll-timer (atom nil)]
+    (.addEventListener element "scroll"
+                       (fn []
+                         (when @*scroll-timer
+                           (js/clearTimeout @*scroll-timer))
+                         (state/set-state! :ui/scrolling? true)
+                         (state/save-scroll-position! (util/scroll-top))
+                         (reset! *scroll-timer (js/setTimeout
+                                                (fn [] (state/set-state! :ui/scrolling? false)) 500)))
+                       false)))

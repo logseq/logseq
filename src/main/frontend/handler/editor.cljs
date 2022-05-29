@@ -590,6 +590,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
+          sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (util/page-name-sanity-lc page)])
@@ -1290,21 +1291,23 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (or (:block/content current-block)
-                           (and elem (gobj/get elem "value")))]
-             (cond
-               force?
-               (save-block-aux! db-block value opts)
+                 value (if (= (:block/uuid current-block) (:block/uuid block))
+                         (:block/content current-block)
+                         (and elem (gobj/get elem "value")))]
+             (when value
+               (cond
+                 force?
+                 (save-block-aux! db-block value opts)
 
-               (and skip-properties?
-                    (db-model/top-block? block)
-                    (when elem (thingatpt/properties-at-point elem)))
-               nil
+                 (and skip-properties?
+                      (db-model/top-block? block)
+                      (when elem (thingatpt/properties-at-point elem)))
+                 nil
 
-               (and block value db-content-without-heading
-                    (not= (string/trim db-content-without-heading)
-                          (string/trim value)))
-               (save-block-aux! db-block value opts)))
+                 (and block value db-content-without-heading
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value)))
+                 (save-block-aux! db-block value opts))))
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
@@ -2571,7 +2574,7 @@
 
       ;; just delete
       :else
-      (do
+      (when-not (mobile-util/native-ios?)
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
@@ -2630,49 +2633,49 @@
         nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
-        ;; does not work sometimes in an empty block, hence the empty block
+        ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
         (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (= value ""))
+             (zero? pos))
         (do
           (util/stop e)
-          (delete-block! (state/get-current-repo) false))
+          (let [block (state/get-edit-block)
+                top-block? (= (:block/left block) (:block/page block))
+                root-block? (= (:block/container block) (str (:block/uuid block)))
+                repo (state/get-current-repo)]
+           (when (and (if top-block? (string/blank? value) true)
+                      (not root-block?))
+             (delete-block! repo false))))
 
         (and (= key "#")
-             (and
-              (> pos 0)
-              (= "#" (util/nth-safe value (dec pos)))))
+             (and (> pos 0)
+                  (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (and
-         (contains? (set/difference (set (keys reversed-autopair-map))
-                                    #{"`"})
-                    key)
+        (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                        #{"`"})
+                        key)
          (= (get-current-input-char input) key))
-        (do
-          (util/stop e)
-          (cursor/move-cursor-forward input))
+        (do (util/stop e)
+            (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
-        (do
-          (autopair input-id "[" format nil)
-          (util/stop e))
+        (do (autopair input-id "[" format nil)
+            (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-paren-keys key))
-        (do
-          (util/stop e)
-          (autopair input-id "(" format nil))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
         (contains? (set (keys autopair-map)) key)
-        (do
-          (util/stop e)
-          (autopair input-id key format nil))
+        (do (util/stop e)
+            (autopair input-id key format nil))
 
         hashtag?
         (do
@@ -2906,7 +2909,7 @@
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
-      
+
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)

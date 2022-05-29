@@ -295,8 +295,8 @@
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       (when-let [url (:url custom-theme)]
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:effect false :emit false}))
-        (state/set-state! :plugin/selected-theme (:url url))))))
+                                     (bean/->js {:emit false}))
+        (state/set-state! :plugin/selected-theme url)))))
 
 (defn setup-system-theme-effect!
   []
@@ -787,20 +787,31 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tippy < rum/static
+(rum/defcs tippy < rum/reactive
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open?] :as opts} child]
+  [state {:keys [fixed-position? open? in-editor?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?
-        manual (not= open? nil)]
+        manual (not= open? nil)
+        edit-id (ffirst (state/sub :editor/editing?))
+        editing-node (when edit-id (gdom/getElement edit-id))
+        editing? (some? editing-node)
+        scrolling? (state/sub :ui/scrolling?)
+        open? (if manual open? @*mounted?)
+        disabled? (boolean
+                   (or
+                    (and in-editor?
+                         ;; editing in non-preview containers or scrolling
+                         (not (util/rec-get-tippy-container editing-node))
+                         (or editing? scrolling?))
+                    (not (state/enable-tooltip?))))]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :delay 600
                     :theme "customized"
-                    :disabled (not (state/enable-tooltip?))
+                    :disabled disabled?
                     :unmountHTMLWhenHide true
-                    :open (if manual open? @*mounted?)
+                    :open (if disabled? false open?)
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
@@ -809,18 +820,19 @@
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if (or open? mounted?)
-                           (try
-                             (when-let [html (:html opts)]
-                               (if (fn? html)
-                                 (html)
-                                 [:div.px-2.py-1
-                                  html]))
-                             (catch js/Error e
-                               (log/error :exception e)
-                               [:div]))
-                           [:div {:key "tippy"} ""])))
-            (rum/fragment {:key "tippy-children"} child))))
+            (assoc :html (or
+                          (when open?
+                            (try
+                              (when-let [html (:html opts)]
+                                (if (fn? html)
+                                  (html)
+                                  [:div.px-2.py-1
+                                   html]))
+                              (catch js/Error e
+                                (log/error :exception e)
+                                [:div])))
+                          [:div {:key "tippy"} ""])))
+           (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
@@ -868,7 +880,7 @@
 (rum/defc progress-bar
   [width]
   {:pre (integer? width)}
-  [:div.w-full.bg-indigo-200.rounded-full.h-2.5
+  [:div.w-full.bg-indigo-200.rounded-full.h-2.5.animate-pulse
    [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
                                            :transition "width 1s"}]])
 
@@ -892,8 +904,12 @@
    {:ref #(reset! (::ref state) %)
     :style {:min-height 24}}
    (if visible?
-     (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5 {:style {:height 88}}
+     (when (fn? content-fn)
+       [:div.fade-enter
+        {:ref #(when-let [^js cls (and % (.-classList %))]
+                 (.add cls "fade-enter-active"))}
+        (content-fn)])
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]
