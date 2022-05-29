@@ -2124,7 +2124,7 @@
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
                       (:embed-parent config))
-             [:a.opacity-30.hover:opacity-100.svg-small.inline
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
               {:on-mouse-down (fn [e]
                                 (util/stop e)
                                 (when-let [block (:embed-parent config)]
@@ -2132,7 +2132,7 @@
               svg/edit])
 
            (when block-reference-only?
-             [:a.opacity-30.hover:opacity-100.svg-small.inline
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
               {:on-mouse-down (fn [e]
                                 (util/stop e)
                                 (editor-handler/edit-block! block :max (:block/uuid block)))}
