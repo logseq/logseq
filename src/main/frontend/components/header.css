@@ -1,4 +1,5 @@
 .cp__header {
+  @apply z-10;  
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
