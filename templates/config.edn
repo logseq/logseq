@@ -108,6 +108,16 @@
  ;; Whether to show empty bullets for non-document mode (the default mode)
  :ui/show-empty-bullets? false
 
+ ;; Pre-defined :view function to use in Query
+ :view
+ {:pprint
+  (fn [r] [:pre.code (pprint r)])}
+
+ ;; Pre-defined :result-transform function to use in Query
+ :result-transform
+ {:sort-by-updated
+  (fn [result] (sort-by (fn [h] (get h :block/updated-at)) result))}
+
  ;; The app will show those queries in today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
  ;; the "NEXT" query asks the future tasks.
@@ -203,7 +213,7 @@
 
  ;; ignore #+keyword: for parsing page references in orgmode
  ;; :ignored-page-references-keywords #{"author" "startup"}
- 
+
  ;; Quick capture templates on mobile for recieving contents from other apps.
  ;; Each template contains three elements {time}, {text} and {url}, which can be auto-expanded
  ;; by received contents from other apps. Note: the {} cannot be omitted.

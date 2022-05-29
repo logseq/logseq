@@ -76,8 +76,10 @@
                               remove-nested-children-blocks
                               (model/sort-by-left-recursive)
                               (model/with-pages)))
-                   result)]
-      (if-let [result-transform (:result-transform q)]
+                   result)
+          result-transform-fn (:result-transform q)
+          repo (state/get-current-repo)]
+      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :result-transform result-transform-fn]) result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try
             (sci/call-fn f result)
@@ -124,8 +126,8 @@
     (let [query (resolve-query query)
           resolved-inputs (mapv resolve-input inputs)
           inputs (cond-> resolved-inputs
-                         rules
-                         (conj rules))
+                   rules
+                   (conj rules))
           repo (or repo (state/get-current-repo))
           k [:custom query']]
       (pprint "inputs (post-resolution):" resolved-inputs)
