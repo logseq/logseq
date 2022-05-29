@@ -1618,6 +1618,8 @@
                            [(str class " checked") true])]
     (when class
       (ui/checkbox {:class class
+                    :style {:margin-top -2
+                            :margin-right 5}
                     :checked checked?
                     :on-mouse-down (fn [e]
                                      (util/stop-propagation e))
@@ -1718,7 +1720,7 @@
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
-                   (block-checkbox t "mr-1 cursor"))
+                   (block-checkbox t (str "mr-1 cursor")))
         marker-switch (when (and (not pre-block?)
                                  (not html-export?))
                         (marker-switch t))
@@ -1735,7 +1737,7 @@
         elem (if heading-level
                (keyword (str "h" heading-level
                              (when block-ref? ".inline")))
-               :span.inline-flex.items-center)]
+               :span.inline)]
     (->elem
      elem
      (merge
@@ -2088,7 +2090,11 @@
   (let [*hide-block-refs? (get state :hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
-        slide? (:slide? config)]
+        slide? (:slide? config)
+        trimmed-content (string/trim (:block/content block))
+        block-reference-only? (and (string/starts-with? trimmed-content "((")
+                                   (re-find (re-pattern util/uuid-pattern) trimmed-content)
+                                   (string/ends-with? trimmed-content "))"))]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
@@ -2118,11 +2124,18 @@
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
                       (:embed-parent config))
-             [:a.opacity-30.hover:opacity-100.svg-small.inline
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
               {:on-mouse-down (fn [e]
                                 (util/stop e)
                                 (when-let [block (:embed-parent config)]
                                   (editor-handler/edit-block! block :max (:block/uuid block))))}
+              svg/edit])
+
+           (when block-reference-only?
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
+              {:on-mouse-down (fn [e]
+                                (util/stop e)
+                                (editor-handler/edit-block! block :max (:block/uuid block)))}
               svg/edit])
 
            (block-refs-count block *hide-block-refs?)]]

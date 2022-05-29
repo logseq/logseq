@@ -2574,7 +2574,7 @@
 
       ;; just delete
       :else
-      (do
+      (when-not (mobile-util/native-ios?)
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
