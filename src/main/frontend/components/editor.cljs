@@ -301,15 +301,17 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
-                         (let [delta-width (- vw-width (+ (:left rect) left))]
-                           (< delta-width (* max-width 0.5))))
+        ;x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
+        ;                 (let [delta-width (- vw-width (+ (:left rect) left))]
+        ;                   (< delta-width (* max-width 0.5))))
+        y-overflow-vh? (< to-max-height 130)
+        to-max-height (if y-overflow-vh? max-height to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
-      :class (if x-overflow-vw? "is-overflow-vw-x" "")
+      :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
       :style (merge
