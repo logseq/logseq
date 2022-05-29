@@ -281,7 +281,6 @@
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight
-        vw-width js/window.innerWidth
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
@@ -301,9 +300,6 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        ;x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
-        ;                 (let [delta-width (- vw-width (+ (:left rect) left))]
-        ;                   (< delta-width (* max-width 0.5))))
         y-overflow-vh? (< to-max-height 130)
         to-max-height (if y-overflow-vh? max-height to-max-height)
         pos-rect (when (and (seq rect) editing-key)
