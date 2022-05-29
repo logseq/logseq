@@ -2090,7 +2090,11 @@
   (let [*hide-block-refs? (get state :hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
-        slide? (:slide? config)]
+        slide? (:slide? config)
+        trimmed-content (string/trim (:block/content block))
+        block-reference-only? (and (string/starts-with? trimmed-content "((")
+                                   (re-find (re-pattern util/uuid-pattern) trimmed-content)
+                                   (string/ends-with? trimmed-content "))"))]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
@@ -2125,6 +2129,13 @@
                                 (util/stop e)
                                 (when-let [block (:embed-parent config)]
                                   (editor-handler/edit-block! block :max (:block/uuid block))))}
+              svg/edit])
+
+           (when block-reference-only?
+             [:a.opacity-30.hover:opacity-100.svg-small.inline
+              {:on-mouse-down (fn [e]
+                                (util/stop e)
+                                (editor-handler/edit-block! block :max (:block/uuid block)))}
               svg/edit])
 
            (block-refs-count block *hide-block-refs?)]]
