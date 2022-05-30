@@ -808,6 +808,14 @@
     (plugin-handler/register-extensions-enhancer
       (keyword pid) type {:enhancer enhancer})))
 
+(defn ^:export exper_request
+  [pid options]
+  nil)
+
+(defn ^:export exper_abort_request
+  [req-id]
+  nil)
+
 ;; helpers
 (defn ^:export query_element_by_id
   [id]
