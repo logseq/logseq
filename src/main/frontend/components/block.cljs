@@ -12,35 +12,37 @@
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
+            [frontend.components.plugins :as plugins]
+            [frontend.components.query-table :as query-table]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.sci :as sci]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.zotero :as zotero]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
+            [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.components.plugins :as plugins]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.query :as query-handler]
-            [frontend.handler.common :as common-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.security :as security]
@@ -50,8 +52,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -63,9 +65,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]
-            [frontend.mobile.util :as mobile-util]))
+            [shadow.loader :as loader]))
 
 (defn safe-read-string
   ([s]
@@ -256,7 +256,8 @@
 
 (rum/defc audio-cp [src]
   [:audio {:src src
-           :controls true}])
+           :controls true
+           :on-touch-start #(util/stop %)}])
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -264,14 +265,14 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?) (mobile-util/is-native-platform?))
+    (when (or granted? (util/electron?) (mobile-util/native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
             share-fn (fn [event]
                        (util/stop event)
-                       (when (mobile-util/is-native-platform?)
+                       (when (mobile-util/native-platform?)
                          (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
                            (.share Share #js {:url url
                                               :title "Open file with your favorite app"}))))]
@@ -509,6 +510,7 @@
 
     (if (or (not manual?) open?)
       (ui/tippy {:ref             *tippy-ref
+                 :in-editor?      true
                  :html            html-template
                  :interactive     true
                  :delay           [1000, 100]
@@ -761,6 +763,7 @@
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
                         :interactive true
+                        :in-editor?  true
                         :delay       [1000, 100]} inner)
              inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
@@ -881,7 +884,7 @@
                              (state/set-state! :pdf/current current)))}
          label-text]
 
-        (mobile-util/is-native-platform?)
+        (mobile-util/native-platform?)
         (asset-link config label-text s metadata full_text))
 
       (contains? (config/doc-formats) ext)
@@ -1056,7 +1059,8 @@
      (when-not (string/blank? query)
        (custom-query (assoc config :dsl-query? true)
                      {:title (ui/tippy {:html commands/query-doc
-                                        :interactive true}
+                                        :interactive true
+                                        :in-editor?  true}
                                        [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
                                         (str "Query: " query)])
                       :query query})))])
@@ -1110,42 +1114,80 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-      (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
-        (when-not (string/blank? vimeo-id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allow-full-screen "allowfullscreen"
-              :allow
-              "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-              :frame-border "0"
-              :src (str "https://player.vimeo.com/video/" vimeo-id)
-              :height height
-              :width width}]))))))
+    (when-let [vimeo-id (nth (util/safe-re-find text/vimeo-regex url) 5)]
+      (when-not (string/blank? vimeo-id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allow-full-screen "allowfullscreen"
+            :allow
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :frame-border "0"
+            :src (str "https://player.vimeo.com/video/" vimeo-id)
+            :height height
+            :width width}])))))
 
 (defn- macro-bilibili-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
-      (when-let [id (cond
-                      (<= (count url) 15) url
-                      :else
-                      (last (util/safe-re-find id-regex url)))]
-        (when-not (string/blank? id)
-          (let [width (min (- (util/get-width) 96)
-                           560)
-                height (int (* width (/ 315 560)))]
-            [:iframe
-             {:allowfullscreen true
-              :framespacing "0"
-              :frameborder "no"
-              :border "0"
-              :scrolling "no"
-              :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-              :width width
-              :height (max 500 height)}]))))))
+    (when-let [id (cond
+                    (<= (count url) 15) url
+                    :else
+                    (nth (util/safe-re-find text/bilibili-regex url) 5))]
+      (when-not (string/blank? id)
+        (let [width (min (- (util/get-width) 96)
+                         560)
+              height (int (* width (/ 315 560)))]
+          [:iframe
+           {:allowfullscreen true
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+            :width width
+            :height (max 500 height)}])))))
+
+(defn- macro-video-cp
+  [_config arguments]
+  (when-let [url (first arguments)]
+    (let [width (min (- (util/get-width) 96)
+                     560)
+          height (int (* width (/ 315 560)))
+          results (text/get-matched-video url)
+          src (match results
+                     [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                     (if (= (count id) 11) ["youtube-player" id] url)
+
+                     [_ _ _ "youtube-nocookie.com" _ id _]
+                     (str "https://www.youtube-nocookie.com/embed/" id)
+
+                     [_ _ _ "loom.com" _ id _]
+                     (str "https://www.loom.com/embed/" id)
+
+                     [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                     (str "https://player.vimeo.com/video/" id)
+
+                     [_ _ _ "bilibili.com" _ id _]
+                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+
+                     :else
+                     url)]
+      (if (and (coll? src)
+               (= (first src) "youtube-player"))
+        (youtube/youtube-video (last src))
+        (when src
+          [:iframe
+           {:allowfullscreen true
+            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :framespacing "0"
+            :frameborder "no"
+            :border "0"
+            :scrolling "no"
+            :src src
+            :width width
+            :height height}])))))
 
 (defn- macro-else-cp
   [name config arguments]
@@ -1258,13 +1300,12 @@
 
       (= name "youtube")
       (when-let [url (first arguments)]
-        (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
-          (when-let [youtube-id (cond
-                                  (== 11 (count url)) url
-                                  :else
-                                  (nth (util/safe-re-find YouTube-regex url) 5))]
-            (when-not (string/blank? youtube-id)
-              (youtube/youtube-video youtube-id)))))
+        (when-let [youtube-id (cond
+                                (== 11 (count url)) url
+                                :else
+                                (nth (util/safe-re-find text/youtube-regex url) 5))]
+          (when-not (string/blank? youtube-id)
+            (youtube/youtube-video youtube-id))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp (first arguments)]
@@ -1286,6 +1327,9 @@
       ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
       (= name "bilibili")
       (macro-bilibili-cp config arguments)
+
+      (= name "video")
+      (macro-video-cp config arguments)
 
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
@@ -1532,7 +1576,7 @@
                                    "hide-inner-bullet"))}
                     [:span.bullet {:blockid (str uuid)}]]]]
        (cond
-         (and (or (mobile-util/is-native-platform?)
+         (and (or (mobile-util/native-platform?)
                   (:ui/show-empty-bullets? (state/get-config)))
               (not doc-mode?))
          bullet
@@ -1866,35 +1910,40 @@
   (.stopPropagation e)
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")
-        shift? (gobj/get e "shiftKey")]
-    (when (contains? #{1 0} button)
-      (when-not (target-forbidden-edit? target)
-        (if (and shift? (state/get-selection-start-block))
-          (editor-handler/highlight-selection-area! block-id)
-          (do
-            (editor-handler/clear-selection!)
-            (editor-handler/unhighlight-blocks!)
-            (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                           cursor-range (util/caret-range (gdom/getElement block-id))
-                           {:block/keys [content format]} block
-                           content (->> content
-                                        (property/remove-built-in-properties format)
-                                        (drawer/remove-logbook))]
-                       ;; save current editing block
-                       (let [{:keys [value] :as state} (editor-handler/get-state)]
-                         (editor-handler/save-block! state value))
-                       (state/set-editing!
-                        edit-input-id
-                        content
-                        block
-                        cursor-range
-                        false))]
-              ;; wait a while for the value of the caret range
-              (if (util/ios?)
-                (f)
-                (js/setTimeout f 5))
+        shift? (gobj/get e "shiftKey")
+        meta? (util/meta-key? e)]
+    (if (and meta? (not (state/get-edit-input-id)))
+      (do
+        (util/stop e)
+        (state/conj-selection-block! (gdom/getElement block-id) :down))
+      (when (contains? #{1 0} button)
+        (when-not (target-forbidden-edit? target)
+          (if (and shift? (state/get-selection-start-block))
+            (editor-handler/highlight-selection-area! block-id)
+            (do
+              (editor-handler/clear-selection!)
+              (editor-handler/unhighlight-blocks!)
+              (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                             cursor-range (util/caret-range (gdom/getElement block-id))
+                             {:block/keys [content format]} block
+                             content (->> content
+                                          (property/remove-built-in-properties format)
+                                          (drawer/remove-logbook))]
+                         ;; save current editing block
+                         (let [{:keys [value] :as state} (editor-handler/get-state)]
+                           (editor-handler/save-block! state value))
+                         (state/set-editing!
+                          edit-input-id
+                          content
+                          block
+                          cursor-range
+                          false))]
+                ;; wait a while for the value of the caret range
+                (if (util/ios?)
+                  (f)
+                  (js/setTimeout f 5))
 
-              (when block-id (state/set-selection-start-block! block-id)))))))))
+                (when block-id (state/set-selection-start-block! block-id))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -1936,6 +1985,7 @@
                                          (for [clock (take 10 (reverse clocks))]
                                            [:li clock])]])))
                     :interactive true
+                    :in-editor?  true
                     :delay       [1000, 100]}
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
@@ -1967,12 +2017,13 @@
                              (when (and
                                     (state/in-selection-mode?)
                                     (not (string/includes? content "```"))
-                                    (not (gobj/get e "shiftKey")))
+                                    (not (gobj/get e "shiftKey"))
+                                    (not (util/meta-key? e)))
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-
+     
      [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
@@ -2034,13 +2085,32 @@
                        (swap! *hide-block-refs? not)))}
         block-refs-count]])))
 
+(rum/defc block-left-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
+   [:div.commands-button.w-0.rounded-r-md
+    {:id (str "block-left-menu-" uuid)}
+    [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+
+(rum/defc block-right-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
+   [:div.commands-button.w-0.flex.flew-col.rounded-md
+    {:id (str "block-right-menu-" uuid)}
+    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]]])
+
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)
   [state config {:block/keys [uuid format] :as block} edit-input-id block-id heading-level edit?]
   (let [*hide-block-refs? (get state :hide-block-refs?)
         editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
-        slide? (:slide? config)]
+        slide? (:slide? config)
+        trimmed-content (string/trim (:block/content block))
+        block-reference-only? (and (string/starts-with? trimmed-content "((")
+                                   (re-find (re-pattern util/uuid-pattern) trimmed-content)
+                                   (string/ends-with? trimmed-content "))"))]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
@@ -2070,11 +2140,18 @@
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
                       (:embed-parent config))
-             [:a.opacity-30.hover:opacity-100.svg-small.inline
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
               {:on-mouse-down (fn [e]
                                 (util/stop e)
                                 (when-let [block (:embed-parent config)]
                                   (editor-handler/edit-block! block :max (:block/uuid block))))}
+              svg/edit])
+
+           (when block-reference-only?
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
+              {:on-mouse-down (fn [e]
+                                (util/stop e)
+                                (editor-handler/edit-block! block :max (:block/uuid block)))}
               svg/edit])
 
            (block-refs-count block *hide-block-refs?)]]
@@ -2224,20 +2301,21 @@
 
 (defn- block-mouse-over
   [uuid e *control-show? block-id doc-mode?]
-  (util/stop e)
-  (when (or
-         (model/block-collapsed? uuid)
-         (editor-handler/collapsable? uuid {:semantic? true}))
-    (reset! *control-show? true))
-  (when-let [parent (gdom/getElement block-id)]
-    (let [node (.querySelector parent ".bullet-container")]
-      (when doc-mode?
-        (dom/remove-class! node "hide-inner-bullet"))))
-  (when (and
-         (state/in-selection-mode?)
-         (non-dragging? e))
+  (when-not @*dragging?
     (util/stop e)
-    (editor-handler/highlight-selection-area! block-id)))
+    (when (or
+           (model/block-collapsed? uuid)
+           (editor-handler/collapsable? uuid {:semantic? true}))
+      (reset! *control-show? true))
+    (when-let [parent (gdom/getElement block-id)]
+      (let [node (.querySelector parent ".bullet-container")]
+        (when doc-mode?
+          (dom/remove-class! node "hide-inner-bullet"))))
+    (when (and
+           (state/in-selection-mode?)
+           (non-dragging? e))
+      (util/stop e)
+      (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]
@@ -2328,6 +2406,8 @@
                      (model/sub-block-direct-children repo uuid))
                    children)
         breadcrumb-show? (:breadcrumb-show? config)
+        *show-left-menu? (::show-block-left-menu? state)
+        *show-right-menu? (::show-block-right-menu? state)
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
@@ -2381,20 +2461,32 @@
 
      [:div.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+       :on-touch-start block-handler/on-touch-start
+       :on-touch-move (fn [event]
+                        (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-cancel block-handler/on-touch-cancel 
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
-
-      (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
+      
+      (when @*show-left-menu?
+        (block-left-menu config block))
+      (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+      (when @*show-right-menu?
+        (block-right-menu config block))]
 
      (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs block-container < rum/reactive
+  (rum/local false ::show-block-left-menu?) 
+  (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]
@@ -2432,7 +2524,7 @@
        (fn []
          (block-container-inner state repo config block))
        nil
-       {:reset-height? false})
+       {})
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2639,7 +2731,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query view collapsed? children? breadcrumb-show?] :as q}]
+  [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         current-block-uuid (or (:block/uuid (:block config))
@@ -2648,7 +2740,8 @@
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         query-result (and query-atom (rum/react query-atom))
-        table? (or (get-in current-block [:block/properties :query-table])
+        table? (or table-view?
+                   (get-in current-block [:block/properties :query-table])
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         transformed-query-result (when query-result
                                    (db/custom-query-result-transform query-result remove-blocks q))
@@ -2677,8 +2770,8 @@
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
-      [:div.custom-query.mt-4 (get config :attr {})
-       (when-not (and built-in? (empty? result))
+      (when-not (and built-in? (empty? result))
+        [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
           [:div.custom-query-title
            [:span.title-text (cond
@@ -2691,7 +2784,7 @@
             (str (count transformed-query-result) " results")]]
           (fn []
             [:div
-             (when current-block
+             (when (and current-block (not view-f) (nil? table-view?))
                [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                 (when-not page-list?
                   [:div.flex.flex-row
@@ -2753,7 +2846,7 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true}))])))
+           :title-trigger? true})]))))
 
 (rum/defc custom-query
   [config q]
@@ -2762,8 +2855,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     nil
-    {:reset-height? true})))
-
+    {})))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
@@ -3098,17 +3190,23 @@
 
 (rum/defcs breadcrumb-with-container < rum/reactive
   {:init (fn [state]
-           (assoc state ::navigating-block (atom (:block/uuid (ffirst (:rum/args state))))))}
+           (let [first-block (ffirst (:rum/args state))]
+             (assoc state
+                    ::initial-block    first-block
+                    ::navigating-block (atom (:block/uuid first-block)))))}
   [state blocks config]
   (let [repo (state/get-current-repo)
         *navigating-block (::navigating-block state)
         navigating-block (rum/react *navigating-block)
-        block (first blocks)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        navigating-block-entity (db/entity [:block/uuid navigating-block])
+        navigated? (and
+                    navigating-block
+                    (not= (:db/id (:block/parent (::initial-block state)))
+                          (:db/id (:block/parent navigating-block-entity))))
         blocks (if navigated?
-                 (let [block (db/pull [:block/uuid navigating-block])]
+                 (let [block navigating-block-entity]
                    (db/get-paginated-blocks repo (:db/id block)
-                                           {:scoped-block-id (:db/id block)}))
+                                            {:scoped-block-id (:db/id block)}))
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)

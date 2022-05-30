@@ -1,5 +1,5 @@
 .cp__header {
-  @apply shadow z-10;
+  @apply z-10;  
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
@@ -9,7 +9,6 @@
   justify-content: space-between;
   flex: 0 0 auto;
   position: sticky;
-  position: -webkit-sticky;
   top: 0;
   left: 0;
   right: 0;
@@ -219,7 +218,7 @@ a.button {
 }
 
 html.is-ios.is-safari {
-
+  
   .cp__header {
     background-color: var(--ls-primary-background-color);
   }
@@ -235,6 +234,8 @@ html.is-native-ipad {
 
   #main-container {
     padding-top: 0px;
+    display: flex;
+    flex-direction: column;
   }
 
   #main-content-container {
@@ -252,8 +253,14 @@ html.is-native-ipad {
     }
   }
 
-  .cp__header > .r {
-    display: flex;
+  .cp__header {
+    > .r {
+      display: flex;
+    }
+
+    a.button {
+      opacity: 1;
+    }
   }
 }
 
@@ -280,7 +287,7 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner {
+  .left-sidebar-inner  {
     > .wrap {
       padding-top: 20px;
     }
@@ -329,10 +336,6 @@ html.is-native-iphone {
   @media (orientation: landscape) {
     --ls-headbar-inner-top-padding: 8px;
     --ls-headbar-height: 2.5rem;
-
-    .cp__header {
-      @apply shadow z-10;
-    }
   }
 }
 
@@ -345,9 +348,14 @@ html.is-native-iphone-without-notch {
 
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 2.5rem;
+  }
+}
 
-    .cp__header {
-      @apply shadow z-10;
-    }
+html.is-zoomed-native-ios {
+  --ls-headbar-inner-top-padding: 30px;
+
+  @media (orientation: landscape) {
+    --ls-headbar-inner-top-padding: 8px;
+    --ls-headbar-height: 2.5rem;
   }
 }

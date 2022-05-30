@@ -409,6 +409,29 @@
                      f))
                  form))
 
+(defn get-sorted-page-block-ids
+  [page-id]
+  (let [root (db-utils/entity page-id)]
+    (loop [result []
+           children (sort-by-left (:block/_parent root) root)]
+      (if (seq children)
+        (let [child (first children)]
+          (recur (conj result (:db/id child))
+                 (concat
+                  (sort-by-left (:block/_parent child) child)
+                  (rest children))))
+        result))))
+
+(defn sort-page-random-blocks
+  "Blocks could be non consecutive."
+  [blocks]
+  (assert (every? #(= (:block/page %) (:block/page (first blocks))) blocks) "Blocks must to be in a same page.")
+  (let [page-id (:db/id (:block/page (first blocks)))
+        ;; TODO: there's no need to sort all the blocks
+        sorted-ids (get-sorted-page-block-ids page-id)
+        blocks-map (zipmap (map :db/id blocks) blocks)]
+    (keep blocks-map sorted-ids)))
+
 (defn has-children?
   ([block-id]
    (has-children? (conn/get-db) block-id))
@@ -583,6 +606,57 @@
               true
               (recur parent)))
           false)))))
+
+(defn get-prev-sibling
+  [db id]
+  (when-let [e (d/entity db id)]
+    (let [left (:block/left e)]
+      (when (not= (:db/id left) (:db/id (:block/parent e)))
+        left))))
+
+(defn get-right-sibling
+  [db db-id]
+  (when-let [block (d/entity db db-id)]
+    (get-by-parent-&-left db
+                          (:db/id (:block/parent block))
+                          db-id)))
+
+(defn last-child-block?
+  "The child block could be collapsed."
+  [db parent-id child-id]
+  (when-let [child (d/entity db child-id)]
+    (cond
+      (= parent-id child-id)
+      true
+
+      (get-right-sibling db child-id)
+      false
+
+      :else
+      (last-child-block? db parent-id (:db/id (:block/parent child))))))
+
+(defn- consecutive-block?
+  [block-1 block-2]
+  (let [db (conn/get-db)
+        aux-fn (fn [block-1 block-2]
+                 (and (= (:block/page block-1) (:block/page block-2))
+                      (or
+                       ;; sibling or child
+                       (= (:db/id (:block/left block-2)) (:db/id block-1))
+                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
+                         (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
+    (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
+
+(defn get-non-consecutive-blocks
+  [blocks]
+  (vec
+   (keep-indexed
+    (fn [i _block]
+      (when (< (inc i) (count blocks))
+        (when-not (consecutive-block? (nth blocks i)
+                                      (nth blocks (inc i)))
+          (nth blocks i))))
+    blocks)))
 
 (defn- get-start-id-for-pagination-query
   [repo-url current-db {:keys [db-before tx-meta] :as tx-report}

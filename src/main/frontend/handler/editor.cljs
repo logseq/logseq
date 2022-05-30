@@ -1,13 +1,15 @@
 (ns frontend.handler.editor
   (:require ["/frontend/utils" :as utils]
+            ["path" :as path]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands
-                     *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos
+                     *show-block-commands *show-commands
+                     *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -25,12 +27,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.image :as image]
             [frontend.idb :as idb]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -40,21 +42,21 @@
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
-            [frontend.util.marker :as marker]
-            [frontend.util.property :as property]
-            [frontend.util.priority :as priority]
-            [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
+            [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
-            ["path" :as path]))
+            [frontend.extensions.html-parser :as html-parser]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -589,6 +591,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
+          sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (util/page-name-sanity-lc page)])
@@ -960,9 +963,7 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
-    (when (seq blocks)
-      (state/exit-editing-and-set-selected-blocks! blocks))))
+  (block-handler/select-block! block-uuid))
 
 (defn- compose-copied-blocks-contents
   [repo block-ids]
@@ -975,7 +976,7 @@
      (into [] (state/get-export-block-text-remove-options)))))
 
 (defn copy-selection-blocks
-  []
+  [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
@@ -983,7 +984,8 @@
           content (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+        (let [html (export/export-blocks-as-html repo ids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
 
@@ -1052,7 +1054,7 @@
 
 (defn cut-selection-blocks
   [copy?]
-  (when copy? (copy-selection-blocks))
+  (when copy? (copy-selection-blocks true))
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -1191,9 +1193,10 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          md-content (compose-copied-blocks-contents repo [block-id])]
+          md-content (compose-copied-blocks-contents repo [block-id])
+          html (export/export-blocks-as-html repo [block-id])]
       (state/set-copied-full-blocks md-content [block])
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1289,21 +1292,23 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (or (:block/content current-block)
-                           (and elem (gobj/get elem "value")))]
-             (cond
-               force?
-               (save-block-aux! db-block value opts)
+                 value (if (= (:block/uuid current-block) (:block/uuid block))
+                         (:block/content current-block)
+                         (and elem (gobj/get elem "value")))]
+             (when value
+               (cond
+                 force?
+                 (save-block-aux! db-block value opts)
 
-               (and skip-properties?
-                    (db-model/top-block? block)
-                    (when elem (thingatpt/properties-at-point elem)))
-               nil
+                 (and skip-properties?
+                      (db-model/top-block? block)
+                      (when elem (thingatpt/properties-at-point elem)))
+                 nil
 
-               (and block value db-content-without-heading
-                    (not= (string/trim db-content-without-heading)
-                          (string/trim value)))
-               (save-block-aux! db-block value opts)))
+                 (and block value db-content-without-heading
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value)))
+                 (save-block-aux! db-block value opts))))
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
@@ -1411,7 +1416,7 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       (mobile-util/convert-file-src (str repo-dir path))
 
       :else
@@ -1677,7 +1682,8 @@
             (move-nodes blocks))
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
-              (.focus input))))
+              (.focus input)
+              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2569,7 +2575,7 @@
 
       ;; just delete
       :else
-      (do
+      (when-not (mobile-util/native-ios?)
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
@@ -2628,49 +2634,49 @@
         nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
-        ;; does not work sometimes in an empty block, hence the empty block
+        ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/is-native-platform?)
+        (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (= value ""))
+             (zero? pos))
         (do
           (util/stop e)
-          (delete-block! (state/get-current-repo) false))
+          (let [block (state/get-edit-block)
+                top-block? (= (:block/left block) (:block/page block))
+                root-block? (= (:block/container block) (str (:block/uuid block)))
+                repo (state/get-current-repo)]
+           (when (and (if top-block? (string/blank? value) true)
+                      (not root-block?))
+             (delete-block! repo false))))
 
         (and (= key "#")
-             (and
-              (> pos 0)
-              (= "#" (util/nth-safe value (dec pos)))))
+             (and (> pos 0)
+                  (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (and
-         (contains? (set/difference (set (keys reversed-autopair-map))
-                                    #{"`"})
-                    key)
+        (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                        #{"`"})
+                        key)
          (= (get-current-input-char input) key))
-        (do
-          (util/stop e)
-          (cursor/move-cursor-forward input))
+        (do (util/stop e)
+            (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
-        (do
-          (autopair input-id "[" format nil)
-          (util/stop e))
+        (do (autopair input-id "[" format nil)
+            (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-paren-keys key))
-        (do
-          (util/stop e)
-          (autopair input-id "(" format nil))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
         (contains? (set (keys autopair-map)) key)
-        (do
-          (util/stop e)
-          (autopair input-id key format nil))
+        (do (util/stop e)
+            (autopair input-id key format nil))
 
         hashtag?
         (do
@@ -2813,23 +2819,8 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
+      (util/scroll-editor-cursor input)
       (close-autocomplete-if-outside input))))
-
-(defonce mobile-toolbar-height 40)
-(defn editor-on-height-change!
-  [id]
-  (fn [box-height ^js row-height]
-    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
-          input (gdom/getElement id)
-          caret (cursor/get-caret-pos input)
-          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
-          box-top (gobj/get (.getBoundingClientRect input) "top")
-          cursor-y (+ cursor-bottom box-top)
-          vw-height (.-height js/window.visualViewport)]
-      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
-        (let [main-node (gdom/getElement "main-content-container")
-              scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]
@@ -2842,7 +2833,9 @@
                 (js/setTimeout
                  #(edit-box-on-change! e block id)
                  timeout)))
-      (edit-box-on-change! e block id))))
+      (let [input (gdom/getElement id)]
+        (edit-box-on-change! e block id)
+        (util/scroll-editor-cursor input)))))
 
 (defn- paste-text-parseable
   [format text]
@@ -2878,13 +2871,25 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn wrap-macro-url
+  [url]
+  (cond
+    (boolean (text/get-matched-video url))
+    (util/format "{{video %s}}" url)
+
+    (string/includes? url "twitter.com")
+    (util/format "{{twitter %s}}" url)
+
+    :else
+    (notification/show! (util/format "No macro is available for %s" url) :warning)))
+
 (defn- paste-copied-blocks-or-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)
-        *stop-event? (atom true)]
+        input (state/get-input)]
+    (util/stop e)
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
@@ -2906,24 +2911,14 @@
            (not (string/blank? (util/get-selected-text))))
       (html-link-format! text)
 
-      (and (gp-util/url? text)
-           (or (string/includes? text "youtube.com")
-               (string/includes? text "youtu.be"))
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-
-      (and (gp-util/url? text)
-           (string/includes? text "twitter.com")
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
-
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
       (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
 
       :else
       ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+            text (string/trim text)]
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
@@ -2935,25 +2930,26 @@
           (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:markdown true _ true]
-          (reset! *stop-event? false)
+          (commands/simple-insert! (state/get-edit-input-id) text nil)
 
           [:org _ true false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:org _ true true]
-          (reset! *stop-event? false))))
-    (when @*stop-event?
-      (util/stop e))))
+          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
 
 (defn paste-text-in-one-block-at-point
   []
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
+       (let [data (if (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data)
+                        clipboard-data)]
+             (state/append-current-edit-content! data))))
    (fn [error]
      (js/console.error error))))
 
@@ -2961,10 +2957,18 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")
+    (let [clipboard-data (gobj/get e "clipboardData")
+          html (.getData clipboard-data "text/html")
+          edit-block (state/get-edit-block)
+          format (or (:block/format edit-block) :markdown)
+          initial-text (.getData clipboard-data "text")
+          text (if-not (string/blank? html)
+                 (html-parser/convert format html)
+                 initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
-        (if (thingatpt/org-admonition&src-at-point input)
+        (if (or (thingatpt/markdown-src-at-point input)
+                (thingatpt/org-admonition&src-at-point input))
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
@@ -2984,7 +2988,7 @@
 
 (defn shortcut-copy-selection
   [_e]
-  (copy-selection-blocks))
+  (copy-selection-blocks true))
 
 (defn shortcut-cut-selection
   [e]
@@ -3028,6 +3032,19 @@
         (if (= selected-start selected-end)
           (copy-current-block-ref)
           (js/document.execCommand "copy")))
+
+      :else
+      (js/document.execCommand "copy"))))
+
+(defn shortcut-copy-text
+  "shortcut copy action:
+  * when in selection mode, copy selected blocks
+  * when in edit mode with text selected, copy selected text as normal"
+  [_e]
+  (when-not (auto-complete?)
+    (cond
+      (state/selection?)
+      (copy-selection-blocks false)
 
       :else
       (js/document.execCommand "copy"))))

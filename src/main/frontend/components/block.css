@@ -185,12 +185,42 @@
   }
 }
 
-html.is-mobile,
-html.is-native-iphone,
-html.is-native-android {
-  .references .block-control {
-    margin-left: -20px;
-  }
+.block-left-menu {
+    background-color: var(--ls-secondary-background-color);
+    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+    
+    .commands-button {
+        overflow: hidden;
+        max-width: 50px;
+        text-align: center;
+        margin: auto 0;
+
+        .indent {
+            opacity: 30%;
+        }
+    }
+}
+
+.block-right-menu {
+    background-color: var(--ls-secondary-background-color);
+    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
+
+    .commands-button {
+        overflow: hidden;
+        max-width: 80px;
+        text-align: center;
+        margin: auto 0;
+
+        .outdent {
+            margin: 0 12px;
+            opacity: 30%;
+        }
+
+        .more {
+            margin: 0 12px;
+            opacity: 30%;
+        }
+    }
 }
 
 .block-ref {
@@ -594,6 +624,23 @@ a.cloze-revealed {
 
 html.is-native-ios {
     audio {
-        width: 300px;
+        width: 100%;
+        max-width: 350px;
+    }
+}
+
+html:not(.is-mac) {
+    body[data-active-keystroke="Control"] {
+        .block-content {
+            cursor: pointer;
+        }
+    }
+}
+
+html.is-mac {
+    body[data-active-keystroke="Meta"] {
+        .block-content {
+            cursor: pointer;
+        }
     }
 }

@@ -168,6 +168,7 @@
               new-content (if (string/blank? value)
                             (str prefix surfix)
                             (str prefix value "\n" surfix))]
+          (state/set-edit-content! (state/get-edit-input-id) new-content)
           (editor-handler/save-block-if-changed! block new-content))
 
         (:file-path config)
@@ -264,6 +265,9 @@
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil false))))
+        (.addEventListener element "touchstart"
+                           (fn [e]
+                             (.stopPropagation e)))
         (.save editor)
         (.refresh editor)
         (when default-open?

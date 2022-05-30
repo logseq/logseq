@@ -46,7 +46,7 @@
        (util/safari?)
        (js/window.scrollTo 0 0)))
 
-(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+(defonce icon-size (if (mobile-util/native-platform?) 23 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -290,47 +290,13 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-visual-viewport-state!
-  []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
-                             (mobile-util/native-ios?))
-                         js/window.visualViewport)]
-    (let [raf-pending? (atom false)
-          set-raf-pending! #(reset! raf-pending? %)
-          on-viewport-changed
-          (fn []
-            (let [update-vw-state
-                  (debounce
-                   (fn []
-                     (state/set-visual-viewport-state {:height     (.-height vp)
-                                                       :page-top   (.-pageTop vp)
-                                                       :offset-top (.-offsetTop vp)})
-                     (state/set-state! :ui/visual-viewport-pending? false))
-                   20)]
-              (when-not @raf-pending?
-                (let [f (fn []
-                          (set-raf-pending! false)
-                          (update-vw-state))]
-                  (set-raf-pending! true)
-                  (state/set-state! :ui/visual-viewport-pending? true)
-                  (js/window.requestAnimationFrame f)))))]
-
-      (.addEventListener vp "resize" on-viewport-changed)
-      (.addEventListener vp "scroll" on-viewport-changed)
-
-      (fn []
-        (.removeEventListener vp "resize" on-viewport-changed)
-        (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil))))
-  #())
-
 (defn apply-custom-theme-effect! [theme]
   (when plugin-handler/lsp-enabled?
     (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
       (when-let [url (:url custom-theme)]
         (js/LSPluginCore.selectTheme (bean/->js custom-theme)
-                                     (bean/->js {:effect false :emit false}))
-        (state/set-state! :plugin/selected-theme (:url url))))))
+                                     (bean/->js {:emit false}))
+        (state/set-state! :plugin/selected-theme url)))))
 
 (defn setup-system-theme-effect!
   []
@@ -684,7 +650,7 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        (when-not (mobile-util/is-native-platform?)
+        (when-not (mobile-util/native-platform?)
           [:a.block-control.opacity-50.hover:opacity-100.mr-2
            (cond->
             {:style    {:width       14
@@ -821,20 +787,31 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tippy < rum/static
+(rum/defcs tippy < rum/reactive
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open?] :as opts} child]
+  [state {:keys [fixed-position? open? in-editor?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?
-        manual (not= open? nil)]
+        manual (not= open? nil)
+        edit-id (ffirst (state/sub :editor/editing?))
+        editing-node (when edit-id (gdom/getElement edit-id))
+        editing? (some? editing-node)
+        scrolling? (state/sub :ui/scrolling?)
+        open? (if manual open? @*mounted?)
+        disabled? (boolean
+                   (or
+                    (and in-editor?
+                         ;; editing in non-preview containers or scrolling
+                         (not (util/rec-get-tippy-container editing-node))
+                         (or editing? scrolling?))
+                    (not (state/enable-tooltip?))))]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :delay 600
                     :theme "customized"
-                    :disabled (not (state/enable-tooltip?))
+                    :disabled disabled?
                     :unmountHTMLWhenHide true
-                    :open (if manual open? @*mounted?)
+                    :open (if disabled? false open?)
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
@@ -843,18 +820,19 @@
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if (or open? mounted?)
-                           (try
-                             (when-let [html (:html opts)]
-                               (if (fn? html)
-                                 (html)
-                                 [:div.px-2.py-1
-                                  html]))
-                             (catch js/Error e
-                               (log/error :exception e)
-                               [:div]))
-                           [:div {:key "tippy"} ""])))
-            (rum/fragment {:key "tippy-children"} child))))
+            (assoc :html (or
+                          (when open?
+                            (try
+                              (when-let [html (:html opts)]
+                                (if (fn? html)
+                                  (html)
+                                  [:div.px-2.py-1
+                                   html]))
+                              (catch js/Error e
+                                (log/error :exception e)
+                                [:div])))
+                          [:div {:key "tippy"} ""])))
+           (rum/fragment {:key "tippy-children"} child))))
 
 (defn slider
   [default-value {:keys [min max on-change]}]
@@ -902,7 +880,7 @@
 (rum/defc progress-bar
   [width]
   {:pre (integer? width)}
-  [:div.w-full.bg-indigo-200.rounded-full.h-2.5
+  [:div.w-full.bg-indigo-200.rounded-full.h-2.5.animate-pulse
    [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
                                            :transition "width 1s"}]])
 
@@ -917,28 +895,21 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner <
+(rum/defcs lazy-visible-inner < rum/reactive
   {:init (fn [state]
            (assoc state
-                  ::ref (atom nil)
-                  ::height (atom 24)))
-   :did-mount (fn [state]
-                (when (last (:rum/args state))
-                  (let [observer (js/ResizeObserver. (fn [entries]
-                                                      (let [entry (first entries)
-                                                            *height (::height state)
-                                                            height' (.-height (.-contentRect entry))]
-                                                        (when (and (> height' @*height)
-                                                                   (not= height' 64))
-                                                          (reset! *height height')))))]
-                   (.observe observer @(::ref state))))
-                state)}
-  [state visible? content-fn _reset-height?]
-  [:div.lazy-visibility {:ref #(reset! (::ref state) %)
-                         :style {:min-height @(::height state)}}
+                  ::ref (atom nil)))}
+  [state visible? content-fn]
+  [:div.lazy-visibility
+   {:ref #(reset! (::ref state) %)
+    :style {:min-height 24}}
    (if visible?
-     (when (fn? content-fn) (content-fn))
-     [:div.shadow.rounded-md.p-4.w-full.mx-auto.fade-in.delay-1000.mb-5 {:style {:min-height 64}}
+     (when (fn? content-fn)
+       [:div.fade-enter
+        {:ref #(when-let [^js cls (and % (.-classList %))]
+                 (.add cls "fade-enter-active"))}
+        (content-fn)])
+     [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1
         [:div.h-2.bg-base-4.rounded]
@@ -951,9 +922,9 @@
 (rum/defcs lazy-visible <
   (rum/local false ::visible?)
   (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [reset-height? once?]}]
+  [state content-fn sensor-opts {:keys [once?]}]
   (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/is-native-platform?))
+    (if (or (util/mobile?) (mobile-util/native-platform?))
       (content-fn)
       (let [*visible? (::visible? state)]
         (visibility-sensor
@@ -969,4 +940,4 @@
            :scrollThrottle 500
            :active @*active?}
           sensor-opts)
-         (lazy-visible-inner @*visible? content-fn reset-height?))))))
+         (lazy-visible-inner @*visible? content-fn))))))

@@ -58,6 +58,7 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+
      ;; right sidebar
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
@@ -88,9 +89,7 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
-     :ui/visual-viewport-pending?           false
-     :ui/visual-viewport-state              nil
-
+     :ui/scrolling?                         false
      :document/mode?                        document-mode?
 
      :config                                {}
@@ -114,7 +113,6 @@
      :editor/args                           nil
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
-     :editor/editing-page-title?            false
 
      ;; for audio record
      :editor/record-status                  "NONE"
@@ -146,6 +144,15 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
+     :mobile/show-toolbar?                  false
+     ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
+     ;;; add a random in (<= 1000000) to observer its update
+     :mobile/toolbar-update-observer        0
+     :mobile/show-tabbar?                   false
+
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -169,7 +176,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -287,7 +294,7 @@
 (defn get-current-repo
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         "local")))
 
 (defn get-config
@@ -853,8 +860,8 @@
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 
-           (when (or (util/mobile?) (mobile-util/is-native-platform?))
-             (util/make-el-center-if-near-top input))))))))
+           (when (or (util/mobile?) (mobile-util/native-platform?))
+             (set-state! :mobile/show-action-bar? false))))))))
 
 (defn clear-edit!
   []
@@ -1189,9 +1196,13 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
 (defn enable-tooltip?
   []
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+  (if (mobile?)
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?
@@ -1544,14 +1555,6 @@
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
-
-(defn set-visual-viewport-state
-  [input]
-  (set-state! :ui/visual-viewport-state input))
-
-(defn get-visual-viewport-state
-  []
-  (:ui/visual-viewport-state @state))
 
 (defn get-plugin-by-id
   [id]
