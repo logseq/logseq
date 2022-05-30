@@ -39,9 +39,9 @@
   (if (= (state/sub :editor/record-status) "NONE")
     (mobile-bar-command #(do (record/start-recording)
                              (reset! *record-start (js/Date.now))) "microphone")
-    [:div.flex.flex-row.items-center
+    [:div.flex.flex-row.items-center.pl-1
      (mobile-bar-command #(do (record/stop-recording)
-                            (reset! *record-start nil))
+                              (reset! *record-start nil))
                          "player-stop")
      [:div.timer.pl-2
       {:on-click record/stop-recording}
