@@ -93,8 +93,8 @@
 
 (defn reset-file!
   ([repo-url file content]
-   (reset-file! repo-url file content false))
-  ([repo-url file content new-graph?]
+   (reset-file! repo-url file content {}))
+  ([repo-url file content {:keys [new-graph? from-disk?]}]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
          file (cond
@@ -163,8 +163,8 @@
                               {:file/path file}
                               new?
                               (assoc :file/created-at t)))])]
-       (db/transact! repo-url tx (when new-graph? {:new-graph? true}))))))
-
+       (db/transact! repo-url tx {:new-graph? true
+                                  :from-disk? from-disk?})))))
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph?]
@@ -184,7 +184,8 @@
           (db/transact! repo
             [[:db/retract page-id :block/alias]
              [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content new-graph?))
+        (reset-file! repo path content {:new-graph? new-graph?
+                                        :from-disk? from-disk?}))
       (db/set-file-content! repo path content))
     (util/p-handle (write-file!)
                    (fn [_]
