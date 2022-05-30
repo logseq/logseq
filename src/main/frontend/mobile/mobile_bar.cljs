@@ -7,6 +7,7 @@
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.record :as record]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -14,7 +15,7 @@
             [rum.core :as rum]))
 
 (def ^:private icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
+  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera :microphone
    :brand-youtube :link :rotate :rotate-clockwise :calendar :code :bold :italic :strikethrough :paint])
 
 (def ^:private commands-stats
@@ -101,7 +102,9 @@
              (command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
              (command editor-handler/cycle-priority! "a-b" true)
              (command editor-handler/toggle-list! "list" true)
+             (command editor-handler/toggle-list! "list" true)
              (command #(mobile-camera/embed-photo parent-id) "camera" true)
+             (command record/start-recording "microphone" true)
              (command commands/insert-youtube-timestamp "brand-youtube" true)
              (command editor-handler/html-link-format! "link" true)
              (command history/undo! "rotate" true true)
