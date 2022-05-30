@@ -12,35 +12,37 @@
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
+            [frontend.components.plugins :as plugins]
+            [frontend.components.query-table :as query-table]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.sci :as sci]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.zotero :as zotero]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
+            [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.components.plugins :as plugins]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.query :as query-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.query :as query-handler]
-            [frontend.handler.common :as common-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.security :as security]
@@ -50,8 +52,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -63,9 +65,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]
-            [frontend.mobile.util :as mobile-util]))
+            [shadow.loader :as loader]))
 
 (defn safe-read-string
   ([s]
@@ -256,7 +256,8 @@
 
 (rum/defc audio-cp [src]
   [:audio {:src src
-           :controls true}])
+           :controls true
+           :on-touch-start #(util/stop %)}])
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -2022,7 +2023,7 @@
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-
+     
      [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
@@ -2083,6 +2084,21 @@
                         :block-ref)
                        (swap! *hide-block-refs? not)))}
         block-refs-count]])))
+
+(rum/defc block-left-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
+   [:div.commands-button.w-0.rounded-r-md
+    {:id (str "block-left-menu-" uuid)}
+    [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
+
+(rum/defc block-right-menu < rum/reactive
+  [_config {:block/keys [uuid] :as _block}]
+  [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
+   [:div.commands-button.w-0.flex.flew-col.rounded-md
+    {:id (str "block-right-menu-" uuid)}
+    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)
@@ -2390,6 +2406,8 @@
                      (model/sub-block-direct-children repo uuid))
                    children)
         breadcrumb-show? (:breadcrumb-show? config)
+        *show-left-menu? (::show-block-left-menu? state)
+        *show-right-menu? (::show-block-right-menu? state)
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
@@ -2443,20 +2461,32 @@
 
      [:div.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+       :on-touch-start block-handler/on-touch-start
+       :on-touch-move (fn [event]
+                        (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+       :on-touch-cancel block-handler/on-touch-cancel 
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
-
-      (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
+      
+      (when @*show-left-menu?
+        (block-left-menu config block))
+      (block-content-or-editor config block edit-input-id block-id heading-level edit?)
+      (when @*show-right-menu?
+        (block-right-menu config block))]
 
      (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs block-container < rum/reactive
+  (rum/local false ::show-block-left-menu?) 
+  (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)]

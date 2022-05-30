@@ -123,7 +123,8 @@
                                   references (->> (concat ref-pages references)
                                                   (remove nil?)
                                                   (distinct))]
-                              (state/set-modal! (filter-dialog filters-atom references page-name))))}
+                              (state/set-modal! (filter-dialog filters-atom references page-name)
+                                                {:center? true})))}
                (ui/icon "filter" {:class (cond
                                            (empty? filter-state)
                                            ""

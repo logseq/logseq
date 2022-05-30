@@ -962,9 +962,7 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
-    (when (seq blocks)
-      (state/exit-editing-and-set-selected-blocks! blocks))))
+  (block-handler/select-block! block-uuid))
 
 (defn- compose-copied-blocks-contents
   [repo block-ids]

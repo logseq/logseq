@@ -27,6 +27,42 @@
     }
 }
 
+.action-bar {
+    position: absolute;
+    bottom: 100px;
+    height: 70px;
+    padding: 6px;
+    border-radius: 10px;
+    background-color: var(--ls-secondary-background-color);
+    overflow-x: overlay;
+    box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
+    z-index: 100;
+        
+    .action-bar-commands {
+        position: relative;
+        display: flex;
+        justify-content: space-around;
+        width: 120%;
+        
+        
+        .ti {
+            color: var(--ls-primary-text-color);
+            font-size: 23px;
+            opacity: 50%;
+        }
+        
+        .description {
+            color: var(--ls-primary-text-color);
+            font-size: 13px;
+            opacity: 60%;
+        }
+        
+        button {
+            padding: 5px 10px
+        }
+    }
+}
+
 #mobile-editor-toolbar {
   position: fixed;
   bottom: 0;
@@ -80,18 +116,48 @@
 html.is-native-ipad {
     .cp__footer {
         height: 55px;
-        /* width: calc(100vw - var(--ls-left-sidebar-width)); */
         right: 0;
         box-shadow: none;
         flex: 1;
         index: 0;
     }
+    
+    .action-bar {
+        width: 70%;
+        min-width:550px;
+        
+        .action-bar-commands {
+            width: 100%;
+        }
+
+        @media (orientation: landscape) {
+            width: 50%;
+        }
+    }
 }
 
 html.is-native-iphone {
+
+    .action-bar {
+        left: 3%;
+        right: 3%;
+    }
+    
     @media (orientation: landscape) {
         .cp__footer {
             height: 45px;
+        }
+
+        .action-bar {
+            bottom: 50px;
+            left: 15%;
+            right: 15%;
+            width: 70%;
+            min-width: 450px;
+
+            .action-bar-commands {
+                width: 100%;
+            }
         }
     }
 }
@@ -101,11 +167,30 @@ html.is-native-android {
     .cp__footer {
         height: 45px;
     }
+    
+    .action-bar {
+        left: 5%;
+        right: 5%;
+    }
+
+    @media (orientation: landscape) {
+        
+        .action-bar {
+            bottom: 50px;
+            left: 15%;
+            right: 15%;
+            width: 70%;
+
+            .action-bar-commands {
+                width: 100%;
+            }
+        }
+    }
 }
 
 html.is-zoomed-native-ios {
     .cp__footer {
-        height: 60px;
+        height: 70px;
     }
 
     @media (orientation: landscape) {
