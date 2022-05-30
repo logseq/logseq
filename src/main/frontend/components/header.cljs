@@ -245,15 +245,15 @@
       :style           {:fontSize  50}}
      [:div.l.flex
       (when-not (mobile-util/native-platform?)
-        left-menu
-        (when current-repo ;; this is for the Search button
-          (ui/with-shortcut :go/search "right"
-            [:a.button#search-button
-             {:on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
-             (ui/icon "search" {:style {:fontSize ui/icon-size}})])))
+        [left-menu
+         (when current-repo ;; this is for the Search button
+           (ui/with-shortcut :go/search "right"
+             [:a.button#search-button
+              {:on-click #(do (when (or (mobile-util/native-android?)
+                                        (mobile-util/native-iphone?))
+                                (state/set-left-sidebar-open! false))
+                              (state/pub-event! [:go/search]))}
+              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
         (if (state/home?)
           left-menu
