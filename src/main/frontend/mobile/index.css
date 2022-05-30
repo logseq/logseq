@@ -10,8 +10,12 @@
     white-space: nowrap;
     height: 80px;
     align-items: start;
-    /* border-top: 1.5px solid var(--ls-tertiary-border-color); */
     box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
+
+    .bottom-action {
+        width: 23px;
+        height: 23px;
+    }
                                                              
     .ti, .timer {
         color: var(--ls-primary-text-color);
@@ -109,8 +113,4 @@ html.is-zoomed-native-ios {
             height: 50px;
         }
     }
-}
-
-.bottom-action {
-    line-height: 1.15;
 }
