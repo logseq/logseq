@@ -4,13 +4,14 @@
             [frontend.state :as state]))
 
 (defn updated-page-hook
-  [page]
+  [_tx-report page]
   (file/sync-to-file page))
 
 (defn invoke-hooks
   [tx-report]
   (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)]
-    (doseq [p (seq pages)] (updated-page-hook p))
+    (when-not (:from-disk? (:tx-meta tx-report))
+      (doseq [p (seq pages)] (updated-page-hook tx-report p)))
     (when (and state/lsp-enabled? (seq blocks))
       (state/pub-event! [:plugin/hook-db-tx
                          {:blocks  blocks

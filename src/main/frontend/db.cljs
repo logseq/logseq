@@ -116,8 +116,8 @@
 
 ;; only save when user's idle
 
-;; TODO: pass as a parameter
-(defonce *sync-search-indice-f (atom nil))
+(def *db-listener (atom nil))
+
 (defn- repo-listen-to-tx!
   [repo conn]
   (d/listen! conn :persistence
@@ -138,14 +138,8 @@
                      (state/set-last-transact-time! repo (util/time-ms))
                      (persist-if-idle! repo)))
 
-                 ;; rebuild search indices
-                 (let [data (:tx-data tx-report)
-                       datoms (filter
-                               (fn [datom]
-                                 (contains? #{:block/name :block/content} (:a datom)))
-                               data)]
-                   (when-let [f @*sync-search-indice-f]
-                     (f datoms)))))))
+                 (when-let [db-listener @*db-listener]
+                   (db-listener repo tx-report))))))
 
 (defn listen-and-persist!
   [repo]
