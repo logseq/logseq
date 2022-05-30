@@ -75,6 +75,9 @@
                                     (if (string? pattern) pattern (apply str (reverse pattern))))))
         wrapper (fn [tag content]
                   (cond
+                    (= tag :comment)
+                    nil
+
                     (and (= tag :p) (:in-table? opts))
                     content
 
