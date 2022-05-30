@@ -10,7 +10,8 @@ import Foundation
 import AWSMobileClient
 import CryptoKit
 
-// MARK: Global variables
+
+// MARK: Global variable
 
 // Defualts to dev
 var URL_BASE = URL(string: "https://api.logseq.com/file-sync/")!
@@ -19,26 +20,47 @@ var REGION: String = "us-east-2"
 
 var ENCRYPTION_KEY: String? = nil
 
+var ENCRYPTION_SECRET_KEY: String? = nil
+var ENCRYPTION_PUBLIC_KEY: String? = nil
+
 // MARK: Metadata type
 
 public struct SyncMetadata: CustomStringConvertible, Equatable {
     var md5: String
     var size: Int
-
+    
     public init?(of fileURL: URL) {
         do {
-            let rawData = try Data(contentsOf: fileURL)
-            if let encrypted = maybeEncrypt(rawData) {
-                size = encrypted.count
-                md5 = encrypted.MD5
-            } else {
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey])
+            guard fileAttributes.isRegularFile! else {
                 return nil
             }
+            size = fileAttributes.fileSize ?? 0
+            
+            // incremental MD5 checksum
+            let bufferSize = 512 * 1024
+            let file = try FileHandle(forReadingFrom: fileURL)
+            defer {
+                file.closeFile()
+            }
+            var ctx = Insecure.MD5.init()
+            while autoreleasepool(invoking: {
+                let data = file.readData(ofLength: bufferSize)
+                if data.count > 0 {
+                    ctx.update(data: data)
+                    return true // continue
+                } else {
+                    return false // eof
+                }
+            }) {}
+            
+            let computed = ctx.finalize()
+            md5 = computed.map { String(format: "%02hhx", $0) }.joined()
         } catch {
             return nil
         }
     }
-
+    
     public var description: String {
         return "SyncMetadata(md5=\(md5), size=\(size))"
     }
@@ -47,11 +69,14 @@ public struct SyncMetadata: CustomStringConvertible, Equatable {
 // MARK: encryption helper
 
 func maybeEncrypt(_ plaindata: Data) -> Data! {
-    if plaindata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) {
+    // avoid encryption twice
+    if plaindata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) ||
+        plaindata.starts(with: "age-encryption.org/v1\n".data(using: .utf8)!) {
         return plaindata
     }
-    if let passphrase = ENCRYPTION_KEY {
-        if let cipherdata = plaindata.sealChaChaPoly(with: passphrase) {
+    if let publicKey = ENCRYPTION_PUBLIC_KEY {
+        // use armor = false, for smaller size
+        if let cipherdata = AgeEncryption.encryptWithPassphrase(plaindata, publicKey, armor: false) {
             return cipherdata
         }
         return nil // encryption fail
@@ -63,9 +88,9 @@ func maybeDecrypt(_ cipherdata: Data) -> Data! {
     if cipherdata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) {
         return cipherdata
     }
-    if cipherdata.starts(with: Data(hexEncoded: "4c530031")!) {
-        if let passphrase = ENCRYPTION_KEY {
-            return cipherdata.openChaChaPoly(with: passphrase)
+    if let secretKey = ENCRYPTION_SECRET_KEY {
+        if let plaindata = AgeEncryption.decryptWithX25519(cipherdata, secretKey) {
+            return plaindata
         }
         return nil
     }
@@ -78,6 +103,7 @@ func maybeDecrypt(_ cipherdata: Data) -> Data! {
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
         print("debug File sync iOS plugin loaded!")
+
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
                 print("error initializing AWSMobileClient. Error: \(error!.localizedDescription)")
@@ -91,11 +117,33 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         self.notifyListeners("debug", data: message)
     }
     
+    @objc func keygen(_ call: CAPPluginCall) {
+        let (secretKey, publicKey) = AgeEncryption.keygen()
+        call.resolve(["secretKey": secretKey,
+                      "publicKey": publicKey])
+    }
+    
+    @objc func setKey(_ call: CAPPluginCall) {
+        let secretKey = call.getString("secretKey")
+        let publicKey = call.getString("publicKey")
+        if secretKey == nil && publicKey == nil {
+            ENCRYPTION_SECRET_KEY = nil
+            ENCRYPTION_PUBLIC_KEY = nil
+        }
+        guard let secretKey = secretKey, let publicKey = publicKey else {
+            call.reject("both secretKey and publicKey should be provided")
+            return
+        }
+        ENCRYPTION_SECRET_KEY = secretKey
+        ENCRYPTION_PUBLIC_KEY = publicKey
+    }
+    
     @objc func setEnv(_ call: CAPPluginCall) {
         guard let env = call.getString("env") else {
             call.reject("required parameter: env")
             return
         }
+        self.setKey(call)
         
         switch env {
         case "production", "product", "prod":
@@ -237,7 +285,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                 
                 for (filePath, remoteFileURL) in fileURLs {
                     group.enter()
-
+                    
                     // NOTE: fileURLs from getFiles API is percent-encoded
                     let localFileURL = baseURL.appendingPathComponent(filePath.decodeFromFname())
                     remoteFileURL.download(toFile: localFileURL) {error in
