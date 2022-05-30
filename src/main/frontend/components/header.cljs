@@ -254,7 +254,8 @@
                                (state/set-left-sidebar-open! false))
                              (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})])))
-      (when (mobile-util/native-platform?)
+      (when (and (mobile-util/native-platform?)
+                 (not (state/home?)))
         (ui/with-shortcut :go/backward "bottom"
           [:a.it.navigation.nav-left.button
            {:title "Go back" :on-click #(js/window.history.back)}
