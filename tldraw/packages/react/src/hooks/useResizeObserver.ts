@@ -1,7 +1,26 @@
 import * as React from 'react'
 import type { TLViewport, TLBounds } from '@tldraw/core'
 
-export function useResizeObserver<T extends Element>(
+const getNearestScrollableContainer = (element: HTMLElement): HTMLElement | Document => {
+  let parent = element.parentElement
+  while (parent) {
+    if (parent === document.body) {
+      return document
+    }
+    const { overflowY } = window.getComputedStyle(parent)
+    const hasScrollableContent = parent.scrollHeight > parent.clientHeight
+    if (
+      hasScrollableContent &&
+      (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay')
+    ) {
+      return parent
+    }
+    parent = parent.parentElement
+  }
+  return document
+}
+
+export function useResizeObserver<T extends HTMLElement>(
   ref: React.RefObject<T>,
   viewport: TLViewport,
   onBoundsChange?: (bounds: TLBounds) => void
@@ -34,11 +53,12 @@ export function useResizeObserver<T extends Element>(
   }, [ref, onBoundsChange])
 
   React.useEffect(() => {
-    window.addEventListener('scroll', updateBounds)
-    window.addEventListener('resize', updateBounds)
+    const scrollingAnchor = ref.current ? getNearestScrollableContainer(ref.current) : document
+    scrollingAnchor.addEventListener('scroll', updateBounds)
+    scrollingAnchor.addEventListener('resize', updateBounds)
     return () => {
-      window.removeEventListener('scroll', updateBounds)
-      window.removeEventListener('resize', updateBounds)
+      scrollingAnchor.removeEventListener('scroll', updateBounds)
+      scrollingAnchor.removeEventListener('resize', updateBounds)
     }
   }, [])
 

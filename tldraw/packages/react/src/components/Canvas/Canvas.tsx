@@ -20,6 +20,7 @@ import {
   usePreventNavigation,
   useCursor,
   useZoom,
+  useApp,
 } from '~hooks'
 import { TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
 import { EMPTY_OBJECT, NOOP } from '~constants'
@@ -90,9 +91,13 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   const rContainer = React.useRef<HTMLDivElement>(null)
   const { viewport, components, meta } = useRendererContext()
   const { zoom } = viewport.camera
+  const app = useApp()
+  const onBoundsChange = React.useCallback((bounds: TLBounds) => {
+    app.inputs.updateContainerOffset([bounds.minX, bounds.minY])
+  }, [])
   useStylesheet(theme, id)
   usePreventNavigation(rContainer)
-  useResizeObserver(rContainer, viewport)
+  useResizeObserver(rContainer, viewport, onBoundsChange)
   useGestureEvents(rContainer)
   useCursor(rContainer, cursor, cursorRotation)
   useZoom(rContainer)

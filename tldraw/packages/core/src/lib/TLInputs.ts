@@ -1,3 +1,4 @@
+import Vec from '@tldraw/vec'
 import { action, makeObservable, observable } from 'mobx'
 import type { TLEventMap } from '~types'
 import { modKey } from '~utils'
@@ -25,12 +26,19 @@ export class TLInputs<K extends TLEventMap> {
 
   @observable state: 'pointing' | 'pinching' | 'idle' | 'panning' = 'idle'
 
+  // The canvas container offset
+  @observable containerOffset: [number, number] = [0, 0]
+
+  @action updateContainerOffset(containerOffset: [number, number]) {
+    Object.assign(this.containerOffset, containerOffset)
+  }
+
   @action private updateModifiers(
     event: K['gesture'] | K['pointer'] | K['keyboard'] | K['wheel'] | K['touch']
   ) {
     if ('clientX' in event) {
       this.previousScreenPoint = this.currentScreenPoint
-      this.currentScreenPoint = [event.clientX, event.clientY]
+      this.currentScreenPoint = Vec.add([event.clientX, event.clientY], this.containerOffset)
     }
     if ('shiftKey' in event) {
       this.shiftKey = event.shiftKey

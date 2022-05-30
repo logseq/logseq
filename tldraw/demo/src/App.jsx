@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 import { App as TldrawApp } from 'tldraw-logseq'
 
 const storingKey = 'playground.index'
@@ -13,33 +13,31 @@ const onLoad = () => {
 
 const documentModel = onLoad() ?? {
   currentPageId: 'page1',
-  selectedIds: ['yt1', 'yt2'],
+  selectedIds: ['p6bv7EfoQPIF1eZB1RRO6'],
   pages: [
     {
-      name: 'Page',
       id: 'page1',
+      name: 'Page',
       shapes: [
         {
-          id: 'yt1',
-          type: 'youtube',
+          scale: [1, 1],
+          id: 'p6bv7EfoQPIF1eZB1RRO6',
+          type: 'logseq-portal',
           parentId: 'page1',
-          point: [100, 100],
-          size: [160, 90],
-          embedId: '',
-        },
-        {
-          id: 'yt2',
-          type: 'youtube',
-          parentId: 'page1',
-          point: [300, 300],
-          size: [160, 90],
-          embedId: '',
+          point: [769.109375, 170.5546875],
+          size: [390.671875, 295.3671875],
+          stroke: '#000000',
+          fill: '#ffffff',
+          strokeWidth: 2,
+          opacity: 1,
+          pageId: '',
+          nonce: 1,
         },
       ],
       bindings: {},
+      nonce: 2,
     },
   ],
-  assets: [],
 }
 
 const list = ['foo', 'bar']
