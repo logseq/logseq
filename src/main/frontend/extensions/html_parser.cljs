@@ -69,28 +69,33 @@
                                                       (when strike-through? (config/get-strike-through format))
                                                       (when mark? (config/get-highlight format))])
                                              :else
-                                             nil)]
-                               (str (if (string? pattern) pattern (apply str pattern))
-                                    (map-join children)
-                                    (if (string? pattern) pattern (apply str (reverse pattern))))))
+                                             nil)
+                                   children' (map-join children)]
+                               (when-not (string/blank? children')
+                                 (str (if (string? pattern) pattern (apply str pattern))
+                                      children'
+                                      (if (string? pattern) pattern (apply str (reverse pattern)))))))
         wrapper (fn [tag content]
-                  (cond
-                    (= tag :comment)
-                    nil
+                  (let [content (cond
+                                  (contains? #{:comment :head :w :style :xml :o:p} tag)
+                                  nil
 
-                    (and (= tag :p) (:in-table? opts))
-                    content
+                                  (and (= tag :p) (:in-table? opts))
+                                  content
 
-                    (contains? #{:p :hr :ul :ol :dl :table :pre :blockquote :aside :canvas
-                                 :center :figure :figcaption :fieldset :div :footer
-                                 :header} tag)
-                    (str "\n\n" content "\n\n")
+                                  (contains? #{:p :hr :ul :ol :dl :table :pre :blockquote :aside :canvas
+                                               :center :figure :figcaption :fieldset :div :footer
+                                               :header} tag)
+                                  (str "\n\n" content "\n\n")
 
-                    (contains? #{:thead :tr :li} tag)
-                    (str content "\n")
+                                  (contains? #{:thead :tr :li} tag)
+                                  (str content "\n")
 
-                    :else
-                    content))
+                                  :else
+                                  content)]
+                    (some-> content
+                            (string/replace "<!--StartFragment-->" "")
+                            (string/replace "<!--EndFragment-->" ""))))
         single-hiccup-transform
         (fn [x]
           (cond
@@ -234,6 +239,7 @@
   (when-not (string/blank? html)
     (let [hiccup (hickory/as-hiccup (hickory/parse html))
           decoded-hiccup (html-decode-hiccup hiccup)]
+      (def hiccup hiccup)
       (hiccup->doc format decoded-hiccup))))
 
 (comment
