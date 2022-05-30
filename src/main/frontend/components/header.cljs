@@ -228,7 +228,11 @@
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
                                (not (mobile-util/native-platform?))
-                               (not config/publishing?))]
+                               (not config/publishing?))
+        left-menu (left-menu-button {:on-click (fn []
+                                       (open-fn)
+                                       (state/set-left-sidebar-open!
+                                        (not (:ui/left-sidebar-open? @state/state))))})]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -241,11 +245,7 @@
       :style           {:fontSize  50}}
      [:div.l.flex
       (when-not (mobile-util/native-platform?)
-        (left-menu-button {:on-click (fn []
-                                       (open-fn)
-                                       (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})
-
+        left-menu
         (when current-repo ;; this is for the Search button
           (ui/with-shortcut :go/search "right"
             [:a.button#search-button
@@ -254,12 +254,13 @@
                                (state/set-left-sidebar-open! false))
                              (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})])))
-      (when (and (mobile-util/native-platform?)
-                 (not (state/home?)))
-        (ui/with-shortcut :go/backward "bottom"
-          [:a.it.navigation.nav-left.button
-           {:title "Go back" :on-click #(js/window.history.back)}
-           (ui/icon "chevron-left" {:style {:fontSize 25}})]))]
+      (when (mobile-util/native-platform?)
+        (if (state/home?)
+          left-menu
+          (ui/with-shortcut :go/backward "bottom"
+            [:a.it.navigation.nav-left.button
+             {:title "Go back" :on-click #(js/window.history.back)}
+             (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
       (when-not file-sync-handler/hiding-login&file-sync

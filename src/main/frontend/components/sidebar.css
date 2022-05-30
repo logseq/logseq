@@ -64,7 +64,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   background-color: var(--ls-primary-background-color);
-  /* transition: transform .3s; */
+  transition: transform .3s;
   transform: translateX(-100%);
   z-index: 3;
 
@@ -226,10 +226,7 @@
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
-
-  @screen sm {
-      transition: width 1.2s;
-  }
+  transition: width 1.2s;
 
   a {
     color: var(--ls-primary-text-color);
