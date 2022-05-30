@@ -976,7 +976,7 @@
      (into [] (state/get-export-block-text-remove-options)))))
 
 (defn copy-selection-blocks
-  []
+  [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
@@ -985,7 +985,7 @@
           block (db/entity [:block/uuid (first ids)])]
       (when block
         (let [html (export/export-blocks-as-html repo ids)]
-          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content html))
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
 
@@ -1054,7 +1054,7 @@
 
 (defn cut-selection-blocks
   [copy?]
-  (when copy? (copy-selection-blocks))
+  (when copy? (copy-selection-blocks true))
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -2988,7 +2988,7 @@
 
 (defn shortcut-copy-selection
   [_e]
-  (copy-selection-blocks))
+  (copy-selection-blocks true))
 
 (defn shortcut-cut-selection
   [e]
@@ -3032,6 +3032,19 @@
         (if (= selected-start selected-end)
           (copy-current-block-ref)
           (js/document.execCommand "copy")))
+
+      :else
+      (js/document.execCommand "copy"))))
+
+(defn shortcut-copy-text
+  "shortcut copy action:
+  * when in selection mode, copy selected blocks
+  * when in edit mode with text selected, copy selected text as normal"
+  [_e]
+  (when-not (auto-complete?)
+    (cond
+      (state/selection?)
+      (copy-selection-blocks false)
 
       :else
       (js/document.execCommand "copy"))))
