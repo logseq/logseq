@@ -58,6 +58,7 @@
 
 #main-content-container[data-is-margin-less-pages=true] {
   padding: 0;
+  position: relative;
 }
 
 .left-sidebar-inner {
