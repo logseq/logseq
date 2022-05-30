@@ -6,7 +6,7 @@ import {
   intersectRayBounds,
 } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
+import { action, computed, makeObservable, observable, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
 import { BoundsUtils, deepCopy, PointUtils } from '~utils'
@@ -101,6 +101,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canFlip: TLFlag = true
   canEdit: TLFlag = false
   canBind: TLFlag = false
+  canActivate: TLFlag = false
   nonce = 0
 
   bindingDistance = BINDING_DISTANCE
@@ -326,7 +327,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     })
     this.update({
       point: Vec.add(initialShape.point, topLeft),
-      handles: nextHandles
+      handles: nextHandles,
     })
   }
 }

@@ -23,6 +23,7 @@ export const AppCanvas = observer(function InnerApp<S extends TLReactShape>(
       selectionDirectionHint={app.selectionDirectionHint}
       selectionBounds={app.selectionBounds}
       selectedShapes={app.selectedShapesArray}
+      activatedShapes={app.activatedShapes}
       erasingShapes={app.erasingShapesArray}
       shapes={app.shapesInViewport}
       assets={app.assets}

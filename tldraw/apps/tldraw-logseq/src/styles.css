@@ -113,9 +113,10 @@
 .logseq-tldraw .primary-tools {
   display: flex;
   position: absolute;
-  bottom: 48px;
-  width: 100%;
-  height: 64px;
+  right: 48px;
+  top: 0;
+  height: 100%;
+  width: 64px;
   align-items: center;
   justify-content: center;
   pointer-events: none;
@@ -140,19 +141,15 @@
 
 .logseq-tldraw .primary-tools .floating-panel {
   display: flex;
+  flex-flow: column;
   border-radius: 128px;
   overflow: hidden;
   padding: 4px;
+  gap: 4px;
 }
 
-.logseq-tldraw .floating-panel > :nth-child(1) {
-  border-top-left-radius: 20px;
-  border-bottom-left-radius: 20px;
-}
-
-.logseq-tldraw .floating-panel > :nth-last-child(1) {
-  border-top-right-radius: 20px;
-  border-bottom-right-radius: 20px;
+.logseq-tldraw .floating-panel > button {
+  border-radius: 20px;
 }
 
 .logseq-tldraw .primary-tools .button {

@@ -35,6 +35,8 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
 
   canEdit = true
 
+  canActivate = true
+
   ReactContextBar = observer(() => {
     const { embedId } = this.props
     const rInput = React.useRef<HTMLInputElement>(null)
@@ -61,7 +63,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isEditing, isErasing }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
     const {
       props: { opacity, embedId },
     } = this
@@ -94,7 +96,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
           style={{
             width: '100%',
             height: embedId ? 'calc(100% - 32px)' : '100%',
-            pointerEvents: isEditing ? 'none' : 'all',
+            pointerEvents: isActivated ? 'all' : 'none',
             userSelect: 'none',
             position: 'relative',
           }}

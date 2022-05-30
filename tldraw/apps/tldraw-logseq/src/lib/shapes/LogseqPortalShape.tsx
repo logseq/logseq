@@ -33,8 +33,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   canChangeAspectRatio = true
-  canFlip = false
-  canEdit = false
+  canFlip = true
+  canActivate = true
 
   ReactContextBar = observer(() => {
     const { pageId } = this.props
@@ -95,110 +95,114 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isEditing, isErasing, isBinding }: TLComponentProps) => {
-    const {
-      props: { opacity, pageId, strokeWidth },
-    } = this
+  ReactComponent = observer(
+    ({ events, isEditing, isErasing, isBinding, isActivated }: TLComponentProps) => {
+      const {
+        props: { opacity, pageId, strokeWidth },
+      } = this
 
-    const app = useApp<Shape>()
-    const isMoving = useCameraMovingRef()
-    const { Page } = React.useContext(LogseqContext)
-    const isSelected = app.selectedIds.has(this.id)
-    const enableTlEvents = () => {
-      return isMoving || isEditing || isSelected || app.selectedTool.id !== 'select'
-    }
+      const app = useApp<Shape>()
+      const isMoving = useCameraMovingRef()
+      const { Page } = React.useContext(LogseqContext)
+      const isSelected = app.selectedIds.has(this.id)
+      const enableTlEvents = () => {
+        return isMoving || isEditing || isSelected || app.selectedTool.id !== 'select'
+      }
 
-    const stop = React.useCallback(
-      e => {
-        if (!enableTlEvents()) {
-          e.stopPropagation()
-        }
-      },
-      [enableTlEvents]
-    )
-
-    if (!Page) {
-      return null
-    }
-
-    let linkButton = null
-    const logseqLink = this.props.logseqLink
-    if (logseqLink) {
-      const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
-      linkButton = (
-        <a className="ml-2" onMouseDown={f}>
-          🔗 {logseqLink}
-        </a>
+      const stop = React.useCallback(
+        e => {
+          if (!enableTlEvents()) {
+            e.stopPropagation()
+          }
+        },
+        [enableTlEvents]
       )
-    }
 
-    return (
-      <HTMLContainer
-        style={{
-          overflow: 'hidden',
-          pointerEvents: 'all',
-          opacity: isErasing ? 0.2 : opacity,
-          border: `${strokeWidth}px solid rgb(52, 52, 52)`,
-          backgroundColor: '#ffffff',
-          boxShadow: isBinding ? '0px 0px 0 16px var(--tl-binding)' : '',
-        }}
-        {...events}
-      >
-        {pageId && (
-          <div
-            className="ls-whiteboard-card-header"
-            style={{
-              height: '32px',
-              width: '100%',
-              background: '#bbb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {pageId}
-            {linkButton}
-          </div>
-        )}
-        <div
+      if (!Page) {
+        return null
+      }
+
+      let linkButton = null
+      const logseqLink = this.props.logseqLink
+      if (logseqLink) {
+        const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
+        linkButton = (
+          <a className="ml-2" onMouseDown={f}>
+            🔗 {logseqLink}
+          </a>
+        )
+      }
+
+      return (
+        <HTMLContainer
           style={{
-            width: '100%',
-            overflow: 'auto',
-            overscrollBehavior: 'none',
-            height: pageId ? 'calc(100% - 33px)' : '100%',
-            pointerEvents: isSelected ? 'none' : 'all',
-            userSelect: 'none',
-            opacity: isSelected ? 0.5 : 1,
+            overflow: 'hidden',
+            pointerEvents: 'all',
+            opacity: isErasing ? 0.2 : opacity,
+            border: `${strokeWidth}px solid`,
+            borderColor: isActivated ? 'var(--tl-selectStroke)' : 'rgb(52, 52, 52)',
+            backgroundColor: '#ffffff',
+            boxShadow: isBinding ? '0px 0px 0 16px var(--tl-binding)' : '',
           }}
+          {...events}
         >
-          {pageId ? (
+          {pageId && (
             <div
-              onWheelCapture={stop}
-              onPointerDown={stop}
-              onPointerUp={stop}
-              style={{ padding: '0 24px' }}
-            >
-              <Page pageId={pageId} />
-            </div>
-          ) : (
-            <div
+              className="ls-whiteboard-card-header"
               style={{
+                height: '32px',
                 width: '100%',
-                height: '100%',
+                background: isActivated ? 'var(--tl-selectStroke)' : '#bbb',
                 display: 'flex',
                 alignItems: 'center',
-                overflow: 'hidden',
+                color: isActivated ? '#fff' : '#000',
                 justifyContent: 'center',
-                padding: 16,
               }}
             >
-              LOGSEQ PORTAL PLACEHOLDER
+              {pageId}
+              {linkButton}
             </div>
           )}
-        </div>
-      </HTMLContainer>
-    )
-  })
+          <div
+            style={{
+              width: '100%',
+              overflow: 'auto',
+              overscrollBehavior: 'none',
+              height: pageId ? 'calc(100% - 33px)' : '100%',
+              pointerEvents: isActivated ? 'all' : 'none',
+              userSelect: 'none',
+              opacity: isSelected ? 0.5 : 1,
+            }}
+          >
+            {pageId ? (
+              <div
+                onWheelCapture={stop}
+                onPointerDown={stop}
+                onPointerUp={stop}
+                style={{ padding: '12px', height: '100%', cursor: 'default' }}
+              >
+                <Page pageId={pageId} />
+              </div>
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  overflow: 'hidden',
+                  justifyContent: 'center',
+                  padding: 16,
+                }}
+              >
+                LOGSEQ PORTAL PLACEHOLDER
+              </div>
+            )}
+          </div>
+        </HTMLContainer>
+      )
+    }
+  )
 
   ReactIndicator = observer(() => {
     const {

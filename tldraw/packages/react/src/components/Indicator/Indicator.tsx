@@ -10,6 +10,7 @@ interface IndicatorProps {
   isSelected?: boolean
   isBinding?: boolean
   isEditing?: boolean
+  isActivated?: boolean
   meta?: any
 }
 
@@ -19,6 +20,7 @@ export const Indicator = observer(function Shape({
   isSelected = false,
   isBinding = false,
   isEditing = false,
+  isActivated = false,
   meta,
 }: IndicatorProps) {
   const {
@@ -31,8 +33,13 @@ export const Indicator = observer(function Shape({
   return (
     <Container bounds={bounds} rotation={rotation} scale={scale} zIndex={10000}>
       <SVGContainer>
-        <g className={`tl-indicator-container ${isSelected ? 'tl-selected' : 'tl-hovered'}`}>
+        <g
+          className={`tl-indicator-container ${
+            isSelected || isActivated ? 'tl-selected' : 'tl-hovered'
+          }`}
+        >
           <ReactIndicator
+            isActivated={isActivated}
             isEditing={isEditing}
             isBinding={isBinding}
             isHovered={isHovered}

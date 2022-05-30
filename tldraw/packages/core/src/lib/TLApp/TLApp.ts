@@ -398,6 +398,24 @@ export class TLApp<
     return this
   }
 
+  /* ----------------- Activated Shapes ---------------- */
+  @observable activatedIds: Set<string> = new Set()
+
+  @computed get activatedShapes(): S[] {
+    const { activatedIds, currentPage, selectedTool } = this
+    const stateId = selectedTool.id
+    if (stateId !== 'select') return []
+    return currentPage.shapes.filter(shape => activatedIds.has(shape.id))
+  }
+
+  @action readonly setActivatedShapes = (shapes: S[] | string[]): this => {
+    this.activatedIds.clear()
+    if (typeof shapes[0] === 'string')
+      (shapes as string[]).forEach(shape => this.activatedIds.add(shape))
+    else (shapes as S[]).forEach(shape => this.activatedIds.add(shape.id))
+    return this
+  }
+
   /* ----------------- Selected Shapes ---------------- */
 
   @observable selectedIds: Set<string> = new Set()

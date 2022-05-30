@@ -43,7 +43,14 @@ const documentModel = onLoad() ?? {
 const list = ['foo', 'bar']
 
 const Page = props => {
-  return <pre>{JSON.stringify(props, null, 2)}</pre>
+  const [value, setValue] = React.useState(JSON.stringify(props, null, 2))
+  return (
+    <textarea
+      className="whitespace-pre w-full h-full font-mono"
+      value={value}
+      onChange={e => setValue(e.target.value)}
+    />
+  )
 }
 
 export default function App() {
