@@ -17,10 +17,10 @@
 
 (defn parse-file
   "Parse file and save parsed data to the given db. Main parse fn used by logseq app"
-  [conn file content {:keys [new? delete-blocks-fn new-graph? extract-options]
-                    :or {new? true
-                         new-graph? false
-                         delete-blocks-fn (constantly [])}}]
+  [conn file content {:keys [new? delete-blocks-fn extract-options]
+                      :or {new? true
+                           delete-blocks-fn (constantly [])}
+                      :as options}]
   (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
@@ -50,7 +50,7 @@
                                new?
                                ;; TODO: use file system timestamp?
                                (assoc :file/created-at (date-time-util/time-ms)))])]
-    (d/transact! conn (gp-util/remove-nils tx) (when new-graph? {:new-graph? true}))))
+    (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))))
 
 (defn filter-files
   "Filters files in preparation for parsing. Only includes files that are

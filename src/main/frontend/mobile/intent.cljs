@@ -80,6 +80,7 @@
                         js/decodeURIComponent
                         util/node-path.name
                         util/file-name-sanity
+                        js/decodeURIComponent
                         (string/replace "." ""))
           path (path/join (config/get-repo-dir (state/get-current-repo))
                           (config/get-pages-directory)

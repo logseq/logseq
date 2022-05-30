@@ -162,7 +162,8 @@
           (db/transact! repo
             [[:db/retract page-id :block/alias]
              [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content new-graph?))
+        (reset-file! repo path content {:new-graph? new-graph?
+                                        :from-disk? from-disk?}))
       (db/set-file-content! repo path content))
     (util/p-handle (write-file!)
                    (fn [_]

@@ -26,6 +26,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.common :as common-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.mobile-bar :refer [mobile-bar]]
@@ -35,8 +36,8 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -249,16 +250,17 @@
 
       (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
 
-      [:nav.px-2 {:aria-label "Sidebar"
-                  :class      "new-page"}
-       (when-not config/publishing?
-         [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-          {:on-click (fn []
-                       (and (util/sm-breakpoint?)
-                            (state/toggle-left-sidebar!))
-                       (state/pub-event! [:go/search]))}
-          (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-          [:span.flex-1 (t :right-side-bar/new-page)]])]]]))
+      (when-not (mobile-util/native-platform?)
+       [:nav.px-2 {:aria-label "Sidebar"
+                   :class      "new-page"}
+        (when-not config/publishing?
+          [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+           {:on-click (fn []
+                        (and (util/sm-breakpoint?)
+                             (state/toggle-left-sidebar!))
+                        (state/pub-event! [:go/search]))}
+           (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+           [:span.flex-1 (t :right-side-bar/new-page)]])])]]))
 
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
@@ -282,7 +284,7 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
                   (common-handler/listen-to-scroll! element))
                 state)}
-  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
+  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -296,6 +298,9 @@
 
      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row
 
+      (when show-action-bar?
+        (action-bar/action-bar))
+      
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -307,7 +312,7 @@
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-
+       
        (cond
          (not indexeddb-support?)
          nil
@@ -377,10 +382,9 @@
                                               [page :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           state)
-   :did-mount (fn [state]
-                (state/set-state! :mobile/show-tabbar? true)
-                state)}
+           (when (state/mobile?)
+                  (state/set-state! :mobile/show-tabbar? true))
+           state)}
   []
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
@@ -511,7 +515,8 @@
         home? (= :home route-name)
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
-        logged? (user-handler/logged-in?)]
+        logged? (user-handler/logged-in?)
+        show-action-bar? (state/sub :mobile/show-action-bar?)]
     (theme/container
      {:t             t
       :theme         theme
@@ -553,7 +558,8 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content})]
+               :main-content        main-content
+               :show-action-bar?    show-action-bar?})]
 
        (right-sidebar/sidebar)
 

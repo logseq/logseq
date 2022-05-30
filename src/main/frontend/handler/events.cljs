@@ -292,6 +292,7 @@
   (let [main-node (util/app-scroll-container-node)]
     (state/set-state! :mobile/show-tabbar? false)
     (state/set-state! :mobile/show-toolbar? true)
+    (state/set-state! :mobile/show-action-bar? false)
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))

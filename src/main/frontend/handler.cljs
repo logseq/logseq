@@ -24,7 +24,6 @@
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -33,7 +32,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db.persist :as db-persist]))
+            [frontend.db.persist :as db-persist]
+            [frontend.modules.outliner.datascript :as outliner-db]))
 
 (defn set-global-error-notification!
   []
@@ -169,6 +169,8 @@
   (state/set-component! :block/linked-references reference/block-linked-references)
   (command-palette/register-global-shortcut-commands))
 
+(reset! db/*db-listener outliner-db/after-transact-pipelines)
+
 (defn start!
   [render]
   (set-global-error-notification!)
@@ -197,7 +199,6 @@
       (when (mobile-util/native-platform?)
         (p/do! (mobile-util/hide-splash))))
 
-    (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (when config/dev?

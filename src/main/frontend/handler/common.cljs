@@ -15,8 +15,10 @@
             [borkdude.rewrite-edn :as rewrite]))
 
 (defn copy-to-clipboard-without-id-property!
-  [format content]
-  (util/copy-to-clipboard! (property/remove-id-property format content)))
+  [format raw-text html]
+  (util/copy-to-clipboard! (property/remove-id-property format raw-text))
+  (when html
+    (util/copy-to-clipboard! html true)))
 
 (defn config-with-document-mode
   [config]
@@ -148,6 +150,7 @@
                          (when @*scroll-timer
                            (js/clearTimeout @*scroll-timer))
                          (state/set-state! :ui/scrolling? true)
+                         (state/save-scroll-position! (util/scroll-top))
                          (reset! *scroll-timer (js/setTimeout
                                                 (fn [] (state/set-state! :ui/scrolling? false)) 500)))
                        false)))
