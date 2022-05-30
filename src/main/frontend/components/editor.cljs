@@ -525,6 +525,7 @@
 
      (when (= (state/sub :editor/record-status) "RECORDING")
        [:div#audio-record-toolbar
+        {:style {:bottom (+ @util/keyboard-height 45)}}
         (footer/audio-record-cp)])
 
      (ui/ls-textarea

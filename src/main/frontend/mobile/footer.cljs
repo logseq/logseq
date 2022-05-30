@@ -43,7 +43,10 @@
       (reset! *record-start -1)
       (mobile-bar-command record/start-recording "microphone"))
     [:div.flex.flex-row.items-center
-     (mobile-bar-command record/stop-recording "player-stop")
+     (mobile-bar-command #(do
+                            (record/stop-recording)
+                            (reset! *record-start -1))
+                         "player-stop")
      [:div.timer.pl-2
       {:on-click record/stop-recording}
       (seconds->minutes:seconds @*record-start)]]))
