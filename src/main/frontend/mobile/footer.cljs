@@ -1,13 +1,14 @@
 (ns frontend.mobile.footer
   (:require [clojure.string :as string]
+            [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.record :as record]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.components.svg :as svg]))
+            [rum.core :as rum]))
 
 (rum/defc mobile-bar-command [command-handler icon]
   [:button.bottom-action
@@ -42,20 +43,26 @@
       (reset! *record-start -1)
       (mobile-bar-command record/start-recording "microphone"))
     [:div.flex.flex-row.items-center
-     (mobile-bar-command record/stop-recording "player-stop")
+     (mobile-bar-command #(do
+                            (record/stop-recording)
+                            (reset! *record-start -1))
+                         "player-stop")
      [:div.timer.pl-2
       {:on-click record/stop-recording}
       (seconds->minutes:seconds @*record-start)]]))
 
 (rum/defc footer < rum/reactive
   []
-  (when (and
-         (state/mobile?)
-         (state/sub :mobile/show-tabbar?)
-         (state/get-current-repo))
+  (when (and (state/sub :mobile/show-tabbar?)
+             (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
-     (mobile-bar-command #(state/toggle-document-mode!) "notes")
+     (mobile-bar-command
+      #(do (when-not (mobile-util/native-ipad?)
+             (state/set-left-sidebar-open! false))
+           (state/pub-event! [:go/search]))
+      "search")
+     (mobile-bar-command state/toggle-document-mode! "notes")
      (mobile-bar-command
       #(let [page (or (state/get-current-page)
                       (string/lower-case (date/journal-name)))]

@@ -559,6 +559,10 @@
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-1.0.6.tgz#b837585e6b5d48dc705ee89e49cc7c6aeb8874ec"
   integrity sha512-8xqUbDZFGBMhgqoBSn9wEd9OBPdHIRegQ9zCCZcpHNf3FFAIby1ck+aDFnoq+Da49xhD6ks1SKCBSxz/26qWTw==
 
+"@capacitor/haptics@^1.1.4":
+  version "1.1.4"
+  integrity sha512-+pJIb5X7xAcbrWj6rJaV+cwBlv8aFwB1/Ob6EV4atydThuuVSSsAL4hI4ZYlPNOxM6H5s+ZDLj7Pa2os4eFmtg==
+
 "@capacitor/ios@3.2.2":
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-3.2.2.tgz#0417cf89df23f651c6a1e20a8fb98294a918ce1f"
@@ -1650,6 +1654,11 @@ big-integer@1.6.x:
   version "1.6.51"
   resolved "https://registry.yarnpkg.com/big-integer/-/big-integer-1.6.51.tgz#0df92a5d9880560d3ff2d5fd20245c889d130686"
   integrity sha512-GPEid2Y9QU1Exl1rpO9B2IPJGHPSupF5GnVIP0blYvNOMer2bTvSWs1jGOUg04hTmu67nmLsQ9TBo1puaotBHg==
+
+bignumber.js@^9.0.2:
+  version "9.0.2"
+  resolved "https://registry.yarnpkg.com/bignumber.js/-/bignumber.js-9.0.2.tgz#71c6c6bed38de64e24a65ebe16cfcf23ae693673"
+  integrity sha512-GAcQvbpsM0pUb0zw1EI0KhQEZ+lRwR5fYaAp3vPOYuP7aDvGy6cVN6XHLauvF8SOga2y0dcLcjt3iQDTSEliyw==
 
 binary-extensions@^1.0.0:
   version "1.13.1"

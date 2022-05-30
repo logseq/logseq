@@ -55,7 +55,8 @@
             [promesa.core :as p]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.block :as gp-block]
+            [frontend.extensions.html-parser :as html-parser]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -962,9 +963,7 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
-    (when (seq blocks)
-      (state/exit-editing-and-set-selected-blocks! blocks))))
+  (block-handler/select-block! block-uuid))
 
 (defn- compose-copied-blocks-contents
   [repo block-ids]
@@ -977,7 +976,7 @@
      (into [] (state/get-export-block-text-remove-options)))))
 
 (defn copy-selection-blocks
-  []
+  [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
@@ -985,7 +984,8 @@
           content (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+        (let [html (export/export-blocks-as-html repo ids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
 
@@ -1054,7 +1054,7 @@
 
 (defn cut-selection-blocks
   [copy?]
-  (when copy? (copy-selection-blocks))
+  (when copy? (copy-selection-blocks true))
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -1193,9 +1193,10 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          md-content (compose-copied-blocks-contents repo [block-id])]
+          md-content (compose-copied-blocks-contents repo [block-id])
+          html (export/export-blocks-as-html repo [block-id])]
       (state/set-copied-full-blocks md-content [block])
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -2887,8 +2888,8 @@
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)
-        *stop-event? (atom true)]
+        input (state/get-input)]
+    (util/stop e)
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
@@ -2916,7 +2917,8 @@
 
       :else
       ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+            text (string/trim text)]
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
@@ -2928,18 +2930,16 @@
           (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:markdown true _ true]
-          (reset! *stop-event? false)
+          (commands/simple-insert! (state/get-edit-input-id) text nil)
 
           [:org _ true false]
-          (paste-segmented-text format (string/trim text))
+          (paste-segmented-text format text)
 
           [:org _ true true]
-          (reset! *stop-event? false))))
-    (when @*stop-event?
-      (util/stop e))))
+          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -2957,7 +2957,14 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")
+    (let [clipboard-data (gobj/get e "clipboardData")
+          html (.getData clipboard-data "text/html")
+          edit-block (state/get-edit-block)
+          format (or (:block/format edit-block) :markdown)
+          initial-text (.getData clipboard-data "text")
+          text (if-not (string/blank? html)
+                 (html-parser/convert format html)
+                 initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
         (if (or (thingatpt/markdown-src-at-point input)
@@ -2981,7 +2988,7 @@
 
 (defn shortcut-copy-selection
   [_e]
-  (copy-selection-blocks))
+  (copy-selection-blocks true))
 
 (defn shortcut-cut-selection
   [e]
@@ -3025,6 +3032,19 @@
         (if (= selected-start selected-end)
           (copy-current-block-ref)
           (js/document.execCommand "copy")))
+
+      :else
+      (js/document.execCommand "copy"))))
+
+(defn shortcut-copy-text
+  "shortcut copy action:
+  * when in selection mode, copy selected blocks
+  * when in edit mode with text selected, copy selected text as normal"
+  [_e]
+  (when-not (auto-complete?)
+    (cond
+      (state/selection?)
+      (copy-selection-blocks false)
 
       :else
       (js/document.execCommand "copy"))))

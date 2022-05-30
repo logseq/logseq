@@ -65,6 +65,7 @@
    :editor/indent                  "Indent block"
    :editor/outdent                 "Outdent block"
    :editor/copy                    "Copy (copies either selection, or block reference)"
+   :editor/copy-text               "Copy selections as text"
    :editor/cut                     "Cut"
    :editor/undo                    "Undo"
    :editor/redo                    "Redo"

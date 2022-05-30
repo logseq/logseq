@@ -1,7 +1,6 @@
 #audio-record-toolbar {
     position: fixed;
     background-color: var(--ls-secondary-background-color);
-    bottom: 45px;
     width: 88px;
     justify-content: left;
     left: 5px;

@@ -19,7 +19,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
-            [promesa.core :as p])
+            [promesa.core :as p]
+            [frontend.util.property :as property])
   (:import [goog.string StringBuffer]))
 
 (defn- get-page-content
@@ -444,14 +445,17 @@
                [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
-               (assoc page
-                      :block/children
-                      (outliner-tree/blocks->vec-tree
-                       (db/get-page-blocks-no-cache
-                        (state/get-current-repo)
-                        name
-                        {:transform? false}) name))))
-
+               (let [blocks (db/get-page-blocks-no-cache
+                             (state/get-current-repo)
+                             name
+                             {:transform? false})
+                     blocks' (map (fn [b]
+                                    (if (seq (:block/properties b))
+                                      (update b :block/content
+                                              (fn [content] (property/remove-properties (:block/format b) content)))
+                                      b)) blocks)
+                     children (outliner-tree/blocks->vec-tree blocks' name)]
+                 (assoc page :block/children children))))
         (nested-select-keys
          [:block/id
           :block/page-name

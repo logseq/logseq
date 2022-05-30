@@ -2,46 +2,47 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
-            [frontend.context.i18n :refer [t]]
+            [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.diff :as diff]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.components.plugins :as plugin]
+            [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
-            [frontend.components.shell :as shell]
+            [frontend.components.plugins :as plugin]
             [frontend.components.search :as search]
+            [frontend.components.shell :as shell]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
+            [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.modules.shortcut.core :as st]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
-            [frontend.commands :as commands]
+            [frontend.modules.shortcut.core :as st]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.modules.instrumentation.posthog :as posthog]
-            [frontend.mobile.util :as mobile-util]
-            [promesa.core :as p]
-            [frontend.fs :as fs]
-            [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
-            [frontend.fs.sync :as sync]
-            [frontend.components.encryption :as encryption]
-            [frontend.encrypt :as encrypt]))
+            [goog.dom :as gdom]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -292,11 +293,19 @@
   (let [main-node (util/app-scroll-container-node)]
     (state/set-state! :mobile/show-tabbar? false)
     (state/set-state! :mobile/show-toolbar? true)
+    (state/set-state! :mobile/show-action-bar? false)
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
+        (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
+      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
+        (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
+      (when (= (state/sub :editor/record-status) "RECORDING")
+        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
+          (set! (.. record-node -style -bottom) (str (+ 45 keyboard-height) "px"))))
       (js/setTimeout (fn []
                        (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
@@ -309,7 +318,14 @@
     (when (mobile-util/native-ios?)
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
-      (set! (.. main-node -style -marginBottom) "0px"))))
+      (set! (.. main-node -style -marginBottom) "0px")
+      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
+        (set! (.. left-sidebar-node -style -bottom) "0px"))
+      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
+      (when (= (state/sub :editor/record-status) "RECORDING")
+        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
+          (set! (.. record-node -style -bottom) "45px"))))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
