@@ -7,6 +7,7 @@
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.footer :as footer]
             [frontend.mobile.record :as record]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -103,7 +104,9 @@
              (command editor-handler/cycle-priority! "a-b" true)
              (command editor-handler/toggle-list! "list" true)
              (command #(mobile-camera/embed-photo parent-id) "camera" true)
-             (command record/start-recording "microphone" true)
+             (command #(do (record/start-recording)
+                           (reset! footer/*record-start (js/Date.now)))
+                      "microphone" true)
              (command commands/insert-youtube-timestamp "brand-youtube" true)
              (command editor-handler/html-link-format! "link" true)
              (command history/undo! "rotate" true true)
