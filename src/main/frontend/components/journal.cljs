@@ -8,7 +8,8 @@
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -48,14 +49,17 @@
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page
-                         {:page     page
-                          :journal? true}))
+                         :page))
                       (.preventDefault e)))}
        [:h1.title
-        (util/capitalize-all title)]]
+        (gp-util/capitalize-all title)]]
 
-      (blocks-cp repo page format)
+      (if today?
+        (blocks-cp repo page format)
+        (ui/lazy-visible (fn []
+                           (blocks-cp repo page format))
+                         nil
+                         {}))
 
       {})
 

@@ -2,45 +2,50 @@
   (:refer-clojure :exclude [run!])
   (:require [clojure.core.async :as async]
             [clojure.set :as set]
-            [frontend.context.i18n :refer [t]]
+            [clojure.string :as string]
             [frontend.components.diff :as diff]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.components.plugins :as plugin]
+            [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
-            [frontend.components.shell :as shell]
+            [frontend.components.plugins :as plugin]
             [frontend.components.search :as search]
+            [frontend.components.shell :as shell]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
+            [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
+            [frontend.fs :as fs]
+            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.nfs :as nfs]
+            [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.modules.shortcut.core :as st]
+            [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.crdt.outliner :as crdt-outliner]
             [frontend.commands :as commands]
+            [frontend.modules.shortcut.core :as st]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.modules.instrumentation.posthog :as posthog]
-            [frontend.mobile.util :as mobile-util]
-            [promesa.core :as p]
-            [frontend.fs :as fs]
-            [clojure.string :as string]
             [frontend.util.persist-var :as persist-var]
             [frontend.fs.sync :as sync]
-            [frontend.modules.crdt.yjs :as yjs]))
+            [frontend.modules.crdt.yjs :as yjs]
+            [goog.dom :as gdom]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -58,8 +63,7 @@
 (defn- file-sync-stop-when-switch-graph []
   (p/do! (persist-var/load-vars)
          (sync/sync-stop)
-         ;; trigger rerender file-sync-header
-         (state/set-file-sync-state nil)))
+         (sync/sync-start)))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
@@ -97,7 +101,6 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph]]
-  (file-sync-stop-when-switch-graph)
   (if (outliner-file/writes-finished?)
     (graph-switch-on-persisted graph)
     (notification/show!
@@ -137,7 +140,7 @@
   [repo]
   (when
    (and (not (util/electron?))
-        (not (mobile-util/is-native-platform?)))
+        (not (mobile-util/native-platform?)))
     (fn [close-fn]
       [:div
        [:p
@@ -235,7 +238,8 @@
                         {:label "diff__cp"}))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (state/set-modal! #(git-component/file-specific-version path hash content)))
+  (p/let [content (when content (encrypt/decrypt content))]
+    (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :graph/ready [[_ repo]]
   (search-handler/rebuild-indices-when-stale! repo)
@@ -271,6 +275,11 @@
       (plugin/open-focused-settings-modal! title))
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
+(defmethod handle :go/proxy-settings [[_ agent-opts]]
+  (state/set-sub-modal!
+    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
+    {:id :https-proxy-panel :center? true}))
+
 
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
@@ -286,15 +295,41 @@
     (reset! st/*inited? true)
     (st/consume-pending-shortcuts!)))
 
+(defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
+  (let [main-node (util/app-scroll-container-node)]
+    (state/set-state! :mobile/show-tabbar? false)
+    (state/set-state! :mobile/show-toolbar? true)
+    (state/set-state! :mobile/show-action-bar? false)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? true))
+    (when (mobile-util/native-ios?)
+      (reset! util/keyboard-height keyboard-height)
+      (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
+      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
+        (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
+      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
+        (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
+      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
+      (js/setTimeout (fn []
+                       (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+                         (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
+                     100))))
 
-(defmethod handle :mobile/keyboard-will-show [[_]]
-  (when (and (state/get-left-sidebar-open?)
-             (state/editing?))
-    (state/set-left-sidebar-open! false)))
-
-(defmethod handle :mobile/keyboard-did-show [[_]]
-  (when-let [input (state/get-input)]
-    (util/make-el-cursor-position-into-center-viewport input)))
+(defmethod handle :mobile/keyboard-will-hide [[_]]
+  (let [main-node (util/app-scroll-container-node)]
+    (state/set-state! :mobile/show-toolbar? false)
+    (state/set-state! :mobile/show-tabbar? true)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? false))
+    (when (mobile-util/native-ios?)
+      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) "0px"))
+      (set! (.. main-node -style -marginBottom) "0px")
+      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
+        (set! (.. left-sidebar-node -style -bottom) "0px"))
+      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
@@ -347,11 +382,12 @@
          false)))))
 
 (defmethod handle :file-watcher/changed [[_ ^js event]]
-  (fs-watcher/handle-changed!
-   (.-event event)
-   (update (js->clj event :keywordize-keys true)
-           :path
-           js/decodeURI)))
+  (let [type (.-event event)
+        payload (-> event
+                    (js->clj :keywordize-keys true)
+                    (update :path js/decodeURI))]
+    (fs-watcher/handle-changed! type payload)
+    (sync/file-watch-handler type payload)))
 
 
 (defmethod handle :graph/merge-remote-changes [[_ graph changes event]]
@@ -359,6 +395,48 @@
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
+
+(defmethod handle :graph/ask-for-re-index [[_ *multiple-windows?]]
+  (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
+    (handle
+     [:modal/show
+      [:div
+       [:p (t :re-index-multiple-windows-warning)]]])
+    (handle
+     [:modal/show
+      [:div {:style {:max-width 700}}
+       [:p (t :re-index-discard-unsaved-changes-warning)]
+       (ui/button
+         (t :yes)
+         :autoFocus "on"
+         :large? true
+         :on-click (fn []
+                     (state/close-modal!)
+                     (repo-handler/re-index!
+                      nfs-handler/rebuild-index!
+                      page-handler/create-today-journal!)))]])))
+
+;; encryption
+(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
+  (state/set-modal!
+   (encryption/encryption-setup-dialog repo-url close-fn)))
+
+(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
+  (state/set-modal!
+   (encryption/encryption-input-secret-dialog
+    repo-url
+    db-encrypted-secret
+    close-fn)))
+
+(defmethod handle :journal/insert-template [[_ page-name]]
+  (let [page-name (util/page-name-sanity-lc page-name)]
+    (when-let [page (db/pull [:block/name page-name])]
+      (when (db/page-empty? (state/get-current-repo) page-name)
+        (when-let [template (state/get-default-journal-template)]
+          (editor-handler/insert-template!
+           nil
+           template
+           {:target page}))))))
 
 (defn run!
   []

@@ -20,15 +20,18 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
-            [clojure.core.async :as async]))
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
+            [clojure.core.async :as async]
+            [frontend.encrypt :as encrypt]))
 
 (defn remove-ignore-files
-  [files]
+  [files dir-name nfs?]
   (let [files (remove (fn [f]
                         (let [path (:file/path f)]
                           (or (string/starts-with? path ".git/")
                               (string/includes? path ".git/")
-                              (and (util-fs/ignored-path? "" path)
+                              (and (util-fs/ignored-path? (if nfs? "" dir-name) path)
                                    (not= (:file/name f) ".gitignore")))))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
@@ -48,20 +51,20 @@
    (cond
      mobile-native?
      (map (fn [{:keys [uri content size mtime]}]
-            {:file/path             (util/path-normalize uri)
+            {:file/path             (gp-util/path-normalize uri)
              :file/last-modified-at mtime
              :file/size             size
              :file/content content})
-       result)
+          result)
 
      electron?
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
-              {:file/path             (util/path-normalize path)
+              {:file/path             (gp-util/path-normalize path)
                :file/last-modified-at mtime
                :file/size             size
                :file/content content}))
-       result)
+          result)
 
      :else
      (let [result (flatten (bean/->clj result))]
@@ -71,7 +74,7 @@
                     path (-> (get-attr "webkitRelativePath")
                              (string/replace-first (str dir-name "/") ""))]
                 {:file/name             (get-attr "name")
-                 :file/path             (util/path-normalize path)
+                 :file/path             (gp-util/path-normalize path)
                  :file/last-modified-at (get-attr "lastModified")
                  :file/size             (get-attr "size")
                  :file/type             (get-attr "type")
@@ -119,7 +122,7 @@
   [ok-handler]
   (let [path-handles (atom {})
         electron? (util/electron?)
-        mobile-native? (mobile-util/is-native-platform?)
+        mobile-native? (mobile-util/native-platform?)
         nfs? (and (not electron?)
                   (not mobile-native?))
         *repo (atom nil)]
@@ -144,7 +147,7 @@
                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
                  result (nth result 1)
                  files (-> (->db-files mobile-native? electron? dir-name result)
-                           remove-ignore-files)
+                           (remove-ignore-files dir-name nfs?))
                  _ (when nfs?
                      (let [file-paths (set (map :file/path files))]
                        (swap! path-handles (fn [handles]
@@ -155,7 +158,7 @@
                                                                         (string/replace-first path (str dir-name "/") ""))
                                                              (let [last-part (last (string/split path "/"))]
                                                                (contains? #{config/app-name
-                                                                            config/default-draw-directory
+                                                                            gp-config/default-draw-directory
                                                                             (config/get-journals-directory)
                                                                             (config/get-pages-directory)}
                                                                           last-part)))))
@@ -166,7 +169,8 @@
            (-> (p/all (map (fn [file]
                              (p/let [content (if nfs?
                                                (.text (:file/file file))
-                                               (:file/content file))]
+                                               (:file/content file))
+                                     content (encrypt/decrypt content)]
                                (assoc file :file/content content))) markup-files))
                (p/then (fn [result]
                          (let [files (map #(dissoc % :file/file) result)]
@@ -245,7 +249,8 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))]
+                                          (:file/content file))
+                                content (encrypt/decrypt content)]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)
@@ -277,7 +282,7 @@
            handle-path (str config/local-handle-prefix dir-name)
            path-handles (atom {})
            electron? (util/electron?)
-           mobile-native? (mobile-util/is-native-platform?)
+           mobile-native? (mobile-util/native-platform?)
            nfs? (and (not electron?)
                      (not mobile-native?))]
        (when re-index?
@@ -292,7 +297,7 @@
                                                  (when nfs?
                                                    (swap! path-handles assoc path handle))))
                     new-files (-> (->db-files mobile-native? electron? dir-name files-result)
-                                  remove-ignore-files)
+                                  (remove-ignore-files dir-name nfs?))
                     _ (when nfs?
                         (let [file-paths (set (map :file/path new-files))]
                           (swap! path-handles (fn [handles]

@@ -7,13 +7,12 @@
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
-            [camel-snake-kebab.core :as csk]
-            [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
-            [frontend.mobile.util :refer [is-native-platform?]]
+            [frontend.mobile.util :refer [native-platform?]]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
@@ -41,6 +40,23 @@
            (gdom/getElement "main-content-container")))
 
 #?(:cljs
+   (defn safe-re-find
+     [pattern s]
+     (when-not (string? s)
+       ;; TODO: sentry
+       (js/console.trace))
+     (when (string? s)
+       (re-find pattern s))))
+
+#?(:cljs
+  (do
+    (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+    (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
+    (defn uuid-string?
+      [s]
+      (safe-re-find exactly-uuid-pattern s))))
+
+#?(:cljs
    (defn ios?
      []
      (utils/ios)))
@@ -51,15 +67,6 @@
      (let [ua (string/lower-case js/navigator.userAgent)]
        (and (string/includes? ua "webkit")
             (not (string/includes? ua "chrome"))))))
-
-(defn safe-re-find
-  [pattern s]
-  #?(:cljs
-     (when-not (string? s)
-       ;; TODO: sentry
-       (js/console.trace)))
-  (when (string? s)
-    (re-find pattern s)))
 
 #?(:cljs
    (defn mobile?
@@ -82,7 +89,7 @@
 
 #?(:cljs
    (def nfs? (and (not (electron?))
-                  (not (is-native-platform?)))))
+                  (not (native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -150,28 +157,6 @@
 ;;   [fmt & args]
 ;;   (apply gstring/format fmt args))
 
-#?(:cljs
-   (defn json->clj
-     ([json-string]
-      (json->clj json-string false))
-     ([json-string kebab?]
-      (let [m (-> json-string
-                  (js/JSON.parse)
-                  (js->clj :keywordize-keys true))]
-        (if kebab?
-          (cske/transform-keys csk/->kebab-case-keyword m)
-          m)))))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
-
 (defn remove-nils-non-nested
   [nm]
   (into {} (remove (comp nil? second)) nm))
@@ -232,39 +217,21 @@
     (str "0" n)
     (str n)))
 
-(defn parse-int
-  [x]
-  #?(:cljs (if (string? x)
-             (js/parseInt x)
-             x)
-     :clj (if (string? x)
-            (Integer/parseInt x)
-            x)))
-
-(defn safe-parse-int
-  [x]
-  #?(:cljs (let [result (parse-int x)]
-             (if (js/isNaN result)
-               nil
-               result))
-     :clj ((try
-             (parse-int x)
-             (catch Exception _
-               nil)))))
 #?(:cljs
-   (defn parse-float
+   (defn safe-parse-int
+     "Use if arg could be an int or string. If arg is only a string, use `parse-long`."
      [x]
      (if (string? x)
-       (js/parseFloat x)
+       (parse-long x)
        x)))
 
 #?(:cljs
    (defn safe-parse-float
+     "Use if arg could be a float or string. If arg is only a string, use `parse-double`"
      [x]
-     (let [result (parse-float x)]
-       (if (js/isNaN result)
-         nil
-         result))))
+     (if (string? x)
+       (parse-double x)
+       x)))
 
 #?(:cljs
    (defn debounce
@@ -420,16 +387,6 @@
       (scroll-to (app-scroll-container-node) 0 animate?))))
 
 #?(:cljs
-   (defn url-encode
-     [string]
-     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-#?(:cljs
-   (defn url-decode
-     [string]
-     (some-> string str (js/decodeURIComponent))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -524,16 +481,6 @@
   [s]
   (if (string? s)
     (string/lower-case s) s))
-
-(defn split-first [pattern s]
-  (when-let [first-index (string/index-of s pattern)]
-    [(subs s 0 first-index)
-     (subs s (+ first-index (count pattern)) (count s))]))
-
-(defn split-last [pattern s]
-  (when-let [last-index (string/last-index-of s pattern)]
-    [(subs s 0 last-index)
-     (subs s (+ last-index (count pattern)) (count s))]))
 
 (defn trim-safe
   [s]
@@ -698,14 +645,6 @@
     []
     (subvec xs start end)))
 
-(defn safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
-
 #?(:cljs
    (defn get-nodes-between-two-nodes
      [id1 id2 class]
@@ -729,6 +668,14 @@
          (if (>= idx-1 idx-2)
            :up
            :down)))))
+
+#?(:cljs
+   (defn rec-get-tippy-container
+     [node]
+     (if (and node (d/has-class? node "tippy-tooltip-content"))
+       node
+       (and node
+            (rec-get-tippy-container (gobj/get node "parentNode"))))))
 
 #?(:cljs
    (defn rec-get-blocks-container
@@ -770,19 +717,8 @@
      ([s html?]
       (utils/writeClipboard s html?))))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
-(defn uuid-string?
-  [s]
-  (safe-re-find exactly-uuid-pattern s))
-
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
-
-(defn capitalize-all [s]
-  (some->> (string/split s #" ")
-           (map string/capitalize)
-           (string/join " ")))
 
 #?(:cljs
    (defn react
@@ -882,11 +818,6 @@
   []
   (str (rand-str 6) (rand-str 3)))
 
-(defn tag-valid?
-  [tag-name]
-  (when (string? tag-name)
-    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
-
 (defn pp-str [x]
   #_:clj-kondo/ignore
   (with-out-str (clojure.pprint/pprint x)))
@@ -950,39 +881,33 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
+#?(:cljs
+   (defn url-encode
+     [string]
+     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
+
+#?(:cljs
+   (defn url-decode
+     [string]
+     (some-> string str (js/decodeURIComponent))))
+
 (def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
-(defn include-windows-reserved-chars?
-  [s]
-  (safe-re-find windows-reserved-chars s))
+#?(:cljs
+   (do
+     (defn include-windows-reserved-chars?
+      [s]
+       (safe-re-find windows-reserved-chars s))
 
-(defn create-title-property?
-  [s]
-  (and (string? s)
-       (or (include-windows-reserved-chars? s)
-           (string/includes? s "_")
-           (string/includes? s "/")
-           (string/includes? s ".")
-           (string/includes? s "%")
-           (string/includes? s "#"))))
-
-(defn remove-boundary-slashes
-  [s]
-  (when (string? s)
-    (let [s (if (= \/ (first s))
-              (subs s 1)
-              s)]
-      (if (= \/ (last s))
-        (subs s 0 (dec (count s)))
-        s))))
-
-(defn normalize
-  [s]
-  (.normalize s "NFC"))
-(defn path-normalize
-  "Normalize file path (for reading paths from FS, not required by writting)"
-  [s]
-  (.normalize s "NFC"))
+     (defn create-title-property?
+       [s]
+       (and (string? s)
+            (or (include-windows-reserved-chars? s)
+                (string/includes? s "_")
+                (string/includes? s "/")
+                (string/includes? s ".")
+                (string/includes? s "%")
+                (string/includes? s "#"))))))
 
 #?(:cljs
    (defn search-normalize
@@ -990,31 +915,29 @@
      [s]
      (removeAccents (.normalize (string/lower-case s) "NFKC"))))
 
-(defn page-name-sanity
-  "Sanitize the page-name for file name (strict), for file writting"
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      ;; Windows reserved path characters
-                      (string/replace windows-reserved-chars "_")
-                      ;; for android filesystem compatiblity
-                      (string/replace #"[\\#|%]+" "_")
-                      (normalize))]
-     (if replace-slash?
-       (string/replace page #"/" ".")
-       page))))
+#?(:cljs
+   (defn file-name-sanity
+     "Sanitize page-name for file name (strict), for file writing."
+     [page-name]
+     (some-> page-name
+             gp-util/page-name-sanity
+             ;; for android filesystem compatiblity
+             (string/replace #"[\\#|%]+" url-encode)
+             ;; Windows reserved path characters
+             (string/replace windows-reserved-chars url-encode)
+             (string/replace #"/" url-encode)
+             (string/replace "*" "%2A"))))
 
-(defn page-name-sanity-lc
-  "Sanitize the query string for a page name (mandate for :block/name)"
-  [s]
-  (page-name-sanity (string/lower-case s)))
+#?(:cljs
+   (def page-name-sanity-lc
+     "Delegate to gp-util to loosely couple app usages to graph-parser"
+     gp-util/page-name-sanity-lc))
 
-(defn safe-page-name-sanity-lc
-  [s]
-  (if (string? s)
-    (page-name-sanity-lc s) s))
+#?(:cljs
+ (defn safe-page-name-sanity-lc
+   [s]
+   (if (string? s)
+     (page-name-sanity-lc s) s)))
 
 (defn get-page-original-name
   [page]
@@ -1124,29 +1047,6 @@
       (string/replace "&gt;" ">")
       (string/replace "&quot;" "\"")
       (string/replace "&apos;" "'")))
-
-#?(:cljs
-   (defn system-locales
-     []
-     (when-not node-test?
-       (when-let [navigator (and js/window (.-navigator js/window))]
-         ;; https://zzz.buzz/2016/01/13/detect-browser-language-in-javascript/
-         (when navigator
-           (let [v (js->clj
-                    (or
-                     (.-languages navigator)
-                     (.-language navigator)
-                     (.-userLanguage navigator)
-                     (.-browserLanguage navigator)
-                     (.-systemLanguage navigator)))]
-             (if (string? v) [v] v)))))))
-
-#?(:cljs
-   (defn zh-CN-supported?
-     []
-     (let [system-locales (set (system-locales))]
-       (or (contains? system-locales "zh-CN")
-           (contains? system-locales "zh-Hans-CN")))))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
@@ -1294,17 +1194,6 @@
   [text]
   (string/join (replace regex-char-esc-smap text)))
 
-(defn split-namespace-pages
-  [title]
-  (let [parts (string/split title "/")]
-    (loop [others (rest parts)
-           result [(first parts)]]
-      (if (seq others)
-        (let [prev (last result)]
-          (recur (rest others)
-                 (conj result (str prev "/" (first others)))))
-        result))))
-
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
@@ -1312,13 +1201,11 @@
    (defn meta-key-name []
      (if mac? "Cmd" "Ctrl")))
 
-(defn wrapped-by-quotes?
-  [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
+#?(:cljs
+   (defn meta-key? [e]
+     (if mac?
+       (gobj/get e "metaKey")
+       (gobj/get e "ctrlKey"))))
 
 #?(:cljs
    (defn right-click?
@@ -1328,52 +1215,53 @@
        (or (= which 3)
            (= button 2)))))
 
+(def keyboard-height (atom nil))
 #?(:cljs
-   (defn url?
-     [s]
-     (and (string? s)
-          (try
-            (js/URL. s)
-            true
-            (catch js/Error _e
-              false)))))
+   (defn scroll-editor-cursor
+     [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
+     (when (and el (or (native-platform?) mobile?))
+       (let [box-rect    (.getBoundingClientRect el)
+             box-top     (.-top box-rect)
+             box-bottom  (.-bottom box-rect)
 
-#?(:cljs
-   (defn make-el-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+             header-height (-> (gdom/getElementByClass "cp__header")
+                               .-clientHeight)
 
-#?(:cljs
-   (defn make-el-cursor-position-into-center-viewport
-     [^js/HTMLElement el]
-     (when el
-       (let [main-node (gdom/getElement "main-content-container")
-             pos (get-selection-start el)
-             cursor-top (some-> (gdom/getElement "mock-text")
-                                gdom/getChildren
-                                array-seq
-                                (nth-safe pos)
-                                .-offsetTop)
-             box-caret (.getBoundingClientRect el)
-             box-top (.-top box-caret)
-             box-bottom (.-bottom box-caret)
-             vw-height (or (.-height js/window.visualViewport)
-                           (.-clientHeight js/document.documentElement))
-             scroll-top (.-scrollTop main-node)
-             cursor-y (if cursor-top (+ cursor-top box-top) box-bottom)
-             scroll (- cursor-y (/ vw-height 2))]
-         (when (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top scroll)))))))
+             main-node   (app-scroll-container-node)
+             scroll-top  (.-scrollTop main-node)
 
-#?(:cljs
-   (defn make-el-center-if-near-top
-     ([^js/HTMLElement el]
-      (make-el-center-if-near-top el 80))
-     ([^js/HTMLElement el offset]
-      (let [target-top (.-top (.getBoundingClientRect el))]
-        (when (<= target-top (or (safe-parse-int offset) 0))
-          (make-el-into-center-viewport el))))))
+             current-pos (get-selection-start el)
+             mock-text   (some-> (gdom/getElement "mock-text")
+                                 gdom/getChildren
+                                 array-seq
+                                 (nth-safe current-pos))
+             offset-top   (and mock-text (.-offsetTop mock-text))
+             offset-height (and mock-text (.-offsetHeight mock-text))
+
+             cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
+             vw-height   (or (.-height js/window.visualViewport)
+                             (.-clientHeight js/document.documentElement))
+             ;; mobile toolbar height: 40px
+             scroll      (- cursor-y (- vw-height (+ @keyboard-height 40)))]
+         (cond
+           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
+           (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
+
+           (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
+                (>= cursor-y header-height))
+           (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
+
+           (< cursor-y header-height)
+           (let [_ (.scrollIntoView el true)
+                 main-node (app-scroll-container-node)
+                 scroll-top (.-scrollTop main-node)]
+             (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
+
+           (> scroll 0)
+           (set! (.-scrollTop main-node) (+ scroll-top scroll))
+
+           :else
+           nil)))))
 
 #?(:cljs
    (defn sm-breakpoint?

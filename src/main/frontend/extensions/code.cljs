@@ -132,9 +132,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
-            [frontend.utf8 :as utf8]
+            [logseq.graph-parser.utf8 :as utf8]
             [frontend.util :as util]
-            [frontend.config :as ui-config]
+            [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -168,6 +168,7 @@
               new-content (if (string/blank? value)
                             (str prefix surfix)
                             (str prefix value "\n" surfix))]
+          (state/set-edit-content! (state/get-edit-input-id) new-content)
           (editor-handler/save-block-if-changed! block new-content))
 
         (:file-path config)
@@ -238,7 +239,7 @@
                                                    (when-let [block-id (:block/uuid config)]
                                                      (let [block (db/pull [:block/uuid block-id])]
                                                        (editor-handler/edit-block! block :max block-id))))}}
-                          (when ui-config/publishing?
+                          (when config/publishing?
                             {:readOnly true
                              :cursorBlinkRate -1}))
         editor (when textarea
@@ -264,6 +265,9 @@
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil false))))
+        (.addEventListener element "touchstart"
+                           (fn [e]
+                             (.stopPropagation e)))
         (.save editor)
         (.refresh editor)
         (when default-open?

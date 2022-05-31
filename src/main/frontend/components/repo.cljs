@@ -14,10 +14,12 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.components.encryption :as encryption]
+            [frontend.encrypt :as e]))
 
 (rum/defc add-repo
   [args]
@@ -42,7 +44,7 @@
        [:div.pl-1.content.mt-3
         [:div.flex.flex-row.my-4
          (when (or (nfs-handler/supported?)
-                   (mobile-util/is-native-platform?))
+                   (mobile-util/native-platform?))
            [:div.mr-8
             (ui/button
               (t :open-a-directory)
@@ -60,6 +62,11 @@
                     :href url}
                 (db/get-repo-path url)])
              [:div.controls
+              (when (e/encrypted-db? url)
+                [:a.control {:title "Show encryption information about this graph"
+                             :on-click (fn []
+                                         (state/set-modal! (encryption/encryption-dialog url)))}
+                 "🔐"])
               [:a.text-gray-400.ml-4.font-medium.text-sm
                {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                 :on-click (fn []
@@ -95,7 +102,7 @@
                        (when (and nfs-repo?
                                   (not= current-repo config/local-repo)
                                   (or (nfs-handler/supported?)
-                                      (mobile-util/is-native-platform?)))
+                                      (mobile-util/native-platform?)))
                          {:title (t :sync-from-local-files)
                           :hover-detail (t :sync-from-local-files-detail)
                           :options {:on-click
@@ -116,24 +123,7 @@
                       :options (cond->
                                 {:on-click
                                  (fn []
-                                   (if @*multiple-windows?
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div
-                                        [:p (t :re-index-multiple-windows-warning)]]])
-                                     (state/pub-event!
-                                      [:modal/show
-                                       [:div {:style {:max-width 700}}
-                                        [:p (t :re-index-discard-unsaved-changes-warning)]
-                                        (ui/button
-                                         (t :yes)
-                                         :autoFocus "on"
-                                         :large? true
-                                         :on-click (fn []
-                                                     (state/close-modal!)
-                                                     (repo-handler/re-index!
-                                                      nfs-handler/rebuild-index!
-                                                      page-handler/create-today-journal!)))]])))})}
+                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows?]))})}
         new-window-link (when (util/electron?)
                           {:title        (t :open-new-window)
                            :options {:on-click #(state/pub-event! [:graph/open-new-window nil])}})]
@@ -158,12 +148,12 @@
             render-content (fn [{:keys [toggle-fn]}]
                              (let [repo-path (db/get-repo-name current-repo)
                                    short-repo-name (db/get-short-repo-name repo-path)]
-                               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                               [:a.item.group.flex.items-center.px-1.py-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title repo-path} ;; show full path on hover
-                                (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
+                                (ui/icon "database mr-2" {:style {:font-size 16} :id "database-icon"})
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium short-repo-name]]

@@ -12,8 +12,8 @@
   []
   [:div.flex.flex-col
    [:h1.title (t :on-boarding/add-graph)]
-   (let [nfs-supported? (or (nfs/supported?) (mobile-util/is-native-platform?))]
-     (if (mobile-util/is-native-platform?)
+   (let [nfs-supported? (or (nfs/supported?) (mobile-util/native-platform?))]
+     (if (mobile-util/native-platform?)
        [:div.text-sm
         (ui/button "Open a local directory"
           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))

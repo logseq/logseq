@@ -58,13 +58,15 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+
      ;; right sidebar
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
      :ui/sidebar-open?                      false
      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
-     :ui/theme                              (or (storage/get :ui/theme) (if (mobile-util/is-native-platform?) "light" "dark"))
+     :ui/theme                              (or (storage/get :ui/theme) "light")
      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+     :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
      :ui/wide-mode?                         (storage/get :ui/wide-mode)
 
      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
@@ -87,9 +89,7 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
-     :ui/visual-viewport-pending?           false
-     :ui/visual-viewport-state              nil
-
+     :ui/scrolling?                         false
      :document/mode?                        document-mode?
 
      :config                                {}
@@ -113,7 +113,6 @@
      :editor/args                           nil
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
-     :editor/editing-page-title?            false
 
      ;; for audio record
      :editor/record-status                  "NONE"
@@ -145,6 +144,16 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
+     :mobile/show-toolbar?                  false
+     :mobile/show-recording-bar?            false
+     ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
+     ;;; add a random in (<= 1000000) to observer its update
+     :mobile/toolbar-update-observer        0
+     :mobile/show-tabbar?                   false
+
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -168,7 +177,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -181,7 +190,9 @@
      :graph/parsing-state                   {}
 
      ;; copied blocks
-     :copy/blocks                           {:copy/content nil :copy/block-ids nil}
+     :copy/blocks                           {:copy/content nil
+                                             :copy/block-ids nil
+                                             :copy/graph nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -215,6 +226,10 @@
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+
+     :file-sync/download-init-progress      nil
+
+     :encryption/graph-parsing?             false
      })))
 
 ;; block uuid -> {content(String) -> ast}
@@ -280,7 +295,7 @@
 (defn get-current-repo
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         "local")))
 
 (defn get-config
@@ -558,12 +573,12 @@
     (when-let [input-id (get-edit-input-id)]
       (when-let [input (gdom/getElement input-id)]
         (let [value (gobj/get input "value")
-              new-value (str value append-text)
-              new-value (if (or (= (last value) " ")
+              new-value (if (or (string/blank? value)
+                                (= (last value) " ")
                                 (= (last value) "\n"))
-                          new-value
-                          (str "\n" new-value))]
-          (js/document.execCommand "insertText" false append-text)
+                          (str value append-text)
+                          (str value "\n" append-text))]
+          (util/set-change-value input new-value)
           (update-state! :editor/content (fn [m]
                                            (assoc m input-id new-value))))))))
 
@@ -748,12 +763,12 @@
   (swap! state assoc :ui/sidebar-open? false))
 
 (defn sidebar-add-block!
-  [repo db-id block-type block-data]
+  [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
     (when db-id
       (update-state! :sidebar/blocks (fn [blocks]
                                        (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type block-data])
+                                            (cons [repo db-id block-type])
                                             (distinct))))
       (open-right-sidebar!)
       (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -767,6 +782,13 @@
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-replace-block!
+  [old-sidebar-key new-sidebar-key]
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (map #(if (= % old-sidebar-key)
+                                           new-sidebar-key
+                                           %) blocks))))
 
 (defn sidebar-block-exists?
   [idx]
@@ -839,8 +861,8 @@
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 
-           (when (or (util/mobile?) (mobile-util/is-native-platform?))
-             (util/make-el-center-if-near-top input))))))))
+           (when (or (util/mobile?) (mobile-util/native-platform?))
+             (set-state! :mobile/show-action-bar? false))))))))
 
 (defn clear-edit!
   []
@@ -873,30 +895,45 @@
     (set-edit-content! edit-input-id content)
     (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
 
-(defn set-theme!
-  [theme]
-  (set-state! :ui/theme theme)
+(defn set-theme-mode!
+  [mode]
   (when (mobile-util/native-ios?)
-    (if (= theme "light")
+    (if (= mode "light")
       (util/set-theme-light)
       (util/set-theme-dark)))
-  (storage/set :ui/theme theme))
+  (set-state! :ui/theme mode)
+  (storage/set :ui/theme mode))
 
 (defn sync-system-theme!
   []
   (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme! (if system-dark? "dark" "light"))
+    (set-theme-mode! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
 
 (defn use-theme-mode!
   [theme-mode]
-  (if-not (= theme-mode "system")
+  (if (= theme-mode "system")
+    (sync-system-theme!)
     (do
-      (set-theme! theme-mode)
+      (set-theme-mode! theme-mode)
       (set-state! :ui/system-theme? false)
-      (storage/set :ui/system-theme? false))
-    (sync-system-theme!)))
+      (storage/set :ui/system-theme? false))))
+
+(defn toggle-theme
+  [theme]
+  (if (= theme "dark") "light" "dark"))
+
+(defn toggle-theme!
+  []
+  (use-theme-mode! (toggle-theme (:ui/theme @state))))
+
+(defn set-custom-theme!
+  ([custom-theme]
+   (set-custom-theme! nil custom-theme))
+  ([mode theme]
+   (set-state! (if mode [:ui/custom-theme (keyword mode)] :ui/custom-theme) theme)
+   (storage/set :ui/custom-theme (:ui/custom-theme @state))))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -905,12 +942,6 @@
 (defn get-editing-block-dom-id
   []
   (:editor/block-dom-id @state))
-
-(defn toggle-theme!
-  []
-  (let [theme (:ui/theme @state)
-        theme' (if (= theme "dark") "light" "dark")]
-    (use-theme-mode! theme')))
 
 (defn set-root-component!
   [component]
@@ -1166,9 +1197,13 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
 (defn enable-tooltip?
   []
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+  (if (mobile?)
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?
@@ -1245,7 +1280,7 @@
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(medley/map-vals (fn [ids] (disj ids pid)) %))
+      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (disj ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (disj coll pid))))
     true))
@@ -1416,13 +1451,15 @@
 
 (defn set-copied-blocks
   [content ids]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/block-ids ids
                             :copy/full-blocks nil}))
 
 (defn set-copied-full-blocks
   [content blocks]
-  (set-state! :copy/blocks {:copy/content content
+  (set-state! :copy/blocks {:copy/graph (get-current-repo)
+                            :copy/content content
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
@@ -1489,6 +1526,15 @@
   []
   (get-in @state [:view/components :page-blocks]))
 
+;; To avoid circular dependencies
+(defn set-component!
+  [k value]
+  (set-state! [:view/components k] value))
+
+(defn get-component
+  [k]
+  (get-in @state [:view/components k]))
+
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
@@ -1510,14 +1556,6 @@
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
-
-(defn set-visual-viewport-state
-  [input]
-  (set-state! :ui/visual-viewport-state input))
-
-(defn get-visual-viewport-state
-  []
-  (:ui/visual-viewport-state @state))
 
 (defn get-plugin-by-id
   [id]
@@ -1645,8 +1683,23 @@
 
 (defn get-file-sync-manager []
   (:file-sync/sync-manager @state))
+
 (defn get-file-sync-state []
   (:file-sync/sync-state @state))
+
+(defn reset-file-sync-download-init-state!
+  []
+  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
+
+(defn set-file-sync-download-init-state!
+  [m]
+  (update-state! [:file-sync/download-init-progress (get-current-repo)]
+                 (if (fn? m) m
+                     (fn [old-value] (merge old-value m)))))
+
+(defn get-file-sync-download-init-state
+  []
+  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
 
 (defn reset-parsing-state!
   []
@@ -1657,3 +1710,8 @@
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))

@@ -35,7 +35,7 @@
 
 (defn- update-draw-content-width
   [state]
-  (let [el ^js (rum/dom-node state)]
+  (when-let [el ^js (rum/dom-node state)]
     (loop [el (.querySelector el ".draw-wrap")]
       (cond
         (or (nil? el) (undefined? el) (undefined? (.-classList el)))
@@ -149,5 +149,5 @@
     (when-not (and (config/local-db? repo)
                    (not granted?)
                    (not (util/electron?))
-                   (not (mobile-util/is-native-platform?)))
+                   (not (mobile-util/native-platform?)))
       (draw-container option))))

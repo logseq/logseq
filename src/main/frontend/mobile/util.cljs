@@ -1,20 +1,21 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [promesa.core :as p]))
 
 (defn platform []
   (.getPlatform Capacitor))
 
-(defn is-native-platform? []
+(defn native-platform? []
   (.isNativePlatform Capacitor))
 
 (defn native-ios? []
-  (and (is-native-platform?)
+  (and (native-platform?)
        (= (platform) "ios")))
 
 (defn native-android? []
-  (and (is-native-platform?)
+  (and (native-platform?)
        (= (platform) "android")))
 
 (defn convert-file-src [path-str]
@@ -23,9 +24,12 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
   (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
-  (defonce ios-file-container (registerPlugin "FileContainer")))
+  (defonce ios-utils (registerPlugin "Utils"))
+  (defonce ios-file-container (registerPlugin "FileContainer"))
+  (defonce file-sync (registerPlugin "FileSync")))
+
 ;; NOTE: both iOS and android share the same FsWatcher API
-(when (is-native-platform?)
+(when (native-platform?)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
 
 (defn sync-icloud-repo [repo-dir]
@@ -38,45 +42,6 @@
 
 (defn hide-splash []
   (.hide SplashScreen))
-
-(def idevice-info
-  (atom
-   {:iPadPro12.9    {:width 1024 :height 1366 :statusbar 40}
-    :iPadPro11      {:width 834  :height 1194 :statusbar 40}
-    :iPadPro10.5    {:width 834  :height 1112 :statusbar 40}
-    :iPadAir10.5    {:width 834  :height 1112 :statusbar 40}
-    :iPadAir10.9    {:width 820  :height 1180 :statusbar 40}
-    :iPad10.2       {:width 810  :height 1080 :statusbar 40}
-    :iPadPro9.7     {:width 768  :height 1024 :statusbar 40}
-    :iPadmini9.7    {:width 768  :height 1024 :statusbar 40}
-    :iPadAir9.7     {:width 768  :height 1024 :statusbar 40}
-    :iPad9.7        {:width 768  :height 1024 :statusbar 40}
-    :iPadmini8.3        {:width 744  :height 1133 :statusbar 40}
-    :iPhone7Plus        {:width 476  :height 847  :statusbar 20}
-    :iPhone6sPlus   {:width 476  :height 847  :statusbar 20}
-    :iPhone6Plus        {:width 476  :height 847  :statusbar 20}
-    :iPhone13ProMax {:width 428  :height 926  :statusbar 47}
-    :iPhone12ProMax {:width 428  :height 926  :statusbar 47}
-    :iPhone11ProMax {:width 414  :height 896  :statusbar 44}
-    :iPhone11       {:width 414  :height 896  :statusbar 48}
-    :iPhoneXSMax        {:width 414  :height 896  :statusbar 48}
-    :iPhoneXR       {:width 414  :height 896  :statusbar 48}
-    :iPhone8Plus        {:width 414  :height 736  :statusbar 20}
-    :iPhone13Pro        {:width 390  :height 844  :statusbar 47}
-    :iPhone13       {:width 390  :height 844  :statusbar 47}
-    :iPhone12       {:width 390  :height 844  :statusbar 47}
-    :iPhone12Pro        {:width 390  :height 844  :statusbar 47}
-    :iPhone11Pro        {:width 375  :height 812  :statusbar 44}
-    :iPhoneXS       {:width 375  :height 812  :statusbar 44}
-    :iPhoneX        {:width 375  :height 812  :statusbar 44}
-    :iPhone8        {:width 375  :height 667  :statusbar 20}
-    :iPhone7        {:width 375  :height 667  :statusbar 20}
-    :iPhone6s       {:width 375  :height 667  :statusbar 20}
-    :iPhone6        {:width 375  :height 667  :statusbar 20}
-    :iPhone13mini   {:width 375  :height 812  :statusbar 44}
-    :iPhone12mini   {:width 375  :height 812  :statusbar 44}
-    :iPhoneSE4      {:width 320  :height 568  :statusbar 20}
-    :iPodtouch5     {:width 320  :height 568  :statusbar 20}}))
 
 (defn get-idevice-model
   []
@@ -120,11 +85,11 @@
   (when-let [model (get-idevice-model)]
     (string/starts-with? (first model) "iPad")))
 
-(defn get-idevice-statusbar-height
+(defn check-ios-zoomed-display
+  "Detect whether iOS device is in Zoom Display"
   []
-  (let [[model landscape?] (get-idevice-model)
-        model (when-not (= model "Not a known Apple device!")
-                (keyword model))]
-    (if (and model landscape?)
-      20
-      (:statusbar (model @idevice-info)))))
+  (p/let [is-zoomed? (p/chain (.isZoomed ios-utils)
+                              #(js->clj % :keywordize-keys true))]
+    (when (:isZoomed is-zoomed?)
+      (let [^js cl (.-classList js/document.documentElement)]
+        (.add cl "is-zoomed-native-ios")))))

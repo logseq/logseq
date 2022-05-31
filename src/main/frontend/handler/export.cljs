@@ -16,8 +16,11 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
-            [promesa.core :as p])
+            [promesa.core :as p]
+            [frontend.util.property :as property])
   (:import [goog.string StringBuffer]))
 
 (defn- get-page-content
@@ -92,6 +95,7 @@
         (js/window.apis.exportPublishAssets
          raw-html-str
          (config/get-custom-css-path)
+         (config/get-export-css-path)
          (config/get-repo-dir repo)
          (clj->js asset-filenames)
          (util/mocked-open-dir-path))
@@ -214,7 +218,7 @@
   (let [block (db/entity [:block/uuid (uuid block-uuid)])
         block-content (get-blocks-contents repo (:block/uuid block))
         format (:block/format block)
-        ast (mldoc/->edn block-content (mldoc/default-config format))
+        ast (mldoc/->edn block-content (gp-mldoc/default-config format))
         embed-pages-new  (get-embed-pages-from-ast ast)
         embed-blocks-new  (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)
@@ -258,7 +262,7 @@
   (let [page-name* (util/page-name-sanity-lc page-name)
         page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
-        ast (mldoc/->edn page-content (mldoc/default-config format))
+        ast (mldoc/->edn page-content (gp-mldoc/default-config format))
         embed-pages-new (get-embed-pages-from-ast ast)
         embed-blocks-new (get-embed-blocks-from-ast ast)
         block-refs-new (get-block-refs-from-ast ast)
@@ -378,7 +382,7 @@
                                               [?e2 :block/file ?e]
                                               [?e2 :block/name ?n]
                                               [?e2 :block/original-name ?n2]] db path)
-                                :format (f/get-format path)})))))
+                                :format (gp-util/get-format path)})))))
 
 
 (defn export-repo-as-markdown!
@@ -439,14 +443,17 @@
                [?b :block/name]] db)
 
         (map (fn [[{:block/keys [name] :as page}]]
-               (assoc page
-                      :block/children
-                      (outliner-tree/blocks->vec-tree
-                       (db/get-page-blocks-no-cache
-                        (state/get-current-repo)
-                        name
-                        {:transform? false}) name))))
-
+               (let [blocks (db/get-page-blocks-no-cache
+                             (state/get-current-repo)
+                             name
+                             {:transform? false})
+                     blocks' (map (fn [b]
+                                    (if (seq (:block/properties b))
+                                      (update b :block/content
+                                              (fn [content] (property/remove-properties (:block/format b) content)))
+                                      b)) blocks)
+                     children (outliner-tree/blocks->vec-tree blocks' name)]
+                 (assoc page :block/children children))))
         (nested-select-keys
          [:block/id
           :block/page-name

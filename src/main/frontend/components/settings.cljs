@@ -1,6 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.storage :as storage]
@@ -131,9 +132,8 @@
                               :href     href
                               :on-click on-click))]
     (when-not (or (util/mobile?)
-                  (mobile-util/is-native-platform?))
+                  (mobile-util/native-platform?))
       [:div.text-sm desc])]])
-
 
 (defn edit-config-edn []
   (row-with-button-action
@@ -151,6 +151,14 @@
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "customize_css"}))
 
+(defn edit-export-css []
+  (row-with-button-action
+   {:left-label   (t :settings-page/export-theme)
+    :button-label (t :settings-page/edit-export-css)
+    :href         (rfe/href :file {:path (config/get-export-css-path)})
+    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+    :-for         "customize_css"}))
+
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -161,7 +169,7 @@
      (ui/toggle show-brackets?
                 config-handler/toggle-ui-show-brackets!
                 true)]]
-   (when (not (or (util/mobile?) (mobile-util/is-native-platform?)))
+   (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
@@ -390,6 +398,23 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
+(defn encryption-row [t enable-encryption?]
+  (toggle "enable_encryption"
+          (t :settings-page/enable-encryption)
+          enable-encryption?
+          #(let [value (not enable-encryption?)]
+             (config-handler/set-config! :feature/enable-encryption? value)
+             (when value
+               (state/close-modal!)
+               (js/setTimeout (fn [] (state/pub-event! [:graph/ask-for-re-index (atom false)]))
+                              100)))
+          [:p.text-sm.opacity-50 "⚠️ This feature is experimental! "
+           [:span "You can use "]
+           [:a {:href "https://github.com/kanru/logseq-encrypt-ui"
+                :target "_blank"}
+            "logseq-encrypt-ui"]
+           [:span " to decrypt your graph."]]))
+
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
     {:left-label   (t :settings-page/customize-shortcuts)
@@ -468,40 +493,6 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")]])]))
 
-(rum/defc user-proxy-settings-panel
-  [{:keys [protocol] :as agent-opts}]
-  (let [[opts set-opts!] (rum/use-state agent-opts)
-        disabled? (string/blank? (:protocol opts))]
-    [:div.cp__settings-network-proxy-panel
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
-     [:div.p-2
-      [:p [:label [:strong (t :type)]
-           (ui/select [{:label "Disabled" :value "" :selected disabled?}
-                       {:label "http" :value "http" :selected (= protocol "http")}
-                       {:label "https" :value "https" :selected (= protocol "https")}
-                       {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
-                      #(set-opts!
-                        (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
-      [:p.flex
-       [:label.pr-4 [:strong (t :host)]
-        [:input.form-input.is-small
-         {:value     (:host opts) :disabled disabled?
-          :on-change #(set-opts!
-                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
-
-       [:label [:strong (t :port)]
-        [:input.form-input.is-small
-         {:value (:port opts) :type "number" :disabled disabled?
-          :on-change #(set-opts!
-                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
-
-      [:p.pt-2
-       (ui/button (t :save)
-        :on-click (fn []
-                    (p/let [_ (ipc/ipc :setHttpsAgent opts)]
-                      (state/set-state! [:electron/user-cfgs :settings/agent] opts)
-                      (state/close-sub-modal! :https-proxy-panel))))]]]))
-
 (rum/defc user-proxy-settings
   [{:keys [protocol host port] :as agent-opts}]
   (ui/button [:span
@@ -509,7 +500,7 @@
                 [:strong.pr-1 e])
               (ui/icon "edit")]
              :on-click #(state/set-sub-modal!
-                         (fn [_] (user-proxy-settings-panel agent-opts))
+                         (fn [_] (plugins/user-proxy-settings-panel agent-opts))
                          {:id :https-proxy-panel :center? true})))
 
 (defn plugin-system-switcher-row []
@@ -535,6 +526,7 @@
      (theme-modes-row t switch-theme system-theme? dark?)
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
+     (when current-repo (edit-export-css))
      (keyboard-shortcuts-row t)]))
 
 (rum/defcs settings-editor < rum/reactive
@@ -544,6 +536,7 @@
         preferred-workflow (state/get-preferred-workflow)
         enable-timetracking? (state/enable-timetracking?)
         enable-journals? (state/enable-journals? current-repo)
+        enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -559,9 +552,9 @@
      (show-brackets-row t show-brackets?)
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)
-     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+     (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
-     (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+     (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (journal-row t enable-journals?)
@@ -578,6 +571,7 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
+     (encryption-row t enable-encryption?)
      (enable-all-pages-public-row t enable-all-pages-public?)
      (zotero-settings-row t)
      (auto-push-row t current-repo enable-git-auto-push?)]))
@@ -610,7 +604,7 @@
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
-     (when-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+     (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (plugin-system-switcher-row))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
@@ -648,7 +642,7 @@
         (for [[label text icon]
               [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
                [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-               (when-not (mobile-util/is-native-platform?)
+               (when-not (mobile-util/native-platform?)
                  [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
                (when plugins-of-settings

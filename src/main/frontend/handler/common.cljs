@@ -15,8 +15,10 @@
             [borkdude.rewrite-edn :as rewrite]))
 
 (defn copy-to-clipboard-without-id-property!
-  [format content]
-  (util/copy-to-clipboard! (property/remove-id-property format content)))
+  [format raw-text html]
+  (util/copy-to-clipboard! (property/remove-id-property format raw-text))
+  (when html
+    (util/copy-to-clipboard! html true)))
 
 (defn config-with-document-mode
   [config]
@@ -80,6 +82,14 @@
       (state/set-config! repo-url config)
       config)))
 
+(defn read-metadata!
+  [content]
+  (try
+    (reader/read-string content)
+    (catch :default e
+      (log/error :parse/metadata-failed e)
+      {})))
+
 (defn get-page-default-properties
   [page-name]
   {:title page-name
@@ -131,3 +141,16 @@
       (log/error :parse/config-failed e)
       (state/pub-event! [:backup/broken-config (state/get-current-repo) content])
       (rewrite/parse-string config/config-default-content))))
+
+(defn listen-to-scroll!
+  [element]
+  (let [*scroll-timer (atom nil)]
+    (.addEventListener element "scroll"
+                       (fn []
+                         (when @*scroll-timer
+                           (js/clearTimeout @*scroll-timer))
+                         (state/set-state! :ui/scrolling? true)
+                         (state/save-scroll-position! (util/scroll-top))
+                         (reset! *scroll-timer (js/setTimeout
+                                                (fn [] (state/set-state! :ui/scrolling? false)) 500)))
+                       false)))

@@ -42,3 +42,6 @@ android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
 
 startup.png
+
+/src/test/docs
+~*~

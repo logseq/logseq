@@ -8,14 +8,15 @@
             [clojure.core.async :as async]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.extract :as extract-handler]
+            [logseq.graph-parser.extract :as extract]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
@@ -42,7 +43,7 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (format/get-format file)]
+     (let [format (gp-util/get-format file)]
        (contains? formats format)))
    files))
 
@@ -75,7 +76,7 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path (util/path-normalize file)
+                                        {:file/path (gp-util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
@@ -92,8 +93,8 @@
 
 (defn reset-file!
   ([repo-url file content]
-   (reset-file! repo-url file content false))
-  ([repo-url file content new-graph?]
+   (reset-file! repo-url file content {}))
+  ([repo-url file content {:keys [new-graph? from-disk?]}]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
          file (cond
@@ -115,13 +116,24 @@
 
                 :else
                 file)
-         file (util/path-normalize file)
-         db-only? (db/db-only? repo-url)]
+         file (gp-util/path-normalize file)
+         db-only? (db/db-only? repo-url)
+         new? (nil? (db/entity [:file/path file]))]
      (when-not db-only? (db/set-file-content! repo-url file content))
-     (let [format (format/get-format file)
+     (let [format (gp-util/get-format file)
            file-content (when-not db-only? [{:file/path file}])
-           tx (if (contains? config/mldoc-support-formats format)
-                (let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content)
+           tx (if (contains? gp-config/mldoc-support-formats format)
+                (let [[pages blocks]
+                      (extract/extract-blocks-pages
+                       repo-url
+                       file
+                       content
+                       {:user-config (state/get-config)
+                        :date-formatter (state/get-date-formatter)
+                        :page-name-order (state/page-name-order)
+                        :block-pattern (config/get-block-pattern format)
+                        :supported-formats (config/supported-formats)
+                        :db (db/get-db (state/get-current-repo))})
                       first-page (first pages)
                       delete-blocks (->
                                      (concat
@@ -144,7 +156,7 @@
                                           (seq))
                       ;; To prevent "unique constraint" on datascript
                       block-ids (set/union (set block-ids) (set block-refs-ids))
-                      pages (extract-handler/with-ref-pages pages blocks)
+                      pages (extract/with-ref-pages pages blocks)
                       pages-index (map #(select-keys % [:block/name]) pages)]
                   ;; does order matter?
                   (concat file-content pages-index delete-blocks pages block-ids blocks))
@@ -158,7 +170,8 @@
                           (assoc :file/created-at t)))])
            tx (concat tx file-tx)]
        (when (seq tx)
-         (db/transact! repo-url tx (when new-graph? {:new-graph? true})))))))
+         (db/transact! repo-url tx {:new-graph? new-graph?
+                                    :from-disk? from-disk?}))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
@@ -179,7 +192,8 @@
           (db/transact! repo
             [[:db/retract page-id :block/alias]
              [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content new-graph?))
+        (reset-file! repo path content {:new-graph? new-graph?
+                                        :from-disk? from-disk?}))
       (db/set-file-content! repo path content))
     (util/p-handle (write-file!)
                    (fn [_]
@@ -275,6 +289,17 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
       (fs/watch-dir! dir))))
+
+(defn create-metadata-file
+  [repo-url encrypted?]
+  (let [repo-dir (config/get-repo-dir repo-url)
+        path (str config/app-name "/" config/metadata-file)
+        file-path (str "/" path)
+        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (reset-file! repo-url path default-content)))))
 
 (defn create-pages-metadata-file
   [repo-url]

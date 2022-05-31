@@ -1,14 +1,14 @@
 (ns frontend.handler.route
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
             [frontend.util :as util]
-            [medley.core :as medley]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
@@ -16,7 +16,6 @@
   [{:keys [to path-params query-params push]
     :or {push true}}]
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
-    (state/save-scroll-position! (util/scroll-top))
     (route-fn to path-params query-params))
   ;; force return nil for usage in render phase of React
   nil)
@@ -79,9 +78,9 @@
     (let [name (:name path-params)
           block? (util/uuid-string? name)]
       (if block?
-        (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
+        (if-let [block (db/entity [:block/uuid (uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)
-                                                  (:block/format block))]
+                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
             (if (> (count content) 48)
               (str (subs content 0 48) "...")
               content))
@@ -126,9 +125,10 @@
     (update-page-label! route)
     (if-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
-      (util/scroll-to (util/app-scroll-container-node)
-                      (state/get-saved-scroll-position)
-                      false))))
+      (js/setTimeout #(util/scroll-to (util/app-scroll-container-node)
+                                      (state/get-saved-scroll-position)
+                                      false)
+                     100))))
 
 (defn go-to-search!
   [search-mode]

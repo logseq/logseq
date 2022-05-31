@@ -71,10 +71,10 @@
       [:section.a
        [:strong "Let’s get you set up."]
        [:small (str "Where on your " DEVICE " do you want to save your work?")
-        (when (mobile-util/is-native-platform?)
+        (when (mobile-util/native-platform?)
           (mobile-intro))]
 
-       (if (or (nfs/supported?) (mobile-util/is-native-platform?))
+       (if (or (nfs/supported?) (mobile-util/native-platform?))
          [:div.choose.flex.flex-col.items-center
           {:on-click #(page-handler/ls-dir-files!
                        (fn []
@@ -140,18 +140,19 @@
 
     (setups-container
      :importer
-     [:article.flex.flex-col.items-center.importer
+     [:article.flex.flex-col.items-center.importer.py-16.px-8
       [:section.c.text-center
        [:h1 "Do you already have notes that you want to import?"]
        [:h2 "If they are in a JSON or Markdown format Logseq can work with them."]]
       [:section.d.md:flex
-       [:label.action-input.flex.items-center
+       [:label.action-input.flex.items-center.mx-2.my-2
         {:disabled (or roam-importing? opml-importing?)}
         [:span.as-flex-center [:i (svg/roam-research 28)]]
-        [:span.flex.flex-col
+        [:div.flex.flex-col
          (if roam-importing?
            (ui/loading "Importing ...")
-           [[:strong "RoamResearch"]
+           [
+            [:strong "RoamResearch"]
             [:small "Import a JSON Export of your Roam graph"]])]
         [:input.absolute.hidden
          {:id        "import-roam"
@@ -172,7 +173,7 @@
                            (notification/show! "Please choose a JSON file."
                                                :error))))}]]
 
-       [:label.action-input.flex.items-center
+       [:label.action-input.flex.items-center.mx-2.my-2
         {:disabled (or roam-importing? opml-importing?)}
         [:span.as-flex-center (ui/icon "sitemap" {:style {:fontSize "26px"}})]
         [:span.flex.flex-col

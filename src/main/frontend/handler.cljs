@@ -2,6 +2,7 @@
   (:require [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.page :as page]
+            [frontend.components.reference :as reference]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -23,7 +24,6 @@
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -32,7 +32,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db.persist :as db-persist]))
+            [frontend.db.persist :as db-persist]
+            [frontend.modules.outliner.datascript :as outliner-db]))
 
 (defn set-global-error-notification!
   []
@@ -46,6 +47,7 @@
             ;;  ;; Don't auto-hide
             ;;  false)
             ))))
+
 
 (defn- watch-for-date!
   []
@@ -92,7 +94,7 @@
            (and (not (seq (db/get-files config/local-repo)))
                 ;; Not native local directory
                 (not (some config/local-db? (map :url repos)))
-                (not (mobile-util/is-native-platform?)))
+                (not (mobile-util/native-platform?)))
            ;; will execute `(state/set-db-restoring! false)` inside
            (repo-handler/setup-local-repo-if-not-exists!)
 
@@ -164,7 +166,10 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
+  (state/set-component! :block/linked-references reference/block-linked-references)
   (command-palette/register-global-shortcut-commands))
+
+(reset! db/*db-listener outliner-db/after-transact-pipelines)
 
 (defn start!
   [render]
@@ -191,10 +196,9 @@
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! repos db-schema)
-      (when (mobile-util/is-native-platform?)
+      (when (mobile-util/native-platform?)
         (p/do! (mobile-util/hide-splash))))
 
-    (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (when config/dev?

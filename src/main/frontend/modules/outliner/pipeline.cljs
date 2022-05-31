@@ -6,7 +6,7 @@
 (defonce *listeners (atom {}))
 
 (defn updated-page-hook
-  [page]
+  [_tx-report page]
   (file/sync-to-file page))
 
 (defn register-listener!
@@ -17,14 +17,14 @@
 (defn invoke-hooks
   [tx-report]
   (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)]
-    (doseq [p (seq pages)] (updated-page-hook p))
+    (when-not (:from-disk? (:tx-meta tx-report))
+      (doseq [p (seq pages)] (updated-page-hook tx-report p)))
 
     (doseq [f (vals @*listeners)]
       (f (state/get-current-repo) {:tx-report tx-report
                                    :pages pages
                                    :blocks blocks}))
 
-    ;; Plugins
     (when (and state/lsp-enabled? (seq blocks))
       (state/pub-event! [:plugin/hook-db-tx
                          {:pages   pages

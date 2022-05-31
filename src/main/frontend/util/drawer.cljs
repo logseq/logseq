@@ -1,7 +1,8 @@
 (ns frontend.util.drawer
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.util.property :as property]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.format.mldoc :as mldoc]))
 
 (defn drawer-start
@@ -22,7 +23,7 @@
 
 (defn get-drawer-ast
   [format content typ]
-  (let [ast (mldoc/->edn content (mldoc/default-config format))
+  (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
         typ-drawer (ffirst (filter (fn [x]
                                      (mldoc/typ-drawer? x typ)) ast))]
     typ-drawer))
@@ -31,7 +32,7 @@
   [format content typ value]
   (when (string? content)
     (try
-      (let [ast (mldoc/->edn content (mldoc/default-config format))
+      (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
             has-properties? (some (fn [x] (mldoc/properties? x)) ast)
             has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
             lines (string/split-lines content)
@@ -53,8 +54,8 @@
                         (if has-properties?
                           (cond
                             (= :org format)
-                            (let [prop-start-idx (.indexOf body-without-timestamps property/properties-start)
-                                  prop-end-idx (.indexOf body-without-timestamps property/properties-end)
+                            (let [prop-start-idx (.indexOf body-without-timestamps gp-property/properties-start)
+                                  prop-end-idx (.indexOf body-without-timestamps gp-property/properties-end)
                                   properties (subvec body-without-timestamps prop-start-idx (inc prop-end-idx))
                                   after (subvec body-without-timestamps (inc prop-end-idx))]
                               (string/join "\n" (concat [title] scheduled deadline properties [drawer] after)))

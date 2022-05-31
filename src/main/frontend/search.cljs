@@ -1,7 +1,7 @@
 (ns frontend.search
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.config :as config]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.db :as db]
             [frontend.regex :as regex]
             [frontend.search.browser :as search-browser]
@@ -143,7 +143,7 @@
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
-       (let [mldoc-exts (set (map name config/mldoc-support-formats))
+       (let [mldoc-exts (set (map name gp-config/mldoc-support-formats))
              files (->> (db/get-files (state/get-current-repo))
                         (map first)
                         (remove (fn [file]
@@ -162,9 +162,13 @@
          (vec (select-keys templates result)))))))
 
 (defn sync-search-indice!
-  [datoms]
-  (when (seq datoms)
-    (when-let [repo (state/get-current-repo)]
+  [repo tx-report]
+  (let [data (:tx-data tx-report)
+        datoms (filter
+                (fn [datom]
+                  (contains? #{:block/name :block/content} (:a datom)))
+                data)]
+    (when (seq datoms)
       (let [datoms (group-by :a datoms)
             pages (:block/name datoms)
             blocks (:block/content datoms)]

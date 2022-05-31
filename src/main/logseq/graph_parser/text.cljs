@@ -1,10 +1,10 @@
-(ns frontend.text
-  (:require [frontend.config :as config]
-            [frontend.util :as util]
+(ns ^:nbb-compatible logseq.graph-parser.text
+  (:require ["path" :as path]
+            [goog.string :as gstring]
             [clojure.string :as string]
-            [frontend.format.mldoc :as mldoc]
             [clojure.set :as set]
-            [frontend.state :as state]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.util :as gp-util]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -13,7 +13,8 @@
 (defn get-file-basename
   [path]
   (when-not (string/blank? path)
-    (util/node-path.name path)))
+    ;; Same as util/node-path.name
+    (.-name (path/parse (string/replace path "+" "/")))))
 
 (defn get-page-name
   [s]
@@ -121,31 +122,44 @@
   [s]
   (string/split s #"(\"[^\"]*\")"))
 
+(def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
+(def vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
+
+(defn get-matched-video
+  [url]
+  (or (re-find youtube-regex url)
+      (re-find loom-regex url)
+      (re-find vimeo-regex url)
+      (re-find bilibili-regex url)))
+
 (def markdown-link #"\[([^\[]+)\](\(.*\))")
+
 (defn split-page-refs-without-brackets
   ([s]
    (split-page-refs-without-brackets s {}))
   ([s {:keys [un-brackets?]
        :or {un-brackets? true}}]
    (cond
-     (and (string? s) (util/wrapped-by-quotes? s))
-     (util/unquote-string s)
+     (and (string? s) (gp-util/wrapped-by-quotes? s))
+     (gp-util/unquote-string s)
 
      (and (string? s) (re-find markdown-link s))
      s
 
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (util/safe-re-find page-ref-re s)
-                (util/safe-re-find #"[\,|，|#|\"]+" s)))
+            (or (gp-util/safe-re-find page-ref-re s)
+                (gp-util/safe-re-find #"[\,|，|#|\"]+" s)))
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
-                          (when-not (util/wrapped-by-quotes? (string/trim s))
+                          (when-not (gp-util/wrapped-by-quotes? (string/trim s))
                             (string/split s page-ref-re-2))))
                        (mapcat (fn [s]
                                  (cond
-                                   (util/wrapped-by-quotes? s)
+                                   (gp-util/wrapped-by-quotes? s)
                                    nil
 
                                    (string/includes? (string/trimr s) "]],")
@@ -165,7 +179,7 @@
                        (remove string/blank?)
                        (mapcat (fn [s]
                                  (cond
-                                   (util/wrapped-by-quotes? s)
+                                   (gp-util/wrapped-by-quotes? s)
                                    nil
 
                                    (page-ref? s)
@@ -186,18 +200,9 @@
      :else
      s)))
 
-(defn extract-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?"
-                   (config/get-block-pattern format))]
-      (util/safe-re-find (re-pattern pattern) text))
-    ""))
-
 (defn- remove-level-space-aux!
   [text pattern space? trim-left?]
-  (let [pattern (util/format
+  (let [pattern (gstring/format
                  (if space?
                    "^[%s]+\\s+"
                    "^[%s]+\\s?")
@@ -206,11 +211,11 @@
     (string/replace-first text (re-pattern pattern) "")))
 
 (defn remove-level-spaces
-  ([text format]
-   (remove-level-spaces text format false true))
-  ([text format space?]
-   (remove-level-spaces text format space? true))
-  ([text format space? trim-left?]
+  ([text format block-pattern]
+   (remove-level-spaces text format block-pattern false true))
+  ([text format block-pattern space?]
+   (remove-level-spaces text format block-pattern space? true))
+  ([text format block-pattern space? trim-left?]
    (when format
      (cond
        (string/blank? text)
@@ -221,17 +226,17 @@
        text
 
        :else
-       (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
+       (remove-level-space-aux! text block-pattern space? trim-left?)))))
 
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
-    (util/format "[%s]"
+    (gstring/format "[%s]"
                  (string/join ", " items))))
 
 (defn media-link?
   [media-formats s]
-  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
+  (some (fn [fmt] (gp-util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
 
 (defn namespace-page?
   [p]
@@ -239,7 +244,7 @@
        (string/includes? p "/")
        (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (util/url? p))))
+       (not (gp-util/url? p))))
 
 (defn add-timestamp
   [content key value]
@@ -339,16 +344,16 @@
   (atom #{"background-color" "background_color"}))
 
 (defn parse-property
-  ([k v]
-   (parse-property :markdown k v))
-  ([format k v]
+  ([k v config-state]
+   (parse-property :markdown k v config-state))
+  ([format k v config-state]
    (let [k (name k)
          v (if (or (symbol? v) (keyword? v)) (name v) (str v))
          v (string/trim v)]
      (cond
        (contains? (set/union
                    #{"title" "filters"}
-                   (get (state/get-config) :ignored-page-references-keywords)) k)
+                   (get config-state :ignored-page-references-keywords)) k)
        v
 
        (= v "true")
@@ -356,16 +361,16 @@
        (= v "false")
        false
 
-       (and (not= k "alias") (util/safe-re-find #"^\d+$" v))
-       (util/safe-parse-int v)
+       (and (not= k "alias") (gp-util/safe-re-find #"^\d+$" v))
+       (parse-long v)
 
-       (util/wrapped-by-quotes? v) ; wrapped in ""
+       (gp-util/wrapped-by-quotes? v) ; wrapped in ""
        v
 
        (contains? @non-parsing-properties (string/lower-case k))
        v
 
-       (mldoc/link? format v)
+       (gp-mldoc/link? format v)
        v
 
        :else

@@ -12,11 +12,11 @@
         :js-options    {:ignore-asset-requires true} ;; handle `require(xxx.css)`
         :modules       {:main
                         {:init-fn    frontend.core/init}
-                        ;; :graph
-                        ;; {:entries [frontend.extensions.graph.force]
-                        ;;  :depends-on #{:main}}
                         :code-editor
                         {:entries    [frontend.extensions.code]
+                         :depends-on #{:main}}
+                        :age-encryption
+                        {:entries    [frontend.extensions.age-encryption]
                          :depends-on #{:main}}
                         :excalidraw
                         {:entries    [frontend.extensions.excalidraw]
@@ -29,7 +29,8 @@
                            :source-map         true
                            :externs            ["datascript/externs.js"
                                                 "externs.js"]
-                           :warnings           {:fn-deprecated false}}
+                           :warnings           {:fn-deprecated false
+                                                :redef false}}
         :closure-defines  {goog.debug.LOGGING_ENABLED      true}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
@@ -54,7 +55,8 @@
 
                                 :externs  ["datascript/externs.js"
                                            "externs.js"]
-                                :warnings {:fn-deprecated false}}}
+                                :warnings {:fn-deprecated false
+                                           :redef false}}}
 
   :test {:target          :node-test
          :output-to       "static/tests.js"
@@ -69,11 +71,11 @@
                :js-options    {:ignore-asset-requires true}
                :modules       {:main
                                {:init-fn    frontend.publishing/init}
-                               ;; :graph
-                               ;; {:entries [frontend.extensions.graph.force]
-                               ;;  :depends-on #{:main}}
                                :code-editor
                                {:entries    [frontend.extensions.code]
+                                :depends-on #{:main}}
+                               :age-encryption
+                               {:entries    [frontend.extensions.age-encryption]
                                 :depends-on #{:main}}
                                :excalidraw
                                {:entries    [frontend.extensions.excalidraw]
@@ -86,7 +88,8 @@
                                   :output-feature-set :es-next
                                   :externs            ["datascript/externs.js"
                                                        "externs.js"]
-                                  :warnings           {:fn-deprecated false}}
+                                  :warnings           {:fn-deprecated false
+                                                       :redef false}}
                :devtools         {:before-load frontend.core/stop
                                   :after-load  frontend.core/start
                                   :preloads    [devtools.preload]}}

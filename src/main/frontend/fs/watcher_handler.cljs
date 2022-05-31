@@ -4,18 +4,19 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [frontend.handler.extract :as extract]
+            [logseq.graph-parser.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util :as util]
+            [logseq.graph-parser.util :as gp-util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.encrypt :as encrypt]))
 
-;; all IPC paths must be normalized! (via util/path-normalize)
+;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
 (defn- set-missing-block-ids!
   [content]
@@ -42,12 +43,14 @@
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
-    (let [path (util/path-normalize path)
+    (let [path (gp-util/path-normalize path)
           repo (config/get-local-repo dir)
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (or content (= type "unlink"))
+      (when (and (or content (= type "unlink"))
+                 (not (encrypt/content-encrypted? content))
+                 (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))

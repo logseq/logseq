@@ -1,7 +1,7 @@
 (ns frontend.extensions.pdf.utils
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
-            [frontend.util :as front-utils]
+            [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [frontend.db :as front-db]
             [frontend.loader :refer [load]]))
@@ -105,7 +105,7 @@
   (.removeAllRanges (js/window.getSelection)))
 
 (def adjust-viewer-size!
-  (front-utils/debounce
+  (util/debounce
     200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
 
 (defn fix-nested-js

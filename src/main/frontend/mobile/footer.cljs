@@ -1,20 +1,23 @@
 (ns frontend.mobile.footer
-  (:require [frontend.ui :as ui]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.mobile.record :as record]
-            [frontend.util :as util]
+  (:require [clojure.string :as string]
+            [frontend.components.svg :as svg]
+            [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [clojure.string :as string]
-            [frontend.date :as date]))
+            [frontend.mobile.record :as record]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [rum.core :as rum]))
 
 (rum/defc mobile-bar-command [command-handler icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (command-handler))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+  [:button.bottom-action
+   {:on-mouse-down (fn [e]
+                     (util/stop e)
+                     (command-handler))}
+   (if (= icon "player-stop")
+     svg/circle-stop
+     (ui/icon icon {:style {:fontSize ui/icon-size}}))])
 
 (defn seconds->minutes:seconds
   [seconds]
@@ -22,7 +25,7 @@
         seconds (mod seconds 60)]
     (util/format "%02d:%02d" minutes seconds)))
 
-(def *record-start (atom -1))
+(def *record-start (atom nil))
 (rum/defcs audio-record-cp < rum/reactive
   {:did-mount (fn [state]
                 (let [comp (:rum/react-component state)
@@ -33,35 +36,36 @@
                  (js/clearInterval (::interval state))
                  (dissoc state ::interval))}
   [state]
-  (when (= (state/sub :editor/record-status) "RECORDING")
-    (swap! *record-start inc))
-  [:div.flex.flex-row
-   (if (= (state/sub :editor/record-status) "NONE")
-     (do
-       (reset! *record-start -1)
-       (mobile-bar-command #(record/start-recording) "microphone"))
-     [:div.flex.flex-row
-      (mobile-bar-command #(record/stop-recording) "player-stop")
-      [:div.timer.pl-2 (seconds->minutes:seconds @*record-start)]])])
+  (if (= (state/sub :editor/record-status) "NONE")
+    (mobile-bar-command #(do (record/start-recording)
+                             (reset! *record-start (js/Date.now))) "microphone")
+    [:div.flex.flex-row.items-center
+     (mobile-bar-command #(do (reset! *record-start nil)
+                              (state/set-state! :mobile/show-recording-bar? false)
+                              (record/stop-recording))
+                         "player-stop")
+     [:div.timer.ml-2
+      {:on-click record/stop-recording}
+      (seconds->minutes:seconds (/ (- (js/Date.now) @*record-start) 1000))]]))
 
 (rum/defc footer < rum/reactive
   []
-  (when-not (or (state/sub :editor/editing?)
-                (state/sub :block/component-editing-mode?)
-                (state/sub :editor/editing-page-title?))
+  (when (and (state/sub :mobile/show-tabbar?)
+             (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (audio-record-cp)
-     (mobile-bar-command #(state/toggle-document-mode!) "notes")
+     (mobile-bar-command
+      #(do (when-not (mobile-util/native-ipad?)
+             (state/set-left-sidebar-open! false))
+           (state/pub-event! [:go/search]))
+      "search")
+     (mobile-bar-command state/toggle-document-mode! "notes")
      (mobile-bar-command
       #(let [page (or (state/get-current-page)
-                      (string/lower-case (date/journal-name)))
-             block (editor-handler/api-insert-new-block!
-                    ""
-                    {:page page
-                     :replace-empty-target? true})]
-         (js/setTimeout
-          (fn [] (editor-handler/edit-block!
-                  block
-                  :max
-                  (:block/uuid block))) 100))
+                      (string/lower-case (date/journal-name)))]
+         (editor-handler/api-insert-new-block!
+          ""
+          {:page page
+           :edit-block? true
+           :replace-empty-target? true}))
       "edit")]))

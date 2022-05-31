@@ -7,7 +7,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.text :as text]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [datascript.core :as d]))
 
 (defonce conns (atom {}))
@@ -22,7 +23,7 @@
 (defn get-repo-name
   [repo]
   (cond
-    (mobile-util/is-native-platform?)
+    (mobile-util/native-platform?)
     (text/get-graph-name-from-path repo)
 
     (config/local-db? repo)
@@ -35,7 +36,7 @@
   "repo-path: output of `get-repo-name`"
   [repo-path]
   (if (or (util/electron?)
-          (mobile-util/is-native-platform?))
+          (mobile-util/native-platform?))
     (text/get-file-basename repo-path)
     repo-path))
 

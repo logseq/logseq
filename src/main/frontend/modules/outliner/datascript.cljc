@@ -7,9 +7,9 @@
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
                      [frontend.config :as config]
+                     [logseq.graph-parser.util :as gp-util]
                      [lambdaisland.glogi :as log]
-                     [frontend.util :as util]
-                     [medley.core :as medley])))
+                     [frontend.search :as search])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -23,19 +23,25 @@
 
 #?(:cljs
    (defn after-transact-pipelines
-     [{:keys [_db-before _db-after _tx-data _tempids _tx-meta] :as tx-report}]
-     (pipelines/invoke-hooks tx-report)
-     (undo-redo/listen-outliner-operation tx-report)))
+     [repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
+     (when-not config/test?
+       (pipelines/invoke-hooks tx-report)
+
+       (when (:outliner/transact? tx-meta)
+         (undo-redo/listen-outliner-operation tx-report))
+
+       (search/sync-search-indice! repo tx-report))))
 
 #?(:cljs
    (defn- remove-nil-from-transaction
      [txs]
-     (some->> (util/remove-nils txs)
+     (some->> (gp-util/remove-nils txs)
               (map (fn [x]
                      (if (map? x)
-                       (medley/map-vals (fn [v] (if (vector? v)
-                                                  (remove nil? v)
-                                                  v)) x)
+                       (update-vals x (fn [v]
+                                        (if (vector? v)
+                                          (remove nil? v)
+                                          v)))
                        x))))))
 
 #?(:cljs
@@ -45,7 +51,7 @@
            txs (map (fn [m] (if (map? m)
                               (dissoc m
                                       :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                      :block/title :block/body :block/level :block/container)
+                                      :block/title :block/body :block/level :block/container :db/other-tx)
                               m)) txs)]
        (when (and (seq txs)
                   (not (:skip-transact? opts)))
@@ -55,7 +61,7 @@
                  conn (conn/get-db repo false)
                  editor-cursor (state/get-current-edit-block-and-position)
                  meta (merge opts {:editor-cursor editor-cursor})
-                 rs (d/transact! conn txs meta)]
+                 rs (d/transact! conn txs (assoc meta :outliner/transact? true))]
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>
@@ -67,8 +73,6 @@
                                        (vec)
                                        (map next))]
                  (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
-             (when-not config/test?
-               (after-transact-pipelines rs))
              rs)
            (catch js/Error e
              (log/error :exception e)

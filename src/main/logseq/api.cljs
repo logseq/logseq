@@ -32,7 +32,6 @@
             [frontend.loader :as loader]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
@@ -119,7 +118,7 @@
 
 (def ^:export set_theme_mode
   (fn [mode]
-    (state/set-theme! mode)))
+    (state/set-theme-mode! mode)))
 
 (def ^:export load_plugin_config
   (fn [path]
@@ -441,11 +440,11 @@
 
 (defn ^:export open_in_right_sidebar
   [block-uuid]
-  (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
+  (editor-handler/open-block-in-sidebar! (uuid block-uuid)))
 
 (def ^:export edit_block
   (fn [block-uuid ^js opts]
-    (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
+    (when-let [block-uuid (and block-uuid (uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
           (editor-handler/edit-block! block pos block-uuid))))))
@@ -454,12 +453,28 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (let [{:keys [before sibling isPageBlock properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
-          block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
+          block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
+          block-uuid' (if (and (not sibling) before block-uuid)
+                        (let [block (db/entity [:block/uuid block-uuid])
+                              first-child (db-model/get-by-parent-&-left (db/get-db)
+                                                                         (:db/id block)
+                                                                         (:db/id block))]
+                          (if first-child
+                            (:block/uuid first-child)
+                            block-uuid))
+                        block-uuid)
+          insert-at-first-child? (not= block-uuid' block-uuid)
+          [sibling? before?] (if insert-at-first-child?
+                               [true true]
+                               [sibling before])
+          before? (if (and (false? sibling?) before? (not insert-at-first-child?))
+                    false
+                    before?)
           new-block (editor-handler/api-insert-new-block!
                       content
-                      {:block-uuid block-uuid
-                       :sibling?   sibling
-                       :before?    before
+                      {:block-uuid block-uuid'
+                       :sibling?   sibling?
+                       :before?    before?
                        :page       page-name
                        :properties properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))
@@ -479,7 +494,7 @@
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren)
+        {:block/uuid (uuid block-uuid) :repo repo} includeChildren)
       nil)))
 
 (def ^:export update_block
@@ -489,7 +504,7 @@
           editing? (and edit-input (string/ends-with? edit-input block-uuid))]
       (if editing?
         (state/set-edit-content! edit-input content)
-        (editor-handler/save-block! repo (medley/uuid block-uuid) content))
+        (editor-handler/save-block! repo (uuid block-uuid) content))
       nil)))
 
 (def ^:export move_block
@@ -504,8 +519,8 @@
 
                     :else
                     nil)
-          src-block (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
-          target-block (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
+          src-block (db-model/query-block-by-uuid (uuid src-block-uuid))
+          target-block (db-model/query-block-by-uuid (uuid target-block-uuid))]
       (editor-dnd-handler/move-blocks nil [src-block] target-block move-to) nil)))
 
 (def ^:export get_block
@@ -564,11 +579,11 @@
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
-    (editor-handler/set-block-property! (medley/uuid block-uuid) key value)))
+    (editor-handler/set-block-property! (uuid block-uuid) key value)))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (editor-handler/remove-block-property! (medley/uuid block-uuid) key)))
+    (editor-handler/remove-block-property! (uuid block-uuid) key)))
 
 (def ^:export get_block_property
   (fn [block-uuid key]

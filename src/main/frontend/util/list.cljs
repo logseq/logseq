@@ -1,8 +1,7 @@
 (ns frontend.util.list
   (:require [frontend.util.thingatpt :as thingatpt]
             [frontend.util.cursor :as cursor]
-            [clojure.string :as string]
-            [frontend.util :as util]))
+            [clojure.string :as string]))
 
 (defn get-prev-item [& [input]]
   (when-not (cursor/textarea-cursor-first-row? input)
@@ -56,7 +55,7 @@
              (map (fn [line] (if (newline? line) "" line)))
              (string/join "\n"))
         (let [[_ num-str] (re-find #"^(\d+){1}\." line)
-              num (if num-str (util/safe-parse-int num-str) nil)
+              num (if num-str (parse-long num-str) nil)
               double-newlines?' (or double-newlines?
                                      (and (newline? line) (seq others) (newline? (first others))))
               [idx' result'] (if (and (not double-newlines?') num)

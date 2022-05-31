@@ -2,8 +2,9 @@
  :deps
  {org.babashka/spec.alpha
   {:git/url "https://github.com/babashka/spec.alpha"
-   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
-  medley/medley {:mvn/version "1.3.0"}}
+   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}}
+ :pods
+ {clj-kondo/clj-kondo {:version "2022.02.09"}}
  :tasks
  {dev:watch
   logseq.tasks.dev/watch
@@ -21,6 +22,12 @@
 
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
+
+  dev:lint
+  logseq.tasks.dev/lint
+
+  test:load-nbb-compatible-namespaces
+  logseq.tasks.nbb/load-compatible-namespaces
 
   lang:list
   logseq.tasks.lang/list-langs

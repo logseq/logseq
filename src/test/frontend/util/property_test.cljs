@@ -146,29 +146,6 @@ SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
     (property/insert-properties :markdown "" {:foo "\"bar, baz\""})
     "foo:: \"bar, baz\""))
 
-(deftest test->new-properties
-  (are [x y] (= (property/->new-properties x) y)
-    ":PROPERTIES:\n:foo: bar\n:END:"
-    "foo:: bar"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:END:"
-    "hello\nfoo:: bar"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
-    "hello\nfoo:: bar\nnice:: bingo"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
-    "hello\nfoo:: bar\nnice:: bingo"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\nnice"
-    "hello\nfoo:: bar\nnice:: bingo\nnice"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice:\n:END:\nnice"
-    "hello\nfoo:: bar\nnice:: \nnice"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice\n:END:\nnice"
-    "hello\nfoo:: bar\n:nice\nnice"))
-
 (deftest test-build-properties-str
   (are [x y] (= (property/build-properties-str :mardown x) y)
     {:title "a"}

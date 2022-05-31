@@ -81,13 +81,12 @@
 
 (defn login-callback [code]
   (go
-    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)))]
+    (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
+                             {:with-credentials? false}))]
       (if (= 200 (:status resp))
         (-> resp
-              (:body)
-              (js/JSON.parse)
-              (js->clj :keywordize-keys true)
-              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+            :body
+            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
         (debug/pprint "login-callback" resp)))))
 
 (defn logout []
@@ -99,7 +98,8 @@
   []
   (when-let [refresh-token (state/get-auth-refresh-token)]
     (go
-      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)))]
+      (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
+                               {:with-credentials? false}))]
         (if (= 400 (:status resp))
           ;; invalid refresh_token
           (do
@@ -109,9 +109,7 @@
             (->
              resp
              (as-> $ (and (http/unexceptional-status? (:status $)) $))
-             (:body)
-             (js/JSON.parse)
-             (js->clj :keywordize-keys true)
+             :body
              (as-> $ (set-tokens! (:id_token $) (:access_token $))))
             true))))))
 

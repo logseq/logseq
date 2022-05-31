@@ -11,7 +11,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.db :as db]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.encrypt :as encrypt]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -31,7 +32,7 @@
       (and (util/electron?) (not bfs-local?))
       node-record
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       mobile-record
 
       (local-db? dir)
@@ -74,17 +75,20 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (->
-     (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-       (when (= bfs-record (get-fs dir))
-         (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-     (p/catch (fn [error]
-                (log/error :file/write-failed {:dir dir
-                                               :path path
-                                               :error error})
-                ;; Disable this temporarily
-                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                )))))
+    (let [fs-record (get-fs dir)]
+      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
+              content (if-not md-or-org? content (encrypt/encrypt content))]
+        (->
+         (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+           (when (= bfs-record fs-record)
+             (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+         (p/catch (fn [error]
+                    (log/error :file/write-failed {:dir dir
+                                                   :path path
+                                                   :error error})
+                    ;; Disable this temporarily
+                    ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                    )))))))
 
 (defn read-file
   ([dir path]
@@ -105,7 +109,7 @@
 
     :else
     (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/is-native-platform?))
+          (map #(if (or (util/electron?) (mobile-util/native-platform?))
                   %
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])]
@@ -121,7 +125,7 @@
     (util/electron?)
     node-record
 
-    (mobile-util/is-native-platform?)
+    (mobile-util/native-platform?)
     mobile-record
 
     :else
@@ -132,7 +136,7 @@
   (let [record (get-record)]
     (p/let [result (protocol/open-dir record ok-handler)]
       (if (or (util/electron?)
-              (mobile-util/is-native-platform?))
+              (mobile-util/native-platform?))
         (let [[dir & paths] (bean/->clj result)]
           [(:path dir) paths])
         result))))
@@ -141,7 +145,7 @@
   [path-or-handle ok-handler]
   (let [record (get-record)
         electron? (util/electron?)
-        mobile? (mobile-util/is-native-platform?)]
+        mobile? (mobile-util/native-platform?)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
       (if (or electron? mobile?)
         (let [result (bean/->clj result)]

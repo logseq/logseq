@@ -2,7 +2,13 @@
  {:unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
-                                object]}
+                                object
+                                ;; TODO: Remove parse-* and update-* when https://github.com/clj-kondo/clj-kondo/issues/1694 is done
+                                parse-long
+                                parse-double
+                                parse-uuid
+                                update-keys
+                                update-vals]}
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
@@ -17,7 +23,20 @@
              medley.core medley
              frontend.db.query-dsl query-dsl
              frontend.db.react react
-             frontend.db.query-react query-react}}}
+             frontend.db.query-react query-react
+             frontend.util util
+             frontend.util.property property
+             frontend.config config
+             frontend.format.mldoc mldoc
+             frontend.format.block block
+             frontend.handler.extract extract
+             logseq.graph-parser.text text
+             logseq.graph-parser.block gp-block
+             logseq.graph-parser.mldoc gp-mldoc
+             logseq.graph-parser.util gp-util
+             logseq.graph-parser.property gp-property
+             logseq.graph-parser.config gp-config
+             logseq.graph-parser.date-time-util date-time-util}}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                          rum.core/defcs hooks.rum/defcs}}

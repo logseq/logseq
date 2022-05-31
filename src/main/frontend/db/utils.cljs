@@ -4,10 +4,10 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [datascript.transit :as dt]
-            [frontend.util :as util]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; transit serialization
 
@@ -45,7 +45,7 @@
 
 (defn date->int
   [date]
-  (util/parse-int
+  (parse-long
    (string/replace (date/ymd date) "/" "")))
 
 (defn entity
@@ -88,7 +88,7 @@
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
    (when-not config/publishing?
-     (let [tx-data (->> (util/remove-nils tx-data)
+     (let [tx-data (->> (gp-util/remove-nils tx-data)
                         (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (conn/get-db repo-url false)]
