@@ -119,8 +119,8 @@ export type IGitResult = { stdout: string; stderr: string; exitCode: number }
 export type IRequestOptions<R = any> = {
   url: string
   headers: Record<string, string>
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  data: any
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  data: Object | ArrayBuffer
   timeout: number
   dataType: 'json' | 'text' | 'base64' | 'arraybuffer'
   success: (result: R) => void
