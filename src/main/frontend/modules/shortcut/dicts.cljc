@@ -965,6 +965,7 @@
              :command.editor/indent                  "Bloğu girintile"
              :command.editor/outdent                 "Blok girintisini azalt"
              :command.editor/copy                    "Kopyala (seçimi veya blok referansını kopyalar)"
+             :command.editor/copy-text               "Seçimleri metin olarak kopyala"
              :command.editor/cut                     "Kes"
              :command.editor/undo                    "Geri al"
              :command.editor/redo                    "Tinele"
