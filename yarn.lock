@@ -561,6 +561,7 @@
 
 "@capacitor/haptics@^1.1.4":
   version "1.1.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/haptics/-/haptics-1.1.4.tgz#80d5bc4776740a227a8cb83c85fac4db1316db8e"
   integrity sha512-+pJIb5X7xAcbrWj6rJaV+cwBlv8aFwB1/Ob6EV4atydThuuVSSsAL4hI4ZYlPNOxM6H5s+ZDLj7Pa2os4eFmtg==
 
 "@capacitor/ios@3.2.2":

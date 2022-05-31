@@ -125,7 +125,6 @@
            tx (if (contains? gp-config/mldoc-support-formats format)
                 (let [[pages blocks]
                       (extract/extract-blocks-pages
-                       repo-url
                        file
                        content
                        {:user-config (state/get-config)
