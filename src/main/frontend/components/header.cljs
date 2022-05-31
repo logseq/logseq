@@ -144,7 +144,11 @@
                                (or (empty? repos)
                                    (nil? (state/sub :git/current-repo)))
                                (not (mobile-util/native-platform?))
-                               (not config/publishing?))]
+                               (not config/publishing?))
+        left-menu (left-menu-button {:on-click (fn []
+                                       (open-fn)
+                                       (state/set-left-sidebar-open!
+                                        (not (:ui/left-sidebar-open? @state/state))))})]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -156,19 +160,23 @@
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
       :style           {:fontSize  50}}
      [:div.l.flex
-      (left-menu-button {:on-click (fn []
-                                     (open-fn)
-                                     (state/set-left-sidebar-open!
-                                      (not (:ui/left-sidebar-open? @state/state))))})
-
-      (when current-repo ;; this is for the Search button
-        (ui/with-shortcut :go/search "right"
-          [:a.button#search-button
-           {:on-click #(do (when (or (mobile-util/native-android?)
-                                     (mobile-util/native-iphone?))
-                             (state/set-left-sidebar-open! false))
-                           (state/pub-event! [:go/search]))}
-           (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
+      (when-not (mobile-util/native-platform?)
+        [left-menu
+         (when current-repo ;; this is for the Search button
+           (ui/with-shortcut :go/search "right"
+             [:a.button#search-button
+              {:on-click #(do (when (or (mobile-util/native-android?)
+                                        (mobile-util/native-iphone?))
+                                (state/set-left-sidebar-open! false))
+                              (state/pub-event! [:go/search]))}
+              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
+      (when (mobile-util/native-platform?)
+        (if (state/home?)
+          left-menu
+          (ui/with-shortcut :go/backward "bottom"
+            [:a.it.navigation.nav-left.button
+             {:title "Go back" :on-click #(js/window.history.back)}
+             (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
       (when-not file-sync-handler/hiding-login&file-sync
@@ -182,8 +190,7 @@
       (when (not= (state/get-current-route) :home)
         (home-button))
 
-      (when (or (util/electron?)
-                (mobile-util/native-ios?))
+      (when (util/electron?)
         (back-and-forward))
 
       (when-not (mobile-util/native-platform?)

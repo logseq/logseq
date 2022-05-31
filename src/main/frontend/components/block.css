@@ -185,6 +185,44 @@
   }
 }
 
+.block-left-menu {
+    background-color: var(--ls-secondary-background-color);
+    background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
+    
+    .commands-button {
+        overflow: hidden;
+        max-width: 50px;
+        text-align: center;
+        margin: auto 0;
+
+        .indent {
+            opacity: 30%;
+        }
+    }
+}
+
+.block-right-menu {
+    background-color: var(--ls-secondary-background-color);
+    /* background: linear-gradient(-90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%); */
+
+    .commands-button {
+        overflow: hidden;
+        max-width: 80px;
+        text-align: center;
+        margin: auto 0;
+
+        .outdent {
+            margin: 0 12px;
+            opacity: 30%;
+        }
+
+        .more {
+            margin: 0 12px;
+            opacity: 30%;
+        }
+    }
+}
+
 .block-ref {
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
@@ -586,7 +624,8 @@ a.cloze-revealed {
 
 html.is-native-ios {
     audio {
-        width: 300px;
+        width: 100%;
+        max-width: 350px;
     }
 }
 

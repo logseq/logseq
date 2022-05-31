@@ -204,6 +204,9 @@
    :editor/copy                    {:binding "mod+c"
                                     :fn      editor-handler/shortcut-copy}
 
+   :editor/copy-text               {:binding "mod+shift+c"
+                                    :fn      editor-handler/shortcut-copy-text}
+
    :editor/cut                     {:binding "mod+x"
                                     :fn      editor-handler/shortcut-cut}
 
@@ -334,7 +337,7 @@
    :ui/toggle-theme                 {:binding "t t"
                                      :fn      state/toggle-theme!}
 
-   :ui/toggle-contents              {:binding "mod+shift+c"
+   :ui/toggle-contents              {:binding "alt+shift+c"
                                      :fn      ui-handler/toggle-contents!}
 
    :ui/open-new-window              {:binding "mod+n"
@@ -470,6 +473,7 @@
                           :editor/indent
                           :editor/outdent
                           :editor/copy
+                          :editor/copy-text
                           :editor/cut
                           :editor/undo
                           :editor/redo
@@ -541,6 +545,7 @@
     :editor/undo
     :editor/redo
     :editor/copy
+    :editor/copy-text
     :editor/cut]
 
    :shortcut.category/formatting

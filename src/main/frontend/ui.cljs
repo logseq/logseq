@@ -905,7 +905,10 @@
     :style {:min-height 24}}
    (if visible?
      (when (fn? content-fn)
-       [:div.fade-in.faster-fade-in (content-fn)])
+       [:div.fade-enter
+        {:ref #(when-let [^js cls (and % (.-classList %))]
+                 (.add cls "fade-enter-active"))}
+        (content-fn)])
      [:div.shadow.rounded-md.p-4.w-full.mx-auto.mb-5.fade-in {:style {:height 88}}
       [:div.animate-pulse.flex.space-x-4
        [:div.flex-1.space-y-3.py-1

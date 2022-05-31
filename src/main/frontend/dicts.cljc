@@ -147,8 +147,10 @@
         :settings-page/git-commit-delay "Git auto commit seconds"
         :settings-page/edit-config-edn "Edit config.edn"
         :settings-page/edit-custom-css "Edit custom.css"
+        :settings-page/edit-export-css "Edit export.css"
         :settings-page/custom-configuration "Custom configuration"
         :settings-page/custom-theme "Custom theme"
+        :settings-page/export-theme "Export theme"
         :settings-page/show-brackets "Show brackets"
         :settings-page/spell-checker "Spell checker"
         :settings-page/auto-updater "Auto updater"
@@ -2171,7 +2173,13 @@
            :settings-page/network-proxy "Proxy de Rede"
 
            :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
-           :file-sync/graph-deleted "O gráfico remoto atual foi excluído"}
+           :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
+           
+           :page/copy-page-url "Copiar URL da página"
+           :page/file-sync-versions "Versões da página"
+           :plugin/not-installed "Não instalado"
+           :tutorial/dummy-notes "dummy-notes-en.md"
+           :tutorial/text "tutorial-en.md"}
 
    :pt-PT {:on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
@@ -3390,7 +3398,8 @@
         :select.graph/add-graph "Sì, aggiungi un nuovo grafo"
 
         :file-sync/other-user-graph "Il grafo locale attuale è associato al grafo remoto di un altro utente. Non è quindi possibile avviare la sincronizzazione."
-        :file-sync/graph-deleted "Il grafo attuale è stato eliminato"}
+        :file-sync/graph-deleted "Il grafo attuale è stato eliminato"
+        :settings-page/enable-encryption "Crittografia"}
 
    :tr {:tutorial/text #?(:cljs (rc/inline "tutorial-tr.md")
                                 :default "tutorial-tr.md")

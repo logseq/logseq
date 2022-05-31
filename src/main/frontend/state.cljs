@@ -145,6 +145,8 @@
      :electron/user-cfgs                    nil
 
      ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
      ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
      ;;; add a random in (<= 1000000) to observer its update
@@ -174,7 +176,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -862,7 +864,10 @@
              (util/set-change-value input content))
 
            (when move-cursor?
-             (cursor/move-cursor-to input pos))))))))
+             (cursor/move-cursor-to input pos))
+
+           (when (or (util/mobile?) (mobile-util/native-platform?))
+             (set-state! :mobile/show-action-bar? false))))))))
 
 (defn clear-edit!
   []

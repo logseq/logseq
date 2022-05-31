@@ -1,5 +1,5 @@
 .cp__header {
-  @apply shadow z-10;
+  @apply z-10;  
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
@@ -189,10 +189,6 @@ a.button {
   &:hover, &.active {
     opacity: 1;
     background: none;
-
-    @screen md {
-        background: var(--ls-tertiary-background-color);
-    }
   }
 
   &:active {
@@ -239,8 +235,14 @@ html.is-native-ipad {
          }
     }
 
-    .cp__header > .r {
-        display: flex;
+     .cp__header {
+         > .r {
+             display: flex;
+         }
+
+         a.button {
+             opacity: 1;
+         }
     }
 }
 
@@ -316,10 +318,6 @@ html.is-native-iphone {
     @media (orientation: landscape) {
         --ls-headbar-inner-top-padding: 8px;
         --ls-headbar-height: 2.5rem;
-
-        .cp__header {
-            @apply shadow z-10;
-        }
     }
 }
 
@@ -332,10 +330,6 @@ html.is-native-iphone-without-notch {
 
         --ls-headbar-inner-top-padding: 0px;
         --ls-headbar-height: 2.5rem;
-
-        .cp__header {
-            @apply shadow z-10;
-        }
     }
 }
 
@@ -345,9 +339,5 @@ html.is-zoomed-native-ios {
      @media (orientation: landscape) {
         --ls-headbar-inner-top-padding: 8px;
         --ls-headbar-height: 2.5rem;
-
-        .cp__header {
-            @apply shadow z-10;
-        }
     }
 }
