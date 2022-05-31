@@ -24,8 +24,7 @@
             [goog.dom :as gdom]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]
-            [frontend.mobile.footer :as footer]))
+            [rum.core :as rum]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -523,12 +522,6 @@
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-
-     (when (= (state/sub :editor/record-status) "RECORDING")
-       [:> react-draggable
-        [:div#audio-record-toolbar
-         {:style {:bottom (+ @util/keyboard-height 45)}}
-         (footer/audio-record-cp)]])
 
      (ui/ls-textarea
       {:id                id

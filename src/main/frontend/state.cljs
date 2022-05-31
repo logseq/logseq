@@ -148,6 +148,7 @@
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
+     :mobile/show-recording-bar?            false
      ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
      ;;; add a random in (<= 1000000) to observer its update
      :mobile/toolbar-update-observer        0
@@ -572,12 +573,12 @@
     (when-let [input-id (get-edit-input-id)]
       (when-let [input (gdom/getElement input-id)]
         (let [value (gobj/get input "value")
-              new-value (str value append-text)
-              new-value (if (or (= (last value) " ")
+              new-value (if (or (string/blank? value)
+                                (= (last value) " ")
                                 (= (last value) "\n"))
-                          new-value
-                          (str "\n" new-value))]
-          (js/document.execCommand "insertText" false append-text)
+                          (str value append-text)
+                          (str value "\n" append-text))]
+          (util/set-change-value input new-value)
           (update-state! :editor/content (fn [m]
                                            (assoc m input-id new-value))))))))
 

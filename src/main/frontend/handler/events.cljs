@@ -294,6 +294,8 @@
     (state/set-state! :mobile/show-tabbar? false)
     (state/set-state! :mobile/show-toolbar? true)
     (state/set-state! :mobile/show-action-bar? false)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? true))
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
@@ -303,9 +305,6 @@
         (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (when (= (state/sub :editor/record-status) "RECORDING")
-        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
-          (set! (.. record-node -style -bottom) (str (+ 45 keyboard-height) "px"))))
       (js/setTimeout (fn []
                        (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
@@ -315,6 +314,8 @@
   (let [main-node (util/app-scroll-container-node)]
     (state/set-state! :mobile/show-toolbar? false)
     (state/set-state! :mobile/show-tabbar? true)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
@@ -322,10 +323,7 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
-      (when (= (state/sub :editor/record-status) "RECORDING")
-        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
-          (set! (.. record-node -style -bottom) "45px"))))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
