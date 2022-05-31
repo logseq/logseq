@@ -409,7 +409,7 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
-  (set-env [this prod? passphrase] "set environment")
+  (set-env [this prod? secret-key public-key] "set environment and passphrase")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -460,7 +460,10 @@
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
   IRSAPI
-  (set-env [_ prod? passphrase] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") passphrase)))))
+  (set-env [_ prod? secret-key public-key]
+    (when (not-empty secret-key)
+      (print "[sync] setting sync age-encryption passphrase..."))
+    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") secret-key public-key)))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -526,8 +529,10 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (set-env [_ prod? _passphrase]      ;; TODO passphrase
-    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
+  (set-env [_ prod? secret-key public-key]
+    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
+                                                           :secretKey secret-key
+                                                           :publicKey public-key}))))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
     (go
@@ -1266,7 +1271,7 @@
                             (map #(relative-path %))
                             (filter #(not (contains-path? ignore-files %))))
               paths (sequence es->paths-xf es)]
-          (println "sync-local->remote" paths)
+          (println "sync-local->remote" type paths)
           (let [r (case type
                     ("add" "change")
                     (update-remote-files rsapi graph-uuid base-path paths @*txid)
@@ -1413,7 +1418,11 @@
     (need-password [this]
       (go
         (<! (ensure-pwd-exists! (state/get-current-repo) graph-uuid))
-        (<! (set-env rsapi config/FILE-SYNC-PROD? (get @pwd-map graph-uuid)))
+        (<! (set-env rsapi config/FILE-SYNC-PROD?
+                     "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
+                     "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg"
+                     ;; (get @pwd-map graph-uuid)
+                     ))
         (.schedule this ::idle nil)))
 
     (idle [this]
@@ -1595,7 +1604,9 @@
              (clear-graphs-txid! repo)
              (do
                ;; set-env
-               (<! (set-env rsapi config/FILE-SYNC-PROD? ""))
+               (<! (set-env rsapi config/FILE-SYNC-PROD?
+                            "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
+                            "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg"))
                (state/set-file-sync-state repo @*sync-state)
                (state/set-file-sync-manager sm)
                ;; wait seconds to receive all file change events,
