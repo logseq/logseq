@@ -278,7 +278,7 @@
                  :updating        installing-or-updating?
                  :has-new-version new-version}])}
 
-     [:div.l.link-block
+     [:div.l.link-block.cursor-pointer
       {:on-click #(plugin-handler/open-readme!
                     url item (if repo remote-readme-display local-markdown-display))}
       (if (and icon (not (string/blank? icon)))
