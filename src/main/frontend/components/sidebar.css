@@ -63,7 +63,7 @@
   width: var(--ls-left-sidebar-sm-width);
   overflow-x: hidden;
   overflow-y: auto;
-  background-color: var(--ls-secondary-background-color);
+  background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translateX(-100%);
   z-index: 3;
@@ -237,8 +237,9 @@
   }
 
   @screen sm {
-    width: var(--ls-left-sidebar-width);
     padding-top: 0;
+    width: var(--ls-left-sidebar-width);
+    background-color: var(--ls-secondary-background-color);
 
     > .wrap {
       margin-top: 50px;
