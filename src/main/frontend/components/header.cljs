@@ -148,7 +148,9 @@
         left-menu (left-menu-button {:on-click (fn []
                                        (open-fn)
                                        (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})]
+                                        (not (:ui/left-sidebar-open? @state/state))))})
+        graph-file-sync-init-downloading? (:downloading?
+                                           (state/sub [:file-sync/download-init-progress (state/get-current-repo)]))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -179,7 +181,8 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
-      (when-not file-sync-handler/hiding-login&file-sync
+      (when-not (or file-sync-handler/hiding-login&file-sync
+                    graph-file-sync-init-downloading?)
         (fs-sync/indicator))
       (when-not file-sync-handler/hiding-login&file-sync
         (login))

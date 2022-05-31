@@ -381,14 +381,17 @@
   IRelativePath
   (-relative-path [_] path)
 
+
+  ;; ignore size, cause size value from remote is count of encrypted-data
   IEquiv
   (-equiv [o ^FileMetadata other]
-    (and (= size (.-size other))
+    (and ;; (= size (.-size other))
          (= (.get-normalized-path o) (.get-normalized-path other))
          (= etag (.-etag other))))
 
   IHash
-  (-hash [_] (hash {:size size :etag etag :path path}))
+  (-hash [_] (hash {;; :size size
+                    :etag etag :path path}))
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
@@ -409,7 +412,8 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
-  (set-env [this prod? passphrase] "set environment")
+  (key-gen [this] "generate public+private keys")
+  (set-env [this prod? private-key public-key] "set environment")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -431,7 +435,7 @@
   (get-graph-salt [this graph-uuid] "return httpcode 410 when salt expired")
   (create-graph-salt [this graph-uuid] "return httpcode 409 when salt already exists and not expired yet")
   (get-graph-encrypt-keys [this graph-uuid])
-  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
+  (upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
 
 (defprotocol IToken
   (get-token [this])
@@ -459,8 +463,12 @@
     (go
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
+
   IRSAPI
-  (set-env [_ prod? passphrase] (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") passphrase)))))
+  (key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
+                            :keywordize-keys true)))
+  (set-env [_ prod? private-key public-key]
+    (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -526,7 +534,9 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (set-env [_ prod? _passphrase]      ;; TODO passphrase
+  (key-gen [_] ;; TODO
+    )
+  (set-env [_ prod? _private-key _public-key] ;; TODO
     (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
@@ -660,7 +670,7 @@
               (apply conj! file-meta-list
                      (map
                       #(->FileMetadata (:Size %)
-                                       (:ETag %)
+                                       (:checksum %)
                                        (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
                                        (:LastModified %)
                                        true nil)
@@ -726,8 +736,8 @@
   (get-graph-encrypt-keys [this graph-uuid]
     (.request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))
 
-  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
-    (.request this "create_graph_encrypt_keys" {:GraphUUID graph-uuid
+  (upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
+    (.request this "upload_graph_encrypt_keys" {:GraphUUID graph-uuid
                                                 :public-key public-key
                                                 :encrypted-private-key encrypted-private-key})))
 
@@ -916,14 +926,14 @@
 
 (add-watch pwd-map :pwd-map-changed #(offer! pwd-map-changed-chan true))
 
-(defn- encrypt-pwd
-  [pwd key*]
-  (p->c (encrypt/encrypt-with-passphrase key* pwd)))
+(defn- encrypt-content
+  [content key*]
+  (p->c (encrypt/encrypt-with-passphrase key* content)))
 
-(defn- decrypt-pwd
-  [encrypted-pwd key*]
+(defn- decrypt-content
+  [encrypted-content key*]
   (go
-    (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-pwd)))]
+    (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-content)))]
       (when-not (instance? ExceptionInfo r) r))))
 
 (defn- persist-pwd!
@@ -933,6 +943,11 @@
           repo-dir (config/get-repo-dir repo)]
       (<! (p->c (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))))
       (<! (p->c (fs/write-file! repo repo-dir path pwd {:skip-compare? true}))))))
+
+(defn- remove-pwd-txt!
+  [repo]
+  (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))]
+    (p->c (fs/unlink! repo path nil))))
 
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
@@ -946,7 +961,7 @@
           (if gone?
             ((juxt :value :expired-at) (<! (create-graph-salt remoteapi graph-uuid)))
             [value expired-at])
-          encrypted-pwd (<! (encrypt-pwd pwd salt-value))]
+          encrypted-pwd (<! (encrypt-content pwd salt-value))]
       (<! (persist-pwd! encrypted-pwd repo)))))
 
 (defn restore-pwd!
@@ -961,7 +976,7 @@
                (<! (get-graph-salt remoteapi graph-uuid)))]
           (if (or gone? (empty? salt-value))
             {:restore-pwd-failed "expired salt"}
-            (let [pwd (<! (decrypt-pwd encrypted-pwd salt-value))]
+            (let [pwd (<! (decrypt-content encrypted-pwd salt-value))]
               (if (nil? pwd)
                 {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
                 (swap! pwd-map assoc graph-uuid pwd)))))))))
@@ -981,6 +996,13 @@
           (let [pwd (get @pwd-map graph-uuid)]
             (when (nil? pwd) (recur)))))
       (get @pwd-map graph-uuid))))
+
+(defn clear-pwd!
+  "- clear pwd in `pwd-map`
+  - remove logseq/encrypted-password.txt"
+  [repo graph-uuid]
+  (swap! pwd-map dissoc graph-uuid)
+  (remove-pwd-txt! repo))
 
 ;;; ### sync state
 
@@ -1410,11 +1432,40 @@
                 (recur)))))
       (.schedule this ::need-password nil))
 
-    (need-password [this]
+    (need-password
+      [this]
       (go
-        (<! (ensure-pwd-exists! (state/get-current-repo) graph-uuid))
-        (<! (set-env rsapi config/FILE-SYNC-PROD? (get @pwd-map graph-uuid)))
-        (.schedule this ::idle nil)))
+        (let [repo (state/get-current-repo)]
+          (<! (ensure-pwd-exists! repo graph-uuid))
+          (let [pwd (get @pwd-map graph-uuid)
+                {:keys [public-key encrypted-private-key] :as r}
+                (<! (get-graph-encrypt-keys remoteapi graph-uuid))]
+            (if (and (nil? public-key)
+                     (nil? encrypted-private-key)
+                     (-> r ex-data :err :status (= 404)))
+              ;; when public+private keys not stored at server
+              ;; generate a new key pair and upload them
+              (let [{public-key :publicKey private-key :secretKey}
+                    (<! (key-gen rsapi))
+                    encrypted-private-key (<! (encrypt-content private-key pwd))
+                    upload-r (<! (upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
+                (if (instance? ExceptionInfo upload-r)
+                  (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
+                      (.schedule this ::stop nil))
+                  (do (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                      (.schedule this ::idle nil))))
+
+              (let [private-key (<! (decrypt-content encrypted-private-key pwd))]
+                (if (and private-key
+                         (string/starts-with?
+                          private-key "AGE-SECRET-KEY"))
+                  (do (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                      (.schedule this ::idle nil))
+
+                  ;; bad pwd
+                  (do (notification/show! "wrong password" :error false)
+                      (<! (clear-pwd! repo graph-uuid))
+                      (.schedule this ::need-password nil)))))))))
 
     (idle [this]
       (go
@@ -1595,7 +1646,7 @@
              (clear-graphs-txid! repo)
              (do
                ;; set-env
-               (<! (set-env rsapi config/FILE-SYNC-PROD? ""))
+               (<! (set-env rsapi config/FILE-SYNC-PROD? nil nil))
                (state/set-file-sync-state repo @*sync-state)
                (state/set-file-sync-manager sm)
                ;; wait seconds to receive all file change events,
