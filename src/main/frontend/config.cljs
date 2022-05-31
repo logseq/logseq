@@ -277,6 +277,7 @@
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
+(def export-css-file "export.css")
 (def custom-js-file "custom.js")
 (def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
@@ -392,6 +393,15 @@
    (when repo
      (get-file-path repo
                     (str app-name "/" custom-css-file)))))
+
+(defn get-export-css-path
+  ([]
+   (get-export-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" export-css-file)))))
+
 
 (defn get-custom-js-path
   ([]
