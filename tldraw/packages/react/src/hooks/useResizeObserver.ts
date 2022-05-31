@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { TLViewport, TLBounds } from '@tldraw/core'
+import { TLViewport, TLBounds, debounce } from '@tldraw/core'
 
 const getNearestScrollableContainer = (element: HTMLElement): HTMLElement | Document => {
   let parent = element.parentElement
@@ -54,11 +54,12 @@ export function useResizeObserver<T extends HTMLElement>(
 
   React.useEffect(() => {
     const scrollingAnchor = ref.current ? getNearestScrollableContainer(ref.current) : document
-    scrollingAnchor.addEventListener('scroll', updateBounds)
-    scrollingAnchor.addEventListener('resize', updateBounds)
+    const debouncedupdateBounds = debounce(updateBounds, 100)
+    scrollingAnchor.addEventListener('scroll', debouncedupdateBounds)
+    scrollingAnchor.addEventListener('resize', debouncedupdateBounds)
     return () => {
-      scrollingAnchor.removeEventListener('scroll', updateBounds)
-      scrollingAnchor.removeEventListener('resize', updateBounds)
+      scrollingAnchor.removeEventListener('scroll', debouncedupdateBounds)
+      scrollingAnchor.removeEventListener('resize', debouncedupdateBounds)
     }
   }, [])
 

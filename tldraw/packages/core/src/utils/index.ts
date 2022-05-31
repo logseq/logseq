@@ -35,6 +35,15 @@ export function throttle<T extends (...args: any) => any>(
   }
 }
 
+export function debounce<T extends (...args: any[]) => void>(fn: T, ms = 0) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let timeoutId: number | any
+  return function (...args: Parameters<T>) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn.apply(args), ms)
+  }
+}
+
 /** Linear interpolate between two values. */
 export function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t

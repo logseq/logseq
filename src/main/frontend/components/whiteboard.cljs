@@ -38,5 +38,5 @@
     [:div.absolute.w-full.h-full
      ;; makes sure the whiteboard will not cover the borders
      {:key name
-      :style {:padding "0.5px"}}
+      :style {:padding "0.5px" :z-index 0}}
      (tldraw-app {:file tldr-name})]))
