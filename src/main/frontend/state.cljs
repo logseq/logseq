@@ -567,21 +567,6 @@
   []
   (sub [:editor/content (get-edit-input-id)]))
 
-(defn append-current-edit-content!
-  [append-text]
-  (when-not (string/blank? append-text)
-    (when-let [input-id (get-edit-input-id)]
-      (when-let [input (gdom/getElement input-id)]
-        (let [value (gobj/get input "value")
-              new-value (if (or (string/blank? value)
-                                (= (last value) " ")
-                                (= (last value) "\n"))
-                          (str value append-text)
-                          (str value "\n" append-text))]
-          (util/set-change-value input new-value)
-          (update-state! :editor/content (fn [m]
-                                           (assoc m input-id new-value))))))))
-
 (defn get-cursor-range
   []
   (:cursor-range @state))
