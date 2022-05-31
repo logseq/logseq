@@ -137,7 +137,13 @@
             (open-default-app! url open))
 
           context-menu-handler
-          (context-menu/setup-context-menu! win)]
+          (context-menu/setup-context-menu! win)
+
+          os-swipe-handler
+          (fn [^js _e direction]
+            (case direction
+              "right" (.goBack web-contents)
+              "left" (.goForward web-contents)))]
       
       (doto web-contents
         (.on "new-window" new-win-handler)
@@ -145,7 +151,8 @@
 
       (doto win
         (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
+        (.on "swipe" os-swipe-handler))
 
       ;; clear
       (fn []
@@ -154,6 +161,8 @@
           (.off "new-window" new-win-handler)
           (.off "will-navigate" will-navigate-handler))
 
-        (.off win "enter-full-screen")
-        (.off win "leave-full-screen")))
+        (doto win
+          (.off "enter-full-screen")
+          (.off "leave-full-screen")
+          (.off "swipe"))))
     #()))
