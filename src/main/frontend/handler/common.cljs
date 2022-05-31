@@ -16,9 +16,7 @@
 
 (defn copy-to-clipboard-without-id-property!
   [format raw-text html]
-  (util/copy-to-clipboard! (property/remove-id-property format raw-text))
-  (when html
-    (util/copy-to-clipboard! html true)))
+  (util/copy-to-clipboard! (property/remove-id-property format raw-text) html))
 
 (defn config-with-document-mode
   [config]
