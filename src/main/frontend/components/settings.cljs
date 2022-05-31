@@ -151,6 +151,14 @@
      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
      :-for         "customize_css"}))
 
+(defn edit-export-css []
+  (row-with-button-action
+   {:left-label   (t :settings-page/export-theme)
+    :button-label (t :settings-page/edit-export-css)
+    :href         (rfe/href :file {:path (config/get-export-css-path)})
+    :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+    :-for         "customize_css"}))
+
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -518,6 +526,7 @@
      (theme-modes-row t switch-theme system-theme? dark?)
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
+     (when current-repo (edit-export-css))
      (keyboard-shortcuts-row t)]))
 
 (rum/defcs settings-editor < rum/reactive
