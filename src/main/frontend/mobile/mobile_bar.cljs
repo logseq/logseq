@@ -102,7 +102,6 @@
              (command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
              (command editor-handler/cycle-priority! "a-b" true)
              (command editor-handler/toggle-list! "list" true)
-             (command editor-handler/toggle-list! "list" true)
              (command #(mobile-camera/embed-photo parent-id) "camera" true)
              (command record/start-recording "microphone" true)
              (command commands/insert-youtube-timestamp "brand-youtube" true)
