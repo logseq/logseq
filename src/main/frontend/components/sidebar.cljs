@@ -19,25 +19,27 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.srs :as srs]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.mobile.swipe :as swipe]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.common :as common-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
-            [frontend.mobile.util :as mobile-util]
             [frontend.mobile.mobile-bar :refer [mobile-bar]]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [rum.core :as rum]
-            [reitit.frontend.easy :as rfe]))
+            [react-draggable]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item
   [name {:keys [class]} child]
@@ -272,6 +274,22 @@
      (sidebar-nav route-match close-fn left-sidebar-open?)
      [:span.shade-mask {:on-click close-fn}]]))
 
+(rum/defc recording-bar
+  []
+  [:> react-draggable
+   {:onStart (fn [_event]
+               (when-let [pos (some-> (state/get-input) cursor/pos)]
+                 (state/set-editor-last-pos! pos)))
+    :onStop (fn [_event]
+              (when-let [block (get-in @state/state [:editor/block :block/uuid])]
+                (editor-handler/edit-block! block :max (:block/uuid block))
+                (when-let [input (state/get-input)]
+                  (when-let [saved-cursor (state/get-editor-last-pos)]
+                    (cursor/move-cursor-to input saved-cursor)))))}
+   [:div#audio-record-toolbar
+    {:style {:bottom (+ @util/keyboard-height 45)}}
+    (footer/audio-record-cp)]])
+
 (rum/defc main <
   {:did-mount (fn [state]
                 (when-let [element (gdom/getElement "main-content-container")]
@@ -284,7 +302,7 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
                   (common-handler/listen-to-scroll! element))
                 state)}
-  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar?]}]
+  [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -306,9 +324,12 @@
         :data-is-full-width         (or global-graph-pages?
                                         (contains? #{:all-files :all-pages :my-publishing} route-name))}
 
+       (when show-recording-bar?
+         (recording-bar))
+
        (mobile-bar)
        (footer/footer)
-
+       
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
@@ -516,7 +537,8 @@
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
-        show-action-bar? (state/sub :mobile/show-action-bar?)]
+        show-action-bar? (state/sub :mobile/show-action-bar?)
+        show-recording-bar? (state/sub :mobile/show-recording-bar?)]
     (theme/container
      {:t             t
       :theme         theme
@@ -559,7 +581,8 @@
                :light?              light?
                :db-restoring?       db-restoring?
                :main-content        main-content
-               :show-action-bar?    show-action-bar?})]
+               :show-action-bar?    show-action-bar?
+               :show-recording-bar? show-recording-bar?})]
 
        (right-sidebar/sidebar)
 
