@@ -82,19 +82,20 @@
 
 (defn- replace-db-id-with-block-uuid
   [tx-report block]
-  (walk/postwalk (fn [f]
-                   (if (and (map? f)
-                            (= 1 (count f))
-                            (:db/id f))
-                     (let [block-uuid (or (:block/uuid (d/entity (:db-before tx-report) (:db/id f)))
-                                          (:block/uuid (d/entity (:db-after tx-report) (:db/id f))))]
-                       (if block-uuid
-                         [:block/uuid block-uuid]
-                         (throw (ex-info "Can't resolve entity in both db-before and db-after"
-                                         {:block block
-                                          :f f}))))
-                     f))
-                 block))
+  (let [block (dissoc block :block/file)]
+    (walk/postwalk (fn [f]
+                     (if (and (map? f)
+                              (= 1 (count f))
+                              (:db/id f))
+                       (let [block-uuid (or (:block/uuid (d/entity (:db-before tx-report) (:db/id f)))
+                                            (:block/uuid (d/entity (:db-after tx-report) (:db/id f))))]
+                         (if block-uuid
+                           [:block/uuid block-uuid]
+                           (throw (ex-info "Can't resolve entity in both db-before and db-after"
+                                           {:block block
+                                            :f f}))))
+                       f))
+                   block)))
 
 ;; TODO: merge pages, page names are same but with different uuids
 (defn- transact-blocks!
