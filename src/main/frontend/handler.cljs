@@ -32,7 +32,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
             [frontend.modules.outliner.datascript :as outliner-db]))
 
 (defn set-global-error-notification!
