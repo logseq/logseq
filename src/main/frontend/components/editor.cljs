@@ -23,6 +23,7 @@
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p]
+            [react-draggable]
             [rum.core :as rum]
             [frontend.mobile.footer :as footer]))
 
@@ -524,9 +525,10 @@
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
 
      (when (= (state/sub :editor/record-status) "RECORDING")
-       [:div#audio-record-toolbar
-        {:style {:bottom (+ @util/keyboard-height 45)}}
-        (footer/audio-record-cp)])
+       [:> react-draggable
+        [:div#audio-record-toolbar
+         {:style {:bottom (+ @util/keyboard-height 45)}}
+         (footer/audio-record-cp)]])
 
      (ui/ls-textarea
       {:id                id
