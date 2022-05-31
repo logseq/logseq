@@ -34,7 +34,7 @@
     [#(.appendChild js/document.body el)
      #(.removeChild js/document.body el)]))
 
-(defn- open-left-sidebar! []
+(defn open-left-sidebar! []
   (state/set-state! :ui/left-sidebar-open? true))
 
 (defn- wait-target

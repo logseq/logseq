@@ -227,15 +227,14 @@
 
        [:div.nav-header
         (if-let [page (:page default-home)]
-          (do
-            (sidebar-item
-              {:class            "home-nav"
-               :title            page
-               :on-click-handler route-handler/redirect-to-home!
-               :active           (and (not srs-open?)
-                                   (= route-name :page)
-                                   (= page (get-in route-match [:path-params :name])))
-               :icon             "home"}))
+          (sidebar-item
+            {:class            "home-nav"
+             :title            page
+             :on-click-handler route-handler/redirect-to-home!
+             :active           (and (not srs-open?)
+                                    (= route-name :page)
+                                    (= page (get-in route-match [:path-params :name])))
+             :icon             "home"})
           (sidebar-item
             {:class            "journals-nav"
              :active           (and (not srs-open?)
