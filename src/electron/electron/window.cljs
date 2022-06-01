@@ -94,27 +94,6 @@
   []
   (.getAllWindows BrowserWindow))
 
-(defn create-url-window! [url opts]
-  (let [win-opts (merge
-                   {:width                600
-                    :height               400
-                    :frame                true
-                    :trafficLightPosition {:x 16 :y 16}
-                    :autoHideMenuBar      (not utils/mac?)
-                    :webPreferences
-                    {:plugins                 true          ; pdf
-                     :nodeIntegration         false
-                     :nodeIntegrationInWorker false
-                     :webSecurity             true
-                     :contextIsolation        true
-                     :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
-                     ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                     ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                     :enableBlinkFeatures     'OverlayScrollbars'}}
-                   opts)
-        ^js win (BrowserWindow. (clj->js win-opts))]
-    (.loadURL win url)))
-
 (defn get-graph-all-windows
   [graph-path] ;; graph-path == dir
   (->> (group-by second (:window/graph @state/state))
