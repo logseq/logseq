@@ -74,7 +74,8 @@
         format (gp-util/get-format path)
         original-name (db/get-file-page path)
         random-id (str (d/squuid))]
-    [:div.file {:id (str "file-edit-wrapper-" random-id)}
+    [:div.file {:id (str "file-edit-wrapper-" random-id)
+                :key path}
      [:h1.title
       [:bdi (js/decodeURI path)]]
      (when original-name
