@@ -1,14 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Decoration, TLLineShape, TLLineShapeProps } from '@tldraw/core'
-import { HTMLContainer, SVGContainer, TLComponentProps } from '@tldraw/react'
+import { SVGContainer, TLComponentProps, useApp } from '@tldraw/react'
+import Vec from '@tldraw/vec'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { getArrowPath } from './arrow/arrowHelpers'
 import { Arrow } from './arrow/Arrow'
+import { getArrowPath } from './arrow/arrowHelpers'
 import { CustomStyleProps, withClampedStyles } from './style-props'
-import { TextLabel } from './text/TextLabel'
 import { getTextLabelSize } from './text/getTextSize'
-import Vec from '@tldraw/vec'
+import { LabelMask } from './text/LabelMask'
+import { TextLabel } from './text/TextLabel'
 
 interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   type: 'line'
@@ -40,6 +41,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
   }
 
   hideSelection = true
+  canEdit = true
 
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
@@ -50,7 +52,9 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       handles: { start, end },
       opacity,
       label,
+      id,
     } = this.props
+    const app = useApp()
     const labelSize = label || isEditing ? getTextLabelSize(label, font) : [0, 0]
     const midPoint = Vec.med(start.point, end.point)
     const dist = Vec.dist(start.point, end.point)
@@ -66,6 +70,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     const handleLabelChange = React.useCallback(
       (label: string) => {
         this.update?.({ label })
+        app.persist()
       },
       [label]
     )
@@ -82,8 +87,9 @@ export class LineShape extends TLLineShape<LineShapeProps> {
           onChange={handleLabelChange}
           onBlur={onEditingEnd}
         />
-        <SVGContainer opacity={isErasing ? 0.2 : opacity}>
-          <g pointerEvents="none">
+        <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
+          <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
+          <g pointerEvents="none" mask={label || isEditing ? `url(#${id}_clip)` : ``}>
             <Arrow
               style={{
                 stroke,
@@ -103,20 +109,49 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   ReactIndicator = observer(() => {
     const {
+      id,
       decorations,
+      label,
       strokeWidth,
       handles: { start, end },
     } = this.props
+    const bounds = this.getBounds()
+    const labelSize = label ? getTextLabelSize(label, font) : [0, 0]
+    const midPoint = Vec.med(start.point, end.point)
+    const dist = Vec.dist(start.point, end.point)
+    const scale = Math.max(
+      0.5,
+      Math.min(1, Math.max(dist / (labelSize[1] + 128), dist / (labelSize[0] + 128)))
+    )
+    const offset = React.useMemo(() => {
+      const offset = Vec.sub(midPoint, Vec.toFixed([bounds.width / 2, bounds.height / 2]))
+      return offset
+    }, [bounds, scale, midPoint])
     return (
-      <path
-        d={getArrowPath(
-          { strokeWidth },
-          start.point,
-          end.point,
-          decorations?.start,
-          decorations?.end
+      <>
+        <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
+        <path
+          mask={label ? `url(#${id}_clip)` : ``}
+          d={getArrowPath(
+            { strokeWidth },
+            start.point,
+            end.point,
+            decorations?.start,
+            decorations?.end
+          )}
+        />
+        {label && (
+          <rect
+            x={bounds.width / 2 - (labelSize[0] / 2) * scale + offset[0]}
+            y={bounds.height / 2 - (labelSize[1] / 2) * scale + offset[1]}
+            width={labelSize[0] * scale}
+            height={labelSize[1] * scale}
+            rx={4 * scale}
+            ry={4 * scale}
+            fill="transparent"
+          />
         )}
-      />
+      </>
     )
   })
 
