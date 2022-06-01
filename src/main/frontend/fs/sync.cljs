@@ -115,12 +115,14 @@
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
+(declare assert-local-txid<=remote-txid)
 (defn update-graphs-txid!
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
   (some-> (persist-var/persist-save graphs-txid)
-          p->c))
+          p->c)
+  (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
 
 (defn clear-graphs-txid! [repo]
   (persist-var/-reset-value! graphs-txid nil repo)
@@ -826,12 +828,19 @@
                    (string/index-of (str (ex-cause r)) "No such file or directory"))
             true
             r))))))
+(defn- assert-local-txid<=remote-txid
+  []
+  (when-let [local-txid (last @graphs-txid)]
+    (go (let [remote-txid (:TXId (<! (get-remote-graph remoteapi nil (second @graphs-txid))))]
+          (assert (<= local-txid remote-txid)
+                  [@graphs-txid local-txid remote-txid])))))
 
 (declare sync-state--add-current-local->remote-files
          sync-state--add-current-remote->local-files
          sync-state--remove-current-local->remote-files
          sync-state--remove-current-remote->local-files
          sync-state--stopped?)
+
 
 (defn apply-filetxns-partitions
   "won't call update-graph-txid! when *txid is nil"
@@ -880,14 +889,19 @@
         cause (ex-cause resp)]
     (or
      (and (= (:error data) :promise-error)
-          (string/index-of (str cause) "txid_to_validate")) ;FIXME: better rsapi err info
+          (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
+            (> (nth r 1) (nth r 2)))) ;; TODO: better rsapi err info
      (= 409 (get-in data [:err :status])))))
 
 (defmethod need-sync-remote? :chan [c]
   (go (need-sync-remote? (<! c))))
 (defmethod need-sync-remote? :default [_] false)
 
-
+(defn- need-reset-local-txid?
+  [r]
+  (when-let [cause (ex-cause r)]
+    (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
+      (< (nth r 1) (nth r 2)))))
 
 
 ;; type = "change" | "add" | "unlink"
@@ -1197,8 +1211,7 @@
               (if (instance? ExceptionInfo diff-r)
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
-                  (if (or (nil? min-txid)             ;; if min-txid is nil(not found any diff txn)
-                          (> (dec min-txid) @*txid))  ;; or min-txid-1 > @*txid, need to remote->local-full-sync
+                  (if (> (dec min-txid) @*txid) ;; min-txid-1 > @*txid, need to remote->local-full-sync
                     (do (println "min-txid" min-txid "request-txid" @*txid)
                         {:need-remote->local-full-sync true})
 
@@ -1369,7 +1382,15 @@
                     _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
                 (cond
                   (need-sync-remote? r*)
-                  {:need-sync-remote true}
+                  (do (println :need-sync-remote r*)
+                      {:need-sync-remote true})
+
+                  (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
+                                              ;; but some potential bugs cause local-txid > remote-txid
+                  (let [remote-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
+                    (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
+                    (reset! *txid remote-txid)
+                    {:succ true})
 
                   (number? r*)          ; succ
                   (do
@@ -1714,3 +1735,12 @@
                           (fn [_k _r _o n]
                             (when (nil? n)
                               (sync-stop))))))))))))
+
+
+
+;;; debug funcs
+(comment
+  (get-remote-all-files-meta remoteapi graph-uuid)
+  (get-local-all-files-meta rsapi graph-uuid
+                            (config/get-repo-dir (state/get-current-repo)))
+  )
