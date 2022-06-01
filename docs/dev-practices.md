@@ -135,3 +135,9 @@ Specs should go under `src/main/frontend/spec/` and be compatible with clojure
 and clojurescript. See `frontend.spec.storage` for an example. By following
 these conventions, specs should also be usable by babashka. This is helpful as it
 allows for third party tools to be written with logseq's data model.
+
+## Development Tools
+
+There are some babashka tasks under `nbb:` which are useful for inspecting
+database changes in realtime. See [these
+docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.

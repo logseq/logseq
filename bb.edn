@@ -4,7 +4,9 @@
   {:git/url "https://github.com/babashka/spec.alpha"
    :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
   logseq/bb-tasks
-  {:local/root "deps/bb-tasks"}
+  #_{:local/root "../bb-tasks"}
+  {:git/url "https://github.com/logseq/bb-tasks"
+   :git/sha "4b3e623fb475cacb992425aa9dac770d6dd63e38"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}}
  :pods
@@ -32,7 +34,10 @@
   logseq.tasks.dev/lint
 
   nbb:watch
-  logseq.bb-tasks.nbb.watch/watch-dir
+  logseq.bb-tasks.nbb.watch/watch
+
+  nbb:portal-watch
+  logseq.bb-tasks.nbb.watch/portal-watch
 
   test:load-namespaces-with-nbb
   logseq.tasks.nbb/load-compatible-namespaces

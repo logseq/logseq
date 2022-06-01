@@ -1,6 +1,0 @@
-{:paths ["src"]
- :pods
- {org.babashka/fswatcher {:version "0.0.3"}}
- :tasks
- {nbb:watch
-  logseq.bb-tasks.nbb.watch/watch-dir}}
