@@ -1563,14 +1563,18 @@
         :file-sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"
         :file-sync/graph-deleted "El gráfico remoto actual se ha eliminado"}
 
-   :nb-NO {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
-           :on-boarding/add-graph "Add a graph"
-           :on-boarding/open-local-dir "Open a local directory"
-           :on-boarding/new-graph-desc-1 "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."
-           :on-boarding/new-graph-desc-2 "After you have opened your directory, it will create three folders in that directory:"
-           :on-boarding/new-graph-desc-3 "/journals - store your journal pages"
-           :on-boarding/new-graph-desc-4 "/pages - store the other pages"
-           :on-boarding/new-graph-desc-5 "/logseq - store configuration, custom.css, and some metadata."
+   :nb-NO {:tutorial/text #?(:cljs (rc/inline "tutorial-no.md")
+                                :default "tutorial-no.md")
+           :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-no.md")
+                                       :default "dummy-notes-no.md")
+           :on-boarding/demo-graph "Dette er en demo graf, endringer vil ikke bli lagret før du åpner en lokal mappe."
+           :on-boarding/add-graph "Legg til en graf"
+           :on-boarding/open-local-dir "Åpne en lokal mappe"
+           :on-boarding/new-graph-desc-1 "Logseq støtter både Markdown og Org-mode. Du kan åpne en eksisterende mappe eller lage en ny på din enhet. Dine data vil bare bli lagret på denne enheten."
+           :on-boarding/new-graph-desc-2 "Etter at du har åpnet en mappe vil det blir opprettet tre undermapper i denne:"
+           :on-boarding/new-graph-desc-3 "/journals - lagrer dine dagboknotater"
+           :on-boarding/new-graph-desc-4 "/pages - lagrer andre sider"
+           :on-boarding/new-graph-desc-5 "/logseq - store konfigurasjon, custom.css, og noe metadata."
            :help/start "Kom i gang"
            :help/about "Om Logseq"
            :help/roadmap "Veikart"
@@ -1694,10 +1698,10 @@
            :content/open-in-sidebar "Åpne i sidefeltet"
            :content/copy-as-json "Kopier som JSON"
            :content/click-to-edit "Klikk for å redigere"
-           :settings-page/git-desc "is used for pages version control, you can click the vertical three dots menu to check the page's history."
-           :settings-page/git-confirm "You need to restart the app after updating the Git settings."
-           :settings-page/git-switcher-label "Enable Git auto commit"
-           :settings-page/git-commit-delay "Git auto commit seconds"
+           :settings-page/git-desc "brukes for versjonskontroll av sider. Du kan klikke på de ...-menyen for å sjekke sidens historikk."
+           :settings-page/git-confirm "Du må omstarte appen etter å ha oppdatert Git innstillingene."
+           :settings-page/git-switcher-label "Skru på Git auto commit"
+           :settings-page/git-commit-delay "Git auto commit sekunder"
            :settings-page/edit-config-edn "Rediger config.edn for nåværende repo"
            :settings-page/edit-custom-css "Rediger custom.css"
            :settings-page/custom-configuration "Tilpasset konfigurasjon"
