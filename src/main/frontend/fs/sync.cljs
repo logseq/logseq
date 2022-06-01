@@ -423,7 +423,7 @@
     (remove-user-graph-uuid-prefix o)
 
     :else
-    (throw (js/Error. (str "unsupport type " (type o))))))
+    (throw (js/Error. (str "unsupport type " (str o))))))
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -763,9 +763,7 @@
 
 (defn- add-new-version-file
   [repo path content]
-  (go
-    (println "add-new-version-file: "
-             (<! (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))))))
+  (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content)))
 
 (defn- is-journals-or-pages?
   [filetxn]
@@ -936,8 +934,9 @@
 
 ;;; ### encryption
 (def pwd-map
-  "graph-uuid->pwd"
+  "graph-uuid->{:pwd xxx :public-key xxx :private-key xxx}"
   (atom {}))
+
 (def pwd-map-changed-chan
   (chan (async/sliding-buffer 1)))
 
@@ -996,12 +995,12 @@
             (let [pwd (<! (decrypt-content encrypted-pwd salt-value))]
               (if (nil? pwd)
                 {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
-                (swap! pwd-map assoc graph-uuid pwd)))))))))
+                (swap! pwd-map assoc-in [graph-uuid :pwd] pwd)))))))))
 
 (defn ensure-pwd-exists!
   [repo graph-uuid]
   (go
-    (let [pwd (get @pwd-map graph-uuid)]
+    (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
       (when (nil? pwd)
         (let [{restore-pwd-failed :restore-pwd-failed}
               (<! (restore-pwd! repo graph-uuid))]
@@ -1010,9 +1009,9 @@
                                #(restore-pwd! repo graph-uuid)])))
         (loop []
           (<! pwd-map-changed-chan)
-          (let [pwd (get @pwd-map graph-uuid)]
+          (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
             (when (nil? pwd) (recur)))))
-      (get @pwd-map graph-uuid))))
+      (get-in @pwd-map [graph-uuid :pwd]))))
 
 (defn clear-pwd!
   "- clear pwd in `pwd-map`
@@ -1020,6 +1019,46 @@
   [repo graph-uuid]
   (swap! pwd-map dissoc graph-uuid)
   (remove-pwd-txt! repo))
+
+(defn ensure-pwd+keys-exists!
+  "ensure password persisted,
+  and ensure public&private keys exists at server"
+  [graph-uuid repo]
+  (go
+    (<! (ensure-pwd-exists! repo graph-uuid))
+    (let [pwd (get-in @pwd-map [graph-uuid :pwd])
+          {:keys [public-key encrypted-private-key] :as r}
+          (<! (get-graph-encrypt-keys remoteapi graph-uuid))]
+      (if (and (nil? public-key)
+               (nil? encrypted-private-key)
+               (-> r ex-data :err :status (= 404)))
+        ;; when public+private keys not stored at server
+        ;; generate a new key pair and upload them
+        (let [{public-key :publicKey private-key :secretKey}
+              (<! (key-gen rsapi))
+              encrypted-private-key (<! (encrypt-content private-key pwd))
+              upload-r (<! (upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
+          (if (instance? ExceptionInfo upload-r)
+            (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
+                ::stop)
+            (do (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
+                (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
+                (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                ::idle)))
+
+        (let [private-key (<! (decrypt-content encrypted-private-key pwd))]
+          (if (and private-key
+                   (string/starts-with?
+                    private-key "AGE-SECRET-KEY"))
+            (do (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
+                (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
+                (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                ::idle)
+
+            ;; bad pwd
+            (do (notification/show! "wrong password" :error false)
+                (<! (clear-pwd! repo graph-uuid))
+                ::need-password)))))))
 
 ;;; ### sync state
 
@@ -1461,37 +1500,8 @@
     (need-password
       [this]
       (go
-        (let [repo (state/get-current-repo)]
-          (<! (ensure-pwd-exists! repo graph-uuid))
-          (let [pwd (get @pwd-map graph-uuid)
-                {:keys [public-key encrypted-private-key] :as r}
-                (<! (get-graph-encrypt-keys remoteapi graph-uuid))]
-            (if (and (nil? public-key)
-                     (nil? encrypted-private-key)
-                     (-> r ex-data :err :status (= 404)))
-              ;; when public+private keys not stored at server
-              ;; generate a new key pair and upload them
-              (let [{public-key :publicKey private-key :secretKey}
-                    (<! (key-gen rsapi))
-                    encrypted-private-key (<! (encrypt-content private-key pwd))
-                    upload-r (<! (upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
-                (if (instance? ExceptionInfo upload-r)
-                  (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
-                      (.schedule this ::stop nil))
-                  (do (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
-                      (.schedule this ::idle nil))))
-
-              (let [private-key (<! (decrypt-content encrypted-private-key pwd))]
-                (if (and private-key
-                         (string/starts-with?
-                          private-key "AGE-SECRET-KEY"))
-                  (do (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
-                      (.schedule this ::idle nil))
-
-                  ;; bad pwd
-                  (do (notification/show! "wrong password" :error false)
-                      (<! (clear-pwd! repo graph-uuid))
-                      (.schedule this ::need-password nil)))))))))
+        (let [next-state (<! (ensure-pwd+keys-exists! graph-uuid (state/get-current-repo)))]
+          (.schedule this next-state nil))))
 
     (idle [this]
       (go
@@ -1579,7 +1589,7 @@
             need-sync-remote
             (do (drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
-                (>! ops-chan {:local->remote {:local local-change}})
+                (>! ops-chan {:local->remote local-change})
                 (.schedule this ::idle nil))
 
             unknown
