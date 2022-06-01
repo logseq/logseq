@@ -16,7 +16,7 @@ interface LineShapeProps extends CustomStyleProps, TLLineShapeProps {
   label: string
 }
 
-const font = '28px / 1 "Source Code Pro"'
+const font = '28px / 1 "Inter"'
 
 export class LineShape extends TLLineShape<LineShapeProps> {
   static id = 'line'
