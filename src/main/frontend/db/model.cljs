@@ -666,7 +666,9 @@
         cached-ids-set (set (conj cached-ids page-id))
         first-changed-id (cond
                            (= (:real-outliner-op tx-meta) :indent-outdent)
-                           (last (:move-blocks tx-meta))
+                           (if (state/logical-outdenting?)
+                             (first (:move-blocks tx-meta))
+                             (last (:move-blocks tx-meta)))
 
                            (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
