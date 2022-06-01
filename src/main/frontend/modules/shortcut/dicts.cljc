@@ -14,6 +14,7 @@
    :date-picker/next-week        "Date picker: Select next week"
    :pdf/previous-page            "Previous page of current pdf doc"
    :pdf/next-page                "Next page of current pdf doc"
+   :pdf/close                    "Close current pdf viewer"
    :auto-complete/complete       "Auto-complete: Choose selected item"
    :auto-complete/prev           "Auto-complete: Select previous item"
    :auto-complete/next           "Auto-complete: Select next item"
@@ -130,7 +131,7 @@
   {:en (merge
         ;; Dynamically add this ns since command descriptions have to
         ;; stay in sync with shortcut.config command ids which do not
-        ;; have a namespce
+        ;; have a namespace
         (update-keys all-default-keyboard-shortcuts decorate-namespace)
         category)
 
@@ -157,6 +158,9 @@
              :command.editor/select-block-up          "选择上方的块"
              :command.editor/select-block-down        "选择下方的块"
              :command.editor/select-all-blocks        "选择所有块"
+             :pdf/previous-page                       "上一页PDF文档"
+             :pdf/next-page                           "下一页PDF文档"
+             :pdf/close                               "关闭当前PDF文档"
              :command.ui/toggle-help                  "显示/关闭帮助"
              :command.git/commit                      "提交消息"
              :command.go/search                       "全文搜索"
