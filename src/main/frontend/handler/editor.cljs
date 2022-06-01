@@ -3493,7 +3493,8 @@
   1. References.
   2. Custom queries."
   [block config]
-  (or
+  (if (or (:ref? config)
+          (:custom-query? config))
    (and
     (or (:ref? config) (:custom-query? config))
     (>= (inc (:block/level block))
