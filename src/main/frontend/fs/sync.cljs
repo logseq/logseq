@@ -192,20 +192,37 @@
        :api-name api-name
        :body body})))
 
-(defn- request
-  ([api-name body token refresh-token-fn] (request api-name body token refresh-token-fn 0))
-  ([api-name body token refresh-token-fn retry-count]
+(def *on-flying-request
+  "requests not finished"
+  (atom #{}))
+
+(defn- request*
+  "max retry count is 5.
+  *stop: volatile var, stop retry-request when it's true,
+          and return :stop"
+  ([api-name body token refresh-token-fn *stop] (request* api-name body token refresh-token-fn 0 *stop))
+  ([api-name body token refresh-token-fn retry-count *stop]
    (go
-     (let [resp (<! (request-once api-name body token))]
-       (if (and
-            (= 401 (get-in resp [:resp :status]))
-            (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
-         (do
-           (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
-           (<! (timeout (min 60000 (* 1000 retry-count))))
-           (let [token (<! (refresh-token-fn))]
-             (<! (request api-name body token refresh-token-fn (inc retry-count)))))
-         (:resp resp))))))
+     (if (and *stop @*stop)
+       :stop
+       (let [resp (<! (request-once api-name body token))]
+         (if (and
+              (= 401 (get-in resp [:resp :status]))
+              (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
+           (if (> retry-count 5)
+             (throw (js/Error. :file-sync-request))
+             (do (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
+                 (<! (timeout (min 60000 (* 1000 retry-count))))
+                 (let [token (<! (refresh-token-fn))]
+                   (<! (request* api-name body token refresh-token-fn (inc retry-count) *stop)))))
+           (:resp resp)))))))
+
+(defn request [api-name & args]
+  (let [name (str api-name (.now js/Date))]
+    (go (swap! *on-flying-request conj name)
+        (let [r (<! (apply request* api-name args))]
+          (swap! *on-flying-request disj name)
+          r))))
 
 (defn- remove-dir-prefix [dir path]
   (let [is-mobile-url? (string/starts-with? dir "file://")
@@ -625,12 +642,12 @@
              :else
              nil))
 
-(deftype RemoteAPI []
+(deftype RemoteAPI [*stopped?]
   Object
 
   (request [this api-name body]
     (go
-      (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this)))]
+      (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this) *stopped?))]
         (if (http/unexceptional-status? (:status resp))
           (get-resp-json-body resp)
           (ex-info "request failed"
@@ -742,7 +759,7 @@
                                                 :encrypted-private-key encrypted-private-key})))
 
 
-(def remoteapi (->RemoteAPI))
+(def remoteapi (->RemoteAPI nil))
 
 (defn- add-new-version-file
   [repo path content]
@@ -1006,6 +1023,15 @@
 
 ;;; ### sync state
 
+(def full-sync-chan (chan 1))
+(def stop-sync-chan (chan 1))
+(def remote->local-sync-chan
+  "not used"
+  (chan 1))
+(def local->remote-sync-chan
+  "not used"
+  (chan))
+
 (defn sync-state
   "create a new sync-state"
   []
@@ -1095,7 +1121,7 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state
+(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
                                 ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -1216,8 +1242,8 @@
              (<! (file-changed? graph-uuid r-path basepath)))))))
 
 (defrecord ^:large-vars/cleanup-todo
-    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state
-                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
+    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
+                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
     Object
     (filter-file-change-events-fn [this]
       (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
@@ -1242,7 +1268,7 @@
     (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
     (stop-local->remote! [_]
       (async/close! stop-chan)
-      (set! stopped true))
+      (vreset! *stopped true))
 
     (ratelimit [this from-chan]
       (let [c (.filtered-chan this 10000)
@@ -1342,7 +1368,7 @@
                diff-local-files)]
           (println "[full-sync(local->remote)]" (count (flatten change-events-partitions)) "files need to sync")
           (loop [es-partitions change-events-partitions]
-            (if stopped
+            (if @*stopped
               {:stop true}
               (if (empty? es-partitions)
                 {:succ true}
@@ -1368,10 +1394,10 @@
 
 (defrecord ^:large-vars/cleanup-todo
     SyncManager [graph-uuid base-path *sync-state
-                 ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
+                 ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
                  full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                  local-changes-chan ^:mutable ratelimit-local-changes-chan
-                 *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable stopped
+                 *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped?
                  ^:mutable ops-chan]
     Object
     (schedule [this next-state args]
@@ -1562,8 +1588,8 @@
               (.schedule this ::idle nil))))))
     IStoppable
     (-stop! [_]
-      (when-not stopped
-        (set! stopped true)
+      (when-not @*stopped?
+        (vreset! *stopped? true)
         (ws-stop! _*ws)
         (offer! stop-sync-chan true)
         (when ops-chan (async/close! ops-chan))
@@ -1575,24 +1601,22 @@
 (defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
                     remote->local-sync-chan local->remote-sync-chan local-changes-chan]
   (let [*txid (atom txid)
+        *stopped? (volatile! false)
+        remoteapi-with-stop (->RemoteAPI *stopped?)
         local->remote-syncer (->Local->RemoteSyncer user-uuid graph-uuid
                                                     base-path
-                                                    repo *sync-state
+                                                    repo *sync-state remoteapi-with-stop
                                                     20000
-                                                    *txid nil (chan) false)
-        remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid
-                                                    base-path
-                                                    repo *txid *sync-state nil (volatile! false))]
+                                                    *txid nil (chan) *stopped?)
+        remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
+                                                    repo *txid *sync-state remoteapi-with-stop
+                                                    nil *stopped?)]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
-    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer
+    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
                    full-sync-chan stop-sync-chan
-                   remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil false nil)))
+                   remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil *stopped? nil)))
 
-(def full-sync-chan (chan 1))
-(def stop-sync-chan (chan 1))
-(def remote->local-sync-chan (chan 1))
-(def local->remote-sync-chan (chan))
 
 (defn sync-stop []
   (when-let [sm (state/get-file-sync-manager)]
