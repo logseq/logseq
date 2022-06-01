@@ -52,7 +52,7 @@
                    (string/replace "{text}" (or text ""))
                    (string/replace "{url}" (or url "")))]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! values)
+      (editor-handler/insert values)
       (editor-handler/api-insert-new-block! values {:page page
                                                     :edit-block? false
                                                     :replace-empty-target? true}))))
@@ -102,7 +102,7 @@
           format (db/get-page-format page)
           content (embed-asset-file url format)]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! content)
+      (editor-handler/insert content)
       (editor-handler/api-insert-new-block! content {:page page
                                                      :edit-block? false
                                                      :replace-empty-target? true}))))
@@ -129,7 +129,7 @@
                       ". We will look into it soon."]
                      :warning false))]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! content)
+      (editor-handler/insert content)
       (editor-handler/api-insert-new-block! content {:page page
                                                      :edit-block? false
                                                      :replace-empty-target? true}))))

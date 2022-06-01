@@ -44,8 +44,9 @@
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:a#left-menu.cp__header-left-menu.button
      {:on-click on-click
-      :style {:margin-left 12}}
-     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+      :style    {:margin-left 12}}
+     [:span.inner
+      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]

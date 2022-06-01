@@ -201,7 +201,7 @@
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title    repo-path}       ;; show full path on hover
-                                (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
+                                (ui/icon "database mr-2" {:style {:font-size 16} :id "database-icon"})
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium

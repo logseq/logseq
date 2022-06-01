@@ -25,7 +25,7 @@
         seconds (mod seconds 60)]
     (util/format "%02d:%02d" minutes seconds)))
 
-(def *record-start (atom -1))
+(def *record-start (atom nil))
 (rum/defcs audio-record-cp < rum/reactive
   {:did-mount (fn [state]
                 (let [comp (:rum/react-component state)
@@ -36,20 +36,17 @@
                  (js/clearInterval (::interval state))
                  (dissoc state ::interval))}
   [state]
-  (when (= (state/sub :editor/record-status) "RECORDING")
-    (swap! *record-start inc))
   (if (= (state/sub :editor/record-status) "NONE")
-    (do
-      (reset! *record-start -1)
-      (mobile-bar-command record/start-recording "microphone"))
+    (mobile-bar-command #(do (record/start-recording)
+                             (reset! *record-start (js/Date.now))) "microphone")
     [:div.flex.flex-row.items-center
-     (mobile-bar-command #(do
-                            (record/stop-recording)
-                            (reset! *record-start -1))
+     (mobile-bar-command #(do (reset! *record-start nil)
+                              (state/set-state! :mobile/show-recording-bar? false)
+                              (record/stop-recording))
                          "player-stop")
-     [:div.timer.pl-2
+     [:div.timer.ml-2
       {:on-click record/stop-recording}
-      (seconds->minutes:seconds @*record-start)]]))
+      (seconds->minutes:seconds (/ (- (js/Date.now) @*record-start) 1000))]]))
 
 (rum/defc footer < rum/reactive
   []

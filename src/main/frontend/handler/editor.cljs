@@ -2043,18 +2043,21 @@
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn- insert
-  [insertion]
-  (when-not (auto-complete?)
-    (let [^js input (state/get-input)
-          selected-start (util/get-selection-start input)
-          selected-end (util/get-selection-end input)
-          value (.-value input)
-          s1 (subs value 0 selected-start)
-          s2 (subs value selected-end)]
-      (state/set-edit-content! (state/get-edit-input-id)
-                               (str s1 insertion s2))
-      (cursor/move-cursor-to input (+ selected-start (count insertion))))))
+(defn insert
+  ([insertion]
+   (insert insertion false))
+  ([insertion auto-complete-enabled?]
+   (when (or auto-complete-enabled?
+             (not (auto-complete?)))
+     (let [^js input (state/get-input)
+           selected-start (util/get-selection-start input)
+           selected-end (util/get-selection-end input)
+           value (.-value input)
+           s1 (subs value 0 selected-start)
+           s2 (subs value selected-end)]
+       (state/set-edit-content! (state/get-edit-input-id)
+                                (str s1 insertion s2))
+       (cursor/move-cursor-to input (+ selected-start (count insertion)))))))
 
 (defn- keydown-new-line
   []
@@ -2949,7 +2952,7 @@
        (let [data (if (gp-util/url? clipboard-data)
                         (wrap-macro-url clipboard-data)
                         clipboard-data)]
-             (state/append-current-edit-content! data))))
+         (insert data true))))
    (fn [error]
      (js/console.error error))))
 
