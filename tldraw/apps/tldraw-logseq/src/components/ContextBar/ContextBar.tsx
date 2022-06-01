@@ -17,7 +17,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({
   // rotation,
 }) => {
   const app = useApp()
-  const rSize = React.useRef([0, 0])
+  const rSize = React.useRef<[number, number] | null>(null)
   const rContextBar = React.useRef<HTMLDivElement>(null)
 
   const updateStroke = React.useCallback<React.ChangeEventHandler<HTMLInputElement>>(e => {
@@ -54,24 +54,27 @@ const _ContextBar: TLContextBarComponent<Shape> = ({
 
   React.useLayoutEffect(() => {
     const elm = rContextBar.current
-    if (!elm) return
+    if (!elm || rSize.current) return
     const { offsetWidth, offsetHeight } = elm
     rSize.current = [offsetWidth, offsetHeight]
-  }, [])
+    return () => {
+      rSize.current = null
+    }
+  })
 
   React.useLayoutEffect(() => {
     const elm = rContextBar.current
     if (!elm) return
-    const size = rSize.current
+    const size = rSize.current ?? [0, 0]
     const [x, y] = getContextBarTranslation(size, { ...offset, bottom: offset.bottom - 32 })
     elm.style.setProperty('transform', `translateX(${x}px) translateY(${y}px)`)
-  }, [scaledBounds, offset])
+  }, [offset])
 
   if (!app) return null
 
   const textShapes = shapes.filter(shape => shape.type === 'text') as TextShape[]
 
-  const sidesShapes = shapes.filter(shape => 'sides' in shape.props) as (PolygonShape)[]
+  const sidesShapes = shapes.filter(shape => 'sides' in shape.props) as PolygonShape[]
 
   const ShapeContent =
     shapes.length === 1 && 'ReactContextBar' in shapes[0] ? shapes[0]['ReactContextBar'] : null
@@ -135,7 +138,9 @@ const _ContextBar: TLContextBarComponent<Shape> = ({
             ) : null}
           </>
         )}
-        <a className="shape-link" onClick={() => app.pubEvent("whiteboard-link", shapes)}>Link</a>
+        <a className="shape-link" onClick={() => app.pubEvent('whiteboard-link', shapes)}>
+          Link
+        </a>
       </div>
     </HTMLContainer>
   )
