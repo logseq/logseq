@@ -12,7 +12,8 @@ export function useCounterScaledPosition(
     const elm = ref.current!
     elm.style.transform = `translate(
         calc(${bounds.minX}px - var(--tl-padding)),
-        calc(${bounds.minY}px - var(--tl-padding)))`
+        calc(${bounds.minY}px - var(--tl-padding)))
+        scale(var(--tl-scale))`
   }, [bounds.minX, bounds.minY, rotation, bounds.rotation])
 
   React.useLayoutEffect(() => {

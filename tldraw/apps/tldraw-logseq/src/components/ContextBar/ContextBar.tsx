@@ -4,7 +4,6 @@ import {
   TLContextBarComponent,
   useApp,
   getContextBarTranslation,
-  useRendererContext,
 } from '@tldraw/react'
 import { observer } from 'mobx-react-lite'
 import type { TextShape, PolygonShape, Shape } from '~lib/shapes'
@@ -12,11 +11,6 @@ import { NumberInput } from '~components/inputs/NumberInput'
 import { ColorInput } from '~components/inputs/ColorInput'
 
 const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
-  const {
-    viewport: {
-      camera: { zoom },
-    },
-  } = useRendererContext()
   const app = useApp()
   const rSize = React.useRef<[number, number] | null>(null)
   const rContextBar = React.useRef<HTMLDivElement>(null)
@@ -64,18 +58,9 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
     const elm = rContextBar.current
     if (!elm) return
     const size = rSize.current ?? [0, 0]
-    const vpOffsets = {
-      left: offsets.left / zoom,
-      right: offsets.right / zoom,
-      top: offsets.top / zoom,
-      bottom: offsets.bottom / zoom,
-      width: offsets.width / zoom,
-      height: offsets.height / zoom,
-    }
-
-    const [x, y] = getContextBarTranslation(size, { ...vpOffsets, bottom: vpOffsets.bottom - 32 })
+    const [x, y] = getContextBarTranslation(size, { ...offsets, bottom: offsets.bottom - 32 })
     elm.style.setProperty('transform', `translateX(${x}px) translateY(${y}px)`)
-  }, [offsets, zoom])
+  }, [offsets])
 
   if (!app) return null
 

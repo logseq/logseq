@@ -9,13 +9,13 @@ import type { TLSelectionDetailProps } from '~types/component-props'
 import Vec from '@tldraw/vec'
 
 export const SelectionDetail = observer(function SelectionDetail<S extends TLReactShape>({
-  bounds,
+  scaledBounds,
   shapes,
   detail = 'size',
   rotation = 0,
 }: TLSelectionDetailProps<S>) {
   // This is the actual rotation of the bounding box, used to position the detail. Note that when rotating only one shape, the bounds rotation and the rotation shown in the detail will be the same; however, when rotating more than one shape, the bounding box will be axis-aligned, but the detail will show the angle that the bounds has been rotated by.
-  const selectionRotation = shapes.length === 1 ? rotation : bounds.rotation ?? 0
+  const selectionRotation = shapes.length === 1 ? rotation : scaledBounds.rotation ?? 0
   const isFlipped = !(selectionRotation < TAU || selectionRotation > TAU * 3)
   const isLine = shapes.length === 1 && shapes[0].type === 'line'
 
@@ -25,8 +25,10 @@ export const SelectionDetail = observer(function SelectionDetail<S extends TLRea
         className="tl-bounds-detail"
         style={{
           transform: isFlipped
-            ? `rotate(${Math.PI + selectionRotation}rad) translateY(${bounds.height / 2 + 32}px)`
-            : `rotate(${selectionRotation}rad) translateY(${bounds.height / 2 + 24}px)`,
+            ? `rotate(${Math.PI + selectionRotation}rad) translateY(${
+                scaledBounds.height / 2 + 32
+              }px)`
+            : `rotate(${selectionRotation}rad) translateY(${scaledBounds.height / 2 + 24}px)`,
           padding: '2px 3px',
           borderRadius: '1px',
         }}
@@ -37,7 +39,7 @@ export const SelectionDetail = observer(function SelectionDetail<S extends TLRea
               shapes[0].props.handles!.end.point
             ).toFixed()}`
           : detail === 'size'
-          ? `${bounds.width.toFixed()} × ${bounds.height.toFixed()}`
+          ? `${scaledBounds.width.toFixed()} × ${scaledBounds.height.toFixed()}`
           : `∠${GeomUtils.radiansToDegrees(GeomUtils.clampRadians(rotation)).toFixed()}°`}
       </div>
     </HTMLContainer>
