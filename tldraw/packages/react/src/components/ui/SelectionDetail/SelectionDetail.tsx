@@ -11,7 +11,6 @@ import Vec from '@tldraw/vec'
 export const SelectionDetail = observer(function SelectionDetail<S extends TLReactShape>({
   bounds,
   shapes,
-  scaledBounds,
   detail = 'size',
   rotation = 0,
 }: TLSelectionDetailProps<S>) {
@@ -26,10 +25,8 @@ export const SelectionDetail = observer(function SelectionDetail<S extends TLRea
         className="tl-bounds-detail"
         style={{
           transform: isFlipped
-            ? `rotate(${Math.PI + selectionRotation}rad) translateY(${
-                scaledBounds.height / 2 + 32
-              }px)`
-            : `rotate(${selectionRotation}rad) translateY(${scaledBounds.height / 2 + 24}px)`,
+            ? `rotate(${Math.PI + selectionRotation}rad) translateY(${bounds.height / 2 + 32}px)`
+            : `rotate(${selectionRotation}rad) translateY(${bounds.height / 2 + 24}px)`,
           padding: '2px 3px',
           borderRadius: '1px',
         }}

@@ -30,7 +30,7 @@ export const SelectionDetailContainer = observer(function SelectionDetail<S exte
 
   const rBounds = React.useRef<HTMLDivElement>(null)
   const scaledBounds = BoundsUtils.multiplyBounds(bounds, zoom)
-  useCounterScaledPosition(rBounds, scaledBounds, zoom, 10003)
+  useCounterScaledPosition(rBounds, bounds, rotation, 10003)
 
   if (!SelectionDetail) throw Error('Expected a SelectionDetail component.')
 

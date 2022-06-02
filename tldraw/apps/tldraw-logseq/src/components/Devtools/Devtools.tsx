@@ -10,6 +10,7 @@ const printPoint = (point: number[]) => {
 export const DevTools = observer(() => {
   const {
     viewport: {
+      bounds,
       camera: { point, zoom },
     },
     inputs,
@@ -40,6 +41,7 @@ export const DevTools = observer(() => {
     ['MP', printPoint(inputs.currentPoint)],
     ['MS', printPoint(inputs.currentScreenPoint)],
     ['VP', printPoint(point)],
+    ['VBR', printPoint([bounds.maxX, bounds.maxY])],
   ]
     .map(p => p.join(''))
     .join('|')

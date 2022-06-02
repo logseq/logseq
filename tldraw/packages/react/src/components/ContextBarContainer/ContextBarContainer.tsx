@@ -35,11 +35,12 @@ export const ContextBarContainer = observer(function ContextBar<S extends TLReac
   const rotatedBounds = BoundsUtils.getRotatedBounds(bounds, rotation)
   const scaledBounds = BoundsUtils.multiplyBounds(rotatedBounds, zoom)
 
-  useCounterScaledPosition(rBounds, scaledBounds, zoom, 10003)
+  useCounterScaledPosition(rBounds, bounds, rotation, 10003)
 
   if (!ContextBar) throw Error('Expected a ContextBar component.')
 
-  const screenBounds = BoundsUtils.translateBounds(scaledBounds, [x, y])
+  const screenBounds = BoundsUtils.translateBounds(scaledBounds, [x * zoom, y * zoom])
+
   const offsets: TLOffset = {
     left: screenBounds.minX,
     right: vpBounds.width - screenBounds.maxX,
@@ -48,6 +49,7 @@ export const ContextBarContainer = observer(function ContextBar<S extends TLReac
     width: screenBounds.width,
     height: screenBounds.height,
   }
+
   const inView =
     BoundsUtils.boundsContain(vpBounds, screenBounds) ||
     BoundsUtils.boundsCollide(vpBounds, screenBounds)
@@ -76,7 +78,7 @@ export const ContextBarContainer = observer(function ContextBar<S extends TLReac
       <ContextBar
         shapes={shapes}
         bounds={bounds}
-        offset={offsets}
+        offsets={offsets}
         scaledBounds={scaledBounds}
         rotation={rotation}
       />

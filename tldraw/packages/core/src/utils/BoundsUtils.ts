@@ -196,7 +196,7 @@ export class BoundsUtils {
         width: bounds.width * n,
         height: bounds.height * n,
       },
-      center
+      [center[0] * n, center[1] * n]
     )
   }
 
@@ -211,7 +211,7 @@ export class BoundsUtils {
         width: bounds.width / n,
         height: bounds.height / n,
       },
-      center
+      [center[0] / n, center[1] / n]
     )
   }
 

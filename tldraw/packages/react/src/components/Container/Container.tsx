@@ -16,7 +16,6 @@ interface ContainerProps extends React.HTMLProps<HTMLDivElement> {
 export const Container = observer<ContainerProps>(function Container({
   id,
   bounds,
-  scale,
   zIndex,
   rotation = 0,
   className = '',
@@ -30,9 +29,8 @@ export const Container = observer<ContainerProps>(function Container({
     elm.style.transform = `translate(
         calc(${bounds.minX}px - var(--tl-padding)),
         calc(${bounds.minY}px - var(--tl-padding)))
-        rotate(${rotation + (bounds.rotation || 0)}rad)
-      ${scale ? `scale(${scale[0]}, ${scale[1]})` : ''}`
-  }, [bounds.minX, bounds.minY, rotation, bounds.rotation, scale])
+        rotate(${rotation + (bounds.rotation || 0)}rad)`
+  }, [bounds.minX, bounds.minY, rotation, bounds.rotation])
 
   React.useLayoutEffect(() => {
     const elm = rBounds.current!

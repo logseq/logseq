@@ -1,37 +1,28 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import * as React from 'react'
 import type { TLBounds } from '@tldraw/core'
 
 export function useCounterScaledPosition(
   ref: React.RefObject<HTMLElement>,
   bounds: TLBounds,
-  zoom: number,
+  rotation: number,
   zIndex: number
 ) {
   React.useLayoutEffect(() => {
-    const elm = ref.current
-    if (!elm) return
-
-    elm.style.setProperty(
-      'transform',
-      `translate(
-          calc(${bounds.minX - 64}px),
-          calc(${bounds.minY - 64}px)
-        )
-        scale(var(--tl-scale))`
-    )
-  }, [bounds.minX, bounds.minY])
+    const elm = ref.current!
+    elm.style.transform = `translate(
+        calc(${bounds.minX}px - var(--tl-padding)),
+        calc(${bounds.minY}px - var(--tl-padding)))`
+  }, [bounds.minX, bounds.minY, rotation, bounds.rotation])
 
   React.useLayoutEffect(() => {
-    const elm = ref.current
-    if (!elm) return
-
-    elm.style.setProperty('width', `calc(${Math.floor(bounds.width)}px + 64px * 2)`)
-    elm.style.setProperty('height', `calc(${Math.floor(bounds.height)}px + 64px * 2)`)
+    const elm = ref.current!
+    elm.style.width = `calc(${Math.floor(bounds.width)}px + (var(--tl-padding) * 2))`
+    elm.style.height = `calc(${Math.floor(bounds.height)}px + (var(--tl-padding) * 2))`
   }, [bounds.width, bounds.height])
 
   React.useLayoutEffect(() => {
-    const elm = ref.current
-    if (!elm) return
-    elm.style.setProperty('z-index', zIndex.toString())
+    const elm = ref.current!
+    if (zIndex !== undefined) elm.style.zIndex = zIndex.toString()
   }, [zIndex])
 }
