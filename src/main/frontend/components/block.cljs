@@ -53,6 +53,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
+            [frontend.util.text :as text-util]
             [frontend.util.property :as property]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
@@ -280,7 +281,7 @@
           (contains? config/audio-formats ext)
           (audio-cp @src)
 
-          (contains? (config/img-formats) ext)
+          (contains? (gp-config/img-formats) ext)
           (resizable-image config title @src metadata full_text true)
 
           (= ext :pdf)
@@ -825,7 +826,7 @@
         (nil? metadata-show)
         (or
          (gp-config/local-asset? s)
-         (text/media-link? media-formats s)))
+         (text-util/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
      ;; markdown
@@ -834,7 +835,7 @@
      ;; image http link
      (and (or (string/starts-with? full-text "http://")
               (string/starts-with? full-text "https://"))
-          (text/media-link? media-formats s)))))
+          (text-util/media-link? media-formats s)))))
 
 (defn- relative-assets-path->absolute-path
   [path]
@@ -1114,7 +1115,7 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (when-let [vimeo-id (nth (util/safe-re-find text/vimeo-regex url) 5)]
+    (when-let [vimeo-id (nth (util/safe-re-find text-util/vimeo-regex url) 5)]
       (when-not (string/blank? vimeo-id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1134,7 +1135,7 @@
     (when-let [id (cond
                     (<= (count url) 15) url
                     :else
-                    (nth (util/safe-re-find text/bilibili-regex url) 5))]
+                    (nth (util/safe-re-find text-util/bilibili-regex url) 5))]
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1155,7 +1156,7 @@
     (let [width (min (- (util/get-width) 96)
                      560)
           height (int (* width (/ 315 560)))
-          results (text/get-matched-video url)
+          results (text-util/get-matched-video url)
           src (match results
                      [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
                      (if (= (count id) 11) ["youtube-player" id] url)
@@ -1303,7 +1304,7 @@
         (when-let [youtube-id (cond
                                 (== 11 (count url)) url
                                 :else
-                                (nth (util/safe-re-find text/youtube-regex url) 5))]
+                                (nth (util/safe-re-find text-util/youtube-regex url) 5))]
           (when-not (string/blank? youtube-id)
             (youtube/youtube-video youtube-id))))
 
@@ -2023,7 +2024,7 @@
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-     
+
      [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
@@ -2345,7 +2346,7 @@
   (let [refs (model/get-page-names-by-ids
               (->> (map :db/id refs)
                    (remove nil?)))]
-    (text/build-data-value refs)))
+    (text-util/build-data-value refs)))
 
 (defn- get-children-refs
   [children]
@@ -2466,14 +2467,14 @@
                         (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel block-handler/on-touch-cancel 
+       :on-touch-cancel block-handler/on-touch-cancel
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
-      
+
       (when @*show-left-menu?
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
@@ -2485,7 +2486,7 @@
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs block-container < rum/reactive
-  (rum/local false ::show-block-left-menu?) 
+  (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)

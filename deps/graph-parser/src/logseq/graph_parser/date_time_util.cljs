@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.date-time-util
+(ns logseq.graph-parser.date-time-util
   "cljs-time util fns for graph-parser"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -25,7 +25,7 @@
                           (fn [formatter]
                             (try
                               (tf/parse (tf/formatter formatter) (gp-util/capitalize-all journal-title))
-                              (catch js/Error _e
+                              (catch :default _e
                                 nil)))
                           formatters)
                          (filter some?)

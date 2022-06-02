@@ -3,13 +3,8 @@
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]))
-
-;; TODO: Properly fix this circular dependency:
-;; mldoc/->edn > text/parse-property > mldoc/link? ->mldoc/inline->edn + mldoc/default-config
-(set! gp-mldoc/parse-property text/parse-property)
 
 (defonce mldoc-record (->MldocMode))
 (defonce adoc-record (->AdocMode))

@@ -8,10 +8,10 @@
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -32,7 +32,7 @@
         page-entity (db/pull [:block/name (util/page-name-sanity-lc title)])
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                           (text/build-data-value page-names)))]
+                           (text-util/build-data-value page-names)))]
     [:div.flex-1.journal.page (cond-> {}
                                 data-page-tags
                                 (assoc :data-page-tags data-page-tags))
