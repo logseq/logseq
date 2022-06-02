@@ -97,8 +97,9 @@ export const App = function App(props: LogseqTldrawProps): JSX.Element {
         {...props}
       >
         <div className="logseq-tldraw logseq-tldraw-wrapper">
-          <AppCanvas components={components} />
-          <AppUI />
+          <AppCanvas components={components}>
+            <AppUI />
+          </AppCanvas>
         </div>
       </AppProvider>
     </LogseqContext.Provider>

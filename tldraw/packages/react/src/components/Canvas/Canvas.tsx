@@ -214,6 +214,8 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
             shapes={selectedShapes}
           />
         )}
+
+        <div id="tl-dev-tools-canvas-anchor" />
       </div>
       {children}
     </div>

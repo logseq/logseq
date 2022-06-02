@@ -56,10 +56,10 @@ export function useResizeObserver<T extends HTMLElement>(
     const scrollingAnchor = ref.current ? getNearestScrollableContainer(ref.current) : document
     const debouncedupdateBounds = debounce(updateBounds, 100)
     scrollingAnchor.addEventListener('scroll', debouncedupdateBounds)
-    scrollingAnchor.addEventListener('resize', debouncedupdateBounds)
+    window.addEventListener('resize', debouncedupdateBounds)
     return () => {
       scrollingAnchor.removeEventListener('scroll', debouncedupdateBounds)
-      scrollingAnchor.removeEventListener('resize', debouncedupdateBounds)
+      window.removeEventListener('resize', debouncedupdateBounds)
     }
   }, [])
 

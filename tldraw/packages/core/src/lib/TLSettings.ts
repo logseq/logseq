@@ -13,7 +13,7 @@ export class TLSettings implements TLSettingsProps {
   }
 
   @observable mode: 'dark' | 'light' = 'light'
-  @observable showGrid = false
+  @observable showGrid = true
   @observable isToolLocked = false
 
   @action update(props: Partial<TLSettingsProps>): void {
