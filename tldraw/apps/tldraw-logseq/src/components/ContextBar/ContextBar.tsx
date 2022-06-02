@@ -89,67 +89,65 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
   return (
     <HTMLContainer centered>
       <div ref={rContextBar} className="contextbar">
-        <div style={{ transform: `scale(var(--tl-scale))` }}>
-          {ShapeContent ? (
-            <ShapeContent />
-          ) : (
-            <>
-              <ColorInput label="Stroke" value={shapes[0].props.stroke} onChange={updateStroke} />
-              <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />
+        {ShapeContent ? (
+          <ShapeContent />
+        ) : (
+          <>
+            <ColorInput label="Stroke" value={shapes[0].props.stroke} onChange={updateStroke} />
+            <ColorInput label="Fill" value={shapes[0].props.fill} onChange={updateFill} />
+            <NumberInput
+              label="Width"
+              value={Math.max(...shapes.map(shape => shape.props.strokeWidth))}
+              onChange={updateStrokeWidth}
+              style={{ width: 48 }}
+            />
+            {sidesShapes.length > 0 && (
               <NumberInput
-                label="Width"
-                value={Math.max(...shapes.map(shape => shape.props.strokeWidth))}
-                onChange={updateStrokeWidth}
-                style={{ width: 48 }}
+                label="Sides"
+                value={Math.max(...sidesShapes.map(shape => shape.props.sides))}
+                onChange={updateSides}
+                style={{ width: 40 }}
               />
-              {sidesShapes.length > 0 && (
-                <NumberInput
-                  label="Sides"
-                  value={Math.max(...sidesShapes.map(shape => shape.props.sides))}
-                  onChange={updateSides}
-                  style={{ width: 40 }}
-                />
-              )}
-              {sidesShapes.length > 0 && (
-                <NumberInput
-                  label="Ratio"
-                  value={Math.max(...sidesShapes.map(shape => shape.props.ratio))}
-                  onChange={updateRatio}
-                  step={0.1}
-                  min={0}
-                  max={2}
-                  style={{ width: 40 }}
-                />
-              )}
+            )}
+            {sidesShapes.length > 0 && (
               <NumberInput
-                label="Opacity"
-                value={Math.max(...shapes.map(shape => shape.props.opacity))}
-                onChange={updateOpacity}
+                label="Ratio"
+                value={Math.max(...sidesShapes.map(shape => shape.props.ratio))}
+                onChange={updateRatio}
                 step={0.1}
-                style={{ width: 48 }}
+                min={0}
+                max={2}
+                style={{ width: 40 }}
               />
-              {textShapes.length > 0 ? (
-                <>
-                  <NumberInput
-                    label="Size"
-                    value={Math.max(...textShapes.map(shape => shape.props.fontSize))}
-                    onChange={updateFontSize}
-                    style={{ width: 48 }}
-                  />
-                  <NumberInput
-                    label=" Weight"
-                    value={Math.max(...textShapes.map(shape => shape.props.fontWeight))}
-                    onChange={updateFontWeight}
-                    style={{ width: 48 }}
-                  />
-                </>
-              ) : null}
-            </>
-          )}
-          <a className="shape-link" onClick={() => app.pubEvent('whiteboard-link', shapes)}>
-            Link
-          </a>
-        </div>
+            )}
+            <NumberInput
+              label="Opacity"
+              value={Math.max(...shapes.map(shape => shape.props.opacity))}
+              onChange={updateOpacity}
+              step={0.1}
+              style={{ width: 48 }}
+            />
+            {textShapes.length > 0 ? (
+              <>
+                <NumberInput
+                  label="Size"
+                  value={Math.max(...textShapes.map(shape => shape.props.fontSize))}
+                  onChange={updateFontSize}
+                  style={{ width: 48 }}
+                />
+                <NumberInput
+                  label=" Weight"
+                  value={Math.max(...textShapes.map(shape => shape.props.fontWeight))}
+                  onChange={updateFontWeight}
+                  style={{ width: 48 }}
+                />
+              </>
+            ) : null}
+          </>
+        )}
+        <a className="shape-link" onClick={() => app.pubEvent('whiteboard-link', shapes)}>
+          Link
+        </a>
       </div>
     </HTMLContainer>
   )
