@@ -14,6 +14,7 @@
             [frontend.db.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
+            [frontend.util.text :as text-util]
             [frontend.util :as util]))
 
 
@@ -443,17 +444,18 @@ Some bindings in this fn:
   [s]
   (some-> s
           (string/replace text/page-ref-re "\"[[$1]]\"")
-          (string/replace text/between-re (fn [[_ x]]
-                                            (->> (string/split x #" ")
-                                                 (remove string/blank?)
-                                                 (map (fn [x]
-                                                        (if (or (contains? #{"+" "-"} (first x))
-                                                                (and (util/safe-re-find #"\d" (first x))
-                                                                     (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
-                                                          (keyword (name x))
-                                                          x)))
-                                                 (string/join " ")
-                                                 (util/format "(between %s)"))))))
+          (string/replace text-util/between-re
+                          (fn [[_ x]]
+                            (->> (string/split x #" ")
+                                 (remove string/blank?)
+                                 (map (fn [x]
+                                        (if (or (contains? #{"+" "-"} (first x))
+                                                (and (util/safe-re-find #"\d" (first x))
+                                                     (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
+                                          (keyword (name x))
+                                          x)))
+                                 (string/join " ")
+                                 (util/format "(between %s)"))))))
 
 (defn- add-bindings!
   [form q]

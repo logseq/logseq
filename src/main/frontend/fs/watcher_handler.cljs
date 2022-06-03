@@ -4,12 +4,12 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [logseq.graph-parser.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
+            [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -21,7 +21,7 @@
 (defn- set-missing-block-ids!
   [content]
   (when (string? content)
-    (doseq [block-id (extract/extract-all-block-refs content)]
+    (doseq [block-id (text-util/extract-all-block-refs content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
                          (catch js/Error _e

@@ -1,12 +1,11 @@
 (ns logseq.graph-parser.extract-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [deftest is]]
             [logseq.graph-parser.extract :as extract]
-            [clojure.pprint :as pprint]
-            [promesa.core :as p]))
+            [clojure.pprint :as pprint]))
 
 (defn- extract
   [text]
-  (p/let [result (extract/extract-blocks-pages "a.md" text {:block-pattern "-"})
+  (let [result (extract/extract-blocks-pages "a.md" text {:block-pattern "-"})
           result (last result)
           lefts (map (juxt :block/parent :block/left) result)]
     (if (not= (count lefts) (count (distinct lefts)))
@@ -15,34 +14,24 @@
         (throw (js/Error. ":block/parent && :block/left conflicts")))
       (mapv :block/content result))))
 
-(defn- async-test
-  [x y]
-  (async done
-         (p/then
-          (extract x)
-          (fn [v]
-            (is (= y v))
-            (done)))))
-
 (deftest test-extract-blocks-pages
   []
-  (async-test
-   "- a
+  (is (= ["a" "b" "c"]
+         (extract
+          "- a
   - b
-    - c"
-   ["a" "b" "c"])
+    - c")))
 
-  (async-test
-   "## hello
+  (is (= ["## hello" "world" "nice" "nice" "bingo" "world"]
+         (extract "## hello
     - world
       - nice
         - nice
       - bingo
-      - world"
-   ["## hello" "world" "nice" "nice" "bingo" "world"])
+      - world")))
 
-  (async-test
-   "# a
+  (is (= ["# a" "## b" "### c" "#### d" "### e" "f" "g" "h" "i" "j"]
+       (extract "# a
 ## b
 ### c
 #### d
@@ -51,17 +40,13 @@
   - g
     - h
   - i
-- j"
-
-   ["# a" "## b" "### c" "#### d" "### e" "f" "g" "h" "i" "j"]))
+- j"))))
 
 (deftest test-regression-1902
   []
-  (async-test
-   "- line1
+  (is (= ["line1" "line2" "line3" "line4"]
+         (extract
+          "- line1
     - line2
       - line3
-     - line4"
-   ["line1" "line2" "line3" "line4"]))
-
-#_(cljs.test/run-tests)
+     - line4"))))

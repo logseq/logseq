@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -74,7 +73,8 @@
         format (gp-util/get-format path)
         original-name (db/get-file-page path)
         random-id (str (d/squuid))]
-    [:div.file {:id (str "file-edit-wrapper-" random-id)}
+    [:div.file {:id (str "file-edit-wrapper-" random-id)
+                :key path}
      [:h1.title
       [:bdi (js/decodeURI path)]]
      (when original-name
@@ -99,10 +99,10 @@
 
      (cond
        ;; image type
-       (and format (contains? (config/img-formats) format))
+       (and format (contains? (gp-config/img-formats) format))
        [:img {:src path}]
 
-       (and format (contains? (config/text-formats) format))
+       (and format (contains? (gp-config/text-formats) format))
        (when-let [file-content (db/get-file path)]
          (let [content (string/trim file-content)
                mode (util/get-file-ext path)]
