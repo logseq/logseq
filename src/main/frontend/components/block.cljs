@@ -2773,8 +2773,8 @@
       (when-not (and built-in? (empty? result))
         [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
-          [:div.custom-query-title
-           [:span.title-text (cond
+          [:div.custom-query-title.flex.justify-between.w-full
+           [:div [:span.title-text (cond
                                (vector? title) title
                                (string? title) (inline-text config
                                                             (get-in config [:block :block/format] :markdown)
@@ -2782,6 +2782,12 @@
                                :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
+           [:a.opacity-70.hover:opacity-100.svg-small.inline ;add an edit button
+            {:on-mouse-down (fn [e]
+                              (util/stop e)
+                              (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+            svg/edit]]
+          
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))
