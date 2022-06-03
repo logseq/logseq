@@ -113,7 +113,7 @@
 
                            (:create-pwd-remote :input-pwd-remote)
                            (a/go
-                             (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID repo))]
+                             (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
                                (if (instance? ExceptionInfo persist-r)
                                  (js/console.error persist-r)
                                  (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))

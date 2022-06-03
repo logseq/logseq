@@ -49,6 +49,7 @@
 ;; - local->remote-full-sync will be triggered after 20min of idle
 ;; - every 20s, flush local changes, and sync to remote
 
+;; TODO: when remote->local-full-sync, download latest journals first, then pages and so on
 ;; TODO: use access-token instead of id-token
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
 ;;       and re-produce a new same-file-delete diff.
@@ -966,23 +967,22 @@
     (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-content)))]
       (when-not (instance? ExceptionInfo r) r))))
 
-(defn- persist-pwd!
-  [pwd repo]
-  (go
-    (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))
-          repo-dir (config/get-repo-dir repo)]
-      (<! (p->c (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))))
-      (<! (p->c (fs/write-file! repo repo-dir path pwd {:skip-compare? true}))))))
+(defn- local-storage-pwd-path
+  [graph-uuid]
+  (str "encrypted-pwd/" graph-uuid))
 
-(defn- remove-pwd-txt!
-  [repo]
-  (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))]
-    (p->c (fs/unlink! repo path nil))))
+(defn- persist-pwd!
+  [pwd graph-uuid]
+  (js/localStorage.setItem (local-storage-pwd-path graph-uuid) pwd))
+
+(defn- remove-pwd!
+  [graph-uuid]
+  (js/localStorage.removeItem (local-storage-pwd-path graph-uuid)))
 
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
-  - persist encrypted pwd at 'logseq/encrypted-password.txt'"
-  [pwd graph-uuid repo]
+  - persist encrypted pwd at local-storage"
+  [pwd graph-uuid]
   (go
     (let [[value expired-at gone?]
           ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
@@ -992,14 +992,14 @@
             ((juxt :value :expired-at) (<! (create-graph-salt remoteapi graph-uuid)))
             [value expired-at])
           encrypted-pwd (<! (encrypt-content pwd salt-value))]
-      (<! (persist-pwd! encrypted-pwd repo)))))
+      (persist-pwd! encrypted-pwd graph-uuid))))
 
 (defn restore-pwd!
   "restore pwd from persisted encrypted-pwd, update `pwd-map`"
-  [repo graph-uuid]
+  [graph-uuid]
   (go
-    (let [encrypted-pwd (<! (p->c (fs/read-file "" (config/get-file-path repo "logseq/encrypted-password.txt"))))]
-      (if (or (nil? encrypted-pwd) (instance? ExceptionInfo encrypted-pwd))
+    (let [encrypted-pwd (js/localStorage.getItem (local-storage-pwd-path graph-uuid))]
+      (if (nil? encrypted-pwd)
         {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
               ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
@@ -1017,10 +1017,10 @@
     (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
       (when (nil? pwd)
         (let [{restore-pwd-failed :restore-pwd-failed}
-              (<! (restore-pwd! repo graph-uuid))]
+              (<! (restore-pwd! graph-uuid))]
           (when restore-pwd-failed
             (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
-                               #(restore-pwd! repo graph-uuid)])))
+                               #(restore-pwd! graph-uuid)])))
         (loop []
           (<! pwd-map-changed-chan)
           (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
@@ -1029,10 +1029,10 @@
 
 (defn clear-pwd!
   "- clear pwd in `pwd-map`
-  - remove logseq/encrypted-password.txt"
-  [repo graph-uuid]
+  - remove encrypted-pwd in local-storage"
+  [graph-uuid]
   (swap! pwd-map dissoc graph-uuid)
-  (remove-pwd-txt! repo))
+  (remove-pwd! graph-uuid))
 
 (defn ensure-pwd+keys-exists!
   "ensure password persisted,
@@ -1071,7 +1071,7 @@
 
             ;; bad pwd
             (do (notification/show! "wrong password" :error false)
-                (<! (clear-pwd! repo graph-uuid))
+                (clear-pwd! graph-uuid)
                 ::need-password)))))))
 
 ;;; ### sync state
@@ -1314,7 +1314,6 @@
     (get-ignore-files [_] #{#"logseq/graphs-txid.edn$"
                             #"logseq/bak/.*"
                             #"logseq/version-files/.*"
-                            #"logseq/encrypted-password.txt$"
                             #"logseq/\.recycle/.*"
                             #"\.DS_Store$"})
     (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
