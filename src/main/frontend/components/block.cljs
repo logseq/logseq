@@ -2705,7 +2705,7 @@
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         repo (state/get-current-repo)
-        view-fn (if (keyword? view) (state/sub [:config repo :view view]) view)
+        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])

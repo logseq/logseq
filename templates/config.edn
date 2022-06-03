@@ -109,12 +109,12 @@
  :ui/show-empty-bullets? false
 
  ;; Pre-defined :view function to use in Query
- :view
+ :query/views
  {:pprint
   (fn [r] [:pre.code (pprint r)])}
 
  ;; Pre-defined :result-transform function to use in Query
- :result-transform
+ :query/result-transforms
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 

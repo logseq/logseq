@@ -79,7 +79,7 @@
                    result)
           result-transform-fn (:result-transform q)
           repo (state/get-current-repo)]
-      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :result-transform result-transform-fn]) result-transform-fn)]
+      (if-let [result-transform (if (keyword? result-transform-fn) (state/sub [:config repo :query/result-transforms result-transform-fn]) result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try
             (sci/call-fn f result)
