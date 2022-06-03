@@ -2788,7 +2788,8 @@
                                :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
-           [:a.opacity-70.hover:opacity-100.svg-small.inline ;add an edit button
+           ;;insert an "edit" button in the query view
+           [:a.opacity-70.hover:opacity-100.svg-small.inline 
             {:on-mouse-down (fn [e]
                               (util/stop e)
                               (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
