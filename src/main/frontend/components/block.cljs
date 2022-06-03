@@ -2735,6 +2735,8 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
+        repo (state/get-current-repo)
+        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
@@ -2755,7 +2757,7 @@
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
-        view-f (and view (sci/eval-string (pr-str view)))
+        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and (seq result)
                                      (not not-grouped-by-page?)
