@@ -147,8 +147,10 @@
         :settings-page/git-commit-delay "Git auto commit seconds"
         :settings-page/edit-config-edn "Edit config.edn"
         :settings-page/edit-custom-css "Edit custom.css"
+        :settings-page/edit-export-css "Edit export.css"
         :settings-page/custom-configuration "Custom configuration"
         :settings-page/custom-theme "Custom theme"
+        :settings-page/export-theme "Export theme"
         :settings-page/show-brackets "Show brackets"
         :settings-page/spell-checker "Spell checker"
         :settings-page/auto-updater "Auto updater"
@@ -1561,14 +1563,18 @@
         :file-sync/other-user-graph "El gráfico local actual está unido al gráfico remoto de otro usuario. Así que no se puede empezar a sincronizar"
         :file-sync/graph-deleted "El gráfico remoto actual se ha eliminado"}
 
-   :nb-NO {:on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
-           :on-boarding/add-graph "Add a graph"
-           :on-boarding/open-local-dir "Open a local directory"
-           :on-boarding/new-graph-desc-1 "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."
-           :on-boarding/new-graph-desc-2 "After you have opened your directory, it will create three folders in that directory:"
-           :on-boarding/new-graph-desc-3 "/journals - store your journal pages"
-           :on-boarding/new-graph-desc-4 "/pages - store the other pages"
-           :on-boarding/new-graph-desc-5 "/logseq - store configuration, custom.css, and some metadata."
+   :nb-NO {:tutorial/text #?(:cljs (rc/inline "tutorial-no.md")
+                                :default "tutorial-no.md")
+           :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-no.md")
+                                       :default "dummy-notes-no.md")
+           :on-boarding/demo-graph "Dette er en demo graf, endringer vil ikke bli lagret før du åpner en lokal mappe."
+           :on-boarding/add-graph "Legg til en graf"
+           :on-boarding/open-local-dir "Åpne en lokal mappe"
+           :on-boarding/new-graph-desc-1 "Logseq støtter både Markdown og Org-mode. Du kan åpne en eksisterende mappe eller lage en ny på din enhet. Dine data vil bare bli lagret på denne enheten."
+           :on-boarding/new-graph-desc-2 "Etter at du har åpnet en mappe vil det blir opprettet tre undermapper i denne:"
+           :on-boarding/new-graph-desc-3 "/journals - lagrer dine dagboknotater"
+           :on-boarding/new-graph-desc-4 "/pages - lagrer andre sider"
+           :on-boarding/new-graph-desc-5 "/logseq - lagrer konfigurasjon, custom.css og noe metadata."
            :help/start "Kom i gang"
            :help/about "Om Logseq"
            :help/roadmap "Veikart"
@@ -1590,7 +1596,7 @@
            :help/block-reference "Blokkreferanse"
            :help/key-commands "Nøkkelkommandoer"
            :help/working-with-lists " (arbeide med lister)"
-           :help/select-nfs-browser " Vennligst bruk en annen nettleser (f.eks. siste chrome) som støtter NFS for å åpne en lokal mappe."
+           :help/select-nfs-browser " Vennligst bruk en annen nettleser (f.eks. siste Chrome) som støtter NFS for å åpne en lokal mappe."
            :undo "Angre"
            :redo "Gjør om"
            :general "Generell"
@@ -1671,7 +1677,7 @@
            :draw/invalid-file "Kunne ikke laste inn den ugyldige excalidraw-filen"
            :draw/specify-title "Vennligst spesifiser en tittel først!"
            :draw/rename-success "Filen ble omdøpt!"
-           :draw/rename-failure "Omdøpring av fil feilet, årsak: "
+           :draw/rename-failure "Omdøping av fil feilet, årsak: "
            :draw/title-placeholder "Uten navn"
            :draw/save "Lagre"
            :draw/save-changes "Lagre endringer"
@@ -1692,10 +1698,10 @@
            :content/open-in-sidebar "Åpne i sidefeltet"
            :content/copy-as-json "Kopier som JSON"
            :content/click-to-edit "Klikk for å redigere"
-           :settings-page/git-desc "is used for pages version control, you can click the vertical three dots menu to check the page's history."
-           :settings-page/git-confirm "You need to restart the app after updating the Git settings."
-           :settings-page/git-switcher-label "Enable Git auto commit"
-           :settings-page/git-commit-delay "Git auto commit seconds"
+           :settings-page/git-desc "brukes for versjonskontroll av sider. Du kan klikke på ...-menyen for å sjekke sidens historikk."
+           :settings-page/git-confirm "Du må starte appen på nytt etter å ha oppdatert Git innstillingene."
+           :settings-page/git-switcher-label "Skru på Git auto commit"
+           :settings-page/git-commit-delay "Git auto commit sekunder"
            :settings-page/edit-config-edn "Rediger config.edn for nåværende repo"
            :settings-page/edit-custom-css "Rediger custom.css"
            :settings-page/custom-configuration "Tilpasset konfigurasjon"
@@ -1826,7 +1832,7 @@
            :plugin/title "Tittel"
            :plugin/all "Alle"
            :plugin/unpacked "Utpakket"
-           :plugin/delete-alert "Vil du avinstallere plugin [{1}]?"
+           :plugin/delete-alert "Vil du avinstallere utvidelse [{1}]?"
            :plugin/open-settings "Åpne innstillinger"
            :plugin/open-package "Åpne pakke"
            :plugin/load-unpacked "Last inn utpakket utvidelse"
@@ -2171,7 +2177,13 @@
            :settings-page/network-proxy "Proxy de Rede"
 
            :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
-           :file-sync/graph-deleted "O gráfico remoto atual foi excluído"}
+           :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
+           
+           :page/copy-page-url "Copiar URL da página"
+           :page/file-sync-versions "Versões da página"
+           :plugin/not-installed "Não instalado"
+           :tutorial/dummy-notes "dummy-notes-en.md"
+           :tutorial/text "tutorial-en.md"}
 
    :pt-PT {:on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
@@ -3390,7 +3402,8 @@
         :select.graph/add-graph "Sì, aggiungi un nuovo grafo"
 
         :file-sync/other-user-graph "Il grafo locale attuale è associato al grafo remoto di un altro utente. Non è quindi possibile avviare la sincronizzazione."
-        :file-sync/graph-deleted "Il grafo attuale è stato eliminato"}
+        :file-sync/graph-deleted "Il grafo attuale è stato eliminato"
+        :settings-page/enable-encryption "Crittografia"}
 
    :tr {:tutorial/text #?(:cljs (rc/inline "tutorial-tr.md")
                                 :default "tutorial-tr.md")
@@ -3536,8 +3549,10 @@
         :settings-page/git-commit-delay "Git otomatik commit saniyesi"
         :settings-page/edit-config-edn "config.edn dosyasını düzenle"
         :settings-page/edit-custom-css "custom.css dosyasını düzenle"
+        :settings-page/edit-export-css "export.css dosyasını düzenle"
         :settings-page/custom-configuration "Özel yapılandırma"
         :settings-page/custom-theme "Özel tema"
+        :settings-page/export-theme "Temayı dışarı aktar"
         :settings-page/show-brackets "Köşeli ayraçları göster"
         :settings-page/spell-checker "Yazım denetleyici"
         :settings-page/auto-updater "Otomatik güncelleme"

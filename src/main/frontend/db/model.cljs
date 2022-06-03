@@ -8,7 +8,7 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -16,7 +16,7 @@
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
             [frontend.db.rules :refer [rules]]
-            [frontend.db.default :as default-db]
+            [logseq.graph-parser.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 
 ;; lazy loading
@@ -55,18 +55,6 @@
     :block/heading-level
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
-
-(defn transact-files-db!
-  ([tx-data]
-   (db-utils/transact! (state/get-current-repo) tx-data))
-  ([repo-url tx-data]
-   (when-not config/publishing?
-     (let [tx-data (->> (gp-util/remove-nils tx-data)
-                        (remove nil?)
-                        (map #(dissoc % :file/handle :file/type)))]
-       (when (seq tx-data)
-         (when-let [conn (conn/get-db repo-url false)]
-           (d/transact! conn (vec tx-data))))))))
 
 (defn pull-block
   [id]
@@ -208,16 +196,6 @@
            (conn/get-db repo-url) path)
       db-utils/seq-flatten))
 
-(defn get-file-pages
-  [repo-url path]
-  (-> (d/q '[:find ?page
-             :in $ ?path
-             :where
-             [?file :file/path ?path]
-             [?page :block/file ?file]]
-           (conn/get-db repo-url) path)
-      db-utils/seq-flatten))
-
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
@@ -239,19 +217,6 @@
   (when (and repo path)
     (when-let [db (conn/get-db repo)]
       (d/entity db [:file/path path]))))
-
-(defn get-file-contents
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (->>
-     (d/q
-      '[:find ?path ?content
-        :where
-        [?file :file/path ?path]
-        [?file :file/content ?content]]
-       db)
-     (into {}))))
-
 
 (defn get-files-full
   [repo]
@@ -666,7 +631,9 @@
         cached-ids-set (set (conj cached-ids page-id))
         first-changed-id (cond
                            (= (:real-outliner-op tx-meta) :indent-outdent)
-                           (last (:move-blocks tx-meta))
+                           (if (state/logical-outdenting?)
+                             (first (:move-blocks tx-meta))
+                             (last (:move-blocks tx-meta)))
 
                            (= outliner-op :move-blocks)
                            (let [{:keys [move-blocks target from-page to-page]} tx-meta]
@@ -1303,42 +1270,10 @@
     (get-block-referenced-blocks-ids id)
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
-(defn get-matched-blocks
-  [match-fn limit]
-  (when-let [repo (state/get-current-repo)]
-    (let [pred (fn [_db content]
-                 (match-fn content))]
-      (->> (d/q
-            '[:find ?block
-              :in $ ?pred
-              :where
-              [?block :block/content ?content]
-              [(?pred $ ?content)]]
-            (conn/get-db)
-            pred)
-           (take limit)
-           db-utils/seq-flatten
-           (db-utils/pull-many '[:block/uuid
-                                 :block/content
-                                 :block/properties
-                                 :block/format
-                                 {:block/page [:block/name]}])))))
-
-;; TODO: Does the result preserves the order of the arguments?
-(defn get-blocks-contents
-  [repo block-uuids]
-  (let [db (conn/get-db repo)]
-    (db-utils/pull-many repo '[:block/content]
-                        (mapv (fn [id] [:block/uuid id]) block-uuids))))
-
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
   (:block/journal? (db-utils/entity [:block/name page-name])))
-
-(defn get-db-type
-  [repo]
-  (db-utils/get-key-value repo :db/type))
 
 (defn get-public-pages
   [db]
@@ -1513,24 +1448,6 @@
           (let [datoms (d/datoms db :avet :block/page (:db/id page))
                 block-eids (mapv :e datoms)]
             (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids)))))))
-
-(defn delete-file-pages!
-  [repo-url path]
-  (let [pages (get-file-pages repo-url path)]
-    (mapv (fn [eid] [:db.fn/retractEntity eid]) pages)))
-
-(defn delete-file-tx
-  [repo-url file-path]
-  (->>
-   (concat
-    (delete-file-blocks! repo-url file-path)
-    (delete-file-pages! repo-url file-path)
-    [[:db.fn/retractEntity [:file/path file-path]]])
-   (remove nil?)))
-
-(defn delete-file!
-  [repo-url file-path]
-  (db-utils/transact! repo-url (delete-file-tx repo-url file-path)))
 
 (defn delete-pages-by-files
   [files]

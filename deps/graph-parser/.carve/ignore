@@ -1,0 +1,4 @@
+;; For CLI
+logseq.graph-parser.cli/parse-graph
+;; For CLI
+logseq.graph-parser.mldoc/ast-export-markdown

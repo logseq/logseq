@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible frontend.db.default
+(ns logseq.graph-parser.db.default
   (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names

@@ -25,10 +25,10 @@
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
             [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
@@ -346,7 +346,7 @@
       [:div.flex-1.page.relative
        (merge (if (seq (:block/tags page))
                 (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                  {:data-page-tags (text/build-data-value page-names)})
+                  {:data-page-tags (text-util/build-data-value page-names)})
                 {})
 
               {:key path-page-name

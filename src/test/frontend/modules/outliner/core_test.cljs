@@ -412,7 +412,7 @@
           (outliner-tx/transact! {:graph test-db}
             (outliner-core/delete-blocks! blocks {})))))))
 
-#_(deftest ^:long random-moves
+(deftest ^:long random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)

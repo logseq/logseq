@@ -1,4 +1,4 @@
-(ns ^:nbb-compatible logseq.graph-parser.util
+(ns logseq.graph-parser.util
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]
@@ -7,9 +7,6 @@
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
   [pattern s]
-  (when-not (string? s)
-    ;; TODO: sentry
-    (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
 
@@ -65,7 +62,7 @@
        (try
          (js/URL. s)
          true
-         (catch js/Error _e
+         (catch :default _e
            false))))
 
 (defn json->clj

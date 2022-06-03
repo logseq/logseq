@@ -16,12 +16,12 @@ test('favorite item and recent item test', async ({ page }) => {
   await page.locator("text=Add to Favorites").click()
   // click from another page
   const another_page_name = await createRandomPage(page)
-  expect(await page.innerText(':nth-match(.favorite-item a, 1)')).toBe('◦' + fav_page_name)
+  expect(await page.innerText(':nth-match(.favorite-item a, 1)')).toBe(fav_page_name)
   await page.click(":nth-match(.favorite-item, 1)")
   expect(await page.innerText('.page-title .title')).toBe(fav_page_name)
 
-  expect(await page.innerText(':nth-match(.recent-item a, 1)')).toBe('◦' + fav_page_name)
-  expect(await page.innerText(':nth-match(.recent-item a, 2)')).toBe('◦' + another_page_name)
+  expect(await page.innerText(':nth-match(.recent-item a, 1)')).toBe(fav_page_name)
+  expect(await page.innerText(':nth-match(.recent-item a, 2)')).toBe(another_page_name)
 
   // remove fav
   await page.click('.ui__dropdown-trigger')

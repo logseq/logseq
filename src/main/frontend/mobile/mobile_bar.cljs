@@ -127,8 +127,8 @@
                  (state/sub :editor/editing?))
         [:div#mobile-editor-toolbar.bg-base-2
          [:div.toolbar-commands
-          (indent-outdent false "arrow-bar-left")
-          (indent-outdent true "arrow-bar-right")
+          (indent-outdent false "indent-decrease")
+          (indent-outdent true "indent-increase")
           (command (editor-handler/move-up-down true) "arrow-bar-to-up")
           (command (editor-handler/move-up-down false) "arrow-bar-to-down")
           (command #(if (state/sub :document/mode?)

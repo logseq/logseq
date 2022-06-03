@@ -713,9 +713,9 @@
 #?(:cljs
    (defn copy-to-clipboard!
      ([s]
-      (utils/writeClipboard s false))
-     ([s html?]
-      (utils/writeClipboard s html?))))
+      (utils/writeClipboard (clj->js {:text s})))
+     ([s html]
+      (utils/writeClipboard (clj->js {:text s :html html})))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))

@@ -14,6 +14,7 @@
    :date-picker/next-week        "Date picker: Select next week"
    :pdf/previous-page            "Previous page of current pdf doc"
    :pdf/next-page                "Next page of current pdf doc"
+   :pdf/close                    "Close current pdf viewer"
    :auto-complete/complete       "Auto-complete: Choose selected item"
    :auto-complete/prev           "Auto-complete: Select previous item"
    :auto-complete/next           "Auto-complete: Select next item"
@@ -65,6 +66,7 @@
    :editor/indent                  "Indent block"
    :editor/outdent                 "Outdent block"
    :editor/copy                    "Copy (copies either selection, or block reference)"
+   :editor/copy-text               "Copy selections as text"
    :editor/cut                     "Cut"
    :editor/undo                    "Undo"
    :editor/redo                    "Redo"
@@ -129,7 +131,7 @@
   {:en (merge
         ;; Dynamically add this ns since command descriptions have to
         ;; stay in sync with shortcut.config command ids which do not
-        ;; have a namespce
+        ;; have a namespace
         (update-keys all-default-keyboard-shortcuts decorate-namespace)
         category)
 
@@ -156,6 +158,9 @@
              :command.editor/select-block-up          "选择上方的块"
              :command.editor/select-block-down        "选择下方的块"
              :command.editor/select-all-blocks        "选择所有块"
+             :command.pdf/previous-page               "上一页PDF文档"
+             :command.pdf/next-page                   "下一页PDF文档"
+             :command.pdf/close                       "关闭当前PDF文档"
              :command.ui/toggle-help                  "显示/关闭帮助"
              :command.git/commit                      "提交消息"
              :command.go/search                       "全文搜索"
@@ -661,7 +666,9 @@
              :command.graph/save                      "Salvar gráfico atual no computador"
              :command.misc/copy                       "Copiar (copiar seleção ou referência do bloco)"
              :command.ui/goto-plugins                 "Ir para o painel de plugins"
-             :command.ui/open-new-window              "Abra uma nova janela"}
+             :command.ui/open-new-window              "Abra uma nova janela"
+             :command.editor/select-down              "Selecione o conteúdo abaixo"
+             :command.editor/select-up                "Selecione o conteúdo acima"}
 
    :ja      {:shortcut.category/formatting                "フォーマット"
              :shortcut.category/basics                "基本操作"
@@ -962,6 +969,7 @@
              :command.editor/indent                  "Bloğu girintile"
              :command.editor/outdent                 "Blok girintisini azalt"
              :command.editor/copy                    "Kopyala (seçimi veya blok referansını kopyalar)"
+             :command.editor/copy-text               "Seçimleri metin olarak kopyala"
              :command.editor/cut                     "Kes"
              :command.editor/undo                    "Geri al"
              :command.editor/redo                    "Tinele"

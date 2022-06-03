@@ -23,8 +23,8 @@
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.mobile.footer :as footer]))
+            [react-draggable]
+            [rum.core :as rum]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -281,7 +281,6 @@
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight
-        vw-width js/window.innerWidth
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
@@ -301,15 +300,14 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
-                         (let [delta-width (- vw-width (+ (:left rect) left))]
-                           (< delta-width (* max-width 0.5))))
+        y-overflow-vh? (< to-max-height 130)
+        to-max-height (if y-overflow-vh? max-height to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
-      :class (if x-overflow-vw? "is-overflow-vw-x" "")
+      :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
       :style (merge
@@ -524,10 +522,6 @@
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-
-     (when (= (state/sub :editor/record-status) "RECORDING")
-       [:div#audio-record-toolbar
-        (footer/audio-record-cp)])
 
      (ui/ls-textarea
       {:id                id

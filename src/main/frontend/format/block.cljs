@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
@@ -15,7 +16,7 @@
   (gp-block/extract-blocks blocks content with-id? format
                            {:user-config (state/get-config)
                             :block-pattern (config/get-block-pattern format)
-                            :supported-formats (config/supported-formats)
+                            :supported-formats (gp-config/supported-formats)
                             :db (db/get-db (state/get-current-repo))
                             :date-formatter (state/get-date-formatter)}))
 
