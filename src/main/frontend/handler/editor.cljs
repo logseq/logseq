@@ -2888,7 +2888,7 @@
     (notification/show! (util/format "No macro is available for %s" url) :warning)))
 
 (defn- paste-copied-blocks-or-text
-  [text e]
+  [initial-text text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
@@ -2900,9 +2900,9 @@
        (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
-       text
+       initial-text
        ;; not copied from the external clipboard
-       (= (string/replace (string/trim text) "\r" "")
+       (= (string/replace (string/trim initial-text) "\r" "")
           (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
@@ -2976,7 +2976,7 @@
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
-          (paste-copied-blocks-or-text text e))
+          (paste-copied-blocks-or-text initial-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
