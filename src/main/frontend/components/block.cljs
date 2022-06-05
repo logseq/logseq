@@ -2434,7 +2434,7 @@
         :data-collapsed (and collapsed? has-child?)
         :class (str uuid
                     (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl")
+                    (when (and card? (not review-cards?)) " shadow-md")
                     (when (:ui/selected? block) " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
