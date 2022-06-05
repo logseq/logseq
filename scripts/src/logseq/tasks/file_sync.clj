@@ -13,13 +13,11 @@
             [clojure.test :as t :refer [deftest is]])
   (:import (java.net URLDecoder)))
 
-(def root-dir
-  "Root directory for graph that is being tested"
-  (atom nil))
+;; Root directory for graph that is being tested
+(defonce root-dir (atom nil))
 
-(def root-graph-id
-  "Graph id for given graph"
-  (atom nil))
+;; Graph id for given graph
+(defonce root-graph-id (atom nil))
 
 (defn- read-config*
   []
@@ -42,8 +40,8 @@
 
 (defn- build-headers
   []
-  (let [{:strs [access_token]} (read-config)]
-    {"authorization" (str "Bearer " access_token)}))
+  (let [{:strs [id_token]} (read-config)]
+    {"authorization" (str "Bearer " id_token)}))
 
 (defn- api-get-all-files
   [graph-id subdir]
@@ -85,6 +83,15 @@
   (fs/move (fs/file dir file)
            (fs/file dir new-file)))
 
+(defmethod run-action* :update-file
+  [{{:keys [file blocks dir]} :args}]
+  (let [origin-content (slurp (fs/file dir file))
+        new-content (str (str/trim-newline origin-content) "\n"
+                         (->> blocks
+                              (map #(str "- " %))
+                              (str/join "\n")))]
+    (spit (fs/file dir file) new-content)))
+
 (defn run-action [action-map]
   (println "\n===\nRUN" (pr-str action-map) "\n===")
   (run-action* action-map))
@@ -119,16 +126,18 @@
 
 (defn- files-are-in-sync?
   [dir graph-id subdir]
+  (try (ensure-dir-is-synced! dir graph-id subdir)
+       true
+       (catch Throwable e
+         (println (.getMessage e))
+         false)))
+
+(defn- wait&files-are-in-sync?
+  [dir graph-id subdir]
   ;; Approximate polling time before file changes are picked up by client
   (println "Wait 10s for logseq to pick up changes...")
   (Thread/sleep 10000)
-  (try-fn-n-times (fn []
-                    (try (ensure-dir-is-synced! dir graph-id subdir)
-                      true
-                      (catch Throwable e
-                        (println (.getMessage e))
-                        false)))
-                  10))
+  (try-fn-n-times #(files-are-in-sync? dir graph-id subdir) 10))
 
 (deftest file-changes
   (let [subdir "pages"
@@ -144,20 +153,31 @@
                   {:action :move-file
                    :args {:file (str subdir "/test.create-page.md")
                           :new-file (str subdir "/test.create-page-new.md")}}
+                  {:action :update-file
+                   :args {:file (str subdir "/test.create-page-new.md")
+                          :blocks ["update line1" "update line2"]}}
                   {:action :delete-file
                    :args {:file (str subdir "/test.create-page-new.md")}}])]
 
     (doseq [action-map actions]
       (run-action action-map)
-      (is (files-are-in-sync? @root-dir @root-graph-id subdir)
+      (is (wait&files-are-in-sync? @root-dir @root-graph-id subdir)
           (str "Test " (select-keys action-map [:action]))))))
 
-(defn integration-tests
-  "Run file-sync integration tests on graph directory"
-  [dir & _args]
-  (let [graph-names-to-ids (api-post-get-graphs)
+
+;; (deftest file)
+
+(defn setup-vars
+  []
+  (let [{:strs [dir]} (read-config)
+        graph-names-to-ids (api-post-get-graphs)
         graph-id (get graph-names-to-ids (fs/file-name dir))]
     (assert dir "No graph id for given dir")
     (reset! root-dir dir)
-    (reset! root-graph-id graph-id)
-    (t/run-tests 'logseq.tasks.file-sync)))
+    (reset! root-graph-id graph-id)))
+
+(defn integration-tests
+  "Run file-sync integration tests on graph directory"
+  [& _args]
+  (setup-vars)
+  (t/run-tests 'logseq.tasks.file-sync))
