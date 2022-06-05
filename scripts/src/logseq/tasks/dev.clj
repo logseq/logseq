@@ -34,7 +34,7 @@
   - lint invalid translation entries
   - Lint datalog rules"
   []
-  (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src"
+  (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
                "scripts/carve.clj"
                "scripts/large_vars.clj"
                "bb lang:invalid-translations"
