@@ -1,6 +1,7 @@
 (ns frontend.handler.block
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [clojure.walk :as walk]
    [frontend.db :as db]
    [frontend.db.model :as db-model]
@@ -149,8 +150,12 @@
 (def *swipe (atom nil))
 
 (defn on-touch-start
-  [event]
-  (let [input (state/get-input)]
+  [event uuid]
+  (let [input (state/get-input)
+        input-id (state/get-edit-input-id)]
+    (when-not (and input
+                   (string/ends-with? input-id (str uuid)))
+      (state/clear-edit!))
     (when (= (util/get-selection-start input)
              (util/get-selection-end input))
       (when-let [touches (.-targetTouches event)]
