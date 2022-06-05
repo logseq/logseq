@@ -1717,6 +1717,7 @@
                (<! (set-env rsapi config/FILE-SYNC-PROD? nil nil))
                (state/set-file-sync-state repo @*sync-state)
                (state/set-file-sync-manager sm)
+               (<! (ensure-pwd+keys-exists! graph-uuid repo))
                ;; wait seconds to receive all file change events,
                ;; and then drop all of them.
                ;; WHY: when opening a graph(or switching to another graph),
