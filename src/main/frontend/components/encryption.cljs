@@ -50,25 +50,25 @@
   (fn [close-fn]
     (encryption-dialog-inner repo-url close-fn)))
 
-(rum/defcs input-password-inner <
+(rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
   [state repo-url close-fn {:keys [type GraphName GraphUUID]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
-        verify-pw? (= type :input-pwd-remote)]
+        verify-pw? (= type :input-pwd-remote)
+        loading? (state/sub [:ui/loading? :set-graph-password])]
     [:div.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
-        (if verify-pw? "What's the password of your remote graph?" "Enter a password")]]]
+        (if verify-pw? "What's the password for this graph?" "Enter a password")]]]
 
-     (when-not verify-pw?
-       (ui/admonition
-         :warning
-         [:div.opacity-70
-          "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."]))
+     (ui/admonition
+      :warning
+      [:div.opacity-70
+       "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
 
      (when-not local-pw?
        [:p.px-2.pb-2
@@ -112,13 +112,19 @@
                                   (close-fn true))
 
                            (:create-pwd-remote :input-pwd-remote)
-                           (a/go
-                             (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
-                               (if (instance? ExceptionInfo persist-r)
-                                 (js/console.error persist-r)
-                                 (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
-                             (close-fn true))))))}
-        "Submit"]]]]))
+                           (do
+                             (state/set-state! [:ui/loading? :set-graph-password] true)
+                             (a/go
+                              (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
+                                (if (instance? ExceptionInfo persist-r)
+                                  (js/console.error persist-r)
+                                  (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
+                              (state/set-state! [:ui/loading? :set-graph-password] false)
+                              (close-fn true)))))))}
+        [:span.inline-flex
+         [:span "Submit"]
+         (when loading?
+           [:span.ml-2 (ui/loading "")])]]]]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
