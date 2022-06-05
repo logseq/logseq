@@ -388,22 +388,6 @@
                        (:current-parsing-file state))]]]]
     (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
-(rum/defc file-sync-download-progress < rum/static
-  [state]
-  (let [finished (or (:finished state) 0)
-        total (:total state)]
-    (if (= total :unknown)
-      (ui/loading "Loading...")
-      (let [width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-           left-label [:div.flex.flex-row.font-bold
-                       "Downloading"
-                       [:div.hidden.md:flex.flex-row
-                        [:span.mr-1 ": "]
-                        [:ul
-                         (for [file (:downloading-files state)]
-                           [:li file])]]]]
-       (ui/progress-bar-with-label width left-label (str finished "/" total))))))
-
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -429,16 +413,8 @@
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        graph-parsing-state (state/sub [:graph/parsing-state current-repo])
-        graph-file-sync-download-init-state (state/sub [:file-sync/download-init-progress current-repo])]
+        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
-      (or
-       (:downloading? graph-file-sync-download-init-state)
-       (not= (:total graph-file-sync-download-init-state) (:finished graph-file-sync-download-init-state)))
-      [:div.flex.items-center.justify-center.full-height-without-header
-       [:div.flex-1
-        (file-sync-download-progress graph-file-sync-download-init-state)]]
-
       (or
        (:graph-loading? graph-parsing-state)
        (not= (:total graph-parsing-state) (:finished graph-parsing-state)))

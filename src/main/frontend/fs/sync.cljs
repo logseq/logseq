@@ -1,6 +1,8 @@
 (ns frontend.fs.sync
   (:require [cljs-http.client :as http]
             [cljs-time.core :as t]
+            [cljs-time.format :as tf]
+            [cljs-time.coerce :as tc]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
@@ -427,6 +429,40 @@
 
     :else
     (throw (js/Error. (str "unsupport type " (str o))))))
+
+(defn- sort-file-metatdata-fn
+  ":recent-days-range > :favorite-pages > small-size pages > ...
+  :recent-days-range : [<min-inst-ms> <max-inst-ms>]
+"
+  [& {:keys [recent-days-range favorite-pages]}]
+  {:pre [(or (nil? recent-days-range)
+             (every? number? recent-days-range))]}
+  (let [favorite-pages* (set favorite-pages)]
+    (fn [^FileMetadata item]
+      (let [path (relative-path item)
+            journal? (string/starts-with? path "journals/")
+            journal-day
+            (when journal?
+              (try
+                (tc/to-long
+                 (tf/parse (tf/formatter "yyyy_MM_dd")
+                           (-> path
+                               (string/replace-first "journals/" "")
+                               (string/replace-first ".md" ""))))
+                (catch :default _)))]
+        (cond
+          (and recent-days-range
+               journal-day
+               (<= (first recent-days-range)
+                   ^number journal-day
+                   (second recent-days-range)))
+          journal-day
+
+          (contains? favorite-pages* path)
+          (count path)
+
+          :else
+          (- (.-size item)))))))
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -1078,9 +1114,8 @@
 
 (def full-sync-chan (chan 1))
 (def stop-sync-chan (chan 1))
-(def remote->local-sync-chan
-  "not used"
-  (chan 1))
+(def remote->local-sync-chan (chan 1))
+(def remote->local-full-sync-chan (chan 1))
 (def local->remote-sync-chan
   "not used"
   (chan))
@@ -1250,11 +1285,13 @@
             remote-all-files-meta (<! remote-all-files-meta-c)
             local-all-files-meta (<! local-all-files-meta-c)
             diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
+            recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
+            sorted-diff-remote-files (sort-by (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
             latest-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
         (println "[full-sync(remote->local)]"
-                 (count diff-remote-files) "files need to sync")
+                 (count sorted-diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map relative-path diff-remote-files)
+             this (map relative-path sorted-diff-remote-files)
              latest-txid))))))
 
 (defn- file-changed?
@@ -1454,8 +1491,7 @@
 (defrecord ^:large-vars/cleanup-todo
     SyncManager [graph-uuid base-path *sync-state
                  ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
-                 full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                 local-changes-chan ^:mutable ratelimit-local-changes-chan
+                 ^:mutable ratelimit-local-changes-chan
                  *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped?
                  ^:mutable ops-chan]
     Object
@@ -1487,9 +1523,10 @@
       (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
       (set! ratelimit-local-changes-chan (ratelimit local->remote-syncer local-changes-chan))
       (go-loop []
-        (let [{:keys [stop remote->local local->remote-full-sync local->remote]}
+        (let [{:keys [stop remote->local remote->local-full-sync local->remote-full-sync local->remote]}
               (async/alt!
                 stop-sync-chan {:stop true}
+                remote->local-full-sync-chan {:remote->local-full-sync true}
                 remote->local-sync-chan {:remote->local true}
                 full-sync-chan {:local->remote-full-sync true}
                 _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
@@ -1500,6 +1537,10 @@
             stop
             (do (drain-chan ops-chan)
                 (>! ops-chan {:stop true}))
+            remote->local-full-sync
+            (do (drain-chan ops-chan)
+                (>! ops-chan {:remote->local-full-sync true})
+                (recur))
             remote->local
             (let [txid
                   (if (true? remote->local)
@@ -1628,8 +1669,7 @@
         (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
         (swap! *sync-state sync-state--update-state ::stop))))
 
-(defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
-                    remote->local-sync-chan local->remote-sync-chan local-changes-chan]
+(defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state]
   (let [*txid (atom txid)
         *stopped? (volatile! false)
         remoteapi-with-stop (->RemoteAPI *stopped?)
@@ -1644,8 +1684,7 @@
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
     (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
-                   full-sync-chan stop-sync-chan
-                   remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil *stopped? nil)))
+                   nil *txid nil nil nil *stopped? nil)))
 
 
 (defn sync-stop []
@@ -1686,8 +1725,7 @@
         repo (state/get-current-repo)
         sm (sync-manager current-user-uuid graph-uuid
                          (config/get-repo-dir repo) repo
-                         txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                         local-changes-chan)]
+                         txid *sync-state)]
     (when-not (config/demo-graph? repo)
       (go
        ;; 1. if remote graph has been deleted, clear graphs-txid.edn
@@ -1713,6 +1751,7 @@
                (drain-chan local-changes-chan)
                (poll! stop-sync-chan)
                (poll! remote->local-sync-chan)
+               (poll! remote->local-full-sync-chan)
 
                ;; update global state when *sync-state changes
                (add-watch *sync-state ::update-global-state
@@ -1721,7 +1760,9 @@
                (.start sm)
 
 
-               (offer! remote->local-sync-chan true)
+               (if (zero? txid)
+                 (offer! remote->local-full-sync-chan true)
+                 (offer! remote->local-sync-chan true))
                (offer! full-sync-chan true)
 
                ;; watch :network/online?

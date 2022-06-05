@@ -55,38 +55,6 @@
   []
   (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
 
-(defn download-all-files
-  [repo graph-uuid user-uuid base-path]
-  (go
-    (<! (sync/set-env sync/rsapi config/FILE-SYNC-PROD? nil nil))
-    (<! (sync/ensure-pwd+keys-exists! graph-uuid repo))
-    (<! (sync/set-env sync/rsapi config/FILE-SYNC-PROD?
-                      (get-in @sync/pwd-map [graph-uuid :private-key])
-                      (get-in @sync/pwd-map [graph-uuid :private-key])))
-    (state/reset-file-sync-download-init-state!)
-    (state/set-file-sync-download-init-state! {:total :unknown :finished 0 :downloading? true})
-    (let [remote-all-files-meta (<! (sync/get-remote-all-files-meta sync/remoteapi graph-uuid))
-          local-all-files-meta (<! (sync/get-local-all-files-meta sync/rsapi graph-uuid base-path))
-          diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
-          latest-txid (:TXId (<! (sync/get-remote-graph sync/remoteapi nil graph-uuid)))
-          partitioned-filetxns
-          (sequence (sync/filepaths->partitioned-filetxns 10 graph-uuid user-uuid)
-                    (map sync/relative-path diff-remote-files))]
-      (state/set-file-sync-download-init-state! {:total (count diff-remote-files) :finished 0})
-      (let [r (<! (sync/apply-filetxns-partitions
-                   nil user-uuid graph-uuid base-path partitioned-filetxns repo nil (atom false)
-                   (fn [filetxns]
-                     (state/set-file-sync-download-init-state!
-                      {:downloading-files (mapv sync/relative-path filetxns)}))
-                   (fn [filetxns]
-                     (state/set-file-sync-download-init-state!
-                      {:finished (+ (count filetxns)
-                                    (or (:finished (state/get-file-sync-download-init-state)) 0))}))))]
-        (if (instance? ExceptionInfo r)
-          ;; TODO: add re-download button
-          (notification/show! (str "Download graph failed: " (ex-cause r)) :warning)
-          (do (state/reset-file-sync-download-init-state!)
-              (<! (sync/update-graphs-txid! latest-txid graph-uuid user-uuid repo))))))))
 
 (defn load-session-graphs
   []
@@ -101,14 +69,10 @@
 
 (defn init-graph [graph-uuid]
   (let [repo (state/get-current-repo)
-        base-path (config/get-repo-dir repo)
         user-uuid (user/user-uuid)]
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
-    (go (sync/sync-stop)
-        (<! (download-all-files repo graph-uuid user-uuid base-path))
-        (println :debug sync/graphs-txid)
-        (swap! refresh-file-sync-component not)
-        (state/pub-event! [:graph/switch repo {:persist? false}]))))
+    (swap! refresh-file-sync-component not)
+    (state/pub-event! [:graph/switch repo {:persist? false}])))
 
 (defn- download-version-file [graph-uuid file-uuid version-uuid]
   (go
