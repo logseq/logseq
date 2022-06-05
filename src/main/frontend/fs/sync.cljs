@@ -1355,39 +1355,22 @@
       (vreset! *stopped true))
 
     (ratelimit [this from-chan]
-      (let [c (.filtered-chan this 10000)
-            filter-e-fn (.filter-file-change-events-fn this)]
-        (go-loop [timeout-c (timeout rate)
-                  coll []]
-          (let [{:keys [timeout ^FileChangeEvent e stop]}
-                (async/alt! timeout-c {:timeout true}
-                            from-chan ([e] {:e e})
-                            stop-chan {:stop true})]
-            (cond
-              stop
-              (async/close! c)
-
-              timeout
-              (do (async/onto-chan! c coll false)
-                  (swap! *sync-state sync-state-reset-queued-local->remote-files)
-                  (recur (async/timeout rate) []))
-
-              (some? e)
-              (if (filter-e-fn e)
+      (let [filter-e-fn (.filter-file-change-events-fn this)]
+        (util/ratelimit
+         from-chan rate
+         :filter-fn
+         (fn [e]
+           (and (filter-e-fn e)
                 (let [e-path [(relative-path e)]]
                   (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
-                  (if (<! (filter-local-changes-pred e base-path graph-uuid))
-                    (let [coll* (distinct (conj coll e))]
-                      (recur timeout-c coll*))
-                    (do (swap! *sync-state sync-state--remove-queued-local->remote-files e-path)
-                        (recur timeout-c coll))))
-                (recur timeout-c coll))
-
-              (nil? e)
-              (do (println "close ratelimit chan")
-                  (async/close! c)))))
-        c))
-
+                  (go
+                    (let [v (<! (filter-local-changes-pred e base-path graph-uuid))]
+                      (when-not v
+                        (swap! *sync-state sync-state--remove-queued-local->remote-files e-path))
+                      v)))))
+         :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
+         :stop-ch stop-chan
+         :distinct-coll? true)))
 
     (sync-local->remote! [this es]
       (if (empty? es)
@@ -1478,12 +1461,6 @@
 
 ;;; ### put all stuff together
 
-(defn- drain-chan
-  "drop all stuffs in CH"
-  [ch]
-  (->> (repeatedly #(poll! ch))
-       (take-while identity)))
-
 (defrecord ^:large-vars/cleanup-todo
     SyncManager [graph-uuid base-path *sync-state
                  ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
@@ -1531,10 +1508,10 @@
                 :priority true)]
           (cond
             stop
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:stop true}))
             remote->local-full-sync
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local-full-sync true})
                 (recur))
             remote->local
@@ -1549,7 +1526,7 @@
             (do (>! ops-chan {:local->remote local->remote})
                 (recur))
             local->remote-full-sync
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:local->remote-full-sync true})
                 (recur)))))
       (.schedule this ::need-password nil))
@@ -1587,7 +1564,7 @@
             succ
             (.schedule this ::idle nil)
             need-sync-remote
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote-full-sync true})
                 (.schedule this ::idle nil))
@@ -1621,7 +1598,7 @@
             (s/assert ::sync-remote->local!-result r)
             (cond
               need-remote->local-full-sync
-              (do (drain-chan ops-chan)
+              (do (util/drain-chan ops-chan)
                   (>! ops-chan {:remote->local-full-sync true})
                   (>! ops-chan {:local->remote-full-sync true})
                   (.schedule this ::idle nil))
@@ -1644,7 +1621,7 @@
             (.schedule this ::idle nil)
 
             need-sync-remote
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote local-change})
                 (.schedule this ::idle nil))
@@ -1744,7 +1721,7 @@
                ;;      actually, each file corresponds to a file-change-event,
                ;;      we need to ignore all of them.
                (<! (timeout 5000))
-               (drain-chan local-changes-chan)
+               (util/drain-chan local-changes-chan)
                (poll! stop-sync-chan)
                (poll! remote->local-sync-chan)
                (poll! remote->local-full-sync-chan)
