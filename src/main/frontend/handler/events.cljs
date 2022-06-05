@@ -60,6 +60,7 @@
          (sync/sync-stop)))
 
 (defmethod handle :user/login [[_]]
+  (state/set-state! [:ui/loading? :login] false)
   (async/go
     (async/<! (file-sync-handler/load-session-graphs))
     (p/let [repos (repo-handler/refresh-repos!)]

@@ -230,7 +230,8 @@
      :file-sync/sync-downloading-files      nil
 
      :encryption/graph-parsing?             false
-     })))
+
+     :ui/loading?                           {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))

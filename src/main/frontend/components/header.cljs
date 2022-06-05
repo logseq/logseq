@@ -33,11 +33,17 @@
 
 (rum/defc login < rum/reactive
   []
-  (let [_ (state/sub :auth/id-token)]
+  (let [_ (state/sub :auth/id-token)
+        loading? (state/sub [:ui/loading? :login])]
     (when-not (or config/publishing?
                   (user-handler/logged-in?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-         [:span (t :login)]])))
+      [:a.button.text-sm.font-medium.block {:on-click
+                                            #(do
+                                               (state/set-state! [:ui/loading? :login] true)
+                                               (js/window.open config/LOGIN-URL))}
+       [:span (t :login)]
+       (when loading?
+         [:span.ml-2 (ui/loading "")])])))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
