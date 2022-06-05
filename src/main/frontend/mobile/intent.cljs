@@ -3,7 +3,6 @@
             ["path" :as path]
             ["send-intent" :refer [^js SendIntent]]
             [clojure.pprint :as pprint]
-            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -112,22 +111,9 @@
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
-          content (cond
-                    (gp-config/mldoc-support? application-type)
+          content (if (gp-config/mldoc-support? application-type)
                     (embed-text-file url title)
-
-                    (contains? (set/union (config/doc-formats) config/media-formats)
-                               (keyword application-type))
-                    (embed-asset-file url format)
-
-                    :else
-                    (notification/show!
-                     [:div
-                      (str "Import " application-type " file has not been supported. You can report it on ")
-                      [:a {:href "https://github.com/logseq/logseq/issues"
-                           :target "_blank"} "Github"]
-                      ". We will look into it soon."]
-                     :warning false))]
+                    (embed-asset-file url format))]
     (if (state/get-edit-block)
       (editor-handler/insert content)
       (editor-handler/api-insert-new-block! content {:page page
