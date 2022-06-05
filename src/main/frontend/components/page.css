@@ -101,7 +101,7 @@
     position: sticky;
     background-color: var(--ls-primary-background-color);
     white-space: nowrap;
-    top: -1px;
+    top: -18px;
     padding-bottom: 10px;
     z-index: 1;
 
