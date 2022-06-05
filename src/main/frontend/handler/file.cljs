@@ -20,7 +20,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.modules.outliner.file :as outliner-file]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -275,6 +276,7 @@
           (catch js/Error e
             (log/error :file/write-failed e))))
       (recur))
+    (outliner-file/ratelimit-file-writes!)
     chan))
 
 (defn watch-for-current-graph-dir!

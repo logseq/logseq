@@ -54,14 +54,12 @@
 
 (def *writes-finished? (atom true))
 
-(let [ch (util/ratelimit write-chan batch-write-interval
-                         :filter-fn
-                         #(do (reset! *writes-finished? false) true)
-                         :flush-fn
-                         #(reset! *writes-finished? true))]
-
-  (async/go-loop []
-    (let [item (async/<! ch)
-          items (cons item (util/drain-chan ch))]
-      (write-files! items)
-      (recur))))
+(defn ratelimit-file-writes!
+  []
+  (util/ratelimit write-chan batch-write-interval
+                 :filter-fn
+                 #(do (reset! *writes-finished? false) true)
+                 :flush-fn
+                 #(do
+                    (write-files! %)
+                    (reset! *writes-finished? true))))
