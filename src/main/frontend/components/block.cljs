@@ -1795,6 +1795,9 @@
        (int? v)
        v
 
+       (= k :file-path)
+       v
+
        date
        date
 

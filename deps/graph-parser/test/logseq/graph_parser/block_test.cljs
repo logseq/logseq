@@ -21,7 +21,8 @@
     [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
     [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
     [["foo" "bar, [[baz, test]]"]] {:foo #{"bar" "baz, test"}}
-    [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}})
+    [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}}
+    [["file-path" "file:///home/x, y.pdf"]] {:file-path "file:///home/x, y.pdf"})
 
   (are [x y] (= (vec (:page-refs (gp-block/extract-properties :markdown x {}))) y)
     [["year" "1000"]] []

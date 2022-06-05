@@ -174,8 +174,13 @@
                                            k)
                                        v (if (coll? v)
                                            (remove string/blank? v)
-                                           (if (string/blank? v)
+                                           (cond
+                                             (string/blank? v)
                                              nil
+                                             (and (= (keyword k) :file-path)
+                                                  (string/starts-with? v "file:"))
+                                             v
+                                             :else
                                              (text/parse-property format k v user-config)))
                                        k (keyword k)
                                        v (if (and
