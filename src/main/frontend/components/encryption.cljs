@@ -53,7 +53,7 @@
 (rum/defcs input-password-inner <
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  [state repo-url close-fn {:keys [type GraphName GraphUUID repo]}]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)

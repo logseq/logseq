@@ -5,7 +5,6 @@
             [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
-            [clojure.set :as set]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs.sync :as sync]

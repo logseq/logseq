@@ -1116,9 +1116,6 @@
 (def stop-sync-chan (chan 1))
 (def remote->local-sync-chan (chan 1))
 (def remote->local-full-sync-chan (chan 1))
-(def local->remote-sync-chan
-  "not used"
-  (chan))
 
 (defn sync-state
   "create a new sync-state"
