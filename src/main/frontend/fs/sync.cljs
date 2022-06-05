@@ -51,7 +51,6 @@
 ;; - local->remote-full-sync will be triggered after 20min of idle
 ;; - every 20s, flush local changes, and sync to remote
 
-;; TODO: when remote->local-full-sync, download latest journals first, then pages and so on
 ;; TODO: use access-token instead of id-token
 ;; TODO: a remote delete-diff cause local related-file deleted, then trigger a `FileChangeEvent`,
 ;;       and re-produce a new same-file-delete diff.
