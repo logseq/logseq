@@ -689,7 +689,10 @@
         (if (http/unexceptional-status? (:status resp))
           (get-resp-json-body resp)
           (ex-info "request failed"
-                   {:err resp :body (get-resp-json-body resp)})))))
+                   {:err resp
+                    :body (get-resp-json-body resp)
+                    :api-name api-name
+                    :request-body body})))))
 
   ;; for test
   (update-files [this graph-uuid txid files]
