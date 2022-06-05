@@ -99,6 +99,11 @@
       > .py-1 {
         padding: 0;
       }
+
+      .menu-link {
+        white-space: normal;
+        word-break: break-all;
+      }
     }
   }
 }
