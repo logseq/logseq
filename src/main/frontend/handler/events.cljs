@@ -55,6 +55,10 @@
          (sync/sync-stop)
          (sync/sync-start)))
 
+(defn- file-sync-stop! []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)))
+
 (defmethod handle :user/login [[_]]
   (async/go
     (async/<! (file-sync-handler/load-session-graphs))
@@ -77,7 +81,8 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
-  (repo-handler/refresh-repos!))
+  (repo-handler/refresh-repos!)
+  (file-sync-stop!))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
