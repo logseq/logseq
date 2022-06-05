@@ -2467,7 +2467,7 @@
 
      [:div.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-       :on-touch-start block-handler/on-touch-start
+       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
                         (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
