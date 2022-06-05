@@ -118,7 +118,7 @@
                               (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
                                 (if (instance? ExceptionInfo persist-r)
                                   (js/console.error persist-r)
-                                  (notification/show! (str "Successfully set the password for graph: " GraphName) :success)))
+                                  (notification/show! (str "Successfully set the password") :success)))
                               (state/set-state! [:ui/loading? :set-graph-password] false)
                               (close-fn true)))))))}
         [:span.inline-flex
