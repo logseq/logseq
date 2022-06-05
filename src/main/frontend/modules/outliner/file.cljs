@@ -13,13 +13,7 @@
             [frontend.state :as state]))
 
 (defonce write-chan (async/chan 100))
-(defonce write-chan-batch-buf (atom []))
-
 (def batch-write-interval 1000)
-
-(defn writes-finished?
-  []
-  (empty? @write-chan-batch-buf))
 
 (defn do-write-file!
   [repo page-db-id]
@@ -37,6 +31,7 @@
 (defn write-files!
   [pages]
   (when (seq pages)
+    (println :write-files pages)
     (when-not config/publishing?
       (doseq [[repo page-id] (set pages)]
         (try (do-write-file! repo page-id)
@@ -57,7 +52,16 @@
     (when-let [repo (state/get-current-repo)]
       (async/put! write-chan [repo page-db-id]))))
 
-(util/batch write-chan
-            batch-write-interval
-            write-files!
-            write-chan-batch-buf)
+(def *writes-finished? (atom true))
+
+(let [ch (util/ratelimit write-chan batch-write-interval
+                         :filter-fn
+                         #(do (reset! *writes-finished? false) true)
+                         :flush-fn
+                         #(reset! *writes-finished? true))]
+
+  (async/go-loop []
+    (let [item (async/<! ch)
+          items (cons item (util/drain-chan ch))]
+      (write-files! items)
+      (recur))))
