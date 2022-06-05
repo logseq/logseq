@@ -44,14 +44,6 @@
                       (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
-(rum/defc indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
 (rum/defc timestamp-submenu
   [parent-id]
   (let [callback (fn [event]
@@ -127,8 +119,6 @@
                  (state/sub :editor/editing?))
         [:div#mobile-editor-toolbar.bg-base-2
          [:div.toolbar-commands
-          (indent-outdent false "indent-decrease")
-          (indent-outdent true "indent-increase")
           (command (editor-handler/move-up-down true) "arrow-bar-to-up")
           (command (editor-handler/move-up-down false) "arrow-bar-to-down")
           (command #(if (state/sub :document/mode?)

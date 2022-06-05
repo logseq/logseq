@@ -191,7 +191,7 @@
     
     .commands-button {
         overflow: hidden;
-        max-width: 50px;
+        max-width: 40px;
         text-align: center;
         margin: auto 0;
 
@@ -207,7 +207,6 @@
 
     .commands-button {
         overflow: hidden;
-        max-width: 80px;
         text-align: center;
         margin: auto 0;
 

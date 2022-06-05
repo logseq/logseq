@@ -2097,12 +2097,14 @@
     [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
 
 (rum/defc block-right-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
+  [_config {:block/keys [uuid] :as _block} edit?]
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
    [:div.commands-button.w-0.flex.flew-col.rounded-md
-    {:id (str "block-right-menu-" uuid)}
-    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]]])
+    {:id (str "block-right-menu-" uuid)
+     :style {:max-width (if edit? 40 80)}}
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    (when-not edit?
+      [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)
@@ -2467,7 +2469,7 @@
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start block-handler/on-touch-start
        :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
+                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel block-handler/on-touch-cancel
@@ -2482,7 +2484,7 @@
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
       (when @*show-right-menu?
-        (block-right-menu config block))]
+        (block-right-menu config block edit?))]
 
      (block-children config children collapsed?)
 
