@@ -22,6 +22,10 @@
   (let [[_user-uuid graph-uuid _txid] @sync/graphs-txid]
     (some? graph-uuid)))
 
+(defn current-graph-sync-on?
+  []
+  (when-let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])]
+    (not (sync/sync-state--stopped? sync-state))))
 
 (defn create-graph
   [name]
