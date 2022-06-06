@@ -1,5 +1,5 @@
 .cp__header {
-  @apply z-10;  
+  @apply z-10;
   -webkit-app-region: drag;
 
   padding-top: var(--ls-headbar-inner-top-padding);
@@ -105,7 +105,6 @@
 
   .dropdown-wrapper {
     .ti {
-      margin-right: 5px;
       opacity: .9;
     }
   }
@@ -218,7 +217,7 @@ a.button {
 }
 
 html.is-ios.is-safari {
-  
+
   .cp__header {
     background-color: var(--ls-primary-background-color);
   }

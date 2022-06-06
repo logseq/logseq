@@ -970,11 +970,12 @@
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
-                                   (map :block/uuid))]
-    (export/export-blocks-as-markdown
-     repo top-level-block-uuids
-     (state/get-export-block-text-indent-style)
-     (into [] (state/get-export-block-text-remove-options)))))
+                                   (map :block/uuid))
+        content (export/export-blocks-as-markdown
+                 repo top-level-block-uuids
+                 (state/get-export-block-text-indent-style)
+                 (into [] (state/get-export-block-text-remove-options)))]
+    [top-level-block-uuids content]))
 
 (defn copy-selection-blocks
   [html?]
@@ -982,10 +983,10 @@
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
                                  (uuid id)) blocks))
-          content (compose-copied-blocks-contents repo ids)
+          [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (let [html (export/export-blocks-as-html repo ids)]
+        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
@@ -1065,9 +1066,13 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (db/pull-many repo '[*] lookup-refs)]
-          (state/set-copied-full-blocks nil blocks)
-          (delete-blocks! repo block-uuids blocks dom-blocks))))))
+              blocks (db/pull-many repo '[*] lookup-refs)
+              top-level-blocks (outliner-core/get-top-level-blocks blocks)
+              sorted-blocks (mapcat (fn [block]
+                                      (tree/get-sorted-block-and-children repo (:db/id block)))
+                                    top-level-blocks)]
+          (state/set-copied-full-blocks nil sorted-blocks)
+          (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -1194,9 +1199,10 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          md-content (compose-copied-blocks-contents repo [block-id])
-          html (export/export-blocks-as-html repo [block-id])]
-      (state/set-copied-full-blocks md-content [block])
+          [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
+          html (export/export-blocks-as-html repo [block-id])
+          sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
+      (state/set-copied-full-blocks md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
