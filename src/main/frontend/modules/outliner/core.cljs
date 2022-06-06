@@ -4,7 +4,7 @@
             [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
@@ -623,7 +623,9 @@
                                      (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
                                        (map (fn [uuid] {:block/uuid uuid
                                                         :block/page target-page}) children-ids)))
-                  fix-non-consecutive-tx (fix-non-consecutive-blocks blocks target-block sibling?)
+                  fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)
+                                              (remove (fn [b]
+                                                        (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
                   full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                   tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                                    :target (:db/id target-block)}

@@ -7,6 +7,7 @@
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.util.page-property :as page-property]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.config :as gp-config]
@@ -154,14 +155,14 @@
         page-name (str "hls__" page-name)
         page (db-model/get-page page-name)
         url (:url pdf-current)
-        format (state/get-preferred-format)]
+        format (state/get-preferred-format)
+        repo-dir (config/get-repo-dir (state/get-current-repo))
+        asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
+        url (if (string/includes? url asset-dir)
+              (str ".." (last (string/split url repo-dir)))
+              url)]
     (if-not page
-      (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-            asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
-            url (if (string/includes? url asset-dir)
-                  (str ".." (last (string/split url repo-dir)))
-                  url)
-            label (:filename pdf-current)]
+      (let [label (:filename pdf-current)]
         (page-handler/create! page-name {:redirect?        false :create-first-block? false
                                          :split-namespace? false
                                          :format           format
@@ -175,7 +176,10 @@
                                                                          url)
                                                             :file-path url}})
         (db-model/get-page page-name))
-      page)))
+
+      ;; try to update file path
+      (page-property/add-property! page-name :file-path url))
+    page))
 
 (defn create-ref-block!
   [{:keys [id content page]}]

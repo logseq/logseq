@@ -56,12 +56,15 @@
                    (log/error :file/write-failed {:path path
                                                   :error error})))
           url (util/format "../assets/%s" filename)
-          file-link (editor-handler/get-asset-file-link format url filename true)]
+          file-link (editor-handler/get-asset-file-link format url filename true)
+          args (merge (if (parse-uuid page)
+                        {:block-uuid (uuid page)}
+                        {:page page})
+                      {:edit-block? false
+                       :replace-empty-target? true})]
     (if edit-block
-      (state/append-current-edit-content! file-link)
-      (editor-handler/api-insert-new-block! file-link {:page page
-                                                       :edit-block? false
-                                                       :replace-empty-target? true}))))
+      (editor-handler/insert file-link)
+      (editor-handler/api-insert-new-block! file-link args))))
 
 (defn stop-recording []
   (p/catch

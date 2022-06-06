@@ -321,6 +321,21 @@
              :block/parent #:db{:id 6},
              :block/uuid 9}]))))
 
+(deftest test-get-sorted-block-and-children
+  (testing "get-sorted-block-and-children"
+    (transact-tree! tree)
+    (is (=
+         '(2 3 4 5 6 7 8 9 10 11)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 2))))))
+
+    (is (=
+         '(22 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 22))))))
+
+    (is (=
+         '(16 17)
+         (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 16))))))))
+
 ;;; Fuzzy tests
 
 (def init-id (atom 100))
@@ -412,7 +427,7 @@
           (outliner-tx/transact! {:graph test-db}
             (outliner-core/delete-blocks! blocks {})))))))
 
-#_(deftest ^:long random-moves
+(deftest ^:long random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-count)

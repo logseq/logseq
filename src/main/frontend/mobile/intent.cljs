@@ -13,10 +13,10 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
             [promesa.core :as p]))
 
 (defn- handle-received-text [result]
@@ -34,7 +34,7 @@
                      (string/split url "\"\n"))
         text (some-> text (string/replace #"^\"" ""))
         url (and url
-                 (cond (boolean (text/get-matched-video url))
+                 (cond (boolean (text-util/get-matched-video url))
                        (util/format "{{video %s}}" url)
 
                        (and (string/includes? url "twitter.com")
@@ -52,7 +52,7 @@
                    (string/replace "{text}" (or text ""))
                    (string/replace "{url}" (or url "")))]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! values)
+      (editor-handler/insert values)
       (editor-handler/api-insert-new-block! values {:page page
                                                     :edit-block? false
                                                     :replace-empty-target? true}))))
@@ -102,7 +102,7 @@
           format (db/get-page-format page)
           content (embed-asset-file url format)]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! content)
+      (editor-handler/insert content)
       (editor-handler/api-insert-new-block! content {:page page
                                                      :edit-block? false
                                                      :replace-empty-target? true}))))
@@ -129,7 +129,7 @@
                       ". We will look into it soon."]
                      :warning false))]
     (if (state/get-edit-block)
-      (state/append-current-edit-content! content)
+      (editor-handler/insert content)
       (editor-handler/api-insert-new-block! content {:page page
                                                      :edit-block? false
                                                      :replace-empty-target? true}))))

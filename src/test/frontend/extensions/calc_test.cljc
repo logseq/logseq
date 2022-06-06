@@ -1,10 +1,15 @@
 (ns frontend.extensions.calc-test
   (:require [clojure.test :as test :refer [are deftest testing]]
+            [clojure.edn :as edn]
             [frontend.extensions.calc :as calc]))
+
+(defn convert-bigNum [b]
+  (edn/read-string (str b))
+  )
 
 (defn run [expr]
   {:pre [(string? expr)]}
-  (calc/eval (calc/parse expr)))
+  (convert-bigNum (calc/eval (calc/parse expr))))
 
 (deftest basic-arithmetic
   (testing "numbers are parsed as expected"
@@ -102,7 +107,7 @@
   (testing "variables can be remembered"
     (are [final-env expr] (let [env (calc/new-env)]
                             (calc/eval env (calc/parse expr))
-                            (= final-env @env))
+                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 1}        "a = 1"
       {"a" -1}        "a = -1"
       {"variable" 1} "variable = 1 + 0 * 2"
@@ -114,7 +119,7 @@
   (testing "variables can have underscores"
     (are [final-env expr] (let [env (calc/new-env)]
                             (calc/eval env (calc/parse expr))
-                            (= final-env @env))
+                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a_a" 1}         "a_a = 1"
       {"x_yy_zzz" 1}    "x_yy_zzz= 1"
       {"foo_bar_baz" 1} "foo_bar_baz = 1 + -0 * 2"))
@@ -122,7 +127,7 @@
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
                                (calc/eval env (calc/parse expr)))
-                             (= final-env @env))
+                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 1 "b" 2}          ["a = 1" "b = a + 1"]
       {"a" 1 "b" 0}          ["a = 1" "b = -a + 1"]
       {"a" 1 "b" 3}          ["a = 1" "b=a*2+1"]
@@ -133,7 +138,7 @@
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
                                (calc/eval env (calc/parse expr)))
-                             (= final-env @env))
+                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 2}              ["a = 1" "a = 2"]
       {"a" 2 "b" 2}        ["a = 1" "b = a + 1" "a = b"]
       {"variable" 1 "x" 0} ["variable = 1 + 0 * 2" "x = log(variable)" "x = variable - 1"])))

@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]

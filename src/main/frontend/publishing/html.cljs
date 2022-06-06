@@ -19,7 +19,7 @@
              :name "viewport"}]
            [:link {:type "text/css", :href "static/css/tabler-icons.min.css", :rel "stylesheet"}]
            [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
-           [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
+           [:link {:type "text/css", :href "static/css/export.css", :rel "stylesheet"}]
            [:link
             {:href icon
              :type "image/png",

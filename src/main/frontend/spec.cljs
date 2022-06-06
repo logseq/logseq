@@ -25,4 +25,3 @@
 ;; repo
 
 (s/def :repos/url string?)
-(s/def :repos/branch string?)

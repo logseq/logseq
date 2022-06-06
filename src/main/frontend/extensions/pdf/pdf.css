@@ -684,6 +684,10 @@ body.is-pdf-active {
   #main-container.is-left-sidebar-open {
     padding-left: unset;
   }
+
+  #left-menu {
+    display: none;
+  }
 }
 
 /* overrides for pdf_viewer.css from PDF.JS web viewer */

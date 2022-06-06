@@ -380,8 +380,8 @@
 
 (def circle-stop
   [:svg
-   {:width "1.3rem"
-    :height "1.3rem"
+   {:width "20px"
+    :height "20px"
     :viewBox "0 0 512 512"
     :fill     "currentColor"}
    [:path

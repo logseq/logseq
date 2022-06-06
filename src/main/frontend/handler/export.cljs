@@ -95,6 +95,7 @@
         (js/window.apis.exportPublishAssets
          raw-html-str
          (config/get-custom-css-path)
+         (config/get-export-css-path)
          (config/get-repo-dir repo)
          (clj->js asset-filenames)
          (util/mocked-open-dir-path))

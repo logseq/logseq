@@ -133,8 +133,9 @@
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:a#left-menu.cp__header-left-menu.button
      {:on-click on-click
-      :style {:margin-left 12}}
-     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+      :style    {:margin-left 12}}
+     [:span.inner
+      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
@@ -245,15 +246,15 @@
       :style           {:fontSize  50}}
      [:div.l.flex
       (when-not (mobile-util/native-platform?)
-        left-menu
-        (when current-repo ;; this is for the Search button
-          (ui/with-shortcut :go/search "right"
-            [:a.button#search-button
-             {:on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
-             (ui/icon "search" {:style {:fontSize ui/icon-size}})])))
+        [left-menu
+         (when current-repo ;; this is for the Search button
+           (ui/with-shortcut :go/search "right"
+             [:a.button#search-button
+              {:on-click #(do (when (or (mobile-util/native-android?)
+                                        (mobile-util/native-iphone?))
+                                (state/set-left-sidebar-open! false))
+                              (state/pub-event! [:go/search]))}
+              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
         (if (state/home?)
           left-menu
