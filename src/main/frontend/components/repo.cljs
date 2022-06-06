@@ -14,7 +14,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.text :as text]
+            [frontend.util.text :as text-util]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
@@ -39,7 +39,7 @@
       [:span.flex.items-center
        (if local?
          (let [local-dir (config/get-local-dir url)
-               graph-name (text/get-graph-name-from-path local-dir)]
+               graph-name (text-util/get-graph-name-from-path local-dir)]
            [:a {:title    local-dir
                 :on-click #(on-click graph)}
             [:span graph-name (and GraphName [:strong.px-1 "(" GraphName ")"])]
@@ -123,7 +123,7 @@
                     (fn [{:keys [url remote? GraphName GraphUUID] :as graph}]
                       (let [local? (config/local-db? url)
                             repo-path (if local? (db/get-repo-name url) GraphName )
-                            short-repo-name (if local? (text/get-graph-name-from-path repo-path) GraphName)]
+                            short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
                         {:title        [:span.flex.items-center short-repo-name
                                         (when remote? [:span.pl-1
                                                        {:title (str "<" GraphName "> #" GraphUUID)}

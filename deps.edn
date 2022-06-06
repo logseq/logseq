@@ -29,8 +29,8 @@
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.2"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   nubank/workspaces                     {:mvn/version "1.1.1"}
-  frankiesardo/linked                   {:mvn/version "1.3.0"}
-  org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}}
+  org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
+  logseq/graph-parser                   {:local/root "deps/graph-parser"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
@@ -47,5 +47,5 @@
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.01.13"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.28"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

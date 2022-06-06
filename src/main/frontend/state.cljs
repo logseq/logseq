@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -1012,15 +1013,7 @@
 
 (defn get-date-formatter
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (or
-        (get-in @state [:config repo :journal/page-title-format])
-        ;; for compatibility
-        (get-in @state [:config repo :date-formatter])))
-    ;; TODO:
-    (get-in @state [:me :settings :date-formatter])
-    "MMM do, yyyy"))
+  (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))

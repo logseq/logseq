@@ -5,12 +5,13 @@
   the team to maintain and understand them."
   (:require [babashka.pods :as pods]
             [clojure.pprint :as pprint]
+            [clojure.edn :as edn]
             [clojure.set :as set]))
 
-(pods/load-pod 'clj-kondo/clj-kondo "2021.12.19")
+(pods/load-pod 'clj-kondo/clj-kondo "2022.02.09")
 (require '[pod.borkdude.clj-kondo :as clj-kondo])
 
-(def config
+(def default-config
   ;; TODO: Discuss with team and agree on lower number
   {:max-lines-count 100
    ;; Vars with these metadata flags are allowed. Name should indicate the reason
@@ -23,11 +24,14 @@
 
 (defn -main
   [args]
-  (let [paths (or args ["src"])
+  (let [paths [(or (first args) "src")]
+        config (or (some->> (second args) edn/read-string (merge default-config))
+                   default-config)
         {{:keys [var-definitions]} :analysis}
         (clj-kondo/run!
          {:lint paths
-          :config {:output {:analysis {:var-definitions {:meta true}}}}})
+          :config {:output {:analysis {:var-definitions {:meta true
+                                                         :lang :cljs}}}}})
         vars (->> var-definitions
                   (keep (fn [m]
                           (let [lines-count (inc (- (:end-row m) (:row m)))]
@@ -40,7 +44,7 @@
                   (sort-by :lines-count (fn [x y] (compare y x))))]
     (if (seq vars)
       (do
-        (println (format "The following vars exceed the line count max of %s:"
+        (println (format "\nThe following vars exceed the line count max of %s:"
                          (:max-lines-count config)))
         (pprint/print-table vars)
         (System/exit 1))

@@ -2,7 +2,7 @@
 * Android studio
 * SDK 30
 * other sdk tools in Android studio preference setting https://capacitorjs.com/docs/getting-started/environment-setup
-* change the server url in capacitor.config.json with your local ip:3001 (run ifconfig to check)
+* change the server url in `capacitor.config.ts` with your local ip:3001 (run ifconfig to check)
 * run `yarn && yarn app-watch`
 * in another console, run `npx cap open android`
 * create Android virtual device in Android studio

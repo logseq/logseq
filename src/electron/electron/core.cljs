@@ -1,7 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.search :as search]
-            [electron.updater :refer [init-updater]]
+            [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
             [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
@@ -11,7 +11,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
             [clojure.core.async :as async]
             [electron.state :as state]
@@ -180,6 +180,51 @@
          (.removeHandler ipcMain call-app-channel)
          (.removeHandler ipcMain call-win-channel))))
 
+(defn- set-app-menu! []
+  (let [about-fn (fn []
+                   (.showMessageBox dialog (clj->js {:title "Logseq"
+                                                     :icon (path/join js/__dirname "icons/logseq.png")
+                                                     :message (str "Version " updater/electron-version)})))
+        template (if mac?
+                   [{:label (.-name app)
+                     :submenu [{:role "about"}
+                               {:type "separator"}
+                               {:role "services"}
+                               {:type "separator"}
+                               {:role "hide"}
+                               {:role "hideOthers"}
+                               {:role "unhide"}
+                               {:type "separator"}
+                               {:role "quit"}]}]
+                   [])
+        template (conj template
+                       {:role "fileMenu"
+                        :submenu [{:label "New Window"
+                                   :click (fn []
+                                            (handler/open-new-window!))
+                                   :accelerator "CommandOrControl+N"
+                                   :acceleratorWorksWhenHidden false}
+                                  (if mac?
+                                    {:role "close"}
+                                    {:role "quit"})]}
+                       {:role "editMenu"}
+                       {:role "viewMenu"}
+                       {:role "windowMenu"})
+        ;; Windows has no about role
+        template (conj template
+                       (if mac?
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}]}
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}
+                                    {:role "about"
+                                     :label "About Logseq"
+                                     :click about-fn}]}))
+        menu (.buildFromTemplate Menu (clj->js template))]
+    (.setApplicationMenu Menu menu)))
+
 (defn- setup-deeplink! []
   ;; Works for Deeplink v1.0.9
   ;; :mainWindow is only used for handeling window restoring on second-instance,
@@ -210,6 +255,7 @@
                              {:scheme     FILE_LSP_SCHEME
                               :privileges privileges}]))
 
+      (set-app-menu!)
       (setup-deeplink!)
 
       (.on app "second-instance"

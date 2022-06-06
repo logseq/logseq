@@ -101,7 +101,7 @@
     position: sticky;
     background-color: var(--ls-primary-background-color);
     white-space: nowrap;
-    top: -1px;
+    top: -18px;
     padding-bottom: 10px;
     z-index: 1;
 
@@ -119,7 +119,6 @@
       font-size: 16px;
       display: inline-block;
       position: relative;
-      bottom: -1px;
     }
 
     .l {
@@ -136,7 +135,7 @@
 
       a.journal {
         color: var(--ls-primary-text-color);
-        opacity: .3;
+        margin-top: 1px;
 
         &.active {
           opacity: 1;
@@ -148,7 +147,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-right: 5px;
+        margin-right: 3px;
       }
     }
 
@@ -195,7 +194,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 5px;
+    padding: 0 5px 0 0;
 
     > span {
       color: var(--ls-primary-text-color);
@@ -208,12 +207,6 @@
             opacity: .6;
           }
         }
-      }
-
-      &.is-first > a:first-child,
-      &.is-last > a:last-child {
-        pointer-events: none;
-        opacity: .3;
       }
     }
   }
@@ -276,8 +269,9 @@
 
 a.page-title {
   padding: 0 8px;
-  margin-left: -12px;
+  margin-left: -8px;
   transition: none;
+  display: block;
 }
 
 html.is-native-android,

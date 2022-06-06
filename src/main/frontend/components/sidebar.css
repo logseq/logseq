@@ -82,11 +82,11 @@
   }
 
   .page-icon {
-    width: 1em;
     text-align: center;
     display: inline-block;
+    line-height: 1em;
     color: #aaa;
-    visibility: hidden;
+    padding: 0 4px 0 8px;
   }
 
   a.item {
