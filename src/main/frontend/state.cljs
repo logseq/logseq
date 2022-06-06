@@ -1437,7 +1437,7 @@
 (defn set-copied-full-blocks
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
+                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
