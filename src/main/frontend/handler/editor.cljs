@@ -3014,7 +3014,9 @@
       (notification/show!
        [:div
         [:span.mb-1.5 (str "Block " format " copied!")]
-        [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
+        [:div [:code.whitespace-nowrap (if (= format "embed")
+                                         (str "{{embed ((" block-id "))}}")
+                                         (str "((" block-id "))"))]]]
        :success true
        ;; use uuid to make sure there is only one toast a time
        (str "copied-block-ref:" block-id)))))
