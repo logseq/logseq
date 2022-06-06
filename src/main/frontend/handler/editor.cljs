@@ -2899,7 +2899,6 @@
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
         input (state/get-input)]
-    (util/stop e)
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
@@ -2933,22 +2932,30 @@
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
-          (paste-text-parseable format text)
+          (do
+            (util/stop e)
+            (paste-text-parseable format text))
 
           [:org _ false _]
-          (paste-text-parseable format text)
+          (do
+            (util/stop e)
+            (paste-text-parseable format text))
 
           [:markdown true _ false]
-          (paste-segmented-text format text)
+          (do
+            (util/stop e)
+            (paste-segmented-text format text))
 
           [:markdown true _ true]
-          (commands/simple-insert! (state/get-edit-input-id) text nil)
+          nil
 
           [:org _ true false]
-          (paste-segmented-text format text)
+          (do
+            (util/stop e)
+            (paste-segmented-text format text))
 
           [:org _ true true]
-          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
+          nil)))))
 
 (defn paste-text-in-one-block-at-point
   []
