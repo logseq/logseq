@@ -4,6 +4,7 @@ import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { LSPluginRequest } from './modules/LSPlugin.Request'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
@@ -115,23 +116,6 @@ export type IBatchBlock = {
 export type IDatom = [e: number, a: string, v: any, t: number, added: boolean]
 
 export type IGitResult = { stdout: string; stderr: string; exitCode: number }
-
-export type IRequestOptions<R = any> = {
-  url: string
-  headers: Record<string, string>
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  data: Object | ArrayBuffer
-  timeout: number
-  dataType: 'json' | 'text' | 'base64' | 'arraybuffer'
-  success: (result: R) => void
-  fail: (err: any) => void
-  final: () => void
-}
-
-export type IRequestTask<R> = {
-  abort: () => void
-  promise: Promise<R>
-}
 
 export interface AppUserInfo {
   [key: string]: any
@@ -967,6 +951,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Git: IGitProxy
   UI: IUIProxy
 
+  Request: LSPluginRequest
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments
 }

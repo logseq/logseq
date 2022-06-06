@@ -531,6 +531,15 @@
                         (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))
 
+(defn call-plugin
+  [^js pl type payload]
+  (when pl
+    (.call (.-caller pl) (name type) (bean/->js payload))))
+
+(defn request-callback
+  [^js pl req-id payload]
+  (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []

@@ -368,6 +368,33 @@
 (defmethod handle :uninstallMarketPlugin [_ [_ id]]
   (plugin/uninstall! id))
 
+(defmethod handle :httpRequest [_ [_ _req-id opts]]
+  (let [{:keys [url method dataType data headers]} opts]
+    (when-let [[method type] (and (not (string/blank? url))
+                                  [(keyword (string/upper-case (or method "GET")))
+                                   (keyword (string/lower-case (or dataType "json")))])]
+      (-> (utils/fetch url
+                       (-> {:method  method
+                            :headers (and headers (bean/->js headers))}
+                           (merge (when (and (not (contains? #{:GET :HEAD} method)) data)
+                                    ;; TODO: support type of arrayBuffer
+                                    {:body (js/JSON.stringify (bean/->js data))}))))
+          (p/then (fn [^js res]
+                    (case type
+                      :json
+                      (.json res)
+
+                      :arraybuffer
+                      (.arrayBuffer res)
+
+                      :base64
+                      (-> (.buffer res)
+                          (p/then #(.toString % "base64")))
+
+                      :text
+                      (.text res))))
+          (p/catch identity)))))
+
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
 

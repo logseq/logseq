@@ -1,4 +1,4 @@
-import { IRequestOptions, IRequestTask, LSPluginUser, WithOptional } from '../LSPlugin.user'
+import { LSPluginUser } from '../LSPlugin.user'
 import { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../helpers'
 
@@ -24,7 +24,7 @@ export class LSPluginExperiments {
     )
   }
 
-  private invokeExperMethod(type: string, ...args: Array<any>) {
+  public invokeExperMethod(type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
     type = safeSnakeCase(type)?.toLowerCase()
     return host.logseq.api['exper_' + type]?.apply(host, args)
@@ -78,19 +78,6 @@ export class LSPluginExperiments {
       this.ctx.baseInfo.id,
       type, enhancer
     )
-  }
-
-  request<R = any>(options: WithOptional<IRequestOptions<R>, keyof Omit<IRequestOptions, 'url'>>): IRequestTask<R> {
-    const pid = this.ctx.baseInfo.id
-    const reqID = this.invokeExperMethod('request', pid, options)
-
-    // TODO: impl
-    const task = {
-      abort: (() => reqID),
-      promise: Promise.resolve(null)
-    }
-
-    return task
   }
 
   ensureHostScope(): any {
