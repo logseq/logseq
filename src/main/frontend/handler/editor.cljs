@@ -2891,7 +2891,9 @@
     (util/format "{{twitter %s}}" url)
 
     :else
-    (notification/show! (util/format "No macro is available for %s" url) :warning)))
+    (do
+      (notification/show! (util/format "No macro is available for %s" url) :warning)
+      nil)))
 
 (defn- paste-copied-blocks-or-text
   [initial-text text e]
@@ -2968,9 +2970,9 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (let [data (if (gp-util/url? clipboard-data)
-                        (wrap-macro-url clipboard-data)
-                        clipboard-data)]
+       (let [data (or (when (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data))
+                      clipboard-data)]
          (insert data true))))
    (fn [error]
      (js/console.error error))))
