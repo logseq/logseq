@@ -25,7 +25,6 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser :as graph-parser]
             [electron.ipc :as ipc]
-            [clojure.set :as set]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]

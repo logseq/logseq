@@ -16,7 +16,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
-            [clojure.set :as set]
             [frontend.modules.outliner.file :as outliner-file]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser :as graph-parser]))
