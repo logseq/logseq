@@ -3014,7 +3014,7 @@
       (notification/show!
        [:div
         [:span.mb-1.5 (str "Block " format " copied!")]
-        [:div [:code.whitespace-nowrap (if (= format "embed")
+        [:div [:code.whitespace.break-all (if (= format "embed")
                                          (str "{{embed ((" block-id "))}}")
                                          (str "((" block-id "))"))]]]
        :success true
