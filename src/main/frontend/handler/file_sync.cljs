@@ -73,6 +73,10 @@
 (defn init-graph [graph-uuid]
   (let [repo (state/get-current-repo)
         user-uuid (user/user-uuid)]
+    ;; FIXME: when switching graph, sync-start is not called. set-env is not called as well.
+    (sync/set-env sync/rsapi config/FILE-SYNC-PROD?
+                  "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
+                  "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg")
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
     (swap! refresh-file-sync-component not)
     (state/pub-event! [:graph/switch repo {:persist? false}])))

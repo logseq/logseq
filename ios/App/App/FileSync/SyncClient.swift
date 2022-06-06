@@ -303,13 +303,14 @@ public class SyncClient {
         for (filePath, fileLocalURL) in files {
             print("debug, upload temp \(fileLocalURL) \(filePath)")
             guard let rawData = try? Data(contentsOf: fileLocalURL) else { continue }
+            guard let encryptedRawDat = maybeEncrypt(rawData) else { continue }
             group.enter()
             
             let randFileName = String.random(length: 15).appending(".").appending(fileLocalURL.pathExtension)
             let key = "\(self.s3prefix!)/ios\(randFileName)"
 
             keyFileDict[key] = filePath
-            transferUtility?.uploadData(rawData, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
+            transferUtility?.uploadData(encryptedRawDat, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
                 .continueWith(block: { (task) in
                     if let error = task.error {
                         completionHandler([:], error)

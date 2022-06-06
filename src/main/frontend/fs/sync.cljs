@@ -523,7 +523,9 @@
   (key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
                             :keywordize-keys true)))
   (set-env [_ prod? private-key public-key]
-    (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
+    (when (not-empty private-key)
+      (print "[sync] setting sync age-encryption passphrase..."))
+    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -589,10 +591,14 @@
       (state/get-auth-id-token)))
 
   IRSAPI
-  (key-gen [_] ;; TODO
-    )
-  (set-env [_ prod? _private-key _public-key] ;; TODO
-    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")}))))))
+  (key-gen [_]
+    (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
+          (->> r
+               (js->clj :keywordize-keys true)))))
+  (set-env [_ prod? secret-key public-key]
+    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
+                                                           :secretKey secret-key
+                                                           :publicKey public-key}))))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
     (go
@@ -1384,7 +1390,7 @@
                             (map #(relative-path %))
                             (filter #(not (contains-path? ignore-files %))))
               paths (sequence es->paths-xf es)]
-          (println "sync-local->remote" paths)
+          (println "sync-local->remote" type paths)
           (let [r (case type
                     ("add" "change")
                     (update-remote-files rsapi graph-uuid base-path paths @*txid)
