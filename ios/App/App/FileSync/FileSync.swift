@@ -83,14 +83,16 @@ func maybeEncrypt(_ plaindata: Data) -> Data! {
 }
 
 func maybeDecrypt(_ cipherdata: Data) -> Data! {
-    if cipherdata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) {
-        return cipherdata
-    }
     if let secretKey = ENCRYPTION_SECRET_KEY {
-        if let plaindata = AgeEncryption.decryptWithX25519(cipherdata, secretKey) {
-            return plaindata
+        if cipherdata.starts(with: "-----BEGIN AGE ENCRYPTED FILE-----".data(using: .utf8)!) ||
+            cipherdata.starts(with: "age-encryption.org/v1\n".data(using: .utf8)!) {
+            if let plaindata = AgeEncryption.decryptWithX25519(cipherdata, secretKey) {
+                return plaindata
+            }
+            return nil
         }
-        return nil
+        // not an encrypted file
+        return cipherdata
     }
     return cipherdata
 }

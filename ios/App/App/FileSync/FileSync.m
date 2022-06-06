@@ -9,6 +9,7 @@
 
 CAP_PLUGIN(FileSync, "FileSync",
            CAP_PLUGIN_METHOD(setEnv, CAPPluginReturnPromise);
+           CAP_PLUGIN_METHOD(keygen, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(getLocalFilesMeta, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(getLocalAllFilesMeta, CAPPluginReturnPromise);
            CAP_PLUGIN_METHOD(renameLocalFile, CAPPluginReturnPromise);
