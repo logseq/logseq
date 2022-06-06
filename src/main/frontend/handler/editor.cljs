@@ -2987,7 +2987,11 @@
           format (or (:block/format edit-block) :markdown)
           initial-text (.getData clipboard-data "text")
           text (if-not (string/blank? html)
-                 (html-parser/convert format html)
+                 (try
+                   (html-parser/convert format html)
+                   (catch :default e
+                     (log/error :html->hiccup e)
+                     initial-text))
                  initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
