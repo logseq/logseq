@@ -35,8 +35,8 @@
 ;;   transaction-id: sync progress of local files
 ;; - logseq/version-files
 ;;   downloaded version-files
-;; files included by `get-ignore-files` will not be synchronized.
-;; files in these `get-monitored-dirs` dirs will be synchronized.
+;; files included by `ignore-files` will not be synchronized.
+;; files in these `monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
@@ -462,6 +462,16 @@
 
           :else
           (- (.-size item)))))))
+;;; ### configs
+(def ignore-files
+  #{#"logseq/graphs-txid.edn$"
+    #"logseq/bak/.*"
+    #"logseq/version-files/.*"
+    #"logseq/\.recycle/.*"
+    #"\.DS_Store$"})
+
+(def monitored-dirs
+  #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"})
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -1208,8 +1218,6 @@
   (sync-remote->local-all-files! [this] "sync all files, return ExceptionInfo when error occurs"))
 
 (defprotocol ILocal->RemoteSync
-  (get-ignore-files [this] "ignored-files won't be synced to remote")
-  (get-monitored-dirs [this])
   (stop-local->remote! [this])
   (ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
@@ -1338,6 +1346,8 @@
         (and (<! (local-file-exists? r-path basepath))
              (<! (file-changed? graph-uuid r-path basepath)))))))
 
+
+
 (defrecord ^:large-vars/cleanup-todo
     Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
                          ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
@@ -1345,8 +1355,8 @@
     (filter-file-change-events-fn [this]
       (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
                                     (string/starts-with? (.-dir e) base-path)
-                                    (not (contains-path? (get-ignore-files this) (relative-path e)))
-                                    (contains-path? (get-monitored-dirs this) (relative-path e)))))
+                                    (not (contains-path? ignore-files (relative-path e)))
+                                    (contains-path? monitored-dirs (relative-path e)))))
 
     (filtered-chan
       ;; "check base-path"
@@ -1356,12 +1366,6 @@
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
     ILocal->RemoteSync
-    (get-ignore-files [_] #{#"logseq/graphs-txid.edn$"
-                            #"logseq/bak/.*"
-                            #"logseq/version-files/.*"
-                            #"logseq/\.recycle/.*"
-                            #"\.DS_Store$"})
-    (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
     (stop-local->remote! [_]
       (async/close! stop-chan)
       (vreset! *stopped true))
@@ -1388,12 +1392,11 @@
       (if (empty? es)
         (go {:succ true})
         (let [type (.-type ^FileChangeEvent (first es))
-              ignore-files (get-ignore-files this)
               es->paths-xf (comp
                             (map #(relative-path %))
                             (filter #(not (contains-path? ignore-files %))))
               paths (sequence es->paths-xf es)]
-          (println "sync-local->remote" type paths)
+          (println :sync-local->remote type paths)
           (let [r (case type
                     ("add" "change")
                     (update-remote-files rsapi graph-uuid base-path paths @*txid)
@@ -1413,7 +1416,7 @@
                       {:need-sync-remote true})
 
                   (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
-                                              ;; but some potential bugs cause local-txid > remote-txid
+                  ;; but some potential bugs cause local-txid > remote-txid
                   (let [remote-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
                     (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
                     (reset! *txid remote-txid)
@@ -1439,8 +1442,6 @@
               remote-all-files-meta (<! remote-all-files-meta-c)
               local-all-files-meta (<! local-all-files-meta-c)
               diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
-              ignore-files (get-ignore-files this)
-              monitored-dirs (get-monitored-dirs this)
               change-events-partitions
               (sequence
                (comp
