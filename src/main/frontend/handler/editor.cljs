@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -48,6 +48,7 @@
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -815,7 +816,7 @@
               tail-len (count value)
               pos (max
                    (if original-content
-                     (utf8/length (utf8/encode original-content))
+                     (gobj/get (utf8/encode original-content) "length")
                      0)
                    0)]
           (edit-block! block pos id
@@ -935,8 +936,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
             content (or content (state/get-edit-content))
-            new-content (-> (text/remove-timestamp content key)
-                            (text/add-timestamp key value))]
+            new-content (-> (text-util/remove-timestamp content key)
+                            (text-util/add-timestamp key value))]
         (when (not= content new-content)
           (let [input-id (state/get-edit-input-id)]
             (if (and input-id
@@ -1567,7 +1568,7 @@
   (when input
     (let [value (gobj/get input "value")
           pos (cursor/pos input)]
-      (text/surround-by? value pos before end))))
+      (text-util/surround-by? value pos before end))))
 
 (defn wrapped-by?
   [input before end]
@@ -1575,7 +1576,7 @@
     (let [value (gobj/get input "value")
           pos (dec (cursor/pos input))]
       (when (>= pos 0)
-        (text/wrapped-by? value pos before end)))))
+        (text-util/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
   "Return matched page names"
@@ -2043,18 +2044,21 @@
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn- insert
-  [insertion]
-  (when-not (auto-complete?)
-    (let [^js input (state/get-input)
-          selected-start (util/get-selection-start input)
-          selected-end (util/get-selection-end input)
-          value (.-value input)
-          s1 (subs value 0 selected-start)
-          s2 (subs value selected-end)]
-      (state/set-edit-content! (state/get-edit-input-id)
-                               (str s1 insertion s2))
-      (cursor/move-cursor-to input (+ selected-start (count insertion))))))
+(defn insert
+  ([insertion]
+   (insert insertion false))
+  ([insertion auto-complete-enabled?]
+   (when (or auto-complete-enabled?
+             (not (auto-complete?)))
+     (let [^js input (state/get-input)
+           selected-start (util/get-selection-start input)
+           selected-end (util/get-selection-end input)
+           value (.-value input)
+           s1 (subs value 0 selected-start)
+           s2 (subs value selected-end)]
+       (state/set-edit-content! (state/get-edit-input-id)
+                                (str s1 insertion s2))
+       (cursor/move-cursor-to input (+ selected-start (count insertion)))))))
 
 (defn- keydown-new-line
   []
@@ -2874,7 +2878,7 @@
 (defn wrap-macro-url
   [url]
   (cond
-    (boolean (text/get-matched-video url))
+    (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
     (string/includes? url "twitter.com")
@@ -2884,7 +2888,7 @@
     (notification/show! (util/format "No macro is available for %s" url) :warning)))
 
 (defn- paste-copied-blocks-or-text
-  [text e]
+  [initial-text text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
@@ -2896,9 +2900,9 @@
        (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
-       text
+       initial-text
        ;; not copied from the external clipboard
-       (= (string/replace (string/trim text) "\r" "")
+       (= (string/replace (string/trim initial-text) "\r" "")
           (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
       (let [blocks (or
                     (:copy/full-blocks copied-blocks)
@@ -2917,8 +2921,7 @@
 
       :else
       ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-            text (string/trim text)]
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
@@ -2949,7 +2952,7 @@
        (let [data (if (gp-util/url? clipboard-data)
                         (wrap-macro-url clipboard-data)
                         clipboard-data)]
-             (state/append-current-edit-content! data))))
+         (insert data true))))
    (fn [error]
      (js/console.error error))))
 
@@ -2972,7 +2975,7 @@
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
-          (paste-copied-blocks-or-text text e))
+          (paste-copied-blocks-or-text initial-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]

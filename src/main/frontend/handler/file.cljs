@@ -2,8 +2,6 @@
   (:refer-clojure :exclude [load-file])
   (:require ["/frontend/utils" :as utils]
             [borkdude.rewrite-edn :as rewrite]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
             [cljs.core.async.interop :refer [<p!]]
             [clojure.core.async :as async]
             [frontend.config :as config]
@@ -11,16 +9,16 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
-            [logseq.graph-parser.extract :as extract]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile]
-            [clojure.set :as set]))
+            [frontend.modules.outliner.file :as outliner-file]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser :as graph-parser]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -49,11 +47,11 @@
 
 (defn- only-text-formats
   [files]
-  (keep-formats files (config/text-formats)))
+  (keep-formats files (gp-config/text-formats)))
 
 (defn- only-image-formats
   [files]
-  (keep-formats files (config/img-formats)))
+  (keep-formats files (gp-config/img-formats)))
 
 (defn restore-config!
   ([repo-url project-changed-check?]
@@ -91,10 +89,25 @@
       (when (not= file current-file)
        current-file))))
 
+(defn- get-delete-blocks [repo-url first-page file]
+  (let [delete-blocks (->
+                       (concat
+                        (db/delete-file-blocks! repo-url file)
+                        (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
+                       (distinct))]
+    (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
+      (when (not= file current-file)
+        (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+          (state/pub-event! [:notification/show
+                             {:content error
+                              :status :error
+                              :clear? false}]))))
+    delete-blocks))
+
 (defn reset-file!
   ([repo-url file content]
    (reset-file! repo-url file content {}))
-  ([repo-url file content {:keys [new-graph? from-disk?]}]
+  ([repo-url file content options]
    (let [electron-local-repo? (and (util/electron?)
                                    (config/local-db? repo-url))
          file (cond
@@ -118,53 +131,18 @@
                 file)
          file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
-     (db/set-file-content! repo-url file content)
-     (let [format (gp-util/get-format file)
-           file-content [{:file/path file}]
-           tx (if (contains? gp-config/mldoc-support-formats format)
-                (let [[pages blocks]
-                      (extract/extract-blocks-pages
-                       file
-                       content
-                       {:user-config (state/get-config)
-                        :date-formatter (state/get-date-formatter)
-                        :page-name-order (state/page-name-order)
-                        :block-pattern (config/get-block-pattern format)
-                        :supported-formats (config/supported-formats)
-                        :db (db/get-db (state/get-current-repo))})
-                      first-page (first pages)
-                      delete-blocks (->
-                                     (concat
-                                      (db/delete-file-blocks! repo-url file)
-                                      (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
-                                     (distinct))
-                      _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
-                          (when (not= file current-file)
-                            (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
-                              (state/pub-event! [:notification/show
-                                                 {:content error
-                                                  :status :error
-                                                  :clear? false}]))))
-                      block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-                      block-refs-ids (->> (mapcat :block/refs blocks)
-                                          (filter (fn [ref] (and (vector? ref)
-                                                                 (= :block/uuid (first ref)))))
-                                          (map (fn [ref] {:block/uuid (second ref)}))
-                                          (seq))
-                      ;; To prevent "unique constraint" on datascript
-                      block-ids (set/union (set block-ids) (set block-refs-ids))
-                      pages (extract/with-ref-pages pages blocks)
-                      pages-index (map #(select-keys % [:block/name]) pages)]
-                  ;; does order matter?
-                  (concat file-content pages-index delete-blocks pages block-ids blocks))
-                file-content)
-           tx (concat tx [(let [t (tc/to-long (t/now))] ;; TODO: use file system timestamp?
-                            (cond->
-                              {:file/path file}
-                              new?
-                              (assoc :file/created-at t)))])]
-       (db/transact! repo-url tx {:new-graph? new-graph?
-                                  :from-disk? from-disk?})))))
+     (graph-parser/parse-file
+      (db/get-db repo-url false)
+      file
+      content
+      (merge options
+             {:new? new?
+              :delete-blocks-fn (partial get-delete-blocks repo-url)
+              :extract-options {:user-config (state/get-config)
+                                :date-formatter (state/get-date-formatter)
+                                :page-name-order (state/page-name-order)
+                                :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                :supported-formats (gp-config/supported-formats)}})))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
@@ -275,6 +253,7 @@
           (catch js/Error e
             (log/error :file/write-failed e))))
       (recur))
+    (outliner-file/ratelimit-file-writes!)
     chan))
 
 (defn watch-for-current-graph-dir!

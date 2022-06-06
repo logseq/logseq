@@ -1,15 +1,13 @@
 (ns frontend.db.conn
   "Contains db connections."
   (:require [clojure.string :as string]
-            [frontend.db-schema :as db-schema]
-            [frontend.db.default :as default-db]
             [frontend.util :as util]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.util :as gp-util]
-            [datascript.core :as d]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (defonce conns (atom {}))
 
@@ -25,7 +23,7 @@
   [repo]
   (cond
     (mobile-util/native-platform?)
-    (text/get-graph-name-from-path repo)
+    (text-util/get-graph-name-from-path repo)
 
     (config/local-db? repo)
     (config/get-local-dir repo)
@@ -69,30 +67,13 @@
   [repo]
   (swap! conns dissoc (datascript-db repo)))
 
-(defn me-tx
-  [_db {:keys [name email avatar]}]
-  (gp-util/remove-nils {:me/name name
-                     :me/email email
-                     :me/avatar avatar}))
-
 (defn start!
-  ([me repo]
-   (start! me repo {}))
-  ([me repo {:keys [db-type listen-handler]}]
+  ([repo]
+   (start! repo {}))
+  ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
-         db-conn (d/create-conn db-schema/schema)]
+         db-conn (gp-db/start-conn)]
      (swap! conns assoc db-name db-conn)
-     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
-                             db-type
-                             (assoc :db/type db-type))
-                           {:block/name "card"
-                            :block/original-name "card"
-                            :block/uuid (d/squuid)}])
-     (when me
-       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-
-     (d/transact! db-conn default-db/built-in-pages)
-
      (when listen-handler
        (listen-handler repo)))))
 

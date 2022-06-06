@@ -33,19 +33,26 @@
 
 (rum/defc login < rum/reactive
   []
-  (let [_ (state/sub :auth/id-token)]
+  (let [_ (state/sub :auth/id-token)
+        loading? (state/sub [:ui/loading? :login])]
     (when-not (or config/publishing?
                   (user-handler/logged-in?))
-      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
-         [:span (t :login)]])))
+      [:a.button.text-sm.font-medium.block {:on-click
+                                            #(do
+                                               (state/set-state! [:ui/loading? :login] true)
+                                               (js/window.open config/LOGIN-URL))}
+       [:span (t :login)]
+       (when loading?
+         [:span.ml-2 (ui/loading "")])])))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:a#left-menu.cp__header-left-menu.button
      {:on-click on-click
-      :style {:margin-left 12}}
-     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
+      :style    {:margin-left 12}}
+     [:span.inner
+      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
@@ -148,7 +155,9 @@
         left-menu (left-menu-button {:on-click (fn []
                                        (open-fn)
                                        (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})]
+                                        (not (:ui/left-sidebar-open? @state/state))))})
+        graph-file-sync-init-downloading? (:downloading?
+                                           (state/sub [:file-sync/download-init-progress (state/get-current-repo)]))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -179,7 +188,8 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
-      (when-not file-sync-handler/hiding-login&file-sync
+      (when-not (or file-sync-handler/hiding-login&file-sync
+                    graph-file-sync-init-downloading?)
         (fs-sync/indicator))
       (when-not file-sync-handler/hiding-login&file-sync
         (login))

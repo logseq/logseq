@@ -2,7 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.default :as default-db]
+            [logseq.graph-parser.db.default :as default-db]
             [frontend.state :as state]
             [frontend.util :as util]))
 

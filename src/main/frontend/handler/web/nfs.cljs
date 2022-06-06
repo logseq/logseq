@@ -183,7 +183,7 @@
                                                (assoc file :file/content content))) markup-files))
                           (p/then (fn [result]
                                     (let [files (map #(dissoc % :file/file) result)]
-                                      (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
+                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                       (async/go
                                         (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
                                                                                                   {:new-graph?   true
@@ -330,7 +330,7 @@
     (search/reset-indice! repo)
     (db/remove-conn! repo)
     (db/clear-query-state!)
-    (db/start-db-conn! (state/get-me) repo)
+    (db/start-db-conn! repo)
     (p/let [_ (reload-dir! repo true)
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))

@@ -1,6 +1,8 @@
 (ns frontend.fs.sync
   (:require [cljs-http.client :as http]
             [cljs-time.core :as t]
+            [cljs-time.format :as tf]
+            [cljs-time.coerce :as tc]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
             [cljs.core.async.impl.channels]
             [cljs.core.async.interop :refer [p->c]]
@@ -115,12 +117,14 @@
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
 
+(declare assert-local-txid<=remote-txid)
 (defn update-graphs-txid!
   [latest-txid graph-uuid user-uuid repo]
   {:pre [(int? latest-txid) (>= latest-txid 0)]}
   (persist-var/-reset-value! graphs-txid [user-uuid graph-uuid latest-txid] repo)
   (some-> (persist-var/persist-save graphs-txid)
-          p->c))
+          p->c)
+  (when (state/developer-mode?) (assert-local-txid<=remote-txid)))
 
 (defn clear-graphs-txid! [repo]
   (persist-var/-reset-value! graphs-txid nil repo)
@@ -192,20 +196,37 @@
        :api-name api-name
        :body body})))
 
-(defn- request
-  ([api-name body token refresh-token-fn] (request api-name body token refresh-token-fn 0))
-  ([api-name body token refresh-token-fn retry-count]
+(def *on-flying-request
+  "requests not finished"
+  (atom #{}))
+
+(defn- request*
+  "max retry count is 5.
+  *stop: volatile var, stop retry-request when it's true,
+          and return :stop"
+  ([api-name body token refresh-token-fn *stop] (request* api-name body token refresh-token-fn 0 *stop))
+  ([api-name body token refresh-token-fn retry-count *stop]
    (go
-     (let [resp (<! (request-once api-name body token))]
-       (if (and
-            (= 401 (get-in resp [:resp :status]))
-            (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
-         (do
-           (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
-           (<! (timeout (min 60000 (* 1000 retry-count))))
-           (let [token (<! (refresh-token-fn))]
-             (<! (request api-name body token refresh-token-fn (inc retry-count)))))
-         (:resp resp))))))
+     (if (and *stop @*stop)
+       :stop
+       (let [resp (<! (request-once api-name body token))]
+         (if (and
+              (= 401 (get-in resp [:resp :status]))
+              (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
+           (if (> retry-count 5)
+             (throw (js/Error. :file-sync-request))
+             (do (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
+                 (<! (timeout (min 60000 (* 1000 retry-count))))
+                 (let [token (<! (refresh-token-fn))]
+                   (<! (request* api-name body token refresh-token-fn (inc retry-count) *stop)))))
+           (:resp resp)))))))
+
+(defn request [api-name & args]
+  (let [name (str api-name (.now js/Date))]
+    (go (swap! *on-flying-request conj name)
+        (let [r (<! (apply request* api-name args))]
+          (swap! *on-flying-request disj name)
+          r))))
 
 (defn- remove-dir-prefix [dir path]
   (let [is-mobile-url? (string/starts-with? dir "file://")
@@ -381,14 +402,17 @@
   IRelativePath
   (-relative-path [_] path)
 
+
+  ;; ignore size, cause size value from remote is count of encrypted-data
   IEquiv
   (-equiv [o ^FileMetadata other]
-    (and (= size (.-size other))
+    (and ;; (= size (.-size other))
          (= (.get-normalized-path o) (.get-normalized-path other))
          (= etag (.-etag other))))
 
   IHash
-  (-hash [_] (hash {:size size :etag etag :path path}))
+  (-hash [_] (hash {;; :size size
+                    :etag etag :path path}))
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
@@ -403,13 +427,48 @@
     (remove-user-graph-uuid-prefix o)
 
     :else
-    (throw (js/Error. (str "unsupport type " (type o))))))
+    (throw (js/Error. (str "unsupport type " (str o))))))
+
+(defn- sort-file-metatdata-fn
+  ":recent-days-range > :favorite-pages > small-size pages > ...
+  :recent-days-range : [<min-inst-ms> <max-inst-ms>]
+"
+  [& {:keys [recent-days-range favorite-pages]}]
+  {:pre [(or (nil? recent-days-range)
+             (every? number? recent-days-range))]}
+  (let [favorite-pages* (set favorite-pages)]
+    (fn [^FileMetadata item]
+      (let [path (relative-path item)
+            journal? (string/starts-with? path "journals/")
+            journal-day
+            (when journal?
+              (try
+                (tc/to-long
+                 (tf/parse (tf/formatter "yyyy_MM_dd")
+                           (-> path
+                               (string/replace-first "journals/" "")
+                               (string/replace-first ".md" ""))))
+                (catch :default _)))]
+        (cond
+          (and recent-days-range
+               journal-day
+               (<= (first recent-days-range)
+                   ^number journal-day
+                   (second recent-days-range)))
+          journal-day
+
+          (contains? favorite-pages* path)
+          (count path)
+
+          :else
+          (- (.-size item)))))))
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
-  (set-env [this prod? secret-key public-key] "set environment and passphrase")
+  (key-gen [this] "generate public+private keys")
+  (set-env [this prod? private-key public-key] "set environment")
   (get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (rename-local-file [this graph-uuid base-path from to])
@@ -431,7 +490,7 @@
   (get-graph-salt [this graph-uuid] "return httpcode 410 when salt expired")
   (create-graph-salt [this graph-uuid] "return httpcode 409 when salt already exists and not expired yet")
   (get-graph-encrypt-keys [this graph-uuid])
-  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
+  (upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]))
 
 (defprotocol IToken
   (get-token [this])
@@ -459,11 +518,14 @@
     (go
       (<! (user/refresh-id-token&access-token))
       (state/get-auth-id-token)))
+
   IRSAPI
-  (set-env [_ prod? secret-key public-key]
-    (when (not-empty secret-key)
+  (key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
+                            :keywordize-keys true)))
+  (set-env [_ prod? private-key public-key]
+    (when (not-empty private-key)
       (print "[sync] setting sync age-encryption passphrase..."))
-    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") secret-key public-key)))))
+    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -529,6 +591,8 @@
       (state/get-auth-id-token)))
 
   IRSAPI
+  (key-gen [_] ;; TODO
+    )
   (set-env [_ prod? secret-key public-key]
     (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
                                                            :secretKey secret-key
@@ -620,16 +684,19 @@
              :else
              nil))
 
-(deftype RemoteAPI []
+(deftype RemoteAPI [*stopped?]
   Object
 
   (request [this api-name body]
     (go
-      (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this)))]
+      (let [resp (<! (request api-name body (<! (get-token this)) #(refresh-token this) *stopped?))]
         (if (http/unexceptional-status? (:status resp))
           (get-resp-json-body resp)
           (ex-info "request failed"
-                   {:err resp :body (get-resp-json-body resp)})))))
+                   {:err resp
+                    :body (get-resp-json-body resp)
+                    :api-name api-name
+                    :request-body body})))))
 
   ;; for test
   (update-files [this graph-uuid txid files]
@@ -665,7 +732,7 @@
               (apply conj! file-meta-list
                      (map
                       #(->FileMetadata (:Size %)
-                                       (:ETag %)
+                                       (:checksum %)
                                        (remove-user-graph-uuid-prefix (js/decodeURIComponent (:Key %)))
                                        (:LastModified %)
                                        true nil)
@@ -731,19 +798,17 @@
   (get-graph-encrypt-keys [this graph-uuid]
     (.request this "get_graph_encrypt_keys" {:GraphUUID graph-uuid}))
 
-  (create-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
-    (.request this "create_graph_encrypt_keys" {:GraphUUID graph-uuid
+  (upload-graph-encrypt-keys [this graph-uuid public-key encrypted-private-key]
+    (.request this "upload_graph_encrypt_keys" {:GraphUUID graph-uuid
                                                 :public-key public-key
                                                 :encrypted-private-key encrypted-private-key})))
 
 
-(def remoteapi (->RemoteAPI))
+(def remoteapi (->RemoteAPI nil))
 
 (defn- add-new-version-file
   [repo path content]
-  (go
-    (println "add-new-version-file: "
-             (<! (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))))))
+  (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content)))
 
 (defn- is-journals-or-pages?
   [filetxn]
@@ -806,12 +871,19 @@
                    (string/index-of (str (ex-cause r)) "No such file or directory"))
             true
             r))))))
+(defn- assert-local-txid<=remote-txid
+  []
+  (when-let [local-txid (last @graphs-txid)]
+    (go (let [remote-txid (:TXId (<! (get-remote-graph remoteapi nil (second @graphs-txid))))]
+          (assert (<= local-txid remote-txid)
+                  [@graphs-txid local-txid remote-txid])))))
 
 (declare sync-state--add-current-local->remote-files
          sync-state--add-current-remote->local-files
          sync-state--remove-current-local->remote-files
          sync-state--remove-current-remote->local-files
          sync-state--stopped?)
+
 
 (defn apply-filetxns-partitions
   "won't call update-graph-txid! when *txid is nil"
@@ -860,14 +932,19 @@
         cause (ex-cause resp)]
     (or
      (and (= (:error data) :promise-error)
-          (string/index-of (str cause) "txid_to_validate")) ;FIXME: better rsapi err info
+          (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
+            (> (nth r 1) (nth r 2)))) ;; TODO: better rsapi err info
      (= 409 (get-in data [:err :status])))))
 
 (defmethod need-sync-remote? :chan [c]
   (go (need-sync-remote? (<! c))))
 (defmethod need-sync-remote? :default [_] false)
 
-
+(defn- need-reset-local-txid?
+  [r]
+  (when-let [cause (ex-cause r)]
+    (when-let [r (re-find #"(\d+), txid_to_validate = (\d+)" (str cause))]
+      (< (nth r 1) (nth r 2)))))
 
 
 ;; type = "change" | "add" | "unlink"
@@ -914,35 +991,40 @@
 
 ;;; ### encryption
 (def pwd-map
-  "graph-uuid->pwd"
+  "graph-uuid->{:pwd xxx :public-key xxx :private-key xxx}"
   (atom {}))
+
 (def pwd-map-changed-chan
   (chan (async/sliding-buffer 1)))
 
 (add-watch pwd-map :pwd-map-changed #(offer! pwd-map-changed-chan true))
 
-(defn- encrypt-pwd
-  [pwd key*]
-  (p->c (encrypt/encrypt-with-passphrase key* pwd)))
+(defn- encrypt-content
+  [content key*]
+  (p->c (encrypt/encrypt-with-passphrase key* content)))
 
-(defn- decrypt-pwd
-  [encrypted-pwd key*]
+(defn- decrypt-content
+  [encrypted-content key*]
   (go
-    (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-pwd)))]
+    (let [r (<! (p->c (encrypt/decrypt-with-passphrase key* encrypted-content)))]
       (when-not (instance? ExceptionInfo r) r))))
 
+(defn- local-storage-pwd-path
+  [graph-uuid]
+  (str "encrypted-pwd/" graph-uuid))
+
 (defn- persist-pwd!
-  [pwd repo]
-  (go
-    (let [path (config/get-file-path repo (str config/app-name "/encrypted-password.txt"))
-          repo-dir (config/get-repo-dir repo)]
-      (<! (p->c (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))))
-      (<! (p->c (fs/write-file! repo repo-dir path pwd {:skip-compare? true}))))))
+  [pwd graph-uuid]
+  (js/localStorage.setItem (local-storage-pwd-path graph-uuid) pwd))
+
+(defn- remove-pwd!
+  [graph-uuid]
+  (js/localStorage.removeItem (local-storage-pwd-path graph-uuid)))
 
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
-  - persist encrypted pwd at 'logseq/encrypted-password.txt'"
-  [pwd graph-uuid repo]
+  - persist encrypted pwd at local-storage"
+  [pwd graph-uuid]
   (go
     (let [[value expired-at gone?]
           ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
@@ -951,43 +1033,95 @@
           (if gone?
             ((juxt :value :expired-at) (<! (create-graph-salt remoteapi graph-uuid)))
             [value expired-at])
-          encrypted-pwd (<! (encrypt-pwd pwd salt-value))]
-      (<! (persist-pwd! encrypted-pwd repo)))))
+          encrypted-pwd (<! (encrypt-content pwd salt-value))]
+      (persist-pwd! encrypted-pwd graph-uuid))))
 
 (defn restore-pwd!
   "restore pwd from persisted encrypted-pwd, update `pwd-map`"
-  [repo graph-uuid]
+  [graph-uuid]
   (go
-    (let [encrypted-pwd (<! (p->c (fs/read-file "" (config/get-file-path repo "logseq/encrypted-password.txt"))))]
-      (if (or (nil? encrypted-pwd) (instance? ExceptionInfo encrypted-pwd))
+    (let [encrypted-pwd (js/localStorage.getItem (local-storage-pwd-path graph-uuid))]
+      (if (nil? encrypted-pwd)
         {:restore-pwd-failed true}
         (let [[salt-value _expired-at gone?]
               ((juxt :value :expired-at #(-> % ex-data :err :status (= 410)))
                (<! (get-graph-salt remoteapi graph-uuid)))]
           (if (or gone? (empty? salt-value))
             {:restore-pwd-failed "expired salt"}
-            (let [pwd (<! (decrypt-pwd encrypted-pwd salt-value))]
+            (let [pwd (<! (decrypt-content encrypted-pwd salt-value))]
               (if (nil? pwd)
                 {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
-                (swap! pwd-map assoc graph-uuid pwd)))))))))
+                (swap! pwd-map assoc-in [graph-uuid :pwd] pwd)))))))))
 
 (defn ensure-pwd-exists!
   [repo graph-uuid]
   (go
-    (let [pwd (get @pwd-map graph-uuid)]
+    (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
       (when (nil? pwd)
         (let [{restore-pwd-failed :restore-pwd-failed}
-              (<! (restore-pwd! repo graph-uuid))]
+              (<! (restore-pwd! graph-uuid))]
           (when restore-pwd-failed
             (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
-                               #(restore-pwd! repo graph-uuid)])))
+                               #(restore-pwd! graph-uuid)])))
         (loop []
           (<! pwd-map-changed-chan)
-          (let [pwd (get @pwd-map graph-uuid)]
+          (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
             (when (nil? pwd) (recur)))))
-      (get @pwd-map graph-uuid))))
+      (get-in @pwd-map [graph-uuid :pwd]))))
+
+(defn clear-pwd!
+  "- clear pwd in `pwd-map`
+  - remove encrypted-pwd in local-storage"
+  [graph-uuid]
+  (swap! pwd-map dissoc graph-uuid)
+  (remove-pwd! graph-uuid))
+
+(defn ensure-pwd+keys-exists!
+  "ensure password persisted,
+  and ensure public&private keys exists at server"
+  [graph-uuid repo]
+  (go
+    (<! (ensure-pwd-exists! repo graph-uuid))
+    (let [pwd (get-in @pwd-map [graph-uuid :pwd])
+          {:keys [public-key encrypted-private-key] :as r}
+          (<! (get-graph-encrypt-keys remoteapi graph-uuid))]
+      (if (and (nil? public-key)
+               (nil? encrypted-private-key)
+               (-> r ex-data :err :status (= 404)))
+        ;; when public+private keys not stored at server
+        ;; generate a new key pair and upload them
+        (let [{public-key :publicKey private-key :secretKey}
+              (<! (key-gen rsapi))
+              encrypted-private-key (<! (encrypt-content private-key pwd))
+              upload-r (<! (upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
+          (if (instance? ExceptionInfo upload-r)
+            (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
+                ::stop)
+            (do (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
+                (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
+                (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                ::idle)))
+
+        (let [private-key (<! (decrypt-content encrypted-private-key pwd))]
+          (if (and private-key
+                   (string/starts-with?
+                    private-key "AGE-SECRET-KEY"))
+            (do (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
+                (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
+                (<! (set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
+                ::idle)
+
+            ;; bad pwd
+            (do (notification/show! "wrong password" :error false)
+                (clear-pwd! graph-uuid)
+                ::need-password)))))))
 
 ;;; ### sync state
+
+(def full-sync-chan (chan 1))
+(def stop-sync-chan (chan 1))
+(def remote->local-sync-chan (chan 1))
+(def remote->local-full-sync-chan (chan 1))
 
 (defn sync-state
   "create a new sync-state"
@@ -1078,7 +1212,7 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync when not equal.
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
-(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state
+(defrecord Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *sync-state remoteapi
                                 ^:mutable local->remote-syncer *stopped]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -1115,8 +1249,7 @@
               (if (instance? ExceptionInfo diff-r)
                 diff-r
                 (let [[diff-txns latest-txid min-txid] diff-r]
-                  (if (or (nil? min-txid)             ;; if min-txid is nil(not found any diff txn)
-                          (> (dec min-txid) @*txid))  ;; or min-txid-1 > @*txid, need to remote->local-full-sync
+                  (if (> (dec min-txid) @*txid) ;; min-txid-1 > @*txid, need to remote->local-full-sync
                     (do (println "min-txid" min-txid "request-txid" @*txid)
                         {:need-remote->local-full-sync true})
 
@@ -1155,11 +1288,13 @@
             remote-all-files-meta (<! remote-all-files-meta-c)
             local-all-files-meta (<! local-all-files-meta-c)
             diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
+            recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
+            sorted-diff-remote-files (sort-by (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
             latest-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
         (println "[full-sync(remote->local)]"
-                 (count diff-remote-files) "files need to sync")
+                 (count sorted-diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map relative-path diff-remote-files)
+             this (map relative-path sorted-diff-remote-files)
              latest-txid))))))
 
 (defn- file-changed?
@@ -1199,8 +1334,8 @@
              (<! (file-changed? graph-uuid r-path basepath)))))))
 
 (defrecord ^:large-vars/cleanup-todo
-    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state
-                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan ^:mutable stopped]
+    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
+                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
     Object
     (filter-file-change-events-fn [this]
       (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
@@ -1219,48 +1354,30 @@
     (get-ignore-files [_] #{#"logseq/graphs-txid.edn$"
                             #"logseq/bak/.*"
                             #"logseq/version-files/.*"
-                            #"logseq/encrypted-password.txt$"
                             #"logseq/\.recycle/.*"
                             #"\.DS_Store$"})
     (get-monitored-dirs [_] #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/"})
     (stop-local->remote! [_]
       (async/close! stop-chan)
-      (set! stopped true))
+      (vreset! *stopped true))
 
     (ratelimit [this from-chan]
-      (let [c (.filtered-chan this 10000)
-            filter-e-fn (.filter-file-change-events-fn this)]
-        (go-loop [timeout-c (timeout rate)
-                  coll []]
-          (let [{:keys [timeout ^FileChangeEvent e stop]}
-                (async/alt! timeout-c {:timeout true}
-                            from-chan ([e] {:e e})
-                            stop-chan {:stop true})]
-            (cond
-              stop
-              (async/close! c)
-
-              timeout
-              (do (async/onto-chan! c coll false)
-                  (swap! *sync-state sync-state-reset-queued-local->remote-files)
-                  (recur (async/timeout rate) []))
-
-              (some? e)
-              (if (filter-e-fn e)
+      (let [filter-e-fn (.filter-file-change-events-fn this)]
+        (util/ratelimit
+         from-chan rate
+         :filter-fn
+         (fn [e]
+           (and (filter-e-fn e)
                 (let [e-path [(relative-path e)]]
                   (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
-                  (if (<! (filter-local-changes-pred e base-path graph-uuid))
-                    (let [coll* (distinct (conj coll e))]
-                      (recur timeout-c coll*))
-                    (do (swap! *sync-state sync-state--remove-queued-local->remote-files e-path)
-                        (recur timeout-c coll))))
-                (recur timeout-c coll))
-
-              (nil? e)
-              (do (println "close ratelimit chan")
-                  (async/close! c)))))
-        c))
-
+                  (go
+                    (let [v (<! (filter-local-changes-pred e base-path graph-uuid))]
+                      (when-not v
+                        (swap! *sync-state sync-state--remove-queued-local->remote-files e-path))
+                      v)))))
+         :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
+         :stop-ch stop-chan
+         :distinct-coll? true)))
 
     (sync-local->remote! [this es]
       (if (empty? es)
@@ -1287,7 +1404,15 @@
                     _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
                 (cond
                   (need-sync-remote? r*)
-                  {:need-sync-remote true}
+                  (do (println :need-sync-remote r*)
+                      {:need-sync-remote true})
+
+                  (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
+                                              ;; but some potential bugs cause local-txid > remote-txid
+                  (let [remote-txid (:TXId (<! (get-remote-graph remoteapi nil graph-uuid)))]
+                    (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
+                    (reset! *txid remote-txid)
+                    {:succ true})
 
                   (number? r*)          ; succ
                   (do
@@ -1325,7 +1450,7 @@
                diff-local-files)]
           (println "[full-sync(local->remote)]" (count (flatten change-events-partitions)) "files need to sync")
           (loop [es-partitions change-events-partitions]
-            (if stopped
+            (if @*stopped
               {:stop true}
               (if (empty? es-partitions)
                 {:succ true}
@@ -1343,18 +1468,11 @@
 
 ;;; ### put all stuff together
 
-(defn- drain-chan
-  "drop all stuffs in CH"
-  [ch]
-  (->> (repeatedly #(poll! ch))
-       (take-while identity)))
-
 (defrecord ^:large-vars/cleanup-todo
     SyncManager [graph-uuid base-path *sync-state
-                 ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer
-                 full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                 local-changes-chan ^:mutable ratelimit-local-changes-chan
-                 *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable stopped
+                 ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
+                 ^:mutable ratelimit-local-changes-chan
+                 *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws *stopped?
                  ^:mutable ops-chan]
     Object
     (schedule [this next-state args]
@@ -1385,9 +1503,10 @@
       (set! _remote-change-chan (ws-listen! graph-uuid _*ws))
       (set! ratelimit-local-changes-chan (ratelimit local->remote-syncer local-changes-chan))
       (go-loop []
-        (let [{:keys [stop remote->local local->remote-full-sync local->remote]}
+        (let [{:keys [stop remote->local remote->local-full-sync local->remote-full-sync local->remote]}
               (async/alt!
                 stop-sync-chan {:stop true}
+                remote->local-full-sync-chan {:remote->local-full-sync true}
                 remote->local-sync-chan {:remote->local true}
                 full-sync-chan {:local->remote-full-sync true}
                 _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
@@ -1396,8 +1515,12 @@
                 :priority true)]
           (cond
             stop
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:stop true}))
+            remote->local-full-sync
+            (do (util/drain-chan ops-chan)
+                (>! ops-chan {:remote->local-full-sync true})
+                (recur))
             remote->local
             (let [txid
                   (if (true? remote->local)
@@ -1410,20 +1533,16 @@
             (do (>! ops-chan {:local->remote local->remote})
                 (recur))
             local->remote-full-sync
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:local->remote-full-sync true})
                 (recur)))))
       (.schedule this ::need-password nil))
 
-    (need-password [this]
+    (need-password
+      [this]
       (go
-        (<! (ensure-pwd-exists! (state/get-current-repo) graph-uuid))
-        (<! (set-env rsapi config/FILE-SYNC-PROD?
-                     "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
-                     "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg"
-                     ;; (get @pwd-map graph-uuid)
-                     ))
-        (.schedule this ::idle nil)))
+        (let [next-state (<! (ensure-pwd+keys-exists! graph-uuid (state/get-current-repo)))]
+          (.schedule this next-state nil))))
 
     (idle [this]
       (go
@@ -1452,7 +1571,7 @@
             succ
             (.schedule this ::idle nil)
             need-sync-remote
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
                 (>! ops-chan {:local->remote-full-sync true})
                 (.schedule this ::idle nil))
@@ -1486,7 +1605,7 @@
             (s/assert ::sync-remote->local!-result r)
             (cond
               need-remote->local-full-sync
-              (do (drain-chan ops-chan)
+              (do (util/drain-chan ops-chan)
                   (>! ops-chan {:remote->local-full-sync true})
                   (>! ops-chan {:local->remote-full-sync true})
                   (.schedule this ::idle nil))
@@ -1509,9 +1628,9 @@
             (.schedule this ::idle nil)
 
             need-sync-remote
-            (do (drain-chan ops-chan)
+            (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
-                (>! ops-chan {:local->remote {:local local-change}})
+                (>! ops-chan {:local->remote local-change})
                 (.schedule this ::idle nil))
 
             unknown
@@ -1520,8 +1639,8 @@
               (.schedule this ::idle nil))))))
     IStoppable
     (-stop! [_]
-      (when-not stopped
-        (set! stopped true)
+      (when-not @*stopped?
+        (vreset! *stopped? true)
         (ws-stop! _*ws)
         (offer! stop-sync-chan true)
         (when ops-chan (async/close! ops-chan))
@@ -1530,27 +1649,23 @@
         (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
         (swap! *sync-state sync-state--update-state ::stop))))
 
-(defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state full-sync-chan stop-sync-chan
-                    remote->local-sync-chan local->remote-sync-chan local-changes-chan]
+(defn sync-manager [user-uuid graph-uuid base-path repo txid *sync-state]
   (let [*txid (atom txid)
+        *stopped? (volatile! false)
+        remoteapi-with-stop (->RemoteAPI *stopped?)
         local->remote-syncer (->Local->RemoteSyncer user-uuid graph-uuid
                                                     base-path
-                                                    repo *sync-state
+                                                    repo *sync-state remoteapi-with-stop
                                                     20000
-                                                    *txid nil (chan) false)
-        remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid
-                                                    base-path
-                                                    repo *txid *sync-state nil (volatile! false))]
+                                                    *txid nil (chan) *stopped?)
+        remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
+                                                    repo *txid *sync-state remoteapi-with-stop
+                                                    nil *stopped?)]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
-    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer
-                   full-sync-chan stop-sync-chan
-                   remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil false nil)))
+    (->SyncManager graph-uuid base-path *sync-state local->remote-syncer remote->local-syncer remoteapi-with-stop
+                   nil *txid nil nil nil *stopped? nil)))
 
-(def full-sync-chan (chan 1))
-(def stop-sync-chan (chan 1))
-(def remote->local-sync-chan (chan 1))
-(def local->remote-sync-chan (chan))
 
 (defn sync-stop []
   (when-let [sm (state/get-file-sync-manager)]
@@ -1590,8 +1705,7 @@
         repo (state/get-current-repo)
         sm (sync-manager current-user-uuid graph-uuid
                          (config/get-repo-dir repo) repo
-                         txid *sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
-                         local-changes-chan)]
+                         txid *sync-state)]
     (when-not (config/demo-graph? repo)
       (go
        ;; 1. if remote graph has been deleted, clear graphs-txid.edn
@@ -1604,11 +1718,10 @@
              (clear-graphs-txid! repo)
              (do
                ;; set-env
-               (<! (set-env rsapi config/FILE-SYNC-PROD?
-                            "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
-                            "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg"))
+               (<! (set-env rsapi config/FILE-SYNC-PROD? nil nil))
                (state/set-file-sync-state repo @*sync-state)
                (state/set-file-sync-manager sm)
+               (<! (ensure-pwd+keys-exists! graph-uuid repo))
                ;; wait seconds to receive all file change events,
                ;; and then drop all of them.
                ;; WHY: when opening a graph(or switching to another graph),
@@ -1616,9 +1729,10 @@
                ;;      actually, each file corresponds to a file-change-event,
                ;;      we need to ignore all of them.
                (<! (timeout 5000))
-               (drain-chan local-changes-chan)
+               (util/drain-chan local-changes-chan)
                (poll! stop-sync-chan)
                (poll! remote->local-sync-chan)
+               (poll! remote->local-full-sync-chan)
 
                ;; update global state when *sync-state changes
                (add-watch *sync-state ::update-global-state
@@ -1627,7 +1741,10 @@
                (.start sm)
 
 
-               (offer! remote->local-sync-chan true)
+               ;; (if (zero? txid)
+               ;;   (offer! remote->local-full-sync-chan true)
+               ;;   (offer! remote->local-sync-chan true))
+               (offer! remote->local-full-sync-chan true)
                (offer! full-sync-chan true)
 
                ;; watch :network/online?
@@ -1640,3 +1757,12 @@
                           (fn [_k _r _o n]
                             (when (nil? n)
                               (sync-stop))))))))))))
+
+
+
+;;; debug funcs
+(comment
+  (get-remote-all-files-meta remoteapi graph-uuid)
+  (get-local-all-files-meta rsapi graph-uuid
+                            (config/get-repo-dir (state/get-current-repo)))
+  )

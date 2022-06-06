@@ -450,6 +450,9 @@
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
 
+(defmethod handle :key-gen [_]
+  (rsapi/key-gen))
+
 (defmethod handle :set-env [_ args]
   (apply rsapi/set-env (rest args)))
 

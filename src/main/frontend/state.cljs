@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -148,6 +149,7 @@
      :mobile/show-action-bar?               false
      :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
+     :mobile/show-recording-bar?            false
      ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
      ;;; add a random in (<= 1000000) to observer its update
      :mobile/toolbar-update-observer        0
@@ -228,10 +230,9 @@
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
 
-     :file-sync/download-init-progress      nil
-
      :encryption/graph-parsing?             false
-     })))
+
+     :ui/loading?                           {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
@@ -571,21 +572,6 @@
 (defn sub-edit-content
   []
   (sub [:editor/content (get-edit-input-id)]))
-
-(defn append-current-edit-content!
-  [append-text]
-  (when-not (string/blank? append-text)
-    (when-let [input-id (get-edit-input-id)]
-      (when-let [input (gdom/getElement input-id)]
-        (let [value (gobj/get input "value")
-              new-value (str value append-text)
-              new-value (if (or (= (last value) " ")
-                                (= (last value) "\n"))
-                          new-value
-                          (str "\n" new-value))]
-          (js/document.execCommand "insertText" false append-text)
-          (update-state! :editor/content (fn [m]
-                                           (assoc m input-id new-value))))))))
 
 (defn get-cursor-range
   []
@@ -1027,15 +1013,7 @@
 
 (defn get-date-formatter
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (or
-        (get-in @state [:config repo :journal/page-title-format])
-        ;; for compatibility
-        (get-in @state [:config repo :date-formatter])))
-    ;; TODO:
-    (get-in @state [:me :settings :date-formatter])
-    "MMM do, yyyy"))
+  (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
@@ -1691,20 +1669,6 @@
 
 (defn get-file-sync-state [repo]
   (get-in @state [:file-sync/sync-state repo]))
-
-(defn reset-file-sync-download-init-state!
-  []
-  (set-state! [:file-sync/download-init-progress (get-current-repo)] {}))
-
-(defn set-file-sync-download-init-state!
-  [m]
-  (update-state! [:file-sync/download-init-progress (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
-
-(defn get-file-sync-download-init-state
-  []
-  (get-in @state [:file-sync/download-init-progress (get-current-repo)]))
 
 (defn reset-parsing-state!
   []

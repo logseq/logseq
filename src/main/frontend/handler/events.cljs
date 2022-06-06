@@ -12,7 +12,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
@@ -55,7 +55,12 @@
          (sync/sync-stop)
          (sync/sync-start)))
 
+(defn- file-sync-stop! []
+  (p/do! (persist-var/load-vars)
+         (sync/sync-stop)))
+
 (defmethod handle :user/login [[_]]
+  (state/set-state! [:ui/loading? :login] false)
   (async/go
     (async/<! (file-sync-handler/load-session-graphs))
     (p/let [repos (repo-handler/refresh-repos!)]
@@ -77,7 +82,8 @@
     (if empty-graph?
       (route-handler/redirect! {:to :import :query-params {:from "picker"}})
       (route-handler/redirect-to-home!)))
-  (repo-handler/refresh-repos!))
+  (repo-handler/refresh-repos!)
+  (file-sync-stop!))
 
 (defn- graph-switch [graph]
   (state/set-current-repo! graph)
@@ -116,7 +122,7 @@
      (graph-switch graph))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (if (outliner-file/writes-finished?)
+  (if @outliner-file/*writes-finished?
     (graph-switch-on-persisted graph opts)
     (notification/show!
      "Please wait seconds until all changes are saved for the current graph."
@@ -314,6 +320,8 @@
     (state/set-state! :mobile/show-tabbar? false)
     (state/set-state! :mobile/show-toolbar? true)
     (state/set-state! :mobile/show-action-bar? false)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? true))
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
       (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
@@ -323,9 +331,6 @@
         (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (when (= (state/sub :editor/record-status) "RECORDING")
-        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
-          (set! (.. record-node -style -bottom) (str (+ 45 keyboard-height) "px"))))
       (js/setTimeout (fn []
                        (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
@@ -335,6 +340,8 @@
   (let [main-node (util/app-scroll-container-node)]
     (state/set-state! :mobile/show-toolbar? false)
     (state/set-state! :mobile/show-tabbar? true)
+    (when (= (state/sub :editor/record-status) "RECORDING")
+      (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
@@ -342,10 +349,7 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
-      (when (= (state/sub :editor/record-status) "RECORDING")
-        (when-let [record-node (gdom/getElement "audio-record-toolbar")]
-          (set! (.. record-node -style -bottom) "45px"))))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]

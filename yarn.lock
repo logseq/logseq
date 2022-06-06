@@ -561,6 +561,7 @@
 
 "@capacitor/haptics@^1.1.4":
   version "1.1.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/haptics/-/haptics-1.1.4.tgz#80d5bc4776740a227a8cb83c85fac4db1316db8e"
   integrity sha512-+pJIb5X7xAcbrWj6rJaV+cwBlv8aFwB1/Ob6EV4atydThuuVSSsAL4hI4ZYlPNOxM6H5s+ZDLj7Pa2os4eFmtg==
 
 "@capacitor/ios@3.2.2":
@@ -5316,10 +5317,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.3.9:
-  version "1.3.9"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.3.9.tgz#9e45a25ba79596f3b0b0eace65f651a4c5a0c30a"
-  integrity sha512-UfqNuBphOj7paSBvozTdin5BLB5+W2tr2SGKTfp5eae6VQPx23oICx6RPQprft7KGFtn8T3rpM1YMUN8FaJLhg==
+mldoc@1.4.0:
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.4.0.tgz#10dd8b57b1941a66b3d30fd031881ad31d499edb"
+  integrity sha512-6s1utUm03SCR1XH2EnHD3s0qAd+RLLGRc+1qb4SuHIjjmT5HMWbWGP+vADBLHKQKP6nwYCKsUJkiwLFjOXfP6w==
   dependencies:
     yargs "^12.0.2"
 
@@ -6831,6 +6832,11 @@ react-grid-layout@0.16.6:
     react-draggable "3.x"
     react-resizable "1.x"
 
+react-icon-base@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.npmmirror.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
+  integrity sha512-9wwKJa2LB8ujtJB5MAXYYEM7JfYThZTj0YnfGxzLLWkifaLIGc7iTde2EpJ7ka5MjneRHnlxbIn5VV9k2WjUVA==
+
 react-icon-base@^2.1.2:
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.2.tgz#a17101dad9c1192652356096860a9ab43a0766c7"
@@ -6840,6 +6846,8 @@ react-icons@2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.13.1, react-is@^16.3.1, react-is@^16.7.0:
   version "16.13.1"

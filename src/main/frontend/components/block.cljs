@@ -53,6 +53,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
+            [frontend.util.text :as text-util]
             [frontend.util.property :as property]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util :as gp-util]
@@ -65,6 +66,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
+            [frontend.fs :as fs]
+            [frontend.handler.file-sync :as file-sync]
             [shadow.loader :as loader]))
 
 (defn safe-read-string
@@ -173,6 +176,60 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(rum/defcs asset-loader
+  < rum/reactive
+    (rum/local nil ::exist?)
+    (rum/local false ::loading?)
+    {:will-mount  (fn [state]
+                    (let [src (first (:rum/args state))]
+                      (if (and (gp-config/local-asset? src)
+                               (file-sync/current-graph-sync-on?))
+                        (let [*exist? (::exist? state)
+                              asset-path (string/replace src (str gp-config/local-assets-dir "://") "")]
+                          (if (string/blank? asset-path)
+                            (reset! *exist? false)
+                            (-> (fs/file-exists? "" asset-path)
+                                (p/then
+                                  (fn [exist?]
+                                    (reset! *exist? (boolean exist?))))))
+                          (assoc state ::asset-path asset-path ::asset-file? true))
+                        state)))
+     :will-update (fn [state]
+                    (let [src (first (:rum/args state))
+                          asset-file? (boolean (::asset-file? state))
+                          sync-on? (file-sync/current-graph-sync-on?)
+                          *loading? (::loading? state)
+                          *exist? (::exist? state)]
+                      (when (and sync-on? asset-file? (false? @*exist?))
+                        (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+                              _downloading-files (:current-remote->local-files sync-state)
+                              contain-url? (and (seq _downloading-files)
+                                                (some #(string/ends-with? src %) _downloading-files))]
+                          (cond
+                            (and (not @*loading?) contain-url?)
+                            (reset! *loading? true)
+
+                            (and @*loading? (not contain-url?))
+                            (do
+                              (reset! *exist? true)
+                              (reset! *loading? false))))))
+                    state)}
+  [state _src content-fn]
+  (let [_ (state/sub [:file-sync/sync-state (state/get-current-repo)])
+        exist? @(::exist? state)
+        loading? @(::loading? state)
+        asset-file? (::asset-file? state)
+        sync-enabled? (boolean (file-sync/current-graph-sync-on?))]
+
+    (if (not sync-enabled?)
+      (content-fn)
+      (if (and asset-file? (or loading? (nil? exist?)))
+        [:p.text-sm.opacity-50 (ui/loading "Loading image ...")]
+        (if (or (not asset-file?)
+                (and exist? (not loading?)))
+          (content-fn)
+          [:p.text-red-500.text-xs [:small.opacity-80 "Image not found!"]])))))
+
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
@@ -280,8 +337,9 @@
           (contains? config/audio-formats ext)
           (audio-cp @src)
 
-          (contains? (config/img-formats) ext)
-          (resizable-image config title @src metadata full_text true)
+          (contains? (gp-config/img-formats) ext)
+          (asset-loader @src
+            #(resizable-image config title @src metadata full_text true))
 
           (= ext :pdf)
           [:a.asset-ref.is-pdf {:href @src
@@ -825,7 +883,7 @@
         (nil? metadata-show)
         (or
          (gp-config/local-asset? s)
-         (text/media-link? media-formats s)))
+         (text-util/media-link? media-formats s)))
        (true? (boolean metadata-show))))
 
      ;; markdown
@@ -834,7 +892,7 @@
      ;; image http link
      (and (or (string/starts-with? full-text "http://")
               (string/starts-with? full-text "https://"))
-          (text/media-link? media-formats s)))))
+          (text-util/media-link? media-formats s)))))
 
 (defn- relative-assets-path->absolute-path
   [path]
@@ -1114,7 +1172,7 @@
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (when-let [vimeo-id (nth (util/safe-re-find text/vimeo-regex url) 5)]
+    (when-let [vimeo-id (nth (util/safe-re-find text-util/vimeo-regex url) 5)]
       (when-not (string/blank? vimeo-id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1134,7 +1192,7 @@
     (when-let [id (cond
                     (<= (count url) 15) url
                     :else
-                    (nth (util/safe-re-find text/bilibili-regex url) 5))]
+                    (nth (util/safe-re-find text-util/bilibili-regex url) 5))]
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
@@ -1155,7 +1213,7 @@
     (let [width (min (- (util/get-width) 96)
                      560)
           height (int (* width (/ 315 560)))
-          results (text/get-matched-video url)
+          results (text-util/get-matched-video url)
           src (match results
                      [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
                      (if (= (count id) 11) ["youtube-player" id] url)
@@ -1303,7 +1361,7 @@
         (when-let [youtube-id (cond
                                 (== 11 (count url)) url
                                 :else
-                                (nth (util/safe-re-find text/youtube-regex url) 5))]
+                                (nth (util/safe-re-find text-util/youtube-regex url) 5))]
           (when-not (string/blank? youtube-id)
             (youtube/youtube-video youtube-id))))
 
@@ -1794,6 +1852,9 @@
        (int? v)
        v
 
+       (= k :file-path)
+       v
+
        date
        date
 
@@ -2023,7 +2084,7 @@
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
-     
+
      [:<>
       [:div.flex.flex-row.justify-between
        [:div.flex-1
@@ -2345,7 +2406,7 @@
   (let [refs (model/get-page-names-by-ids
               (->> (map :db/id refs)
                    (remove nil?)))]
-    (text/build-data-value refs)))
+    (text-util/build-data-value refs)))
 
 (defn- get-children-refs
   [children]
@@ -2466,14 +2527,14 @@
                         (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel block-handler/on-touch-cancel 
+       :on-touch-cancel block-handler/on-touch-cancel
        :on-mouse-over (fn [e]
                         (block-mouse-over uuid e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id collapsed? *control-show? edit?))
-      
+
       (when @*show-left-menu?
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
@@ -2485,7 +2546,7 @@
      (dnd-separator-wrapper block block-id slide? false false)]))
 
 (rum/defcs block-container < rum/reactive
-  (rum/local false ::show-block-left-menu?) 
+  (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
@@ -2734,6 +2795,8 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
+        repo (state/get-current-repo)
+        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
@@ -2754,7 +2817,7 @@
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
-        view-f (and view (sci/eval-string (pr-str view)))
+        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and (seq result)
                                      (not not-grouped-by-page?)
@@ -2773,8 +2836,8 @@
       (when-not (and built-in? (empty? result))
         [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
-          [:div.custom-query-title
-           [:span.title-text (cond
+          [:div.custom-query-title.flex.justify-between.w-full
+           [:div [:span.title-text (cond
                                (vector? title) title
                                (string? title) (inline-text config
                                                             (get-in config [:block :block/format] :markdown)
@@ -2782,6 +2845,13 @@
                                :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
+           ;;insert an "edit" button in the query view
+           [:a.opacity-70.hover:opacity-100.svg-small.inline 
+            {:on-mouse-down (fn [e]
+                              (util/stop e)
+                              (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+            svg/edit]]
+          
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))

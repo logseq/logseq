@@ -1,8 +1,10 @@
 (ns electron.file-sync-rsapi
   (:require ["@logseq/rsapi" :as rsapi]))
 
-(defn set-env [env secret-key public-key]
-  (rsapi/setEnv env secret-key public-key))
+(defn key-gen [] (rsapi/keygen))
+
+(defn set-env [env private-key public-key]
+  (rsapi/setEnv env private-key public-key))
 
 (defn get-local-files-meta [graph-uuid base-path file-paths]
   (rsapi/getLocalFilesMeta graph-uuid base-path (clj->js file-paths)))

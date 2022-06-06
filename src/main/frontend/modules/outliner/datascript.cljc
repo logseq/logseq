@@ -55,6 +55,7 @@
                               m)) txs)]
        (when (and (seq txs)
                   (not (:skip-transact? opts)))
+         ;; (frontend.util/pprint txs)
          (try
            (let [repo (get opts :repo (state/get-current-repo))
                  conn (conn/get-db repo false)

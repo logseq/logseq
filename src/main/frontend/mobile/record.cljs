@@ -63,7 +63,7 @@
                       {:edit-block? false
                        :replace-empty-target? true})]
     (if edit-block
-      (state/append-current-edit-content! file-link)
+      (editor-handler/insert file-link)
       (editor-handler/api-insert-new-block! file-link args))))
 
 (defn stop-recording []
