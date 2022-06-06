@@ -37,6 +37,7 @@
    :editor/strike-through        "Strikethrough"
    :editor/clear-block           "Delete entire block content"
    :editor/kill-line-before      "Delete line before cursor position"
+   :editor/copy-embed            "Copy a block embed pointing to the current block"
    :editor/kill-line-after       "Delete line after cursor position"
    :editor/beginning-of-block    "Move cursor to the beginning of a block"
    :editor/end-of-block          "Move cursor to the end of a block"
@@ -896,9 +897,9 @@
              :shortcut.category/block-command-editing "Modifica comandi blocco"
              :shortcut.category/block-selection       "Selezione blocco (premi Esc per uscire dalla selezione)"
              :shortcut.category/toggle                "Attiva/disattiva"
-             :shortcut.category/others                "Altri"
+             :shortcut.category/others                "Altri"}
 
-   }
+   
    :tr      {:shortcut.category/basics "Temel bilgiler"
              :shortcut.category/formatting "Biçimlendirme"
              :shortcut.category/navigating "Gezinme"
