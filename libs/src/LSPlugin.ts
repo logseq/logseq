@@ -318,12 +318,16 @@ export interface IAppProxy {
    * Supported key names
    * @link https://gist.github.com/xyhp915/d1a6d151a99f31647a95e59cdfbf4ddc
    * @param keybinding
-   * @param action
+   * @param action - a callback function to be executed when the key is pressed
+   * @example 
+   * ```ts
+   * logseq.registerCommandShortcut('mod+s', () => {})
    */
   registerCommandShortcut: (
     keybinding: SimpleCommandKeybinding,
     action: SimpleCommandCallback
   ) => void
+
 
   invokeExternalCommand: (
     type: ExternalCommandType,
@@ -331,14 +335,15 @@ export interface IAppProxy {
   ) => Promise<void>
 
   /**
-   * Get state from app store
-   * valid state is here
+   * A function to get the value of any active *state* in the app. The items that you can request for are in the link 
    * https://github.com/logseq/logseq/blob/master/src/main/frontend/state.cljs#L27
    *
    * @example
    * ```ts
    * const isDocMode = await logseq.App.getStateFromStore('document/mode?')
    * ```
+   * 
+   * You can follow this format for any state in the above link including "ui/developer-mode?" to check if developer mode is on or "search/result" to get the results of the search view
    * @param path
    */
   getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
@@ -359,11 +364,35 @@ export interface IAppProxy {
   getCurrentGraph: () => Promise<AppGraphInfo | null>
 
   // router
+  /**
+   * Used to move to a specified "route" in the app.
+   * @example
+   * ```ts
+   * logseq.App.pushState('page', {name: 'Logseq Mastery - Course Notes'}, )
+   * ```ts
+   * logseq.App.pushState('home') 
+   * //Pushes to the user defined home page or current journal day
+   * ```
+   */
   pushState: (
     k: string,
     params?: Record<string, any>,
     query?: Record<string, any>
   ) => void
+
+
+  /**
+   * Used to move to a specified "route" in the app. 
+   * Difference, compared to "push state" is that this method will not push the current state to the history.
+   * This means that if the user clicks the back button it won't return to a page called by "replaceState".
+   * @example
+   * ```ts
+   * logseq.App.pushState('page', {name: 'Logseq Mastery - Course Notes'}, )
+   * ```ts
+   * logseq.App.pushState('home') 
+   * //Pushes to the user defined home page or current journal day
+   * ```
+   */
   replaceState: (
     k: string,
     params?: Record<string, any>,
@@ -374,8 +403,17 @@ export interface IAppProxy {
   queryElementById: (id: string) => Promise<string | boolean>
 
   /**
+   * Takes the input of a DOM selector and returns the element's bounding box.
    * @added 0.0.5
-   * @param selector
+   * @param selector - more about selectors are here https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector
+   * 
+   * @example
+   * ```ts
+   * logseq.api.query_element_rect("div#block-content-629c40e7-d577-422a-89c1-bc742ab885b0")
+   * //This will return the coordinates of a block with specified UUID in the DOM 
+   * logseq.api.query_element_rect(".references.mt-6.flex-1.flex-row")
+   * //This will return the coordinates of the references section in the DOM
+   * ```
    */
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
 
@@ -516,9 +554,9 @@ export interface IEditorProxy extends Record<string, any> {
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
 
   /**
-   * get all blocks for the specified page
+   * get all blocks on the specified page
    *
-   * @param srcPage - the page name or uuid
+   * @param srcPage - the page name
    */
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
@@ -531,7 +569,11 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<[page: PageEntity, blocks: Array<BlockEntity>]> | null>
 
   /**
-   * get flatten pages from top namespace
+   * gets all the pages that inherit from the specified namespace
+   * @example
+   * ```ts
+   * const pages = await logseq.Editor.getPagesFromNamespace('my-namespace')
+   * ```
    * @param namespace
    */
   getPagesFromNamespace: (
@@ -540,6 +582,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   /**
    * construct pages tree from namespace pages
+   * Returns each page as a tree structure. Each first level page is a namespace and sub namespaces are its children property
    * @param namespace
    */
   getPagesTreeFromNamespace: (
@@ -547,11 +590,21 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<PageEntity> | null>
 
   /**
+   * Used to insert a block in a page
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
-   * @param srcBlock
-   * @param content
-   * @param opts
+   * @param srcBlock - the UUID of the block under which it will be inserted
+   * @param content - the content of the block
+   * @param opts - options
+   * @param opts.before - set to true to insert the block before srcBlock
+   * @param opts.sibling - set to false if you want to insert the block as a child of srcBlock. Defaults to inserting as a sibling, not indented. 
+   * @param opts.isPageBlock - when this is selected, instead of a block UUID, you can pass a page name into srcBlock
+   * @param opts.properties - allows you to define block properties for the block to have upon insertion
+   * 
+   * @example
+   * ```ts
+   * logseq.Editor.insertBlock('block-uuid-1', 'Hello World', {sibling: false, properties: {color: 'red'}})
+   * ```
    */
   insertBlock: (
     srcBlock: BlockIdentity,
@@ -564,6 +617,9 @@ export interface IEditorProxy extends Record<string, any> {
     }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * Used to batch insert multiple blocks into a page
+   */
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
@@ -578,12 +634,23 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlock: (srcBlock: BlockIdentity) => Promise<void>
 
+  /**
+   * @example 
+   * 
+   * ```ts
+   * logseq.Editor.updateBlock(block.uuid, 'new content', {includeChildren: true})
+   * ```
+   * @param srcBlock - the uuid of the block
+   * @param content - the new content of the block
+   * @param opts - an object containing the options
+   **/
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
   /**
+   * set the collapse status of a block
    * @example
    *
    * ```ts
@@ -597,12 +664,34 @@ export interface IEditorProxy extends Record<string, any> {
     uuid: BlockUUID,
     opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
-
+  /**
+   * Returns a PageEntity object for the page ID or page name provided. Optionally get the blocks on the page.
+   * @example
+   * 
+   * ```ts
+   * const page = await logseq.Editor.getPage('page-name')
+   * ```
+   * @param srcPage - the page name or uuid
+   * @param opts - an object containing the options
+   * 
+   */
   getPage: (
     srcPage: PageIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<PageEntity | null>
 
+  /**
+   * Create a page with provided page name, returns a PageEntity object
+   * @example
+   * ```ts
+   * const page = await logseq.Editor.createPage('Avocados')
+   * page.name // Avocados
+   * ```
+   * @param pageName - the name of the page provided 
+   * @param opts
+   * @param properties - an object containing properties the page should have by default
+   * 
+   */
   createPage: (
     pageName: BlockPageName,
     properties?: {},
@@ -646,6 +735,17 @@ export interface IEditorProxy extends Record<string, any> {
 
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
 
+  /**
+   * Adds a block property to an existing block
+   * @example
+   * ```ts
+   * logseq.Editor.upsertBlockProperty(block.uuid, 'color', 'red')
+   * //the block will now have a property called color with value red
+   * ```
+   * @param block - the uuid of the block
+   * @param key - the key of the property
+   * @param value - the value of the property
+   * 
   upsertBlockProperty: (
     block: BlockIdentity,
     key: string,
@@ -654,6 +754,17 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
 
+  /**
+   * Get's the value of a block property in an existing block
+   * @example
+   * ```ts
+   * logseq.Editor.getBlockProperty(block.uuid, 'color')
+   * //returns the value of the color property
+   * ```
+   * @param block - the uuid of the block
+   * @param key - the key of the property
+   * @returns the value of the property
+   */
   getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
 
   getBlockProperties: (block: BlockIdentity) => Promise<any>
@@ -667,6 +778,7 @@ export interface IEditorProxy extends Record<string, any> {
   openInRightSidebar: (uuid: BlockUUID) => void
 
   /**
+   * A hook that is called when content in a block is selected
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
    */
   onInputSelectionEnd: IUserHook<{
@@ -697,6 +809,17 @@ export interface IDBProxy {
   /**
    * Hook all transaction data of DB
    *
+   * @example
+   * ```ts
+   * logseq.DB.onChanged((e) => {
+   *  if (e.txMeta?.outlinerOp == "insertBlocks") {
+   *    logseq.UI.showMsg(`A block has just been inserted);
+   *  }
+   * else {
+   *  logseq.UI.showMsg(`${blocks.length} blocks have just been updated`); // "5 blocks have just been updated"
+   * }
+   * })
+   * ```
    * @added 0.0.2
    */
   onChanged: IUserHook<{
@@ -707,7 +830,13 @@ export interface IDBProxy {
 
   /**
    * Subscribe a specific block changed event
-   *
+   * @example 
+   * ```ts
+   * logseq.DB.onBlockChanged(block.uuid, (block) => {
+   *  logseq.UI.showMsg(`${block.uuid} changed`)
+   * })
+   * //Every time a block is changed, a message with the UUID of the changed block will be shown
+   * 
    * @added 0.0.2
    */
   onBlockChanged(
@@ -768,7 +897,7 @@ export interface IUIProxy {
 export interface IAssetsProxy {
   /**
    * @added 0.0.2
-   * @param exts
+   * @param exts - files with these extensions will be listed
    */
   listFilesOfCurrentGraph(exts: string | string[]): Promise<{
     path: string
@@ -780,6 +909,9 @@ export interface IAssetsProxy {
   }>
 }
 
+/**
+ * Theme Related APIs
+ */
 export interface ILSPluginThemeManager {
   get themes(): Map<PluginLocalIdentity, Theme[]>
 
@@ -855,7 +987,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   provideTheme(theme: Theme): this
 
   /**
-   * Inject custom css for the main Logseq app
+   * Inject custom css for the main Logseq app. Optionally provide a key to identify and later replace the css
    *
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
    * @example
@@ -864,6 +996,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *    @import url("https://at.alicdn.com/t/font_2409735_r7em724douf.css");
    *  )
    * ```
+   * 
    */
   provideStyle(style: StyleString | StyleOptions): this
 
@@ -888,9 +1021,30 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   provideUI(ui: UIOptions): this
 
   /**
-   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
+   * @example
+   * ```ts
+   * const settings = [{
+   *  key: "timeFormat",
+   *  type: "enum",
+   *  default: ["12 hour time", "24 hour time"],
+   *  title: "Select between 12 and 24 hour time",
+   *  description:
+   *    "Select between 12 and 24 hour time. This option will be followed whenever you call {end} or {start} in the template.",
+   *  enumChoices: ["12 hour time", "24 hour time"],
+   *  enumPicker: "select",
+   * },
+   * {
+   *  key: "calendarName",
+   * type: "string",
+   *  default: "Calendar 1",
+   *  title: "What would you like to name the calendar?",
+   *  description:
+   *    "Choose a name for the calendar. This will be the name of the calendar block that is inserted.",
+   * }]
+   * logseq.useSettingsSchema(settings)
+   * ```
    *
-   * @param schemas
+   * @param schemas - An array containing SettingSchemeDesc objects
    */
   useSettingsSchema(schemas: Array<SettingSchemaDesc>): this
 
@@ -903,8 +1057,13 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   onSettingsChanged<T = any>(cb: (a: T, b: T) => void): IUserOffHook
 
+  /**
+   * A function which brings up logseq's plugin settings page
+   */
   showSettingsUI(): void
-
+  /**
+   * A function which hides logseq's plugin settings page if it's currently visible
+   */
   hideSettingsUI(): void
 
   setMainUIAttrs(attrs: Record<string, any>): void
@@ -934,7 +1093,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   hideMainUI(opts?: { restoreEditingCursor: boolean }): void
 
   /**
-   * toggle the plugin's UI
+   * toggle the plugin's UI. If it's currently visible, it will hide it, else it will show it
    */
   toggleMainUI(): void
 
