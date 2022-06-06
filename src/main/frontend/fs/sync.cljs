@@ -949,8 +949,6 @@
 
 
 ;; type = "change" | "add" | "unlink"
-
-
 (deftype FileChangeEvent [type dir path stat]
   IRelativePath
   (-relative-path [_] (remove-dir-prefix dir path))
@@ -960,6 +958,12 @@
     (and (= dir (.-dir other))
          (= type (.-type other))
          (= path (.-path other))))
+
+  IHash
+  (-hash [_]
+    (hash {:dir dir
+           :type type
+           :path path}))
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
