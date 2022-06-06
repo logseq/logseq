@@ -2986,13 +2986,9 @@
           edit-block (state/get-edit-block)
           format (or (:block/format edit-block) :markdown)
           initial-text (.getData clipboard-data "text")
-          text (if-not (string/blank? html)
-                 (try
-                   (html-parser/convert format html)
-                   (catch :default e
-                     (log/error :html->hiccup e)
-                     initial-text))
-                 initial-text)
+          text (or (when (string/blank? html)
+                     (html-parser/convert format html))
+                   initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
         (if (or (thingatpt/markdown-src-at-point input)
