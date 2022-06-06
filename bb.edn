@@ -8,7 +8,9 @@
   {:git/url "https://github.com/logseq/bb-tasks"
    :git/sha "4b3e623fb475cacb992425aa9dac770d6dd63e38"}
   logseq/graph-parser
-  {:local/root "deps/graph-parser"}}
+  {:local/root "deps/graph-parser"}
+  org.clj-commons/digest
+  {:mvn/version "1.4.100"}}
  :pods
  {clj-kondo/clj-kondo {:version "2022.02.09"}
   org.babashka/fswatcher {:version "0.0.3"}}

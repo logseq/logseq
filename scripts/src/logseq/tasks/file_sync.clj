@@ -12,6 +12,7 @@
             [babashka.curl :as curl]
             [clojure.data :as data]
             [clojure.test :as t :refer [deftest is]]
+            [clj-commons.digest :as digest]
             [logseq.tasks.file-sync-actions :as file-sync-actions])
   (:import (java.net URLDecoder)))
 
@@ -55,7 +56,14 @@
         body (json/parse-string (:body resp) keyword)]
     (->> body
          :Objects
-         (map (comp #(URLDecoder/decode %) fs/file-name :Key)))))
+         (map (juxt (comp #(URLDecoder/decode %) fs/file-name :Key) :checksum)))))
+
+(defn- get-local-all-files
+  [dir subdir]
+  (let [files (map fs/file (fs/list-dir (fs/file dir subdir)))
+        f (juxt fs/file-name digest/md5)]
+    (map f files)))
+
 
 (defn- api-post-get-graphs
   []
@@ -95,14 +103,14 @@
     (spit (fs/file dir file) new-content)))
 
 (defn run-action [action-map]
-  (println "==\nRUN")
+  (println "===\nRUN")
   (pp/pprint ((juxt :action #(get-in % [:args :file])) action-map))
   (println "===")
   (run-action* action-map))
 
 (defn- ensure-dir-is-synced!
   [dir graph-id subdir]
-  (let [actual (set (map fs/file-name (fs/list-dir (fs/file dir subdir))))
+  (let [actual (set (get-local-all-files dir subdir))
         expected (set (api-get-all-files graph-id subdir))]
     (assert (= actual expected)
             (let [[local-only remote-only _] (data/diff actual expected)]
@@ -163,7 +171,7 @@
     (doseq [actions partitioned-actions]
       (doseq [action actions]
         (run-action action)
-        (Thread/sleep 500))
+        (Thread/sleep 1000))
       (is (wait&files-are-in-sync? @root-dir @root-graph-id subdir)
           (str "Test " (mapv (juxt :action #(get-in % [:args :file])) actions))))))
 
