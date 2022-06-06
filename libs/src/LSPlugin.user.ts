@@ -39,6 +39,7 @@ import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
+import { LSPluginRequest } from './modules/LSPlugin.Request'
 
 declare global {
   interface Window {
@@ -318,8 +319,7 @@ const KEY_MAIN_UI = 0
  */
 export class LSPluginUser
   extends EventEmitter<LSPluginUserEvents>
-  implements ILSPluginUser
-{
+  implements ILSPluginUser {
   // @ts-ignore
   private _version: string = LIB_VERSION
   private _debugTag: string = ''
@@ -333,6 +333,7 @@ export class LSPluginUser
   private _ui = new Map<number, uiState>()
 
   private _mFileStorage: LSPluginFileStorage
+  private _mRequest: LSPluginRequest
   private _mExperiments: LSPluginExperiments
 
   /**
@@ -670,6 +671,12 @@ export class LSPluginUser
   get FileStorage(): LSPluginFileStorage {
     let m = this._mFileStorage
     if (!m) m = this._mFileStorage = new LSPluginFileStorage(this)
+    return m
+  }
+
+  get Request(): LSPluginRequest {
+    let m = this._mRequest
+    if (!m) m = this._mRequest = new LSPluginRequest(this)
     return m
   }
 

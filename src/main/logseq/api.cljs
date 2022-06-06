@@ -808,9 +808,17 @@
     (plugin-handler/register-extensions-enhancer
       (keyword pid) type {:enhancer enhancer})))
 
+(defonce *request-k (volatile! 0))
+
 (defn ^:export exper_request
-  [pid options]
-  nil)
+  [pid ^js options]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (let [req-id (vreset! *request-k (inc @*request-k))
+          req-cb #(plugin-handler/request-callback _pl req-id %)]
+      (-> (ipc/ipc :httpRequest req-id options)
+          (p/then #(req-cb %))
+          (p/catch #(req-cb %)))
+      req-id)))
 
 (defn ^:export exper_abort_request
   [req-id]
