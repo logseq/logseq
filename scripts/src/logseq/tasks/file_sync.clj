@@ -3,14 +3,16 @@
 
 * Login to electron app and toggle file-sync on
 * Set up file-sync-auth.json file per #'read-config
-* Run `bb file-sync:integration-tests GRAPH_DIRECTORY`
+* Run `bb file-sync:integration-tests`
 * Wait for test results. Each action takes 10-20s and prints results as it goes"
   (:require [clojure.string :as str]
             [cheshire.core :as json]
+            [clojure.pprint :as pp]
             [babashka.fs :as fs]
             [babashka.curl :as curl]
             [clojure.data :as data]
-            [clojure.test :as t :refer [deftest is]])
+            [clojure.test :as t :refer [deftest is]]
+            [logseq.tasks.file-sync-actions :as file-sync-actions])
   (:import (java.net URLDecoder)))
 
 ;; Root directory for graph that is being tested
@@ -93,7 +95,9 @@
     (spit (fs/file dir file) new-content)))
 
 (defn run-action [action-map]
-  (println "\n===\nRUN" (pr-str action-map) "\n===")
+  (println "==\nRUN")
+  (pp/pprint ((juxt :action #(get-in % [:args :file])) action-map))
+  (println "===")
   (run-action* action-map))
 
 (defn- ensure-dir-is-synced!
@@ -133,39 +137,35 @@
          false)))
 
 (defn- wait&files-are-in-sync?
-  [dir graph-id subdir]
+  [dir graph-id subdir & [msg]]
   ;; Approximate polling time before file changes are picked up by client
-  (println "Wait 10s for logseq to pick up changes...")
+  (if msg
+    (println msg)
+    (println "Wait 10s for logseq to pick up changes..."))
   (Thread/sleep 10000)
   (try-fn-n-times #(files-are-in-sync? dir graph-id subdir) 10))
 
-(deftest file-changes
+(defn- clear-dir-pages
+  [subdir]
+  (fs/delete-tree (str @root-dir "/" subdir))
+  (fs/create-dir (str @root-dir "/" subdir)))
+
+(deftest rand-file-changes
   (let [subdir "pages"
-        ;; Directory must be in sync in order for assertions to pass
-        _ (ensure-dir-is-synced! @root-dir @root-graph-id subdir)
-        ;; These actions are data driven which allows us to spec to generate them
-        ;; when the API is able to handle more randomness
+        actions (:generated-action (file-sync-actions/generate-rand-actions 30))
         actions (mapv
                  #(assoc-in % [:args :dir] @root-dir)
-                 [{:action :create-file
-                   :args {:file (str subdir "/test.create-page.md")
-                          :blocks ["hello world"]}}
-                  {:action :move-file
-                   :args {:file (str subdir "/test.create-page.md")
-                          :new-file (str subdir "/test.create-page-new.md")}}
-                  {:action :update-file
-                   :args {:file (str subdir "/test.create-page-new.md")
-                          :blocks ["update line1" "update line2"]}}
-                  {:action :delete-file
-                   :args {:file (str subdir "/test.create-page-new.md")}}])]
-
-    (doseq [action-map actions]
-      (run-action action-map)
+                 actions)
+        partitioned-actions (partition-all 3 actions)]
+    (clear-dir-pages subdir)
+    (wait&files-are-in-sync? @root-dir @root-graph-id subdir
+                             (format "clear dir [%s], and ensure it's in sync" subdir))
+    (doseq [actions partitioned-actions]
+      (doseq [action actions]
+        (run-action action)
+        (Thread/sleep 500))
       (is (wait&files-are-in-sync? @root-dir @root-graph-id subdir)
-          (str "Test " (select-keys action-map [:action]))))))
-
-
-;; (deftest file)
+          (str "Test " (mapv (juxt :action #(get-in % [:args :file])) actions))))))
 
 (defn setup-vars
   []
@@ -177,7 +177,17 @@
     (reset! root-graph-id graph-id)))
 
 (defn integration-tests
-  "Run file-sync integration tests on graph directory"
+  "Run file-sync integration tests on graph directory
+  requirements:
+
+  * file-sync-auth.json, and it looks like:
+  ```
+  {\"id_token\":\"<id-token>\",
+    \"dir\": \"/Users/me/Documents/untitled folder 31\"}
+  ```
+
+  * you alse need to open logseq-app(or yarn electron-watch),
+    and open <dir> and start file-sync"
   [& _args]
   (setup-vars)
   (t/run-tests 'logseq.tasks.file-sync))

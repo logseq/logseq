@@ -1737,9 +1737,10 @@
                (.start sm)
 
 
-               (if (zero? txid)
-                 (offer! remote->local-full-sync-chan true)
-                 (offer! remote->local-sync-chan true))
+               ;; (if (zero? txid)
+               ;;   (offer! remote->local-full-sync-chan true)
+               ;;   (offer! remote->local-sync-chan true))
+               (offer! remote->local-full-sync-chan true)
                (offer! full-sync-chan true)
 
                ;; watch :network/online?
