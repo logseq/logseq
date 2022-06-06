@@ -525,7 +525,7 @@
   (set-env [_ prod? private-key public-key]
     (when (not-empty private-key)
       (print "[sync] setting sync age-encryption passphrase..."))
-    (go (<! (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))))
+    (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
   (get-local-all-files-meta [_ graph-uuid base-path]
     (go
       (let [r (<! (retry-rsapi #(p->c (ipc/ipc "get-local-all-files-meta" graph-uuid base-path))))]
@@ -596,9 +596,9 @@
           (->> r
                (js->clj :keywordize-keys true)))))
   (set-env [_ prod? secret-key public-key]
-    (go (<! (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
-                                                           :secretKey secret-key
-                                                           :publicKey public-key}))))))
+    (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
+                                                   :secretKey secret-key
+                                                   :publicKey public-key}))))
 
   (get-local-all-files-meta [_ _graph-uuid base-path]
     (go
@@ -625,11 +625,10 @@
                set)))))
 
   (rename-local-file [_ _graph-uuid base-path from to]
-    (go
-      (<! (p->c (.renameLocalFile mobile-util/file-sync
-                                  (clj->js {:basePath base-path
-                                            :from from
-                                            :to to}))))))
+    (p->c (.renameLocalFile mobile-util/file-sync
+                            (clj->js {:basePath base-path
+                                      :from from
+                                      :to to}))))
 
   (update-local-files [this graph-uuid base-path filepaths]
     (go
