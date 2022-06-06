@@ -479,7 +479,8 @@
             next (if sibling?
                    (tree/-get-right target-node)
                    (tree/-get-down target-node))
-            next-tx (when (and next (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))))
+            next-tx (when (and next
+                               (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
                       (when-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
                         [{:block/uuid (tree/-get-id next)
                           :block/left (:db/id left)}]))
