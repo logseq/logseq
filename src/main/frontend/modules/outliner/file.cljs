@@ -31,7 +31,6 @@
 (defn write-files!
   [pages]
   (when (seq pages)
-    (println :write-files pages)
     (when-not config/publishing?
       (doseq [[repo page-id] (set pages)]
         (try (do-write-file! repo page-id)
