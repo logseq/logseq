@@ -1352,7 +1352,7 @@
     Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
                          ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
     Object
-    (filter-file-change-events-fn [this]
+    (filter-file-change-events-fn [_]
       (fn [^FileChangeEvent e] (and (instance? FileChangeEvent e)
                                     (string/starts-with? (.-dir e) base-path)
                                     (not (contains-path? ignore-files (relative-path e)))
@@ -1388,7 +1388,7 @@
          :stop-ch stop-chan
          :distinct-coll? true)))
 
-    (sync-local->remote! [this es]
+    (sync-local->remote! [_ es]
       (if (empty? es)
         (go {:succ true})
         (let [type (.-type ^FileChangeEvent (first es))
