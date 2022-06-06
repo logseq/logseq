@@ -2909,20 +2909,26 @@
        ;; not copied from the external clipboard
        (= (string/replace (string/trim initial-text) "\r" "")
           (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
-      (let [blocks (or
-                    (:copy/full-blocks copied-blocks)
-                    (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-        (when (seq blocks)
-          (state/set-copied-full-blocks! blocks)
-          (paste-blocks blocks {})))
+      (do
+        (util/stop e)
+        (let [blocks (or
+                     (:copy/full-blocks copied-blocks)
+                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
+         (when (seq blocks)
+           (state/set-copied-full-blocks! blocks)
+           (paste-blocks blocks {}))))
 
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
-      (html-link-format! text)
+      (do
+        (util/stop e)
+        (html-link-format! text))
 
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
-      (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+      (do
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
       :else
       ;; from external
