@@ -27,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil

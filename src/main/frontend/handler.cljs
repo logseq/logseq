@@ -54,7 +54,9 @@
   (let [f (fn []
             #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
-              (when-not (state/nfs-refreshing?)
+              (when (and (not (state/nfs-refreshing?))
+                         (not (contains? (:file/unlinked-dirs @state/state)
+                                         (config/get-repo-dir repo))))
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)
