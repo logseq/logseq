@@ -148,7 +148,8 @@ public class SyncClient {
     }
     
     // (txid, error)
-    public func updateFiles(_ fileKeyDict: [String: String], completionHandler: @escaping  (Int?, Error?) -> Void) {
+    // filePath => [S3Key, md5]
+    public func updateFiles(_ fileKeyDict: [String: [String]], completionHandler: @escaping  (Int?, Error?) -> Void) {
         let url = URL_BASE.appendingPathComponent("update_files")
         
         var request = URLRequest(url: url)
@@ -158,7 +159,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": Dictionary(uniqueKeysWithValues: fileKeyDict.map { ($0, $1) }) as [String: String] as Any,
+            "Files": Dictionary(uniqueKeysWithValues: fileKeyDict.map { ($0, $1) }) as [String: [String]] as Any,
             "TXId": self.txid,
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
@@ -252,7 +253,7 @@ public class SyncClient {
     }
     
     // [filePath, Key]
-    public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], Error?) -> Void) {
+    public func uploadTempFiles(_ files: [String: URL], credentials: S3Credential, completionHandler: @escaping ([String: String], [String: String], Error?) -> Void) {
         let credentialsProvider = AWSBasicSessionCredentialsProvider(
             accessKey: credentials.AccessKeyId, secretKey: credentials.SecretKey, sessionToken: credentials.SessionToken)
         let configuration = AWSServiceConfiguration(region: .USEast2, credentialsProvider: credentialsProvider)
@@ -280,6 +281,7 @@ public class SyncClient {
         let group = DispatchGroup()
         var keyFileDict: [String: String] = [:]
         var fileKeyDict: [String: String] = [:]
+        var fileMd5Dict: [String: String] = [:]
         
         let uploadCompletionHandler = { (task: AWSS3TransferUtilityUploadTask, error: Error?) -> Void in
             // ignore any errors in first level of handler
@@ -310,10 +312,11 @@ public class SyncClient {
             let key = "\(self.s3prefix!)/ios\(randFileName)"
 
             keyFileDict[key] = filePath
+            fileMd5Dict[filePath] = rawData.MD5
             transferUtility?.uploadData(encryptedRawDat, key: key, contentType: "application/octet-stream", expression: uploadExpression, completionHandler: uploadCompletionHandler)
                 .continueWith(block: { (task) in
                     if let error = task.error {
-                        completionHandler([:], error)
+                        completionHandler([:], [:], error)
                     }
                     return nil
                 })
@@ -321,7 +324,7 @@ public class SyncClient {
         
         group.notify(queue: .main) {
             AWSS3TransferUtility.remove(forKey: transferKey)
-            completionHandler(fileKeyDict, nil)
+            completionHandler(fileKeyDict, fileMd5Dict, nil)
         }
     }
 }

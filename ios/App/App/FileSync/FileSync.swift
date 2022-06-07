@@ -74,7 +74,7 @@ func maybeEncrypt(_ plaindata: Data) -> Data! {
     }
     if let publicKey = ENCRYPTION_PUBLIC_KEY {
         // use armor = false, for smaller size
-        if let cipherdata = AgeEncryption.encryptWithPassphrase(plaindata, publicKey, armor: false) {
+        if let cipherdata = AgeEncryption.encryptWithX25519(plaindata, publicKey, armor: true) {
             return cipherdata
         }
         return nil // encryption fail
@@ -362,7 +362,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             }
 
             // 2. upload_temp_file
-            client.uploadTempFiles(files, credentials: credentials!) { (uploadedFileKeyDict, error) in
+            client.uploadTempFiles(files, credentials: credentials!) { (uploadedFileKeyDict, fileMd5Dict, error) in
                 guard error == nil else {
                     self.debugNotification(["event": "upload:error", "data": ["message": "error while uploading temp files: \(error!)"]])
                     call.reject("error(uploadTempFiles): \(error!)")
@@ -374,7 +374,13 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                     call.reject("no file to update")
                     return
                 }
-                client.updateFiles(uploadedFileKeyDict) { (txid, error) in
+
+                var uploadedFileKeyMd5Dict: [String: [String]] = [:]
+
+                for (filePath, fileKey) in uploadedFileKeyDict {
+                    uploadedFileKeyMd5Dict[filePath] = [fileKey, fileMd5Dict[filePath]!]
+                }
+                client.updateFiles(uploadedFileKeyMd5Dict) { (txid, error) in
                     guard error == nil else {
                         self.debugNotification(["event": "upload:error", "data": ["message": "error while updating files: \(error!)"]])
                         call.reject("error updateFiles: \(error!)")
