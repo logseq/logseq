@@ -89,8 +89,8 @@ jobs:
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
           sed -i 's/versionName ".*"/versionName "${{ steps.ref.outputs.version }}"/g' android/app/build.gradle
 
-      - name: Compile CLJS
-        run: yarn install && yarn release
+      - name: Compile CLJS - android variant, use es6 instead of es-next
+        run: yarn install && yarn release-android-app
 
       - name: Upload Sentry Sourcemaps (beta only)
         if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}

@@ -79,3 +79,10 @@
   [blocks-exclude-root root]
   (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
     (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
+
+(defn get-sorted-block-and-children
+  [repo db-id]
+  (when-let [root-block (db/pull db-id)]
+    (let [blocks (db/get-block-and-children repo (:block/uuid root-block))
+          blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
+      (sort-blocks blocks-exclude-root root-block))))

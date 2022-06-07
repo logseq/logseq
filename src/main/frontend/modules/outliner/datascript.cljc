@@ -8,7 +8,8 @@
                      [frontend.state :as state]
                      [frontend.config :as config]
                      [logseq.graph-parser.util :as gp-util]
-                     [lambdaisland.glogi :as log])))
+                     [lambdaisland.glogi :as log]
+                     [frontend.search :as search])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -22,9 +23,14 @@
 
 #?(:cljs
    (defn after-transact-pipelines
-     [{:keys [_db-before _db-after _tx-data _tempids _tx-meta] :as tx-report}]
-     (pipelines/invoke-hooks tx-report)
-     (undo-redo/listen-outliner-operation tx-report)))
+     [repo {:keys [_db-before _db-after _tx-data _tempids tx-meta] :as tx-report}]
+     (when-not config/test?
+       (pipelines/invoke-hooks tx-report)
+
+       (when (:outliner/transact? tx-meta)
+         (undo-redo/listen-outliner-operation tx-report))
+
+       (search/sync-search-indice! repo tx-report))))
 
 #?(:cljs
    (defn- remove-nil-from-transaction
@@ -48,13 +54,16 @@
                                       :block/title :block/body :block/level :block/container :db/other-tx)
                               m)) txs)]
        (when (and (seq txs)
-                  (not (:skip-transact? opts)))
+                  (not (:skip-transact? opts))
+                  (not (contains? (:file/unlinked-dirs @state/state)
+                                  (config/get-repo-dir (state/get-current-repo)))))
+         ;; (frontend.util/pprint txs)
          (try
            (let [repo (get opts :repo (state/get-current-repo))
                  conn (conn/get-db repo false)
                  editor-cursor (state/get-current-edit-block-and-position)
                  meta (merge opts {:editor-cursor editor-cursor})
-                 rs (d/transact! conn txs meta)]
+                 rs (d/transact! conn txs (assoc meta :outliner/transact? true))]
              (when true                 ; TODO: add debug flag
                (let [eids (distinct (mapv first (:tx-data rs)))
                      left&parent-list (->>
@@ -66,8 +75,6 @@
                                        (vec)
                                        (map next))]
                  (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
-             (when-not config/test?
-               (after-transact-pipelines rs))
              rs)
            (catch js/Error e
              (log/error :exception e)

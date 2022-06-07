@@ -5,6 +5,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.handler.search :as search-handler]
             [frontend.handler.notification :as notification]
+            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.handler.plugin :as plugin-handler]))
 
 (rum/defc route-view
@@ -15,8 +16,7 @@
   []
   (try
     (comp
-      (ui/setup-active-keystroke!)
-      (ui/setup-patch-ios-visual-viewport-state!))
+     (ui/setup-active-keystroke!))
     (catch js/Error _e
       nil)))
 
@@ -88,6 +88,7 @@
                    (state/setup-electron-updater!)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
+                   (quick-tour/init)
                    (plugin-handler/host-mounted!)
                    (assoc state ::teardown (setup-fns!) ))
    :will-unmount (fn [state]

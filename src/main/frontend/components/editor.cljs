@@ -7,9 +7,6 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
-            [frontend.mobile.camera :as mobile-camera]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
@@ -26,10 +23,8 @@
             [logseq.graph-parser.util :as gp-util]
             [goog.dom :as gdom]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.handler.history :as history]
-            [frontend.mobile.footer :as footer]
-            [frontend.handler.config :as config-handler]))
+            [react-draggable]
+            [rum.core :as rum]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -232,88 +227,6 @@
                            template)
             :class       "black"}))))))
 
-(rum/defc mobile-bar-indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(def ^:private mobile-bar-icons-keywords
-  [:checkbox :brackets :parentheses :command :tag :a-b :list :camera
-   :brand-youtube :link :rotate :rotate-clockwise :code :bold :italic :strikethrough :paint])
-
-(def ^:private mobile-bar-commands-stats
-  (atom (into {}
-              (mapv (fn [name] [name {:counts 0}])
-                    mobile-bar-icons-keywords))))
-
-(defn set-command-stats [icon]
-  (let [key (keyword icon)
-        counts (get-in @mobile-bar-commands-stats [key :counts])]
-    (swap! mobile-bar-commands-stats
-           assoc-in [key :counts] (inc counts))
-    (config-handler/set-config!
-     :mobile/toolbar-stats @mobile-bar-commands-stats)))
-
-(rum/defc mobile-bar-command
-  [command-handler icon & [count? event?]]
-  [:div
-   [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (util/stop e)
-                      (when count?
-                        (set-command-stats icon))
-                      (if event?
-                        (command-handler e)
-                        (command-handler)))}
-    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
-
-(defn mobile-bar-commands
-  [_parent-state parent-id]
-  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/make-el-cursor-position-into-center-viewport input)
-                             (.focus input)))]
-    (zipmap mobile-bar-icons-keywords
-     [(mobile-bar-command editor-handler/cycle-todo! "checkbox" true)
-      (mobile-bar-command #(editor-handler/toggle-page-reference-embed parent-id) "brackets" true)
-      (mobile-bar-command #(editor-handler/toggle-block-reference-embed parent-id) "parentheses" true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) "command" true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "#" {})) "tag" true)
-      (mobile-bar-command editor-handler/cycle-priority! "a-b" true)
-      (mobile-bar-command editor-handler/toggle-list! "list" true)
-      (mobile-bar-command #(mobile-camera/embed-photo parent-id) "camera" true)
-      (mobile-bar-command commands/insert-youtube-timestamp "brand-youtube" true)
-      (mobile-bar-command editor-handler/html-link-format! "link" true)
-      (mobile-bar-command history/undo! "rotate" true true)
-      (mobile-bar-command history/redo! "rotate-clockwise" true true)
-      (mobile-bar-command #(do (viewport-fn) (commands/simple-insert! parent-id "<" {})) "code" true)
-      (mobile-bar-command editor-handler/bold-format! "bold" true)
-      (mobile-bar-command editor-handler/italics-format! "italic" true)
-      (mobile-bar-command editor-handler/strike-through-format! "strikethrough" true)
-      (mobile-bar-command editor-handler/highlight-format! "paint" true)])))
-
-(rum/defc mobile-bar < rum/reactive
-  [parent-state parent-id]
-  (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
-   (reset! mobile-bar-commands-stats config-toolbar-stats))
-  (let [commands (mobile-bar-commands parent-state parent-id)
-        sorted-commands (sort-by (comp :counts second) > @mobile-bar-commands-stats)]
-    [:div#mobile-editor-toolbar.bg-base-2
-     [:div.toolbar-commands
-      (mobile-bar-indent-outdent false "arrow-bar-left")
-      (mobile-bar-indent-outdent true "arrow-bar-right")
-      (mobile-bar-command (editor-handler/move-up-down true) "arrow-bar-to-up")
-      (mobile-bar-command (editor-handler/move-up-down false) "arrow-bar-to-down")
-      (mobile-bar-command #(if (state/sub :document/mode?)
-                             (editor-handler/insert-new-block! nil)
-                             (commands/simple-insert! parent-id "\n" {})) "arrow-back")
-      (for [command sorted-commands]
-        ((first command) commands))]
-     [:div.toolbar-hide-keyboard
-      (mobile-bar-command #(state/clear-edit!) "keyboard-show")]]))
-
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -368,7 +281,6 @@
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight
-        vw-width js/window.innerWidth
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
@@ -388,15 +300,14 @@
                                    (when (> ofx 0)
                                      (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
                            [right-sidebar? editing-key])
-        x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
-                         (let [delta-width (- vw-width (+ (:left rect) left))]
-                           (< delta-width (* max-width 0.5))))
+        y-overflow-vh? (< to-max-height 130)
+        to-max-height (if y-overflow-vh? max-height to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
         y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
-      :class (if x-overflow-vw? "is-overflow-vw-x" "")
+      :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
       :style (merge
@@ -607,19 +518,10 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id config]
+  [state {:keys [format block]} id _config]
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-
-     (when (= (state/sub :editor/record-status) "RECORDING")
-       [:div#audio-record-toolbar
-        (footer/audio-record-cp)])
-
-     (when (and (or (mobile-util/is-native-platform?)
-                    config/mobile?)
-                (not (:review-cards? config)))
-       (mobile-bar state id))
 
      (ui/ls-textarea
       {:id                id
@@ -629,7 +531,6 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
-       :on-height-change  (editor-handler/editor-on-height-change! id)
        :auto-focus        false
        :class             heading-class})
 

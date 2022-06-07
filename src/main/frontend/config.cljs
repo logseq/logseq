@@ -5,6 +5,7 @@
             [frontend.util :as util]
             [shadow.resource :as rc]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
@@ -63,48 +64,19 @@
     (if dev? path
         (str asset-domain path))))
 
-(defn text-formats
-  []
-  (let [config-formats (some->> (get-in @state/state [:config :text-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-       :excalidraw})))
-
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
-(defn img-formats
-  []
-  (let [config-formats (some->> (get-in @state/state [:config :image-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
-
 (defn doc-formats
   []
-  (let [config-formats (some->> (get-in @state/state [:config :document-formats])
-                                (map :keyword)
-                                (set))]
-    (set/union
-     config-formats
-     #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})))
+  #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def audio-formats #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
 
-(def media-formats (set/union (img-formats) audio-formats))
+(def media-formats (set/union (gp-config/img-formats) audio-formats))
 
 (def html-render-formats
   #{:adoc :asciidoc})
-
-(defn supported-formats
-  []
-  (set/union (text-formats)
-             (img-formats)))
 
 (def mobile?
   (when-not util/node-test?
@@ -114,13 +86,7 @@
 
 (defn get-block-pattern
   [format]
-  (let [format (or format (state/get-preferred-format))
-        format (keyword format)]
-    (case format
-      :org
-      "*"
-
-      "-")))
+  (gp-config/get-block-pattern (or format (state/get-preferred-format))))
 
 (defn get-hr
   [format]
@@ -277,6 +243,7 @@
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
+(def export-css-file "export.css")
 (def custom-js-file "custom.js")
 (def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
@@ -315,7 +282,7 @@
     (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
 
-    (and (mobile-util/is-native-platform?) (local-db? repo-url))
+    (and (mobile-util/native-platform?) (local-db? repo-url))
     (let [dir (get-local-dir repo-url)]
       (if (string/starts-with? dir "file:")
         dir
@@ -328,7 +295,7 @@
 
 (defn get-repo-path
   [repo-url path]
-  (if (and (or (util/electron?) (mobile-util/is-native-platform?))
+  (if (and (or (util/electron?) (mobile-util/native-platform?))
            (local-db? repo-url))
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
@@ -392,6 +359,15 @@
    (when repo
      (get-file-path repo
                     (str app-name "/" custom-css-file)))))
+
+(defn get-export-css-path
+  ([]
+   (get-export-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" export-css-file)))))
+
 
 (defn get-custom-js-path
   ([]

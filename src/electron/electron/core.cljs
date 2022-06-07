@@ -1,7 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.search :as search]
-            [electron.updater :refer [init-updater]]
+            [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
             [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
@@ -11,7 +11,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
             [clojure.core.async :as async]
             [electron.state :as state]
@@ -81,7 +81,7 @@
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
-(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
+(defn- handle-export-publish-assets [_event html custom-css-path export-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
           asset-filenames (js->clj asset-filenames)
           root-dir (or output-path (handler/open-dir-dialog))]
@@ -89,7 +89,8 @@
       (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
-            index-html-path (path/join root-dir "index.html")]
+            index-html-path (path/join root-dir "index.html")
+            export-or-custom-css-path (if (fs/existsSync export-css-path) export-css-path custom-css-path)]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
@@ -99,35 +100,35 @@
                            (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
                           (map
-                            (fn [filename]
-                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
-                                  (p/catch
-                                      (fn [e]
-                                        (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                        (js/console.error e)))))
-                            asset-filenames)
+                           (fn [filename]
+                             (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                                 (p/catch
+                                  (fn [e]
+                                    (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
+                                    (js/console.error e)))))
+                           asset-filenames)
 
                           (map
-                            (fn [part]
-                              (. fs copy (path/join app-path part) (path/join static-dir part)))
-                            ["css" "fonts" "icons" "img" "js"])))
-                custom-css (. fs readFile custom-css-path)
-                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
+                           (fn [part]
+                             (. fs copy (path/join app-path part) (path/join static-dir part)))
+                           ["css" "fonts" "icons" "img" "js"])))
+                export-css (. fs readFile export-or-custom-css-path)
+                _ (. fs writeFile (path/join static-dir "css" "export.css") export-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
                                    (path/join static-dir "js" "publishing" file)
                                    (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (. fs removeSync (path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
@@ -179,6 +180,51 @@
          (.removeHandler ipcMain call-app-channel)
          (.removeHandler ipcMain call-win-channel))))
 
+(defn- set-app-menu! []
+  (let [about-fn (fn []
+                   (.showMessageBox dialog (clj->js {:title "Logseq"
+                                                     :icon (path/join js/__dirname "icons/logseq.png")
+                                                     :message (str "Version " updater/electron-version)})))
+        template (if mac?
+                   [{:label (.-name app)
+                     :submenu [{:role "about"}
+                               {:type "separator"}
+                               {:role "services"}
+                               {:type "separator"}
+                               {:role "hide"}
+                               {:role "hideOthers"}
+                               {:role "unhide"}
+                               {:type "separator"}
+                               {:role "quit"}]}]
+                   [])
+        template (conj template
+                       {:role "fileMenu"
+                        :submenu [{:label "New Window"
+                                   :click (fn []
+                                            (handler/open-new-window!))
+                                   :accelerator "CommandOrControl+N"
+                                   :acceleratorWorksWhenHidden false}
+                                  (if mac?
+                                    {:role "close"}
+                                    {:role "quit"})]}
+                       {:role "editMenu"}
+                       {:role "viewMenu"}
+                       {:role "windowMenu"})
+        ;; Windows has no about role
+        template (conj template
+                       (if mac?
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}]}
+                         {:role "help"
+                          :submenu [{:label "Official Documentation"
+                                     :click #(.openExternal shell "https://docs.logseq.com/")}
+                                    {:role "about"
+                                     :label "About Logseq"
+                                     :click about-fn}]}))
+        menu (.buildFromTemplate Menu (clj->js template))]
+    (.setApplicationMenu Menu menu)))
+
 (defn- setup-deeplink! []
   ;; Works for Deeplink v1.0.9
   ;; :mainWindow is only used for handeling window restoring on second-instance,
@@ -209,6 +255,7 @@
                              {:scheme     FILE_LSP_SCHEME
                               :privileges privileges}]))
 
+      (set-app-menu!)
       (setup-deeplink!)
 
       (.on app "second-instance"

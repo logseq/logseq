@@ -1,17 +1,19 @@
 (ns frontend.handler.editor
   (:require ["/frontend/utils" :as utils]
+            ["path" :as path]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands
-                     *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos
+                     *show-block-commands *show-commands
+                     *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -25,12 +27,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
-            [frontend.image :as image]
             [frontend.idb :as idb]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.core :as outliner-core]
-            [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.transaction :as outliner-tx]
+            [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -40,21 +42,22 @@
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
-            [frontend.util.marker :as marker]
-            [frontend.util.property :as property]
-            [frontend.util.priority :as priority]
-            [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
+            [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.util.keycode :as keycode]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.block :as gp-block]
-            ["path" :as path]))
+            [frontend.extensions.html-parser :as html-parser]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -589,6 +592,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
+          sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (util/page-name-sanity-lc page)])
@@ -812,7 +816,7 @@
               tail-len (count value)
               pos (max
                    (if original-content
-                     (utf8/length (utf8/encode original-content))
+                     (gobj/get (utf8/encode original-content) "length")
                      0)
                    0)]
           (edit-block! block pos id
@@ -932,8 +936,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content]} block
             content (or content (state/get-edit-content))
-            new-content (-> (text/remove-timestamp content key)
-                            (text/add-timestamp key value))]
+            new-content (-> (text-util/remove-timestamp content key)
+                            (text-util/add-timestamp key value))]
         (when (not= content new-content)
           (let [input-id (state/get-edit-input-id)]
             (if (and input-id
@@ -960,30 +964,30 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str block-uuid))]
-    (when (seq blocks)
-      (state/exit-editing-and-set-selected-blocks! blocks))))
+  (block-handler/select-block! block-uuid))
 
 (defn- compose-copied-blocks-contents
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (outliner-core/get-top-level-blocks blocks)
-                                   (map :block/uuid))]
-    (export/export-blocks-as-markdown
-     repo top-level-block-uuids
-     (state/get-export-block-text-indent-style)
-     (into [] (state/get-export-block-text-remove-options)))))
+                                   (map :block/uuid))
+        content (export/export-blocks-as-markdown
+                 repo top-level-block-uuids
+                 (state/get-export-block-text-indent-style)
+                 (into [] (state/get-export-block-text-remove-options)))]
+    [top-level-block-uuids content]))
 
 (defn copy-selection-blocks
-  []
+  [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
     (let [repo (state/get-current-repo)
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
                                  (uuid id)) blocks))
-          content (compose-copied-blocks-contents repo ids)
+          [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
           block (db/entity [:block/uuid (first ids)])]
       (when block
-        (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+        (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
+          (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
         (state/set-copied-blocks content ids)
         (notification/show! "Copied!" :success)))))
 
@@ -1052,7 +1056,7 @@
 
 (defn cut-selection-blocks
   [copy?]
-  (when copy? (copy-selection-blocks))
+  (when copy? (copy-selection-blocks true))
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
@@ -1062,9 +1066,13 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (db/pull-many repo '[*] lookup-refs)]
-          (state/set-copied-full-blocks nil blocks)
-          (delete-blocks! repo block-uuids blocks dom-blocks))))))
+              blocks (db/pull-many repo '[*] lookup-refs)
+              top-level-blocks (outliner-core/get-top-level-blocks blocks)
+              sorted-blocks (mapcat (fn [block]
+                                      (tree/get-sorted-block-and-children repo (:db/id block)))
+                                    top-level-blocks)]
+          (state/set-copied-full-blocks nil sorted-blocks)
+          (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -1191,9 +1199,11 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
-          md-content (compose-copied-blocks-contents repo [block-id])]
-      (state/set-copied-full-blocks md-content [block])
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
+          [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
+          html (export/export-blocks-as-html repo [block-id])
+          sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
+      (state/set-copied-full-blocks md-content sorted-blocks)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1289,21 +1299,23 @@
                  db-content (:block/content db-block)
                  db-content-without-heading (and db-content
                                                  (gp-util/safe-subs db-content (:block/level db-block)))
-                 value (or (:block/content current-block)
-                           (and elem (gobj/get elem "value")))]
-             (cond
-               force?
-               (save-block-aux! db-block value opts)
+                 value (if (= (:block/uuid current-block) (:block/uuid block))
+                         (:block/content current-block)
+                         (and elem (gobj/get elem "value")))]
+             (when value
+               (cond
+                 force?
+                 (save-block-aux! db-block value opts)
 
-               (and skip-properties?
-                    (db-model/top-block? block)
-                    (when elem (thingatpt/properties-at-point elem)))
-               nil
+                 (and skip-properties?
+                      (db-model/top-block? block)
+                      (when elem (thingatpt/properties-at-point elem)))
+                 nil
 
-               (and block value db-content-without-heading
-                    (not= (string/trim db-content-without-heading)
-                          (string/trim value)))
-               (save-block-aux! db-block value opts)))
+                 (and block value db-content-without-heading
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value)))
+                 (save-block-aux! db-block value opts))))
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
@@ -1345,7 +1357,7 @@
 
 (defn get-asset-file-link
   [format url file-name image?]
-  (let [pdf? (and url (string/ends-with? url ".pdf"))]
+  (let [pdf? (and url (string/ends-with? (string/lower-case url) ".pdf"))]
     (case (keyword format)
       :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
       :org (if image?
@@ -1411,7 +1423,7 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile-util/is-native-platform?)
+      (mobile-util/native-platform?)
       (mobile-util/convert-file-src (str repo-dir path))
 
       :else
@@ -1562,7 +1574,7 @@
   (when input
     (let [value (gobj/get input "value")
           pos (cursor/pos input)]
-      (text/surround-by? value pos before end))))
+      (text-util/surround-by? value pos before end))))
 
 (defn wrapped-by?
   [input before end]
@@ -1570,7 +1582,7 @@
     (let [value (gobj/get input "value")
           pos (dec (cursor/pos input))]
       (when (>= pos 0)
-        (text/wrapped-by? value pos before end)))))
+        (text-util/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
   "Return matched page names"
@@ -1677,7 +1689,8 @@
             (move-nodes blocks))
           (when-let [input-id (state/get-edit-input-id)]
             (when-let [input (gdom/getElement input-id)]
-              (.focus input))))
+              (.focus input)
+              (js/setTimeout #(util/scroll-editor-cursor input) 100))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -1927,7 +1940,8 @@
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
+                                                                         :outliner-op :paste})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
@@ -2037,18 +2051,21 @@
                         (db/entity [:block/name (util/page-name-sanity-lc id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn- insert
-  [insertion]
-  (when-not (auto-complete?)
-    (let [^js input (state/get-input)
-          selected-start (util/get-selection-start input)
-          selected-end (util/get-selection-end input)
-          value (.-value input)
-          s1 (subs value 0 selected-start)
-          s2 (subs value selected-end)]
-      (state/set-edit-content! (state/get-edit-input-id)
-                               (str s1 insertion s2))
-      (cursor/move-cursor-to input (+ selected-start (count insertion))))))
+(defn insert
+  ([insertion]
+   (insert insertion false))
+  ([insertion auto-complete-enabled?]
+   (when (or auto-complete-enabled?
+             (not (auto-complete?)))
+     (let [^js input (state/get-input)
+           selected-start (util/get-selection-start input)
+           selected-end (util/get-selection-end input)
+           value (.-value input)
+           s1 (subs value 0 selected-start)
+           s2 (subs value selected-end)]
+       (state/set-edit-content! (state/get-edit-input-id)
+                                (str s1 insertion s2))
+       (cursor/move-cursor-to input (+ selected-start (count insertion)))))))
 
 (defn- keydown-new-line
   []
@@ -2569,7 +2586,7 @@
 
       ;; just delete
       :else
-      (do
+      (when-not (mobile-util/native-ios?)
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
@@ -2628,49 +2645,49 @@
         nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
-        ;; does not work sometimes in an empty block, hence the empty block
+        ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/is-native-platform?)
+        (and (mobile-util/native-platform?)
              (= key "Backspace")
-             (= value ""))
+             (zero? pos))
         (do
           (util/stop e)
-          (delete-block! (state/get-current-repo) false))
+          (let [block (state/get-edit-block)
+                top-block? (= (:block/left block) (:block/page block))
+                root-block? (= (:block/container block) (str (:block/uuid block)))
+                repo (state/get-current-repo)]
+           (when (and (if top-block? (string/blank? value) true)
+                      (not root-block?))
+             (delete-block! repo false))))
 
         (and (= key "#")
-             (and
-              (> pos 0)
-              (= "#" (util/nth-safe value (dec pos)))))
+             (and (> pos 0)
+                  (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (and
-         (contains? (set/difference (set (keys reversed-autopair-map))
-                                    #{"`"})
-                    key)
+        (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                        #{"`"})
+                        key)
          (= (get-current-input-char input) key))
-        (do
-          (util/stop e)
-          (cursor/move-cursor-forward input))
+        (do (util/stop e)
+            (cursor/move-cursor-forward input))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-square-brackets-keys key))
-        (do
-          (autopair input-id "[" format nil)
-          (util/stop e))
+        (do (autopair input-id "[" format nil)
+            (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
              (contains? keycode/left-paren-keys key))
-        (do
-          (util/stop e)
-          (autopair input-id "(" format nil))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
         (contains? (set (keys autopair-map)) key)
-        (do
-          (util/stop e)
-          (autopair input-id key format nil))
+        (do (util/stop e)
+            (autopair input-id key format nil))
 
         hashtag?
         (do
@@ -2813,23 +2830,8 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
+      (util/scroll-editor-cursor input)
       (close-autocomplete-if-outside input))))
-
-(defonce mobile-toolbar-height 40)
-(defn editor-on-height-change!
-  [id]
-  (fn [box-height ^js row-height]
-    (let [row-height (:rowHeight (js->clj row-height :keywordize-keys true))
-          input (gdom/getElement id)
-          caret (cursor/get-caret-pos input)
-          cursor-bottom (if caret (+ row-height (:top caret)) box-height)
-          box-top (gobj/get (.getBoundingClientRect input) "top")
-          cursor-y (+ cursor-bottom box-top)
-          vw-height (.-height js/window.visualViewport)]
-      (when (<  vw-height (+ cursor-y mobile-toolbar-height))
-        (let [main-node (gdom/getElement "main-content-container")
-              scroll-top (.-scrollTop main-node)]
-          (set! (.-scrollTop main-node) (+ scroll-top row-height)))))))
 
 (defn editor-on-change!
   [block id search-timeout]
@@ -2842,7 +2844,9 @@
                 (js/setTimeout
                  #(edit-box-on-change! e block id)
                  timeout)))
-      (edit-box-on-change! e block id))))
+      (let [input (gdom/getElement id)]
+        (edit-box-on-change! e block id)
+        (util/scroll-editor-cursor input)))))
 
 (defn- paste-text-parseable
   [format text]
@@ -2878,48 +2882,56 @@
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
 
+(defn wrap-macro-url
+  [url]
+  (cond
+    (boolean (text-util/get-matched-video url))
+    (util/format "{{video %s}}" url)
+
+    (string/includes? url "twitter.com")
+    (util/format "{{twitter %s}}" url)
+
+    :else
+    (do
+      (notification/show! (util/format "No macro is available for %s" url) :warning)
+      nil)))
+
 (defn- paste-copied-blocks-or-text
-  [text e]
+  [initial-text text e]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)
-        *stop-event? (atom true)]
+        input (state/get-input)]
     (cond
       ;; Internal blocks by either copy or cut blocks
       (and
        (= copied-graph (state/get-current-repo))
        (or (seq copied-block-ids)
            (seq (:copy/full-blocks copied-blocks)))
-       text
+       initial-text
        ;; not copied from the external clipboard
-       (= (string/replace (string/trim text) "\r" "")
+       (= (string/replace (string/trim initial-text) "\r" "")
           (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
-      (let [blocks (or
-                    (:copy/full-blocks copied-blocks)
-                    (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-        (when (seq blocks)
-          (state/set-copied-full-blocks! blocks)
-          (paste-blocks blocks {})))
+      (do
+        (util/stop e)
+        (let [blocks (or
+                      (:copy/full-blocks copied-blocks)
+                      (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
+          (when (seq blocks)
+            (state/set-copied-full-blocks! blocks)
+            (paste-blocks blocks {}))))
 
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
-      (html-link-format! text)
-
-      (and (gp-util/url? text)
-           (or (string/includes? text "youtube.com")
-               (string/includes? text "youtu.be"))
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{youtube %s}}" text) nil)
-
-      (and (gp-util/url? text)
-           (string/includes? text "twitter.com")
-           (mobile-util/is-native-platform?))
-      (commands/simple-insert! (state/get-edit-input-id) (util/format "{{twitter %s}}" text) nil)
+      (do
+        (util/stop e)
+        (html-link-format! text))
 
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
-      (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
+      (do
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
       :else
       ;; from external
@@ -2929,31 +2941,40 @@
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
-          (paste-text-parseable format text)
+          (do
+            (util/stop e)
+            (paste-text-parseable format text))
 
           [:org _ false _]
-          (paste-text-parseable format text)
+          (do
+            (util/stop e)
+            (paste-text-parseable format text))
 
           [:markdown true _ false]
-          (paste-segmented-text format (string/trim text))
+          (do
+            (util/stop e)
+            (paste-segmented-text format text))
 
           [:markdown true _ true]
-          (reset! *stop-event? false)
+          nil
 
           [:org _ true false]
-          (paste-segmented-text format (string/trim text))
+          (do
+            (util/stop e)
+            (paste-segmented-text format text))
 
           [:org _ true true]
-          (reset! *stop-event? false))))
-    (when @*stop-event?
-      (util/stop e))))
+          nil)))))
 
 (defn paste-text-in-one-block-at-point
   []
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
+       (let [data (or (when (gp-util/url? clipboard-data)
+                        (wrap-macro-url clipboard-data))
+                      clipboard-data)]
+         (insert data true))))
    (fn [error]
      (js/console.error error))))
 
@@ -2961,14 +2982,22 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")
+    (let [clipboard-data (gobj/get e "clipboardData")
+          html (.getData clipboard-data "text/html")
+          edit-block (state/get-edit-block)
+          format (or (:block/format edit-block) :markdown)
+          initial-text (.getData clipboard-data "text")
+          text (or (when (string/blank? html)
+                     (html-parser/convert format html))
+                   initial-text)
           input (state/get-input)]
       (if-not (string/blank? text)
-        (if (thingatpt/org-admonition&src-at-point input)
+        (if (or (thingatpt/markdown-src-at-point input)
+                (thingatpt/org-admonition&src-at-point input))
           (when-not (mobile-util/native-ios?)
             (util/stop e)
             (paste-text-in-one-block-at-point))
-          (paste-copied-blocks-or-text text e))
+          (paste-copied-blocks-or-text initial-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
@@ -2984,7 +3013,7 @@
 
 (defn shortcut-copy-selection
   [_e]
-  (copy-selection-blocks))
+  (copy-selection-blocks true))
 
 (defn shortcut-cut-selection
   [e]
@@ -3028,6 +3057,19 @@
         (if (= selected-start selected-end)
           (copy-current-block-ref)
           (js/document.execCommand "copy")))
+
+      :else
+      (js/document.execCommand "copy"))))
+
+(defn shortcut-copy-text
+  "shortcut copy action:
+  * when in selection mode, copy selected blocks
+  * when in edit mode with text selected, copy selected text as normal"
+  [_e]
+  (when-not (auto-complete?)
+    (cond
+      (state/selection?)
+      (copy-selection-blocks false)
 
       :else
       (js/document.execCommand "copy"))))

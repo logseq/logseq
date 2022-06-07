@@ -13,6 +13,10 @@ const config: CapacitorConfig = {
             splashImmersive: false,
             backgroundColor: "#002b36"
         },
+
+        Keyboard: {
+            resize: "none"
+        }
     },
     ios: {
         scheme: "Logseq"

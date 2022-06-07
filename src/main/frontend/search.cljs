@@ -162,9 +162,13 @@
          (vec (select-keys templates result)))))))
 
 (defn sync-search-indice!
-  [datoms]
-  (when (seq datoms)
-    (when-let [repo (state/get-current-repo)]
+  [repo tx-report]
+  (let [data (:tx-data tx-report)
+        datoms (filter
+                (fn [datom]
+                  (contains? #{:block/name :block/content} (:a datom)))
+                data)]
+    (when (seq datoms)
       (let [datoms (group-by :a datoms)
             pages (:block/name datoms)
             blocks (:block/content datoms)]

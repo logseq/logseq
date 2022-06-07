@@ -454,11 +454,27 @@
     (let [{:keys [before sibling isPageBlock properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (uuid block-uuid-or-page-name))
+          block-uuid' (if (and (not sibling) before block-uuid)
+                        (let [block (db/entity [:block/uuid block-uuid])
+                              first-child (db-model/get-by-parent-&-left (db/get-db)
+                                                                         (:db/id block)
+                                                                         (:db/id block))]
+                          (if first-child
+                            (:block/uuid first-child)
+                            block-uuid))
+                        block-uuid)
+          insert-at-first-child? (not= block-uuid' block-uuid)
+          [sibling? before?] (if insert-at-first-child?
+                               [true true]
+                               [sibling before])
+          before? (if (and (false? sibling?) before? (not insert-at-first-child?))
+                    false
+                    before?)
           new-block (editor-handler/api-insert-new-block!
                       content
-                      {:block-uuid block-uuid
-                       :sibling?   sibling
-                       :before?    before
+                      {:block-uuid block-uuid'
+                       :sibling?   sibling?
+                       :before?    before?
                        :page       page-name
                        :properties properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))

@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -26,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
@@ -58,6 +60,7 @@
      :modal/close-btn?                      nil
      :modal/subsets                         []
 
+
      ;; right sidebar
      :ui/fullscreen?                        false
      :ui/settings-open?                     false
@@ -88,9 +91,7 @@
      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                               false
                                               true)
-     :ui/visual-viewport-pending?           false
-     :ui/visual-viewport-state              nil
-
+     :ui/scrolling?                         false
      :document/mode?                        document-mode?
 
      :config                                {}
@@ -114,7 +115,6 @@
      :editor/args                           nil
      :editor/on-paste?                      false
      :editor/last-key-code                  nil
-     :editor/editing-page-title?            false
 
      ;; for audio record
      :editor/record-status                  "NONE"
@@ -146,6 +146,16 @@
      :electron/updater                      {}
      :electron/user-cfgs                    nil
 
+     ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
+     :mobile/show-toolbar?                  false
+     :mobile/show-recording-bar?            false
+     ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
+     ;;; add a random in (<= 1000000) to observer its update
+     :mobile/toolbar-update-observer        0
+     :mobile/show-tabbar?                   false
+
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -169,7 +179,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -287,7 +297,7 @@
 (defn get-current-repo
   []
   (or (:git/current-repo @state)
-      (when-not (mobile-util/is-native-platform?)
+      (when-not (mobile-util/native-platform?)
         "local")))
 
 (defn get-config
@@ -558,21 +568,6 @@
 (defn sub-edit-content
   []
   (sub [:editor/content (get-edit-input-id)]))
-
-(defn append-current-edit-content!
-  [append-text]
-  (when-not (string/blank? append-text)
-    (when-let [input-id (get-edit-input-id)]
-      (when-let [input (gdom/getElement input-id)]
-        (let [value (gobj/get input "value")
-              new-value (str value append-text)
-              new-value (if (or (= (last value) " ")
-                                (= (last value) "\n"))
-                          new-value
-                          (str "\n" new-value))]
-          (js/document.execCommand "insertText" false append-text)
-          (update-state! :editor/content (fn [m]
-                                           (assoc m input-id new-value))))))))
 
 (defn get-cursor-range
   []
@@ -853,8 +848,8 @@
            (when move-cursor?
              (cursor/move-cursor-to input pos))
 
-           (when (or (util/mobile?) (mobile-util/is-native-platform?))
-             (util/make-el-center-if-near-top input))))))))
+           (when (or (util/mobile?) (mobile-util/native-platform?))
+             (set-state! :mobile/show-action-bar? false))))))))
 
 (defn clear-edit!
   []
@@ -1014,15 +1009,7 @@
 
 (defn get-date-formatter
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (or
-        (get-in @state [:config repo :journal/page-title-format])
-        ;; for compatibility
-        (get-in @state [:config repo :date-formatter])))
-    ;; TODO:
-    (get-in @state [:me :settings :date-formatter])
-    "MMM do, yyyy"))
+  (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
@@ -1189,9 +1176,13 @@
     (set-state! :ui/shortcut-tooltip? (not mode))
     (storage/set :ui/shortcut-tooltip? (not mode))))
 
+(defn mobile?
+  []
+  (or (util/mobile?) (mobile-util/native-platform?)))
+
 (defn enable-tooltip?
   []
-  (if (or (util/mobile?) (mobile-util/is-native-platform?))
+  (if (mobile?)
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?
@@ -1447,7 +1438,7 @@
 (defn set-copied-full-blocks
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
+                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
@@ -1544,14 +1535,6 @@
 (defn get-last-key-code
   []
   (:editor/last-key-code @state))
-
-(defn set-visual-viewport-state
-  [input]
-  (set-state! :ui/visual-viewport-state input))
-
-(defn get-visual-viewport-state
-  []
-  (:ui/visual-viewport-state @state))
 
 (defn get-plugin-by-id
   [id]

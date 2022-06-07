@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
@@ -98,8 +98,12 @@
                                                 (or
                                                  (:block/original-name page)
                                                  (:block/name page)))
-          page (if (seq properties) (assoc page :block/properties properties) page)]
+          page (if (seq properties) (assoc page :block/properties properties) page)
+          page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
+        (not page-empty?)
+        [page]
+
         create-title?
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
           [page
@@ -156,19 +160,21 @@
      page-name)))
 
 (defn delete-file!
-  [repo page-name]
+  [repo page-name unlink-file?]
   (let [file (db/get-page-file page-name)
         file-path (:file/path file)]
     ;; delete file
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-      (->
-       (p/let [_ (and (config/local-db? repo)
-                      (mobile-util/is-native-platform?)
-                      (fs/delete-file! repo file-path file-path {}))
-               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
-       (p/catch (fn [err]
-                  (js/console.error "error: " err)))))))
+      (when unlink-file?
+        (->
+         (p/let [_ (and (config/local-db? repo)
+                        (mobile-util/native-platform?)
+                        ;; TODO: @leizhe remove fs/delete-file! and use fs/unlink!
+                        (fs/delete-file! repo file-path file-path {}))
+                 _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
+         (p/catch (fn [err]
+                    (js/console.error "error: " err))))))))
 
 (defn- compute-new-file-path
   [old-path new-name]
@@ -312,7 +318,7 @@
             page (db/entity [:block/name page-name])]
         (db/transact! tx-data)
 
-        (when delete-file? (delete-file! repo page-name))
+        (delete-file! repo page-name delete-file?)
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
@@ -594,7 +600,7 @@
                      page)
         (let [journal? (date/valid-journal-title? page)
               ref-file-path (str
-                             (if (or (util/electron?) (mobile-util/is-native-platform?))
+                             (if (or (util/electron?) (mobile-util/native-platform?))
                                (-> (config/get-repo-dir (state/get-current-repo))
                                    js/decodeURI
                                    (string/replace #"/+$" "")
@@ -728,7 +734,7 @@
                (not (state/loading-files? repo)))
       (state/set-today! (date/today))
       (when (or (config/local-db? repo)
-                (and (= "local" repo) (not (mobile-util/is-native-platform?))))
+                (and (= "local" repo) (not (mobile-util/native-platform?))))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)

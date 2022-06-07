@@ -1,5 +1,7 @@
 package com.logseq.app;
 
+import android.annotation.SuppressLint;
+import android.os.Build;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructStat;
@@ -26,7 +28,6 @@ public class FsWatcher extends Plugin {
 
     List<SingleFileObserver> observers;
     private String mPath;
-    private Uri mPathUri;
 
     @Override
     public void load() {
@@ -35,17 +36,23 @@ public class FsWatcher extends Plugin {
 
     @PluginMethod()
     public void watch(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            call.reject("Android version not supported");
+            return;
+        }
         String pathParam = call.getString("path");
         // check file:// or no scheme uris
         Uri u = Uri.parse(pathParam);
         Log.i("FsWatcher", "watching " + u);
         if (u.getScheme() == null || u.getScheme().equals("file")) {
-            File pathObj = new File(u.getPath());
-            if (pathObj == null) {
+            File pathObj;
+            try {
+                pathObj = new File(u.getPath());
+            } catch (Exception e) {
                 call.reject("invalid watch path: " + pathParam);
                 return;
             }
-            mPathUri = Uri.fromFile(pathObj);
+
             mPath = pathObj.getAbsolutePath();
 
             int mask = FileObserver.CLOSE_WRITE |
@@ -56,15 +63,16 @@ public class FsWatcher extends Plugin {
                 call.reject("already watching");
                 return;
             }
-            observers = new ArrayList<SingleFileObserver>();
+            observers = new ArrayList<>();
             observers.add(new SingleFileObserver(pathObj, mask));
 
             // NOTE: only watch first level of directory
             File[] files = pathObj.listFiles();
             if (files != null) {
-                for (int i = 0; i < files.length; ++i) {
-                    if (files[i].isDirectory() && !files[i].getName().startsWith(".")) {
-                        observers.add(new SingleFileObserver(files[i], mask));
+                for (File file : files) {
+                    String filename = file.getName();
+                    if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("node_modules")) {
+                        observers.add(new SingleFileObserver(file, mask));
                     }
                 }
             }
@@ -103,13 +111,14 @@ public class FsWatcher extends Plugin {
         }
         File[] files = pathObj.listFiles();
         if (files != null) {
-            for (int i = 0; i < files.length; ++i) {
-                if (files[i].isDirectory() && !files[i].getName().startsWith(".") && !files[i].getName().equals("bak")) {
-                    this.initialNotify(files[i], maxDepth - 1);
-                } else if (files[i].isFile()
-                        && Pattern.matches("[^.].*?\\.(md|org|css|edn|text|markdown|yml|yaml|json|js)$",
-                                files[i].getName())) {
-                    this.onObserverEvent(FileObserver.CREATE, files[i].getAbsolutePath());
+            for (File file : files) {
+                String filename = file.getName();
+                if (file.isDirectory() && !filename.startsWith(".") && !filename.equals("bak") && !filename.equals("version-files") && !filename.equals("node_modules")) {
+                    this.initialNotify(file, maxDepth - 1);
+                } else if (file.isFile()
+                        && Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$",
+                        file.getName())) {
+                    this.onObserverEvent(FileObserver.CREATE, file.getAbsolutePath());
                 }
             }
         }
@@ -132,9 +141,7 @@ public class FsWatcher extends Plugin {
                 try {
                     obj.put("stat", getFileStat(path));
                     content = getFileContents(f);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (ErrnoException e) {
+                } catch (IOException | ErrnoException e) {
                     e.printStackTrace();
                 }
                 obj.put("content", content);
@@ -145,9 +152,7 @@ public class FsWatcher extends Plugin {
                 try {
                     obj.put("stat", getFileStat(path));
                     content = getFileContents(f);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (ErrnoException e) {
+                } catch (IOException | ErrnoException e) {
                     e.printStackTrace();
                 }
                 obj.put("content", content);
@@ -172,7 +177,7 @@ public class FsWatcher extends Plugin {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         byte[] buffer = new byte[1024];
-        int length = 0;
+        int length;
 
         while ((length = inputStream.read(buffer)) != -1) {
             outputStream.write(buffer, 0, length);
@@ -183,22 +188,25 @@ public class FsWatcher extends Plugin {
     }
 
     public static JSObject getFileStat(final String path) throws ErrnoException {
+        File file = new File(path);
         StructStat stat = Os.stat(path);
         JSObject obj = new JSObject();
         obj.put("atime", stat.st_atime);
         obj.put("mtime", stat.st_mtime);
         obj.put("ctime", stat.st_ctime);
+        obj.put("size", file.length());
         return obj;
     }
 
     private class SingleFileObserver extends FileObserver {
-        private String mPath;
+        private final String mPath;
 
         public SingleFileObserver(String path, int mask) {
             super(path, mask);
             mPath = path;
         }
 
+        @SuppressLint("NewApi")
         public SingleFileObserver(File path, int mask) {
             super(path, mask);
             mPath = path.getAbsolutePath();
@@ -206,9 +214,9 @@ public class FsWatcher extends Plugin {
 
         @Override
         public void onEvent(int event, String path) {
-            if (path != null) {
+            if (path != null && !path.equals("graphs-txid.edn") && !path.equals("broken-config.edn")) {
                 Log.d("FsWatcher", "got path=" + path + " event=" + event);
-                if (Pattern.matches("[^.].*?\\.(md|org|css|edn|text|markdown|yml|yaml|json|js)$", path)) {
+                if (Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$", path)) {
                     String fullPath = mPath + "/" + path;
                     FsWatcher.this.onObserverEvent(event, fullPath);
                 }
