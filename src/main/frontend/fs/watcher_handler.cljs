@@ -92,7 +92,7 @@
                (db/file-exists? repo path))
           (when-let [page-name (db/get-file-page path)]
             (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #() :delete-file? false))
+            (page-handler/delete! page-name #() :unlink-file? true))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
