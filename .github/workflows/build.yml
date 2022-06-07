@@ -74,16 +74,15 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
+      # TODO: Re-enable outliner.core-test when hang is fixed
       - name: Run ClojureScript tests
         run: |
           yarn cljs:test
-          node static/tests.js
+          node static/tests.js -r '^((?!(outliner.core-test)).)*$'
 
-      - name: Run nbb tests for graph-parser
-        run: yarn nbb-logseq -cp src/main:src/test -m logseq.graph-parser.nbb-test-runner/run-tests
       # In this job because it depends on an npm package
       - name: Load nbb compatible namespaces
-        run: bb test:load-nbb-compatible-namespaces
+        run: bb test:load-namespaces-with-nbb
 
   lint:
     runs-on: ubuntu-latest

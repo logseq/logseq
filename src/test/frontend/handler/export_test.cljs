@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [async deftest use-fixtures are is]]
             [clojure.edn :as edn]
             [frontend.handler.export :as export]
-            [frontend.db.config :as config]
+            [frontend.test.helper :as test-helper]
             [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -33,10 +33,10 @@
 (use-fixtures :once
   {:before (fn []
              (async done
-                    (config/clear-current-repo)
+                    (test-helper/clear-current-repo)
                     (p/let [_ (import-test-data!)]
                       (done))))
-   :after config/destroy-db!})
+   :after test-helper/destroy-test-db!})
 
 (deftest export-blocks-as-markdown
   (are [expect block-uuid-s]

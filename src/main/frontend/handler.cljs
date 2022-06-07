@@ -6,7 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.error :as error]
@@ -54,7 +54,9 @@
   (let [f (fn []
             #_:clj-kondo/ignore
             (let [repo (state/get-current-repo)]
-              (when-not (state/nfs-refreshing?)
+              (when (and (not (state/nfs-refreshing?))
+                         (not (contains? (:file/unlinked-dirs @state/state)
+                                         (config/get-repo-dir repo))))
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)

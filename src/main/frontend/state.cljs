@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.graph-parser.config :as gp-config]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce ^:large-vars/data-var state
@@ -26,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
@@ -1007,15 +1009,7 @@
 
 (defn get-date-formatter
   []
-  (or
-    (when-let [repo (get-current-repo)]
-      (or
-        (get-in @state [:config repo :journal/page-title-format])
-        ;; for compatibility
-        (get-in @state [:config repo :date-formatter])))
-    ;; TODO:
-    (get-in @state [:me :settings :date-formatter])
-    "MMM do, yyyy"))
+  (gp-config/get-date-formatter (get-config)))
 
 (defn shortcuts []
   (get-in @state [:config (get-current-repo) :shortcuts]))
@@ -1444,7 +1438,7 @@
 (defn set-copied-full-blocks
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
+                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!

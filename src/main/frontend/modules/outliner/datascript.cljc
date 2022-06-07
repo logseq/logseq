@@ -54,7 +54,9 @@
                                       :block/title :block/body :block/level :block/container :db/other-tx)
                               m)) txs)]
        (when (and (seq txs)
-                  (not (:skip-transact? opts)))
+                  (not (:skip-transact? opts))
+                  (not (contains? (:file/unlinked-dirs @state/state)
+                                  (config/get-repo-dir (state/get-current-repo)))))
          ;; (frontend.util/pprint txs)
          (try
            (let [repo (get opts :repo (state/get-current-repo))

@@ -1,5 +1,6 @@
 (ns frontend.extensions.sci
-  (:require [sci.core :as sci]))
+  (:require [sci.core :as sci]
+            [frontend.util :as util]))
 
 ;; Some helpers
 (def sum (partial apply +))
@@ -13,7 +14,9 @@
     (sci/eval-string s {:bindings {'sum sum
                                    'average average
                                    'parseFloat js/parseFloat
-                                   'isNaN js/isNaN}})
+                                   'isNaN js/isNaN
+                                   'log js/console.log
+                                   'pprint util/pp-str}})
     (catch js/Error e
       (println "Query: sci eval failed:")
       (js/console.error e))))

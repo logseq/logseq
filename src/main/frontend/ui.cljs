@@ -137,7 +137,8 @@
                       nil
                       [:div.flex.items-center
                        (when icon icon)
-                       [:div {:style {:margin-right "8px"}} title]])]
+                       [:div {:style {:margin-right "8px"
+                                      :margin-left "4px"}} title]])]
           (if hr
             [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
