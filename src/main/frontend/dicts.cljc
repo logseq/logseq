@@ -1864,8 +1864,8 @@
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :select.graph/add-graph "Ja, legg til en ny graf"
 
-           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjernkontroll. Så kan ikke begynne å synkronisere."
-           :file-sync/graph-deleted "Nåværende fjernkontrollen er slettet"
+           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjerngraf Så kan ikke begynne å synkronisere."
+           :file-sync/graph-deleted "Nåværende fjerngraf er slettet"
            :host "Vert"
            :port "Port"
            :re-index-discard-unsaved-changes-warning "Reindeksering vil forkaste nåværende graf, og deretter prosessere alle filene på nytt slik de er på disk akkurat no. Du vil miste ulagrede endringer, og det kan ta litt tid. Forsette?"
