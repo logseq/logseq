@@ -33,6 +33,7 @@
     "+"
     "Dotted"
     ".+"
+    "DoublePlus"
     "++"))
 
 (defn timestamp->text
