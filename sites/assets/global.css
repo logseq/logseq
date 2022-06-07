@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply text-gray-100 bg-logseq-800;
+}
+
+.app-logo-link {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  background-image: url("./logo.png");
+  background-size: cover;
+}
+
+.app-headbar .links-group {
+  @apply flex space-x-8;
+
+  a {
+    @apply text-gray-300 text-lg hover:text-gray-50;
+  }
+}
+
+.app-head-showcase {
+  @apply overflow-hidden;
+  height: 740px;
+
+  .item-wrap {}
+
+  .text-1 {
+    padding-top: 90px;
+  }
+
+  .image-2 {
+    background-image: url("./header_bg.png");
+    background-size: contain;
+    top: 170px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 570px;
+    background-position-y: -110px;
+    background-position-x: -12px;
+  }
+
+  .actions-4 {
+    @apply absolute bottom-2 border w-full flex justify-center pt-24 pb-5;
+
+    &:before {
+      @apply absolute top-0 left-0 w-full bg-gradient-to-t h-20;
+
+      content: " ";
+    }
+  }
+}
