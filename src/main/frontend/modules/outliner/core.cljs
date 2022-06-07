@@ -370,6 +370,21 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
+(defn- fix-top-level-blocks
+  "Blocks with :block/level"
+  [blocks]
+  (loop [blocks blocks
+         last-top-level-block nil
+         result []]
+    (if-let [block (first blocks)]
+      (if (= 1 (:block/level block))
+        (let [block' (assoc block
+                            :block/left {:db/id (:db/id last-top-level-block)}
+                            :block/parent (:block/parent last-top-level-block))]
+          (recur (rest blocks) block (conj result block')))
+        (recur (rest blocks) last-top-level-block (conj result block)))
+      result)))
+
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
@@ -454,6 +469,7 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
+        blocks' (fix-top-level-blocks blocks')
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?

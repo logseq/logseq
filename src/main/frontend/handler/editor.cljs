@@ -1940,7 +1940,8 @@
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
+                                                                         :outliner-op :paste})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
@@ -2914,11 +2915,11 @@
       (do
         (util/stop e)
         (let [blocks (or
-                     (:copy/full-blocks copied-blocks)
-                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-         (when (seq blocks)
-           (state/set-copied-full-blocks! blocks)
-           (paste-blocks blocks {}))))
+                      (:copy/full-blocks copied-blocks)
+                      (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
+          (when (seq blocks)
+            (state/set-copied-full-blocks! blocks)
+            (paste-blocks blocks {}))))
 
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
