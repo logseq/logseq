@@ -3004,7 +3004,7 @@
   (cut-blocks-and-clear-selections! false))
 
 ;; credits to @pengx17
-(defn copy-current-block-ref
+(defn- copy-current-block-ref
   [format]
   (when-let [current-block (state/get-edit-block)]
     (when-let [block-id (:block/uuid current-block)]
@@ -3190,7 +3190,6 @@
   (let [input (state/get-input)]
     (save-current-block! {:force? true})
     (util/forward-kill-word input)
-    (copy-current-block-ref "embed")
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
 
