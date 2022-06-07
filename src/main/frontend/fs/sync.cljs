@@ -1096,7 +1096,6 @@
   "ensure password persisted,
   and ensure public&private keys exists at server"
   [graph-uuid repo *stopped?]
-  {:post [(s/valid? ::state %)]}
   (go
     (<! (ensure-pwd-exists! repo graph-uuid *stopped?))
     (if @*stopped?
@@ -1552,6 +1551,7 @@
       [this]
       (go
         (let [next-state (<! (ensure-pwd+keys-exists! graph-uuid (state/get-current-repo) *stopped?))]
+          (assert (s/valid? ::state next-state) next-state)
           (.schedule this next-state nil))))
 
     (idle [this]
