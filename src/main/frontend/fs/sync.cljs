@@ -603,8 +603,8 @@
   IRSAPI
   (key-gen [_]
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
-          (->> r
-               (js->clj :keywordize-keys true)))))
+          (-> r
+              (js->clj :keywordize-keys true)))))
   (set-env [_ prod? secret-key public-key]
     (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
                                                    :secretKey secret-key
