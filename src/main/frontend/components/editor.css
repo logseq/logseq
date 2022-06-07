@@ -1,13 +1,12 @@
 #audio-record-toolbar {
     position: fixed;
     background-color: var(--ls-secondary-background-color);
-    bottom: 45px;
-    width: 88px;
+    width: 90px;
     justify-content: left;
     left: 5px;
     transition: none;
     z-index: 9999;
-    padding: 5px 5px 0px 5px;
+    padding: 5px 5px 5px 8px;
     border-radius: 5px;
 }
 
@@ -35,6 +34,10 @@
 
   &.is-overflow-vw-x {
     transform: translateX(calc(-100% + 1rem));
+  }
+
+  &.is-overflow-vh-y {
+    transform: translateY(calc(-100% - 2rem));
   }
 }
 

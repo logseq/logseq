@@ -1,4 +1,4 @@
-(ns frontend.mobile.deeplink 
+(ns frontend.mobile.deeplink
   (:require
    [clojure.string :as string]
    [frontend.config :as config]
@@ -9,7 +9,7 @@
    [frontend.handler.user :as user-handler]
    [frontend.mobile.intent :as intent]
    [frontend.state :as state]
-   [logseq.graph-parser.text :as text]))
+   [frontend.util.text :as text-util]))
 
 (def *link-to-another-graph (atom false))
 
@@ -19,7 +19,7 @@
         pathname (.-pathname parsed-url)
         search-params (.-searchParams parsed-url)
         current-repo-url (state/get-current-repo)
-        get-graph-name-fn #(-> (text/get-graph-name-from-path %)
+        get-graph-name-fn #(-> (text-util/get-graph-name-from-path %)
                                (string/split "/")
                                last
                                string/lower-case)

@@ -14,7 +14,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [logseq.graph-parser.text :as text]
+            [frontend.util.text :as text-util]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [goog.object :as gobj]
@@ -54,7 +54,7 @@
             [:div.flex.justify-between.mb-4 {:key id}
              (if local?
                (let [local-dir (config/get-local-dir url)
-                     graph-name (text/get-graph-name-from-path local-dir)]
+                     graph-name (text-util/get-graph-name-from-path local-dir)]
                  [:a {:title local-dir
                       :on-click #(state/pub-event! [:graph/switch url])}
                   graph-name])
@@ -89,7 +89,7 @@
         repo-links (mapv
                     (fn [{:keys [url]}]
                       (let [repo-path (db/get-repo-name url)
-                            short-repo-name (text/get-graph-name-from-path repo-path)]
+                            short-repo-name (text-util/get-graph-name-from-path repo-path)]
                         {:title short-repo-name
                          :hover-detail repo-path ;; show full path on hover
                          :options {:class "ml-1"
@@ -148,12 +148,12 @@
             render-content (fn [{:keys [toggle-fn]}]
                              (let [repo-path (db/get-repo-name current-repo)
                                    short-repo-name (db/get-short-repo-name repo-path)]
-                               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                               [:a.item.group.flex.items-center.px-1.py-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))
                                  :title repo-path} ;; show full path on hover
-                                (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
+                                (ui/icon "database mr-2" {:style {:font-size 16} :id "database-icon"})
                                 [:div.graphs
                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
                                   [:span [:span#repo-name.font-medium short-repo-name]]

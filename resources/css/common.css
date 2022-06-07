@@ -11,7 +11,7 @@
   --ls-border-radius-medium: 8px;
   --ls-headbar-height: 3rem;
   --ls-headbar-inner-top-padding: 0px;
-  --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-width: 246px;
   --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
 }
@@ -101,8 +101,8 @@ See: https://github.com/logseq/logseq/pull/4652. */
 html[data-theme='light'] {
   --ls-primary-background-color: #ffffff;
   --ls-secondary-background-color: #f7f7f7;
-  --ls-tertiary-background-color: #f1eee8;
-  --ls-quaternary-background-color: #e8e5de;
+  --ls-tertiary-background-color: #eaeaea;
+  --ls-quaternary-background-color: #dcdcdc;
   --ls-table-tr-even-background-color: #f7f7f7;
   --ls-active-primary-color: rgb(0, 105, 182);
   --ls-active-secondary-color: #00477c;

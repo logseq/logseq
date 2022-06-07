@@ -46,7 +46,11 @@ After cloning the [Logseq repository](https://github.com/logseq/logseq), there a
 
   - `src/main/frontend/` contains code that powers the Logseq editor. Folders and files inside are organized by features or functions. For example, `components` contains all the UI components and `handler` contains all the event-handling code. You can explore on your own interest.
 
-  - `src/main/logseq/` contains the api used by plugins and the graph-parser.
+  - `src/main/logseq/` contains the api used by plugins.
+
+- `deps/` contains dependencies or libraries used by the frontend.
+
+  - `deps/graph-parser/` is a library that parses a Logseq graph and saves it to a database.
 
 ## Data Flow
 

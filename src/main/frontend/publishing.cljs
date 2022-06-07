@@ -2,7 +2,7 @@
   (:require [frontend.state :as state]
             [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db-schema :as db-schema]
+            [logseq.graph-parser.db.schema :as db-schema]
             [rum.core :as rum]
             [frontend.handler.route :as route]
             [frontend.page :as page]

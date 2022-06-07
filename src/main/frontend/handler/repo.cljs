@@ -22,9 +22,8 @@
             [shadow.resource :as rc]
             [frontend.db.persist :as db-persist]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser :as graph-parser]
             [electron.ipc :as ipc]
-            [clojure.set :as set]
             [clojure.core.async :as async]
             [frontend.encrypt :as encrypt]))
 
@@ -215,30 +214,19 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths db-encrypted? re-render? re-render-opts opts]
-  (let [support-files (filter
-                       (fn [file]
-                         (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
-                       files)
-        support-files (sort-by :file/path support-files)
-        {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
-        {built-in true others false} (group-by (fn [file]
-                                                 (or (string/includes? (:file/path file) "contents.")
-                                                     (string/includes? (:file/path file) ".edn")
-                                                     (string/includes? (:file/path file) "custom.css"))) non-journals)
-        support-files' (concat (reverse journals) built-in others)
+  (let [supported-files (graph-parser/filter-files files)
         new-graph? (:new-graph? opts)
         delete-data (->> (concat delete-files delete-blocks)
                          (remove nil?))
-        chan (async/to-chan! support-files')
+        chan (async/to-chan! supported-files)
         graph-added-chan (async/promise-chan)]
     (when (seq delete-data) (db/transact! repo-url delete-data))
     (state/set-current-repo! repo-url)
-    (state/set-parsing-state! {:total (count support-files')})
+    (state/set-parsing-state! {:total (count supported-files)})
     ;; Synchronous for tests for not breaking anything
     (if util/node-test?
       (do
-        (doseq [file support-files']
+        (doseq [file supported-files]
           (state/set-parsing-state! (fn [m]
                                       (assoc m :current-parsing-file (:file/path file))))
           (parse-and-load-file! repo-url file new-graph?))
@@ -354,9 +342,9 @@
         (delete-db-f)))))
 
 (defn start-repo-db-if-not-exists!
-  [repo option]
+  [repo]
   (state/set-current-repo! repo)
-  (db/start-db-conn! nil repo option))
+  (db/start-db-conn! repo))
 
 (defn setup-local-repo-if-not-exists!
   []
@@ -364,7 +352,7 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! nil repo)
+             (db/start-db-conn! repo)
              (when-not config/publishing?
                (let [dummy-notes (t :tutorial/dummy-notes)]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -380,19 +368,16 @@
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn restore-and-setup-repo!
-  "Restore the db of a graph from the persisted data, and setup.
-   Create a new conn, or replace the conn in state with a new one.
-   me: optional, identity data, can be retrieved from `(state/get-me)` or `nil`"
-  ([repo]
-   (restore-and-setup-repo! repo (state/get-me)))
-  ([repo me]
-   (p/let [_ (state/set-db-restoring! true)
-           _ (db/restore-graph! repo me)]
-     (file-handler/restore-config! repo false)
-     ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
-     (db/listen-and-persist! repo)
-     (ui-handler/add-style-if-exists!)
-     (state/set-db-restoring! false))))
+  "Restore the db of a graph from the persisted data, and setup. Create a new
+  conn, or replace the conn in state with a new one."
+  [repo]
+  (p/let [_ (state/set-db-restoring! true)
+          _ (db/restore-graph! repo)]
+         (file-handler/restore-config! repo false)
+         ;; Don't have to unlisten the old listerner, as it will be destroyed with the conn
+         (db/listen-and-persist! repo)
+         (ui-handler/add-style-if-exists!)
+         (state/set-db-restoring! false)))
 
 (defn rebuild-index!
   [url]

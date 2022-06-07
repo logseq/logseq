@@ -4,12 +4,12 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [logseq.graph-parser.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [logseq.graph-parser.util :as gp-util]
+            [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -21,7 +21,7 @@
 (defn- set-missing-block-ids!
   [content]
   (when (string? content)
-    (doseq [block-id (extract/extract-all-block-refs content)]
+    (doseq [block-id (text-util/extract-all-block-refs content)]
       (when-let [block (try
                          (model/get-block-by-uuid block-id)
                          (catch js/Error _e
@@ -48,10 +48,24 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (= type "unlink"))
+      (when (and (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
                  (not (encrypt/content-encrypted? content))
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
+          (and (= "unlinkDir" type) dir)
+          (do
+            (state/pub-event! [:notification/show
+                               {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
+                                :status :error
+                                :clear? false}])
+            (state/update-state! :file/unlinked-dirs (fn [dirs] (conj dirs dir))))
+
+          (= "addDir" type)
+          (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
+
+          (contains? (:file/unlinked-dirs @state/state) dir)
+          nil
+
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
                (not= path pages-metadata-path))

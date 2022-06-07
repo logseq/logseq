@@ -245,7 +245,7 @@ export const getClipText = (cb, errorHandler) => {
 }
 
 // TODO split the capacitor clipboard to a separate file for capacitor APIs
-export const writeClipboard = (text, isHtml) => {
+export const writeClipboard = ({text, html}) => {
     if (typeof navigator.permissions == "undefined") {
         CapacitorClipboard.write({ string: text });
         return
@@ -260,18 +260,18 @@ export const writeClipboard = (text, isHtml) => {
         let promise_written = null
         if (typeof ClipboardItem !== 'undefined') {
             let blob = new Blob([text], {
-            type: ["text/plain"]
+              type: ["text/plain"]
             });
             let data = [new ClipboardItem({
                 ["text/plain"]: blob
             })];
-            if (isHtml) {
-                blob = new Blob([text], {
-                    type: ["text/plain", "text/html"]
+            if (html) {
+                let richBlob = new Blob([html], {
+                    type: ["text/html"]
                 })
                 data = [new ClipboardItem({
                     ["text/plain"]: blob,
-                    ["text/html"]: blob
+                    ["text/html"]: richBlob
                 })];
             }
             promise_written = navigator.clipboard.write(data)
