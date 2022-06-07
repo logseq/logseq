@@ -1060,8 +1060,8 @@
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
-                           (or (= "true" (dom/attr block "data-transclude"))
-                               (= "true" (dom/attr block "data-query")))) blocks)]
+                              (or (= "true" (dom/attr block "data-transclude"))
+                                  (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -3027,17 +3027,24 @@
 
 ;; credits to @pengx17
 (defn- copy-current-block-ref
-  []
+  [format]
   (when-let [current-block (state/get-edit-block)]
     (when-let [block-id (:block/uuid current-block)]
-      (copy-block-ref! block-id #(str "((" % "))"))
+      (if (= format "embed")
+       (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
+       (copy-block-ref! block-id #(str "((" % "))")))
       (notification/show!
        [:div
-        [:span.mb-1.5 "Block ref copied!"]
-        [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
+        [:span.mb-1.5 (str "Block " format " copied!")]
+        [:div [:code.whitespace.break-all (if (= format "embed")
+                                         (str "{{embed ((" block-id "))}}")
+                                         (str "((" block-id "))"))]]]
        :success true
        ;; use uuid to make sure there is only one toast a time
        (str "copied-block-ref:" block-id)))))
+
+(defn copy-current-block-embed []
+  (copy-current-block-ref "embed"))
 
 (defn shortcut-copy
   "shortcut copy action:
@@ -3055,7 +3062,7 @@
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
         (if (= selected-start selected-end)
-          (copy-current-block-ref)
+          (copy-current-block-ref "ref")
           (js/document.execCommand "copy")))
 
       :else
@@ -3132,9 +3139,9 @@
           ;; if the move is to cross block boundary, select the whole block
          (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
              (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
-          (select-block-up-down direction)
+         (select-block-up-down direction)
           ;; simulate text selection
-          (cursor/select-up-down input direction anchor cursor-rect)))
+         (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
 
 (defn open-selected-block!
@@ -3207,6 +3214,8 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
+
+  
 (defn block-with-title?
   [format content semantic?]
   (and (string/includes? content "\n")
