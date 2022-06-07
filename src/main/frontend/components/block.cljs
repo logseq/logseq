@@ -182,10 +182,10 @@
     (rum/local false ::loading?)
     {:will-mount  (fn [state]
                     (let [src (first (:rum/args state))]
-                      (if (and (gp-config/local-asset? src)
+                      (if (and (gp-config/local-protocol-asset? src)
                                (file-sync/current-graph-sync-on?))
                         (let [*exist? (::exist? state)
-                              asset-path (string/replace src (str gp-config/local-assets-dir "://") "")]
+                              asset-path (gp-config/remove-asset-protocol src)]
                           (if (string/blank? asset-path)
                             (reset! *exist? false)
                             (-> (fs/file-exists? "" asset-path)
