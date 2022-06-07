@@ -85,7 +85,8 @@
                         :icon    (ui/icon "lock-off")
                         :options {:on-click #(let [current-graph (repo-handler/get-detail-graph-info current-repo)]
                                                (state/pub-event!
-                                                 [:modal/remote-encryption-input-pw-dialog current-repo current-graph]))}})
+                                                [:modal/remote-encryption-input-pw-dialog current-repo current-graph
+                                                 :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
 
                  graph-txid-exists?
                  (concat
