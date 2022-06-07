@@ -28,7 +28,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.search :as search]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
