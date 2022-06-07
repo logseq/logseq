@@ -1868,7 +1868,7 @@
            :file-sync/graph-deleted "Nåværende fjerngraf er slettet"
            :host "Vert"
            :port "Port"
-           :re-index-discard-unsaved-changes-warning "Reindeksering vil forkaste nåværende graf, og deretter prosessere alle filene på nytt slik de er på disk akkurat no. Du vil miste ulagrede endringer, og det kan ta litt tid. Forsette?"
+           :re-index-discard-unsaved-changes-warning "Reindeksering vil forkaste nåværende graf, og deretter prosessere alle filene på nytt slik de er på disk akkurat nå. Du vil miste ulagrede endringer, og det kan ta litt tid. Forsette?"
            :re-index-multiple-windows-warning "Du må lukke de andre vinduene før du kan reindeksere denne grafen"
            :save "Lagrer..."
            :settings-of-plugins "Innstillinger for utvidelser"
