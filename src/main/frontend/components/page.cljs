@@ -25,6 +25,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.state :as state]
