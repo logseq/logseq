@@ -3,13 +3,13 @@
 (require '[babashka.deps :as deps])
 (deps/add-deps '{:deps {me.tagaholic/dlint {:mvn/version "0.1.0"}
                         io.lambdaforge/datalog-parser {:mvn/version "0.1.11"}}
-                 :paths ["src/main"]})
+                 :paths ["src"]})
 
 (ns lint-rules
   "Lint datalog rules for parse-ability and unbound variables"
   (:require [datalog.parser.impl :as parser-impl]
             [dlint.core :as dlint]
-            [frontend.db.rules :as rules]))
+            [logseq.db.rules :as rules]))
 
 (defn- lint-unbound-rule [rule]
   (->> (dlint/lint [rule])

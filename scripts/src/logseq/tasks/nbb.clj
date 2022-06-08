@@ -3,21 +3,6 @@
             [clojure.string :as str]
             [babashka.tasks :refer [shell]]))
 
-(defn- fetch-meta-namespaces
-  "Return namespaces with metadata"
-  [paths]
-  (let [{{:keys [namespace-definitions]} :analysis}
-        (clj-kondo/run!
-         {:lint paths
-          :config {:output {:analysis {:namespace-definitions {:meta true
-                                                               :lang :cljs}}}}})
-        matches (keep (fn [m]
-                        (when (:meta m)
-                          {:ns   (:name m)
-                           :meta (:meta m)}))
-                      namespace-definitions)]
-    matches))
-
 (defn- validate-namespaces
   [namespaces classpath dir]
   (assert (seq namespaces) "There must be some namespaces to check")
@@ -27,14 +12,6 @@
     ;; Run from current dir so that yarn command runs correctly
     (shell {:dir dir} "yarn nbb-logseq -cp" classpath "-e" (format "(require '[%s])" n)))
   (println "Success!"))
-
-(defn load-compatible-namespaces
-  "Check nbb-compatible namespaces can be required by nbb-logseq"
-  []
-  (let [namespaces (map :ns
-                        (filter #(get-in % [:meta :nbb-compatible])
-                                (fetch-meta-namespaces ["src/main"])))]
-    (validate-namespaces namespaces "src/main" ".")))
 
 (defn load-all-namespaces
   "Check all namespaces in a directory can be required by nbb-logseq"
