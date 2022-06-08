@@ -1310,7 +1310,7 @@
         (println "[full-sync(remote->local)]"
                  (count sorted-diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map relative-path sorted-diff-remote-files)
+             this (map (comp js/encodeURIComponent relative-path) sorted-diff-remote-files)
              latest-txid))))))
 
 (defn- file-changed?
