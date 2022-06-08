@@ -31,6 +31,14 @@
     (config-handler/set-config!
      :mobile/toolbar-stats @commands-stats)))
 
+(rum/defc indent-outdent [indent? icon]
+  [:div
+   [:button.bottom-action
+    {:on-mouse-down (fn [e]
+                      (util/stop e)
+                      (editor-handler/indent-outdent indent?))}
+    (ui/icon icon {:style {:fontSize ui/icon-size}})]])
+
 (rum/defc command
   [command-handler icon & [count? event?]]
   [:div
@@ -119,6 +127,8 @@
           sorted-commands (sort-by (comp :counts second) > @commands-stats)]
       [:div#mobile-editor-toolbar.bg-base-2
        [:div.toolbar-commands
+        (indent-outdent false "indent-decrease")
+        (indent-outdent true "indent-increase")
         (command (editor-handler/move-up-down true) "arrow-bar-to-up")
         (command (editor-handler/move-up-down false) "arrow-bar-to-down")
         (command #(if (state/sub :document/mode?)
