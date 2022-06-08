@@ -345,6 +345,7 @@
    :ui/toggle-contents              {:binding "alt+shift+c"
                                      :fn      ui-handler/toggle-contents!}
 
+   ;; The option is overrided by set-app-menu! in electron
    :ui/open-new-window              {:binding "mod+n"
                                      :inactive (not (util/electron?))
                                      :fn      #(state/pub-event! [:graph/open-new-window nil])}

@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent]]
+            [electron.utils :refer [*win mac? linux? dev? logger get-win-from-sender restore-user-fetch-agent get-graph-name]]
             [electron.url :refer [logseq-url-handler]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -201,7 +201,9 @@
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
                                    :click (fn []
-                                            (handler/open-new-window!))
+                                            (p/let [graph-name (get-graph-name (state/get-graph-path))
+                                                    _     (handler/broadcast-persist-graph! graph-name)]
+                                                   (handler/open-new-window!)))
                                    :accelerator "CommandOrControl+N"
                                    :acceleratorWorksWhenHidden false}
                                   (if mac?
