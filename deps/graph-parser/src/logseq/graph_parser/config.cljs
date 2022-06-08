@@ -10,6 +10,7 @@
 
 (defonce asset-protocol "assets://")
 (defonce capacitor-protocol "capacitor://")
+(defonce capacitor-protocol-with-prefix (str capacitor-protocol "localhost/_capacitor_file_"))
 
 (defonce local-assets-dir "assets")
 
@@ -28,7 +29,7 @@
   (if (local-protocol-asset? s)
     (-> s
         (string/replace-first asset-protocol "")
-        (string/replace-first capacitor-protocol ""))
+        (string/replace-first capacitor-protocol-with-prefix "file://"))
     s))
 
 (defonce default-draw-directory "draws")

@@ -2,7 +2,8 @@
   (:require ["path" :as path]
             [clojure.string :as string]
             [frontend.fs :as fs]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs.reader :as reader]))
 
 ;; TODO: move all file path related util functions to here
 
@@ -33,12 +34,22 @@
           (some #(string/ends-with? path %)
                 [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
+(defn read-graph-txid-info
+  [root]
+  (when (string? root)
+    (-> (p/let [txid-str (fs/read-file root "logseq/graphs-txid.edn")
+                txid-meta (and txid-str (reader/read-string txid-str))]
+               txid-meta)
+        (p/catch
+          (fn [^js e]
+            (js/console.error "[fs read txid data error]" e))))))
+
 (defn inflate-graphs-info
   [graphs]
   (if (seq graphs)
-    (for [{:keys [root] :as graph} graphs]
-      (p/let [sync-meta (fs/read-file root nil)]
-        (if sync-meta
-          (assoc graph :sync-meta sync-meta)
-          graph)))
+    (p/all (for [{:keys [root] :as graph} graphs]
+             (p/let [sync-meta (read-graph-txid-info root)]
+                    (if sync-meta
+                      (assoc graph :sync-meta sync-meta)
+                      graph))))
     []))

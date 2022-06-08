@@ -12,6 +12,7 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [electron.ipc :as ipc]
+            [frontend.util.fs :as fs-util]
             [cljs.core.async :as as]))
 
 (rum/defcs indicator <
@@ -136,7 +137,9 @@
                               ;; verify directory
                               (-> (if empty-dir?
                                     (p/resolved nil)
-                                    (ipc/ipc :readGraphTxIdInfo root))
+                                    (if (util/electron?)
+                                      (ipc/ipc :readGraphTxIdInfo root)
+                                      (fs-util/read-graph-txid-info root)))
 
                                   (p/then (fn [^js info]
                                             (when (and (not empty-dir?)
