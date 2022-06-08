@@ -1560,7 +1560,9 @@
                      (if collapsed?
                        (editor-handler/expand-block! uuid)
                        (editor-handler/collapse-block! uuid))))}
-      [:span {:class (if control-show? "control-show cursor-pointer" "control-hide")}
+      [:span {:class (if (or collapsed?
+                             (and control-show?
+                                  (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
                                    (bullet-on-click event block uuid))}
@@ -2309,10 +2311,7 @@
   [uuid e *control-show? block-id doc-mode?]
   (when-not @*dragging?
     (util/stop e)
-    (when (or
-           (model/block-collapsed? uuid)
-           (editor-handler/collapsable? uuid {:semantic? true}))
-      (reset! *control-show? true))
+    (reset! *control-show? true)
     (when-let [parent (gdom/getElement block-id)]
       (let [node (.querySelector parent ".bullet-container")]
         (when doc-mode?
@@ -2791,12 +2790,12 @@
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
            ;;insert an "edit" button in the query view
-           [:a.opacity-70.hover:opacity-100.svg-small.inline 
+           [:a.opacity-70.hover:opacity-100.svg-small.inline
             {:on-mouse-down (fn [e]
                               (util/stop e)
                               (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
             svg/edit]]
-          
+
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))
