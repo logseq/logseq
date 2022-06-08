@@ -1,13 +1,13 @@
 (ns logseq.graph-parser-test
   (:require [cljs.test :refer [deftest testing is]]
             [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.db :as gp-db]
+            [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [datascript.core :as d]))
 
 (deftest parse-file
   (testing "id properties"
-    (let [conn (gp-db/start-conn)]
+    (let [conn (ldb/start-conn)]
       (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098" {})
       (is (= [{:id "628953c1-8d75-49fe-a648-f4c612109098"}]
              (->> (d/q '[:find (pull ?b [*])
@@ -18,7 +18,7 @@
                   (map :block/properties)))
           "id as text has correct :block/properties"))
 
-    (let [conn (gp-db/start-conn)]
+    (let [conn (ldb/start-conn)]
       (graph-parser/parse-file conn "foo.md" "- id:: [[628953c1-8d75-49fe-a648-f4c612109098]]" {})
       (is (= [{:id #{"628953c1-8d75-49fe-a648-f4c612109098"}}]
              (->> (d/q '[:find (pull ?b [*])
@@ -30,7 +30,7 @@
           "id as linked ref has correct :block/properties")))
 
   (testing "unexpected failure during block extraction"
-    (let [conn (gp-db/start-conn)
+    (let [conn (ldb/start-conn)
           deleted-page (atom nil)]
       (with-redefs [gp-block/with-pre-block-if-exists (fn stub-failure [& _args]
                                               (throw (js/Error "Testing unexpected failure")))]

@@ -6,7 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.error :as error]
