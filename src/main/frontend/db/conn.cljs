@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.db :as ldb]))
 
 (defonce conns (atom {}))
 
@@ -71,7 +71,7 @@
    (start! repo {}))
   ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
-         db-conn (gp-db/start-conn)]
+         db-conn (ldb/start-conn)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler repo)))))

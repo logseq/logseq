@@ -1,16 +1,20 @@
-name: logseq graph-parser CI
+name: logseq/graph-parser CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to graph-parser
+  # Path filters ensure jobs only kick off if a change is made to graph-parser or
+  # its local dependencies
   push:
     branches: [master]
     paths:
       - 'deps/graph-parser/**'
+      # db is a local dep that could break functionality in this lib and should trigger this
+      - 'deps/db/**'
       - '!deps/graph-parser/**.md'
   pull_request:
     branches: [master]
     paths:
       - 'deps/graph-parser/**'
+      - 'deps/db/**'
       - '!deps/graph-parser/**.md'
 
 env:
@@ -74,11 +78,11 @@ jobs:
         run: cd deps/graph-parser && clojure -M:test
 
       - name: Run nbb-logseq tests
-        run: cd deps/graph-parser && yarn nbb-logseq -cp src:test -m logseq.graph-parser.nbb-test-runner/run-tests
+        run: cd deps/graph-parser && yarn nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests
 
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
-        run: bb test:load-all-namespaces-with-nbb deps/graph-parser src
+        run: bb test:load-all-namespaces-with-nbb deps/graph-parser
 
   lint:
     runs-on: ubuntu-latest

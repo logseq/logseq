@@ -24,6 +24,7 @@
   ;; distinct b/c sometimes namespaces are duplicated with .cljc analysis
   (doseq [n (distinct namespaces)]
     (println "Requiring" n "...")
+    ;; Run from current dir so that yarn command runs correctly
     (shell {:dir dir} "yarn nbb-logseq -cp" classpath "-e" (format "(require '[%s])" n)))
   (println "Success!"))
 
@@ -36,12 +37,12 @@
     (validate-namespaces namespaces "src/main" ".")))
 
 (defn load-all-namespaces
-  "Check all namespaces in source path(s) can be required by nbb-logseq"
-  [dir & paths]
+  "Check all namespaces in a directory can be required by nbb-logseq"
+  [dir]
   (let [{{:keys [namespace-definitions]} :analysis}
         (clj-kondo/run!
-         {:lint (map #(str dir "/" %) paths)
+         {:lint (map #(str dir "/" %) ["src"])
           :config {:output {:analysis {:namespace-definitions {:lang :cljs}}}}})]
     (validate-namespaces (map :name namespace-definitions)
-                         (str/join ":" paths)
+                         (str/trim (:out (shell {:dir dir :out :string} "clojure -Spath")))
                          dir)))
