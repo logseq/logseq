@@ -74,11 +74,10 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
-      # TODO: Re-enable outliner.core-test when hang is fixed
       - name: Run ClojureScript tests
         run: |
           yarn cljs:test
-          node static/tests.js -r '^((?!(outliner.core-test)).)*$'
+          node static/tests.js
 
       # In this job because it depends on an npm package
       - name: Load nbb compatible namespaces
