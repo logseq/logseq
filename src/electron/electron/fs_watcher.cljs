@@ -60,19 +60,14 @@
                          :usePolling false
                          :awaitWriteFinish true})
           dir-watcher (.watch watcher dir watcher-opts)
-          watcher-del-f #(.close dir-watcher)
-          parent-dir (path/join dir "..")
-          parent-watcher (.watch watcher parent-dir watcher-opts)
-          parent-watcher-del-f #(.close parent-watcher)]
-      (swap! *file-watcher assoc dir
-             [dir-watcher watcher-del-f]
-             [parent-watcher parent-watcher-del-f])
+          watcher-del-f #(.close dir-watcher)]
+      (swap! *file-watcher assoc dir [dir-watcher watcher-del-f])
       ;; TODO: batch sender
-      (.on parent-watcher "unlinkDir"
+      (.on dir-watcher "unlinkDir"
            (fn [path]
              (when (= dir path)
                (publish-file-event! dir dir "unlinkDir"))))
-      (.on parent-watcher "addDir"
+      (.on dir-watcher "addDir"
            (fn [path]
              (when (= dir path)
                (publish-file-event! dir dir "addDir"))))
@@ -92,9 +87,7 @@
 
       ;; electron app extends `EventEmitter`
       ;; TODO check: duplicated with the logic in "window-all-closed" ?
-      (.on app "quit" (fn []
-                        (watcher-del-f)
-                        (parent-watcher-del-f)))
+      (.on app "quit" watcher-del-f)
 
       true)))
 
