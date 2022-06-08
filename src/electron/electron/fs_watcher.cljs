@@ -4,8 +4,7 @@
             ["chokidar" :as watcher]
             [electron.utils :as utils]
             ["electron" :refer [app]]
-            [electron.window :as window]
-            ["path" :as path]))
+            [electron.window :as window]))
 
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw
