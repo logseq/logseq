@@ -13,6 +13,10 @@ on:
       - 'deps/db/**'
       - '!deps/db/**.md'
 
+defaults:
+  run:
+    working-directory: deps/db
+
 env:
   CLOJURE_VERSION: '1.10.1.727'
   # setup-java@v2 dropped support for legacy Java version syntax.
@@ -50,11 +54,11 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Fetch yarn deps
-        run: cd deps/db && yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile
 
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
-        run: bb test:load-all-namespaces-with-nbb deps/db
+        run: cd ../.. && bb test:load-all-namespaces-with-nbb deps/db
 
   lint:
     runs-on: ubuntu-latest
@@ -76,10 +80,13 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: cd deps/db && clojure -M:clj-kondo --parallel --lint src
+        run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
-        run: cd deps/db && ../../scripts/carve.clj
+        run: ../../scripts/carve.clj
 
       - name: Lint for vars that are too large
-        run: scripts/large_vars.clj deps/db/src '{:max-lines-count 30}'
+        run: ../../scripts/large_vars.clj src '{:max-lines-count 30}'
+
+      - name: Lint datalog rules
+        run: ../../scripts/lint_rules.clj

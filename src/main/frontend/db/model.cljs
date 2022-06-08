@@ -15,7 +15,7 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.db.rules :refer [rules]]
+            [logseq.db.rules :refer [rules]]
             [logseq.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 

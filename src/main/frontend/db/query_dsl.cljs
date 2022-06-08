@@ -11,7 +11,7 @@
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
-            [frontend.db.rules :as rules]
+            [logseq.db.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
             [frontend.util.text :as text-util]
