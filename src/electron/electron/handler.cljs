@@ -53,13 +53,16 @@
 (defmethod handle :unlink [_window [_ repo path]]
   (if (plugin/dotdir-file? path)
     (fs/unlinkSync path)
-    (let [file-name   (-> (string/replace path (str repo "/") "")
-                          (string/replace "/" "_")
-                          (string/replace "\\" "_"))
-          recycle-dir (str repo "/logseq/.recycle")
-          _           (fs-extra/ensureDirSync recycle-dir)
-          new-path    (str recycle-dir "/" file-name)]
-      (fs/renameSync path new-path))))
+    (try
+      (let [file-name   (-> (string/replace path (str repo "/") "")
+                           (string/replace "/" "_")
+                           (string/replace "\\" "_"))
+           recycle-dir (str repo "/logseq/.recycle")
+           _           (fs-extra/ensureDirSync recycle-dir)
+           new-path    (str recycle-dir "/" file-name)]
+        (fs/renameSync path new-path))
+      (catch :default _e
+        nil))))
 
 (defonce Diff (google-diff.))
 (defn string-some-deleted?

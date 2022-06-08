@@ -122,7 +122,7 @@
   (let [item (build-sidebar-item repo idx db-id block-type)]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4.shadow-lg
+        [:div.sidebar-item.content.color-level.px-4.shadow-md
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between

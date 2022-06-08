@@ -145,6 +145,8 @@
 
    :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
+   :editor/copy-embed {:binding "mod+e"
+                       :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
                                              :fn      editor-handler/paste-text-in-one-block-at-point}
@@ -447,6 +449,7 @@
                           :editor/forward-kill-word
                           :editor/backward-kill-word
                           :editor/replace-block-reference-at-point
+                          :editor/copy-embed
                           :editor/paste-text-in-one-block-at-point
                           :editor/insert-youtube-timestamp])
      (with-meta {:before m/enable-when-editing-mode!}))
@@ -609,6 +612,7 @@
     :editor/forward-kill-word
     :editor/backward-kill-word
     :editor/replace-block-reference-at-point
+    :editor/copy-embed
     :editor/paste-text-in-one-block-at-point
     :editor/select-up
     :editor/select-down]

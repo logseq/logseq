@@ -29,10 +29,13 @@
 
 (defn- publish-file-event!
   [dir path event]
-  (let [content (when (and (not= event "unlink")
+  (let [dir-path? (= dir path)
+        content (when (and (not= event "unlink")
+                           (not dir-path?)
                            (utils/should-read-content? path))
                   (utils/read-file path))
-        stat (when (not= event "unlink")
+        stat (when (and (not= event "unlink")
+                        (not dir-path?))
                (fs/statSync path))]
     (send-file-watcher! dir event {:dir (utils/fix-win-path! dir)
                                    :path (utils/fix-win-path! path)
@@ -44,31 +47,39 @@
   [_win dir]
   (when (and (fs/existsSync dir)
              (not (get @*file-watcher dir)))
-    (let [watcher (.watch watcher dir
-                          (clj->js
-                           {:ignored (fn [path]
-                                       (utils/ignored-path? dir path))
-                            :ignoreInitial false
-                            :ignorePermissionErrors true
-                            :interval polling-interval
-                            :binaryInterval polling-interval
-                            :persistent true
-                            :disableGlobbing true
-                            :usePolling false
-                            :awaitWriteFinish true}))
-          watcher-del-f #(.close watcher)]
-      (swap! *file-watcher assoc dir [watcher watcher-del-f])
+    (let [watcher-opts (clj->js
+                        {:ignored (fn [path]
+                                    (utils/ignored-path? dir path))
+                         :ignoreInitial false
+                         :ignorePermissionErrors true
+                         :interval polling-interval
+                         :binaryInterval polling-interval
+                         :persistent true
+                         :disableGlobbing true
+                         :usePolling false
+                         :awaitWriteFinish true})
+          dir-watcher (.watch watcher dir watcher-opts)
+          watcher-del-f #(.close dir-watcher)]
+      (swap! *file-watcher assoc dir [dir-watcher watcher-del-f])
       ;; TODO: batch sender
-      (.on watcher "add"
+      (.on dir-watcher "unlinkDir"
+           (fn [path]
+             (when (= dir path)
+               (publish-file-event! dir dir "unlinkDir"))))
+      (.on dir-watcher "addDir"
+           (fn [path]
+             (when (= dir path)
+               (publish-file-event! dir dir "addDir"))))
+      (.on dir-watcher "add"
            (fn [path]
              (publish-file-event! dir path "add")))
-      (.on watcher "change"
+      (.on dir-watcher "change"
            (fn [path]
              (publish-file-event! dir path "change")))
-      (.on watcher "unlink"
+      (.on dir-watcher "unlink"
            (fn [path]
              (publish-file-event! dir path "unlink")))
-      (.on watcher "error"
+      (.on dir-watcher "error"
            (fn [path]
              (println "Watch error happened: "
                       {:path path})))

@@ -8,13 +8,15 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.notification :as notification]
             [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -48,10 +50,31 @@
           pages-metadata-path (config/get-pages-metadata-path)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and (or content (= type "unlink"))
+      (when (and (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
                  (not (encrypt/content-encrypted? content))
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
+          (and (= "unlinkDir" type) dir)
+          (do
+            (state/pub-event! [:notification/show
+                               {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
+                                :status :error
+                                :clear? false}])
+            (state/update-state! :file/unlinked-dirs (fn [dirs] (conj dirs dir))))
+
+          (= "addDir" type)
+          (when (contains? (:file/unlinked-dirs @state/state) dir)
+            (notification/clear-all!)
+            (state/pub-event! [:notification/show
+                               {:content (str "The directory " dir " has been back, you can edit your graph now.")
+                                :status :success
+                                :clear? true}])
+            (fs/watch-dir! dir)
+            (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
+
+          (contains? (:file/unlinked-dirs @state/state) dir)
+          nil
+
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
                (not= path pages-metadata-path))
@@ -76,9 +99,11 @@
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
-          (when-let [page-name (db/get-file-page path)]
-            (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #() :delete-file? false))
+          (p/let [dir-exists? (fs/file-exists? dir "")]
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :unlink-file? true))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
