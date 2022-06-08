@@ -2791,11 +2791,12 @@
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
            ;;insert an "edit" button in the query view
-           (if (not built-in?) [:a.opacity-70.hover:opacity-100.svg-small.inline
+           (when-not built-in? 
+            [:a.opacity-70.hover:opacity-100.svg-small.inline
                       {:on-mouse-down (fn [e]
                                         (util/stop e)
                                         (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-                      svg/edit] nil)]
+                      svg/edit])]
           
           (fn []
             [:div
