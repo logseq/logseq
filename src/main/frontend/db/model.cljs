@@ -802,13 +802,6 @@
     (->> (tree-seq map? (fn [x] [(:block/parent x)]) block)
          (some util/collapsed?))))
 
-(defn block-collapsed?
-  ([block-id]
-   (block-collapsed? (state/get-current-repo) block-id))
-  ([repo block-id]
-   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
-     (util/collapsed? block))))
-
 (defn get-block-page
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
