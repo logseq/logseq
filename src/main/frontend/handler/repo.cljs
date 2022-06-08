@@ -444,7 +444,6 @@
                           :root (config/get-local-dir db)
                           :nfs? true}) nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
-                       ;; TODO: mobile
                        (cond (util/electron?)
                              (ipc/ipc :inflateGraphsInfo nfs-dbs)
 
