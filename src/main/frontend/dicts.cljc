@@ -3838,7 +3838,7 @@
         :page/show-journals "일지 보기"
         :page/show-name "페이지 이름 보기"
         :page/hide-name "페이지 이름 숨기기"
-        :block/name "페이지 일므"
+        :block/name "페이지 이름"
         :page/last-modified "마지막 편집 시간:"
         :page/new-title "새 문서의 제목이 무엇입니까?"
         :page/earlier "이전"
