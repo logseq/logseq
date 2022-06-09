@@ -27,7 +27,7 @@ We use https://github.com/borkdude/carve to detect unused vars in our codebase.
 
 To run this linter:
 ```
-scripts/carve.clj
+bb lint:carve
 ```
 
 By default, the script runs in CI mode which prints unused vars if they are
@@ -35,7 +35,7 @@ found. The script can be run in an interactive mode which prompts for keeping
 (ignoring) an unused var or removing it. Run this mode with:
 
 ```
-scripts/carve.clj '{:interactive true}'
+bb lint:carve '{:interactive true}'
 ```
 
 When a var is ignored, it is added to `.carve/ignore`. Please add a comment for
@@ -46,17 +46,19 @@ why a var is ignored to help others understand why it's unused.
 Large vars have a lot of complexity and make it hard for the team to maintain
 and understand them. To run this linter:
 ```
-scripts/large_vars.clj
+bb lint:large-vars
 ```
 
 To configure the linter, see its `config` var.
 
 ### Datalog linting
 
-We use [datascript](https://github.com/tonsky/datascript)'s datalog to power our modeling and querying layer. Since datalog is concise, it is easy to write something invalid. To avoid typos and other preventable mistakes, we lint our queries and rules. Our queries are linted through clj-kondo and [datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will error if it detects an invalid query. Our rules are linted through a script that also uses the datalog-parser. To run this linter:
-```
-scripts/lint_rules.clj
-```
+We use [datascript](https://github.com/tonsky/datascript)'s datalog to power our
+modeling and querying layer. Since datalog is concise, it is easy to write
+something invalid. To avoid typos and other preventable mistakes, we lint our
+queries and rules. Our queries are linted through clj-kondo and
+[datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will
+error if it detects an invalid query.
 
 ## Testing
 

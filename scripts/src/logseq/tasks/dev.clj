@@ -31,13 +31,11 @@
   - clj-kondo lint
   - carve lint for unused vars
   - lint for vars that are too large
-  - lint invalid translation entries
-  - Lint datalog rules"
+  - lint invalid translation entries"
   []
   (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
-               "scripts/carve.clj"
-               "scripts/large_vars.clj"
-               "bb lang:invalid-translations"
-               "scripts/lint_rules.clj"]]
+               "bb lint:carve"
+               "bb lint:large-vars"
+               "bb lang:invalid-translations"]]
     (println cmd)
     (shell cmd)))
