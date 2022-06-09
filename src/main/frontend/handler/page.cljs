@@ -157,7 +157,6 @@
          (when (seq txs)
            (db/transact! txs)))
 
-       (prn "creating" page-name) ;; TODO Junyi
        (when create-first-block?
          (when (or
                 (db/page-empty? repo (:db/id (db/entity [:block/name page-name])))
