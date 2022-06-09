@@ -72,7 +72,10 @@
                                 page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-path (when (util/electron?) (page-handler/get-page-file-path))
-          _ (state/sub :auth/id-token)]
+          _ (state/sub :auth/id-token)
+          file-sync-graph-uuid (and (user-handler/logged-in?)
+                                    (not file-sync-handler/hiding-login&file-sync)
+                                    (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>
          [{:title   (if favorited?
@@ -127,15 +130,19 @@
                           (if public? false true))
                          (state/close-modal!))}})
 
-          (when (util/electron?)
+          (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
              :options {:on-click
                        (fn []
-                         (shell/get-file-latest-git-log page 100))}})
-          (when (and (user-handler/logged-in?) (not file-sync-handler/hiding-login&file-sync))
-            (when-let [graph-uuid (file-sync-handler/get-current-graph-uuid)]
-              {:title (t :page/file-sync-versions)
-               :options {:on-click #(file-sync-handler/list-file-versions graph-uuid page)}}))
+                         (cond
+                           file-sync-graph-uuid
+                           (file-sync-handler/list-file-versions file-sync-graph-uuid page)
+
+                           (util/electron?)
+                           (shell/get-file-latest-git-log page 100)
+
+                           :else
+                           nil))}})
 
           (when (and (util/electron?) file-path)
             {:title   (t :page/open-backup-directory)

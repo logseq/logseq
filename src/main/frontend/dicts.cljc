@@ -91,7 +91,6 @@
         :page/make-public "Make it public for publishing"
         :page/version-history "Check page history"
         :page/open-backup-directory "Open page backups directory"
-        :page/file-sync-versions "Page versions"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/add-to-favorites "Add to Favorites"
@@ -834,7 +833,6 @@
            :page/make-public "导出 HTML 时发布本页面"
            :page/version-history "查看页面历史记录"
            :page/open-backup-directory "打开页面备份文件夹"
-           :page/file-sync-versions "页面历史"
            :page/make-private "导出 HTML 时取消发布本页面"
            :page/delete "删除本页"
            :page/add-to-favorites "添加收藏"
@@ -1880,13 +1878,12 @@
            :graph/save-error "Lagring feilet"
            :graph/save-success "Lagring vellykket"
            :page/copy-page-url "Kopier side URL"
-           :page/file-sync-versions "Versjoner av siden"
            :page/open-backup-directory "Åpne mappe med sidens sikkerhetskopier"
            :plugin/not-installed "Ikke installert"
            :settings-page/edit-export-css "Rediger export.css"
            :settings-page/network-proxy "Nettverksproxy"
            :settings-page/plugin-system "System for utvidelser"}
-   
+
    :pt-BR {:on-boarding/demo-graph "Esse é um gráfico de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
            :on-boarding/add-graph "Adicionar gráfico"
            :on-boarding/open-local-dir "Abrir pasta local"
@@ -2198,9 +2195,8 @@
 
            :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
            :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
-           
+
            :page/copy-page-url "Copiar URL da página"
-           :page/file-sync-versions "Versões da página"
            :plugin/not-installed "Não instalado"
            :tutorial/dummy-notes "dummy-notes-en.md"
            :tutorial/text "tutorial-en.md"}
@@ -2582,7 +2578,6 @@
         :page/action-publish "Опубликовать"
         :page/make-public "Сделать доступным для публикации"
         :page/version-history "проверить историю git страницы"
-        :page/file-sync-versions "история страницы"
         :page/make-private "Сделать приватным"
         :page/delete "Удалить страницу"
         :page/add-to-favorites "Добавить в Избранное"
@@ -2866,7 +2861,6 @@
         :page/make-public "パブリッシュのため公開する"
         :page/version-history "ページ履歴の確認"
         :page/open-backup-directory "ページのバックアップディレクトリを開く"
-        :page/file-sync-versions "Page versions"
         :page/make-private "非公開にする"
         :page/delete "ページ削除"
         :page/add-to-favorites "お気に入りへ追加"
@@ -3189,7 +3183,6 @@
         :page/make-public "Segna come pubblico per la pubblicazione"
         :page/version-history "Controlla la cronologia della pagina"
         :page/open-backup-directory "Apri la cartella dei backup delle pagine"
-        :page/file-sync-versions "Versioni delle pagine"
         :page/make-private "Segna come privato"
         :page/delete "Elimina pagina"
         :page/add-to-favorites "Aggiungi ai Preferiti"
@@ -3513,7 +3506,6 @@
         :page/make-public "Yayımlamak için herkese açık hale getir"
         :page/version-history "Sayfa geçmişini kontrol et"
         :page/open-backup-directory "Sayfa yedekleme dizinini aç"
-        :page/file-sync-versions "Sayfa sürümleri"
         :page/make-private "Özel yap"
         :page/delete "Sayfayı sil"
         :page/add-to-favorites "Sık kullanılanlara ekle"
@@ -3750,7 +3742,7 @@
 
         :file-sync/other-user-graph "Geçerli yerel grafik, diğer kullanıcının uzak grafiğine bağlıdır. Bu yüzden senkronizasyon başlatılamıyor."
         :file-sync/graph-deleted "Geçerli uzak grafik silindi"}
-   
+
    :ko {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                           :default "tutorial-ko.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ko.md")
@@ -3839,7 +3831,6 @@
         :page/make-public "출판 전 공개 상태로 만들기"
         :page/version-history "페이지 편집 기록 확인"
         :page/open-backup-directory "페이지 백업 디렉토리 열기"
-        :page/file-sync-versions "페이지 버전"
         :page/make-private "비공개 상태로 만들기"
         :page/delete "페이지 삭제"
         :page/add-to-favorites "즐겨찾기에 추가"
@@ -4077,7 +4068,7 @@
         :file-sync/other-user-graph "현재 로컬 그래프가 다른 유저의 리모트 그래프와 충돌합니다. 동기화를 시작할 수 없습니다."
         :file-sync/graph-deleted "현재 리모트 그래프를 삭제했습니다."
         }
-     
+
      :tongue/fallback :en})
 
 (def languages [{:label "English" :value :en}
