@@ -367,7 +367,12 @@
 (defn enable-journals?
   [repo]
   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo)))))
+                (get (sub-config) repo)))))
+
+(defn enable-flashcards?
+  [repo]
+  (not (false? (:feature/enable-flashcards?
+                (get (sub-config) repo)))))
 
 (defn export-heading-to-list?
   []

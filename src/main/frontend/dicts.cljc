@@ -183,6 +183,7 @@
         :settings-page/tab-version-control "Version control"
         :settings-page/tab-advanced "Advanced"
         :settings-page/plugin-system "Plug-in system"
+        :settings-page/enable-flashcards "Flashcards"
         :settings-page/network-proxy "Network proxy"
         :logseq "Logseq"
         :on "ON"
@@ -1886,7 +1887,7 @@
            :settings-page/edit-export-css "Rediger export.css"
            :settings-page/network-proxy "Nettverksproxy"
            :settings-page/plugin-system "System for utvidelser"}
-   
+
    :pt-BR {:on-boarding/demo-graph "Esse é um gráfico de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
            :on-boarding/add-graph "Adicionar gráfico"
            :on-boarding/open-local-dir "Abrir pasta local"
@@ -2198,7 +2199,7 @@
 
            :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
            :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
-           
+
            :page/copy-page-url "Copiar URL da página"
            :page/file-sync-versions "Versões da página"
            :plugin/not-installed "Não instalado"
@@ -3750,7 +3751,7 @@
 
         :file-sync/other-user-graph "Geçerli yerel grafik, diğer kullanıcının uzak grafiğine bağlıdır. Bu yüzden senkronizasyon başlatılamıyor."
         :file-sync/graph-deleted "Geçerli uzak grafik silindi"}
-   
+
    :ko {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                           :default "tutorial-ko.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ko.md")
@@ -4077,7 +4078,7 @@
         :file-sync/other-user-graph "현재 로컬 그래프가 다른 유저의 리모트 그래프와 충돌합니다. 동기화를 시작할 수 없습니다."
         :file-sync/graph-deleted "현재 리모트 그래프를 삭제했습니다."
         }
-     
+
      :tongue/fallback :en})
 
 (def languages [{:label "English" :value :en}
