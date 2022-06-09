@@ -89,21 +89,24 @@
                                          (state/set-modal! (encryption/encryption-dialog url))))}
                "🔐"])
 
-            [:a.text-gray-400.ml-4.font-medium.text-sm
-             {:title    (if only-cloud?
-                          "Warning: It can't be recovered!"
-                          "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk.")
-              :on-click (fn []
-                          (if only-cloud?
-                            (when (js/confirm (str "Are you sure remove remote this graph (" GraphName ")!"))
-                              (go (<! (file-sync/delete-graph GraphUUID))
-                                  (file-sync/load-session-graphs)))
-                            (do
-                              (repo-handler/remove-repo! repo)
-                              (file-sync/load-session-graphs))))}
-             (if only-cloud?
-               [:span.text-red-600 "Remove"]
-               "Unlink")]]])]]
+            (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
+              [:div.flex.flex-row.items-center
+               (when loading? [:div.ml-2 (ui/loading "")])
+               [:a.text-gray-400.ml-4.font-medium.text-sm
+                {:title    (if only-cloud?
+                             "Warning: It can't be recovered!"
+                             "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk.")
+                 :on-click (fn []
+                             (if only-cloud?
+                               (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")!"))
+                                 (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
+                                 (go (<! (file-sync/delete-graph GraphUUID))
+                                     (file-sync/load-session-graphs)
+                                     (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))
+                               (do
+                                 (repo-handler/remove-repo! repo)
+                                 (file-sync/load-session-graphs))))}
+                (if only-cloud? "Remove" "Unlink")]])]])]]
       (widgets/add-graph))))
 
 (defn refresh-cb []

@@ -135,6 +135,7 @@
         (when (user-uuid) (state/pub-event! [:user/login]))))))
 
 (defn login-callback [code]
+  (state/set-state! [:ui/loading? :login] true)
   (go
     (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_callback?code=" code)
                              {:with-credentials? false}))]

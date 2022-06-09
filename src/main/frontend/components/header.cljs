@@ -37,10 +37,7 @@
         loading? (state/sub [:ui/loading? :login])]
     (when-not (or config/publishing?
                   (user-handler/logged-in?))
-      [:a.button.text-sm.font-medium.block {:on-click
-                                            #(do
-                                               (state/set-state! [:ui/loading? :login] true)
-                                               (js/window.open config/LOGIN-URL))}
+      [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
        [:span (t :login)]
        (when loading?
          [:span.ml-2 (ui/loading "")])])))
