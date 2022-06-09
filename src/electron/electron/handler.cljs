@@ -421,6 +421,7 @@
     (watcher/watch-dir! window dir)))
 
 (defn open-new-window!
+  "Persist db first before calling! Or may break db persistency"
   []
   (let [win (win/create-main-window)]
     (win/on-close-actions! win close-watcher-when-orphaned!)
@@ -487,8 +488,9 @@
   (println "Error: no ipc handler for: " (bean/->js args)))
 
 (defn broadcast-persist-graph!
-  "Sends persist graph event to the renderer contains the target graph.
-   Returns a promise."
+  "Receive graph-name (not graph path)
+   Sends persist graph event to the renderer contains the target graph.
+   Returns a promise<void>."
   [graph-name]
   (p/create (fn [resolve _reject]
               (let [graph-path (utils/get-graph-dir graph-name)

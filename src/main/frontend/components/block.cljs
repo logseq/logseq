@@ -2088,7 +2088,7 @@
        (merge attrs))
 
      [:<>
-      [:div.flex.flex-row.justify-between
+      [:div.flex.flex-row.justify-between.block-content-inner
        [:div.flex-1
         (cond
           (seq title)

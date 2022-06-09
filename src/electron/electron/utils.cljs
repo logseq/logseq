@@ -121,8 +121,14 @@
          (send (name kind) (bean/->js payload))))))
 
 (defn get-graph-dir
+  "required by all internal state in the electron section"
   [graph-name]
   (string/replace graph-name "logseq_local_" ""))
+
+(defn get-graph-name
+  "reversing `get-graph-dir`"
+  [graph-dir]
+  (str "logseq_local_" graph-dir))
 
 ;; Keep update with the normalization in main
 (defn normalize
