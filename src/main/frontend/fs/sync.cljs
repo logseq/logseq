@@ -40,15 +40,15 @@
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
-;;   trigger remote->local first, then local->remote-full-sync
-;;   local->remote-full-sync will compare local-files with remote-files (by md5 & size),
+;;   trigger remote->local-full-sync first, then local->remote-full-sync
+;;   local->remote-full-sync will compare local-files with remote-files (by md5),
 ;;   and upload new-added-files to remote server.
 ;; - if local->remote sync(normal-sync or full-sync) return :need-sync-remote,
 ;;   then trigger a remote->local sync
 ;; - if remote->local sync return :need-remote->local-full-sync,
 ;;   then we need a remote->local-full-sync,
 ;;   which compare local-files with remote-files, sync diff-remote-files to local
-;; - local->remote-full-sync will be triggered after 20min of idle
+;; - local->remote-full-sync will be triggered after 20mins of idle
 ;; - every 20s, flush local changes, and sync to remote
 
 ;; TODO: use access-token instead of id-token
@@ -1140,6 +1140,9 @@
 (def stop-sync-chan (chan 1))
 (def remote->local-sync-chan (chan 1))
 (def remote->local-full-sync-chan (chan 1))
+(def immediately-local->remote-chan
+  "Immediately trigger upload of files in waiting queue"
+  (chan))
 
 (defn sync-state
   "create a new sync-state"
@@ -1349,8 +1352,6 @@
         (and (<! (local-file-exists? r-path basepath))
              (<! (file-changed? graph-uuid r-path basepath)))))))
 
-
-
 (defrecord ^:large-vars/cleanup-todo
     Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
                          ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
@@ -1389,7 +1390,8 @@
                       v)))))
          :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
          :stop-ch stop-chan
-         :distinct-coll? true)))
+         :distinct-coll? true
+         :flush-now-ch immediately-local->remote-chan)))
 
     (sync-local->remote! [_ es]
       (if (empty? es)
@@ -1470,10 +1472,6 @@
                     succ
                     (recur (next es-partitions))
                     (or need-sync-remote unknown) r)))))))))
-
-
-
-
 
 ;;; ### put all stuff together
 

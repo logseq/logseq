@@ -1074,6 +1074,13 @@
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
 #?(:cljs
+   (defn drain-chan
+     "drop all stuffs in CH, and return all of them"
+     [ch]
+     (->> (repeatedly #(async/poll! ch))
+          (take-while identity))))
+
+#?(:cljs
    (defn ratelimit
      "return a channel CH,
   ratelimit flush items in in-ch every max-duration(ms),
@@ -1083,19 +1090,24 @@
   - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
   - :stop-ch stop go-loop when stop-ch closed
   - :distinct-coll? distinct coll when put into CH
-  - :chan-buffer buffer of return CH, default use (async/chan 1000)"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer]}]
+  - :chan-buffer buffer of return CH, default use (async/chan 1000)
+  - :flush-now-ch flush the content in the queue immediately"
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch]}]
      (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
-           stop-ch* (or stop-ch (async/chan))]
+           stop-ch* (or stop-ch (async/chan))
+           flush-now-ch* (or flush-now-ch (async/chan))]
        (async/go-loop [timeout-ch (async/timeout max-duration) coll []]
-         (let [{:keys [timeout e stop]}
+         (let [{:keys [timeout e stop flush-now]}
                (async/alt! timeout-ch {:timeout true}
                            in-ch ([e] {:e e})
-                           stop-ch* {:stop true})]
+                           stop-ch* {:stop true}
+                           flush-now-ch* {:flush-now true})]
            (cond
-             timeout
+             (or flush-now timeout)
              (do (async/onto-chan! ch coll false)
                  (flush-fn coll)
+                 (drain-chan flush-now-ch*)
+                 (when (= max-duration 20000) (println :ratelimit flush-now timeout))
                  (recur (async/timeout max-duration) []))
 
              (some? e)
@@ -1114,12 +1126,7 @@
              (async/close! ch))))
        ch)))
 
-#?(:cljs
-   (defn drain-chan
-     "drop all stuffs in CH, and return all of them"
-     [ch]
-     (->> (repeatedly #(async/poll! ch))
-          (take-while identity))))
+
 
 #?(:cljs
    (defn trace!
