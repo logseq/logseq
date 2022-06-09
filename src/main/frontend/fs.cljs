@@ -12,7 +12,8 @@
             [promesa.core :as p]
             [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.state :as state]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -79,7 +80,17 @@
       (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
               content (if-not md-or-org? content (encrypt/encrypt content))]
         (->
-         (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+         (p/let [opts (assoc opts
+                             :error-handler
+                             (fn [error]
+                               (state/pub-event! [:instrument {:type :write-file/failed
+                                                               :payload {:fs (type fs-record)
+                                                                         :user-agent (when js/navigator js/navigator.userAgent)
+                                                                         :path path
+                                                                         :content-length (count content)
+                                                                         :error-str (str error)
+                                                                         :error error}}])))
+                 _ (protocol/write-file! (get-fs dir) repo dir path content opts)]
            (when (= bfs-record fs-record)
              (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
          (p/catch (fn [error]
