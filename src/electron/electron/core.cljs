@@ -202,10 +202,9 @@
                         :submenu [{:label "New Window"
                                    :click (fn []
                                             (p/let [graph-name (get-graph-name (state/get-graph-path))
-                                                    _     (handler/broadcast-persist-graph! graph-name)]
-                                                   (handler/open-new-window!)))
-                                   :accelerator "CommandOrControl+N"
-                                   :acceleratorWorksWhenHidden false}
+                                                    _ (handler/broadcast-persist-graph! graph-name)]
+                                              (handler/open-new-window!)))
+                                   :accelerator "CommandOrControl+N"}
                                   (if mac?
                                     {:role "close"}
                                     {:role "quit"})]}
