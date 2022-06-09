@@ -1373,13 +1373,11 @@
   "Get all uuids of blocks with any back link exists."
   []
   (when-let [db (conn/get-db)]
-    (->> (d/datoms db :avet :block/uuid)
-         (map :v)
-         (map (fn [id]
-                (let [e (db-utils/entity [:block/uuid id])]
-                  (when (pos-int? (count (:block/_refs e)))
-                    id))))
-         (remove nil?))))
+    (d/q '[:find [?refed-uuid ...]
+           :where
+           ;; ?referee-b is block with ref towards ?refed-b
+           [?refed-b   :block/uuid ?refed-uuid]
+           [?referee-b :block/refs ?refed-b]] db)))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents

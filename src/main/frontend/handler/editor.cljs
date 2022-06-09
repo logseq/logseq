@@ -943,7 +943,8 @@
               (save-block-if-changed! block new-content))))))))
 
 (defn set-blocks-id!
-  "Persist block uuid to file if not exists"
+  "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
+   Accepts a list of uuids."
   [block-ids]
   (let [block-ids (remove nil? block-ids)
         col (map (fn [block-id]
@@ -1958,7 +1959,8 @@
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
-  [tree-vec format]
+  "keep-uuid? - maintain the existing :uuid in tree vec"
+  [tree-vec format keep-uuid?]
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
@@ -1967,15 +1969,18 @@
                                   (property/insert-properties format content props))
                     ast (mldoc/->edn content* (gp-mldoc/default-config format))
                     blocks (block/extract-blocks ast content* true format)
-                    fst-block (first blocks)]
+                    fst-block (first blocks)
+                    fst-block (if (and keep-uuid? (uuid? (:uuid block)))
+                                (assoc fst-block :block/uuid (:uuid block))
+                                fst-block)]
                 (assert fst-block "fst-block shouldn't be nil")
                 (assoc fst-block :block/level (:block/level block)))))))
 
 (defn insert-block-tree
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
-  [tree-vec format {:keys [target-block] :as opts}]
-  (let [blocks (block-tree->blocks tree-vec format)
+  [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
+  (let [blocks (block-tree->blocks tree-vec format keep-uuid?)
         page-id (:db/id (:block/page target-block))
         blocks (gp-block/with-parent-and-left page-id blocks)]
     (paste-blocks
