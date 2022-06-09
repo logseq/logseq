@@ -11,7 +11,7 @@
             [frontend.util :as util]))
 
 (def *url (atom nil))
-;; FIXME: `appUrlOpen` are fired twice when receiving a same intent. 
+;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
 ;; they are from the same intent share.
 (def *last-shared-url (atom nil))
@@ -22,7 +22,7 @@
   []
   (let [path (fs/iOS-ensure-documents!)]
     (println "iOS container path: " path))
-  
+
   (.addEventListener js/window
                      "load"
                      (fn [_event]
@@ -31,7 +31,7 @@
                                         1000))))
 
   (mobile-util/check-ios-zoomed-display)
-  
+
   (.removeAllListeners mobile-util/file-sync)
 
   (.addListener mobile-util/file-sync "debug"
@@ -99,6 +99,7 @@
                 (fn [^js state]
                   (when (state/get-current-repo)
                     (let [is-active? (.-isActive state)]
+                      (state/set-mobile-app-state-change is-active?)
                       (when-not is-active?
                         (editor-handler/save-current-block!)))))))
 
@@ -108,6 +109,6 @@
 
   (when (mobile-util/native-ios?)
     (ios-init))
-  
+
   (when (mobile-util/native-platform?)
     (general-init)))

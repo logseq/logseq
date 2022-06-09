@@ -1748,6 +1748,13 @@
                (add-watch *sync-state ::update-global-state
                           (fn [_ _ _ n]
                             (state/set-file-sync-state repo n)))
+               ;; watch :mobile/app-state-change,
+               ;; trigger a remote->local once activated
+               (add-watch (rum/cursor state/state :mobile/app-state-change) "sync-manage"
+                          (fn [_ _ _ {:keys [is-active?]}]
+                            (when is-active?
+                              (offer! remote->local-sync-chan true))))
+
                (.start sm)
 
 
@@ -1767,7 +1774,6 @@
                           (fn [_k _r _o n]
                             (when (nil? n)
                               (sync-stop))))))))))))
-
 
 
 ;;; debug funcs

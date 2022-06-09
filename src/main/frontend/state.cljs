@@ -155,7 +155,10 @@
      ;;; add a random in (<= 1000000) to observer its update
      :mobile/toolbar-update-observer        0
      :mobile/show-tabbar?                   false
-
+     ;;; Used to monitor mobile app status,
+     ;;; value spec:
+     ;;; {:is-active? bool, :timestamp int}
+     :mobile/app-state-change                 (atom nil)
      ;; plugin
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
@@ -1685,3 +1688,9 @@
   [repo]
   (:feature/enable-encryption?
    (get (sub-config) repo)))
+
+(defn set-mobile-app-state-change
+  [is-active?]
+  (set-state! :mobile/app-state-change
+              {:is-active? is-active?
+               :timestamp (inst-ms (js/Date.))}))
