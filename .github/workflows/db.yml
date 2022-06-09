@@ -24,7 +24,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.8.2'
+  BABASHKA_VERSION: '0.8.156'
 
 jobs:
   test:
@@ -58,7 +58,7 @@ jobs:
 
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
-        run: cd ../.. && bb test:load-all-namespaces-with-nbb deps/db
+        run: bb test:load-all-namespaces-with-nbb .
 
   lint:
     runs-on: ubuntu-latest
@@ -83,10 +83,10 @@ jobs:
         run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
-        run: ../../scripts/carve.clj
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: ../../scripts/large_vars.clj src '{:max-lines-count 30}'
+        run: bb lint:large-vars
 
       - name: Lint datalog rules
-        run: ../../scripts/lint_rules.clj
+        run: bb lint:rules

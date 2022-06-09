@@ -6,7 +6,7 @@
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "4b3e623fb475cacb992425aa9dac770d6dd63e38"}
+   :git/sha "abb32ccd26405d56fd28a29d56f3cb902b8c4334"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}}
  :pods
@@ -33,17 +33,17 @@
   dev:lint
   logseq.tasks.dev/lint
 
+  lint:large-vars
+  logseq.bb-tasks.lint.large-vars/-main
+
+  lint:carve
+  logseq.bb-tasks.lint.carve/-main
+
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
 
   nbb:portal-watch
   logseq.bb-tasks.nbb.watch/portal-watch
-
-  test:load-namespaces-with-nbb
-  logseq.tasks.nbb/load-compatible-namespaces
-
-  test:load-all-namespaces-with-nbb
-  logseq.tasks.nbb/load-all-namespaces
 
   lang:list
   logseq.tasks.lang/list-langs
@@ -58,4 +58,13 @@
   logseq.tasks.lang/invalid-translations
 
   file-sync:integration-tests
-  logseq.tasks.file-sync/integration-tests}}
+  logseq.tasks.file-sync/integration-tests}
+
+ :tasks/config
+ {:large-vars
+  ;; TODO: Get to a smaller max-lines-count
+  {:max-lines-count 100
+   ;; TODO: Address vars tagged with cleanup-todo. These
+   ;; are left mostly because they are not high priority
+   ;; or not well understood
+   :metadata-exceptions #{:large-vars/cleanup-todo}}}}

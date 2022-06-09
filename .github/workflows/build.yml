@@ -101,10 +101,10 @@ jobs:
         run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
-        run: scripts/carve.clj
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: scripts/large_vars.clj
+        run: bb lint:large-vars
 
       - name: Lint invalid translation entries
         run: bb lang:invalid-translations

@@ -1,4 +1,5 @@
-(ns ^:bb-compatible logseq.db.rules)
+(ns ^:bb-compatible logseq.db.rules
+  "Datalog rules for use with logseq.db.schema")
 
 (def ^:large-vars/data-var rules
   ;; rule "parent" is optimized for child node -> parent node nesting queries

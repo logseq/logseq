@@ -17,6 +17,10 @@ on:
       - 'deps/db/**'
       - '!deps/graph-parser/**.md'
 
+defaults:
+  run:
+    working-directory: deps/graph-parser
+
 env:
   CLOJURE_VERSION: '1.10.1.727'
   # setup-java@v2 dropped support for legacy Java version syntax.
@@ -24,7 +28,7 @@ env:
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
   NODE_VERSION: '16'
-  BABASHKA_VERSION: '0.8.2'
+  BABASHKA_VERSION: '0.8.156'
 
 jobs:
   test:
@@ -69,20 +73,20 @@ jobs:
 
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: cd deps/graph-parser && clojure -A:test -P
+        run: clojure -A:test -P
 
       - name: Fetch yarn deps
-        run: cd deps/graph-parser && yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile
 
       - name: Run ClojureScript tests
-        run: cd deps/graph-parser && clojure -M:test
+        run: clojure -M:test
 
       - name: Run nbb-logseq tests
-        run: cd deps/graph-parser && yarn nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests
+        run: yarn nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests
 
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
-        run: bb test:load-all-namespaces-with-nbb deps/graph-parser
+        run: bb test:load-all-namespaces-with-nbb .
 
   lint:
     runs-on: ubuntu-latest
@@ -108,10 +112,10 @@ jobs:
           babashka-version: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: cd deps/graph-parser && clojure -M:clj-kondo --parallel --lint src test
+        run: clojure -M:clj-kondo --parallel --lint src test
 
       - name: Carve lint for unused vars
-        run: cd deps/graph-parser && ../../scripts/carve.clj
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: scripts/large_vars.clj deps/graph-parser/src '{:max-lines-count 75}'
+        run: bb lint:large-vars
