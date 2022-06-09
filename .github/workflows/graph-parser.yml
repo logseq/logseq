@@ -9,12 +9,14 @@ on:
       - 'deps/graph-parser/**'
       # db is a local dep that could break functionality in this lib and should trigger this
       - 'deps/db/**'
+      - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
   pull_request:
     branches: [master]
     paths:
       - 'deps/graph-parser/**'
       - 'deps/db/**'
+      - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
 
 defaults:
@@ -23,7 +25,6 @@ defaults:
 
 env:
   CLOJURE_VERSION: '1.10.1.727'
-  # setup-java@v2 dropped support for legacy Java version syntax.
   # This is the same as 1.8.
   JAVA_VERSION: '8'
   # This is the latest node version we can run.
@@ -36,17 +37,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
           cache-dependency-path: deps/graph-parser/yarn.lock
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
@@ -62,7 +63,7 @@ jobs:
           babashka-version: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: clojure-deps
         with:
           path: |
@@ -93,10 +94,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
