@@ -88,11 +88,6 @@
                                         (state/pub-event!
                                          [:modal/remote-encryption-input-pw-dialog current-repo current-graph
                                           :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
-          (and graph-txid-exists? idle?)
-          (concat
-           [{:title [:strong "Save now"]
-             :options {:on-click
-                       #(as/offer! fs-sync/immediately-local->remote-chan true)}}])
           graph-txid-exists?
           (concat
            (map (fn [f] {:title [:div.file-item f]
@@ -107,7 +102,14 @@
                           (take 10 (:history sync-state))))))
 
         {:links-header
-         [:strong.debug-status (str status)]}))]))
+         [:div.p-4
+          (when (and graph-txid-exists? queuing?)
+            (ui/button "Sync now"
+              :class "block"
+              :small? true
+              :on-click #(as/offer! fs-sync/immediately-local->remote-chan true)))
+          (when config/dev?
+            [:strong.debug-status (str status)])]}))]))
 
 (rum/defc pick-local-graph-for-sync [graph]
   (rum/use-effect!
