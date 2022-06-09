@@ -90,7 +90,7 @@
                                           :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
           (and graph-txid-exists? idle?)
           (concat
-           [{:title [:strong "Save files now"]
+           [{:title [:strong "Save now"]
              :options {:on-click
                        #(as/offer! fs-sync/immediately-local->remote-chan true)}}])
           graph-txid-exists?
