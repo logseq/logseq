@@ -618,7 +618,7 @@
 
 (defn loading
   [content]
-  [:div.flex.flex-row.items-center
+  [:div.flex.flex-row.items-center.inline
    [:span.icon.flex.items-center svg/loading]
    [:span.text.pl-2 content]])
 

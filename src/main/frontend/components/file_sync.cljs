@@ -97,6 +97,7 @@
            [{:title   [:strong "Save now"]
              :options {:on-click
                        #(as/offer! fs-sync/immediately-local->remote-chan true)}}])
+
           graph-txid-exists?
           (concat
            (map (fn [f] {:title [:div.file-item f]
@@ -111,7 +112,16 @@
                           (take 10 (:history sync-state))))))
 
         {:links-header
-         [:strong.debug-status (str status)]}))]))
+         [:<>
+          (when (and graph-txid-exists? queuing?)
+            [:div.px-2.py-1
+             (ui/button "Sync now"
+                        :class "block"
+                        :small? true
+                        :on-click #(as/offer! fs-sync/immediately-local->remote-chan true))])
+          (when config/dev?
+            [:strong.debug-status (str status)])]
+         }))]))
 
 (rum/defc pick-local-graph-for-sync [graph]
   (rum/use-effect!
@@ -200,7 +210,7 @@
        [:div.p-4 (ui/loading "Loading...")]
        (for [version version-files]
          (let [version-uuid (get-version-key version)
-               _local?       (some? (:relative-path version))]
+               _local?      (some? (:relative-path version))]
            [:div.version-list-item {:key version-uuid}
             [:a.item-link.block
              {:title    version-uuid

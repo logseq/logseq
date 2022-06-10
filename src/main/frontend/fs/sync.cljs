@@ -819,7 +819,7 @@
 
 (defn- add-new-version-file
   [repo path content]
-  (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content)))
+  (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))
 
 (defn- is-journals-or-pages?
   [filetxn]
