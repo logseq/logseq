@@ -1,7 +1,9 @@
-import type { TLDocumentModel, TLShapeConstructor } from '@tldraw/core'
+import { BoundsUtils, TLDocumentModel, TLShapeConstructor } from '@tldraw/core'
 import React from 'react'
 import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
+
+const SVG_EXPORT_PADDING = 16
 
 const ShapesMap = new Map(shapes.map(shape => [shape.id, shape]))
 
@@ -29,9 +31,17 @@ export class WhiteboardPreview {
   }
 
   getPreview() {
-    // TODO: translate each shape to where it should be
+    const commonBounds = BoundsUtils.getCommonBounds(
+      this.shapes?.map(s => s.getRotatedBounds()) ?? []
+    )
+
+    if (!commonBounds) {
+      return null
+    }
+
     return (
       <svg
+        xmlns="http://www.w3.org/2000/svg"
         style={{
           pointerEvents: 'none',
           height: '100%',
@@ -41,18 +51,37 @@ export class WhiteboardPreview {
           position: 'fixed',
           border: '1px solid black',
           transformOrigin: 'bottom right',
-          transform: 'scale(0.2)',
+          // transform: 'scale(0.5)',
         }}
+        viewBox={[
+          0,
+          0,
+          commonBounds.width + SVG_EXPORT_PADDING * 2,
+          commonBounds.height + SVG_EXPORT_PADDING * 2,
+        ].join(' ')}
       >
         {this.shapes?.map(s => {
           const {
             bounds,
             props: { rotation },
           } = s
-          const transformStr = `translate(${bounds.minX}px, ${bounds.minY}px)
-                                rotate(${(rotation ?? 0) + (bounds.rotation ?? 0)}rad)`
+          const [tx, ty] = [
+            (SVG_EXPORT_PADDING + bounds.minX - commonBounds.minX).toFixed(2),
+            (SVG_EXPORT_PADDING + bounds.minY - commonBounds.minY).toFixed(2),
+          ]
+          const r = +((rotation ?? 0) + (bounds.rotation ?? 0)).toFixed(2)
+          const transformArr = [`translate(${tx}px, ${ty}px)`]
+
+          if (r) {
+            const [dx, dy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
+            transformArr.push(
+              `translate(${dx}px, ${dy}px)`,
+              `rotate(${r}rad)`,
+              `translate(-${dx}px, -${dy}px)`
+            )
+          }
           return (
-            <g style={{ transform: transformStr }} key={s.id}>
+            <g style={{ transform: transformArr.join(' ') }} key={s.id}>
               {s.getShapeSVGJsx()}
             </g>
           )
