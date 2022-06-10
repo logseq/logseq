@@ -32,9 +32,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     pageId: '',
   }
 
+  hideRotateHandle = true
   canChangeAspectRatio = true
   canFlip = true
   canActivate = true
+  canEdit = true
 
   ReactContextBar = observer(() => {
     const { pageId } = this.props

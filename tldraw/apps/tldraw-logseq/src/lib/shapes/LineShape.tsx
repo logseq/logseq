@@ -128,7 +128,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       return offset
     }, [bounds, scale, midPoint])
     return (
-      <>
+      <g>
         <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
         <path
           mask={label ? `url(#${id}_clip)` : ``}
@@ -151,7 +151,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             fill="transparent"
           />
         )}
-      </>
+      </g>
     )
   })
 

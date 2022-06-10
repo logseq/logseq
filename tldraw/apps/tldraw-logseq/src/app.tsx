@@ -5,29 +5,14 @@ import {
   AppCanvas,
   AppProvider,
   TLReactCallbacks,
-  TLReactComponents,
-  TLReactShapeConstructor,
-  TLReactToolConstructor,
+  TLReactComponents, TLReactToolConstructor
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
 import { ContextBar } from '~components/ContextBar/ContextBar'
 import { useFileDrop } from '~hooks/useFileDrop'
 import { LogseqContext } from '~lib/logseq-context'
-import {
-  BoxShape,
-  DotShape,
-  EllipseShape,
-  HighlighterShape,
-  ImageShape,
-  LineShape,
-  LogseqPortalShape,
-  PenShape,
-  PolygonShape,
-  Shape,
-  TextShape,
-  YouTubeShape,
-} from '~lib/shapes'
+import { Shape, shapes } from '~lib/shapes'
 import {
   BoxTool,
   DotTool,
@@ -39,26 +24,12 @@ import {
   PenTool,
   PolygonTool,
   TextTool,
-  YouTubeTool,
+  YouTubeTool
 } from '~lib/tools'
 
 const components: TLReactComponents<Shape> = {
   ContextBar: ContextBar,
 }
-
-const shapes: TLReactShapeConstructor<Shape>[] = [
-  BoxShape,
-  DotShape,
-  EllipseShape,
-  HighlighterShape,
-  ImageShape,
-  LineShape,
-  PenShape,
-  PolygonShape,
-  TextShape,
-  YouTubeShape,
-  LogseqPortalShape,
-]
 
 const tools: TLReactToolConstructor<Shape>[] = [
   BoxTool,

@@ -1,14 +1,15 @@
-import type { BoxShape } from './BoxShape'
-import type { DotShape } from './DotShape'
-import type { EllipseShape } from './EllipseShape'
-import type { HighlighterShape } from './HighlighterShape'
-import type { ImageShape } from './ImageShape'
-import type { LineShape } from './LineShape'
-import type { PenShape } from './PenShape'
-import type { PolygonShape } from './PolygonShape'
-import type { TextShape } from './TextShape'
-import type { YouTubeShape } from './YouTubeShape'
-import type { LogseqPortalShape } from './LogseqPortalShape';
+import { BoxShape } from './BoxShape'
+import { DotShape } from './DotShape'
+import { EllipseShape } from './EllipseShape'
+import { HighlighterShape } from './HighlighterShape'
+import { ImageShape } from './ImageShape'
+import { LineShape } from './LineShape'
+import { PenShape } from './PenShape'
+import { PolygonShape } from './PolygonShape'
+import { TextShape } from './TextShape'
+import { YouTubeShape } from './YouTubeShape'
+import { LogseqPortalShape } from './LogseqPortalShape'
+import type { TLReactShapeConstructor } from '@tldraw/react'
 
 export type Shape =
   | BoxShape
@@ -35,3 +36,17 @@ export * from './PolygonShape'
 export * from './TextShape'
 export * from './YouTubeShape'
 export * from './LogseqPortalShape'
+
+export const shapes: TLReactShapeConstructor<Shape>[] = [
+  BoxShape,
+  DotShape,
+  EllipseShape,
+  HighlighterShape,
+  ImageShape,
+  LineShape,
+  PenShape,
+  PolygonShape,
+  TextShape,
+  YouTubeShape,
+  LogseqPortalShape,
+]

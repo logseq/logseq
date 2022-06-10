@@ -31,8 +31,6 @@ export interface TLShapeProps {
   scale?: number[]
   rotation?: number
   handles?: Record<string, TLHandle>
-  label?: string
-  labelPosition?: number[]
   clipping?: number | number[]
   assetId?: string
   children?: string[]
@@ -329,5 +327,22 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
       point: Vec.add(initialShape.point, topLeft),
       handles: nextHandles,
     })
+  }
+
+  /**
+   * Get a svg group element that can be used to render the shape with only the props data. In the
+   * base, draw any shape as a box. Can be overridden by subclasses.
+   */
+  getShapeSVGJsx() {
+    // Do not need to consider the original point here
+    const bounds = this.getBounds()
+    return (
+      <rect
+        fill="var(--tl-foreground)"
+        fillOpacity={0.2}
+        width={bounds.width}
+        height={bounds.height}
+      />
+    )
   }
 }

@@ -67,6 +67,7 @@
 .logseq-tldraw .statusbar {
   position: absolute;
   font-family: monospace;
+  font-size: 10px;
   bottom: 0;
   grid-row: 3;
   width: 100%;
