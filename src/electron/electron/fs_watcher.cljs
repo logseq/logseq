@@ -44,51 +44,54 @@
 
 (defn watch-dir!
   "Watch a directory if no such file watcher exists"
-  [_win dir]
-  (when (and (fs/existsSync dir)
-             (not (get @*file-watcher dir)))
-    (let [watcher-opts (clj->js
-                        {:ignored (fn [path]
-                                    (utils/ignored-path? dir path))
-                         :ignoreInitial false
-                         :ignorePermissionErrors true
-                         :interval polling-interval
-                         :binaryInterval polling-interval
-                         :persistent true
-                         :disableGlobbing true
-                         :usePolling false
-                         :awaitWriteFinish true})
-          dir-watcher (.watch watcher dir watcher-opts)
-          watcher-del-f #(.close dir-watcher)]
-      (swap! *file-watcher assoc dir [dir-watcher watcher-del-f])
-      ;; TODO: batch sender
-      (.on dir-watcher "unlinkDir"
-           (fn [path]
-             (when (= dir path)
-               (publish-file-event! dir dir "unlinkDir"))))
-      (.on dir-watcher "addDir"
-           (fn [path]
-             (when (= dir path)
-               (publish-file-event! dir dir "addDir"))))
-      (.on dir-watcher "add"
-           (fn [path]
-             (publish-file-event! dir path "add")))
-      (.on dir-watcher "change"
-           (fn [path]
-             (publish-file-event! dir path "change")))
-      (.on dir-watcher "unlink"
-           (fn [path]
-             (publish-file-event! dir path "unlink")))
-      (.on dir-watcher "error"
-           (fn [path]
-             (println "Watch error happened: "
-                      {:path path})))
+  [dir]
+  (when-not (get @*file-watcher dir)
+    (if (fs/existsSync dir)
+      (let [watcher-opts (clj->js
+                          {:ignored (fn [path]
+                                      (utils/ignored-path? dir path))
+                           :ignoreInitial false
+                           :ignorePermissionErrors true
+                           :interval polling-interval
+                           :binaryInterval polling-interval
+                           :persistent true
+                           :disableGlobbing true
+                           :usePolling false
+                           :awaitWriteFinish true})
+            dir-watcher (.watch watcher dir watcher-opts)
+            watcher-del-f #(.close dir-watcher)]
+        (swap! *file-watcher assoc dir [dir-watcher watcher-del-f])
+        ;; TODO: batch sender
+        (.on dir-watcher "unlinkDir"
+             (fn [path]
+               (when (= dir path)
+                 (publish-file-event! dir dir "unlinkDir"))))
+        (.on dir-watcher "addDir"
+             (fn [path]
+               (when (= dir path)
+                 (publish-file-event! dir dir "addDir"))))
+        (.on dir-watcher "add"
+             (fn [path]
+               (publish-file-event! dir path "add")))
+        (.on dir-watcher "change"
+             (fn [path]
+               (publish-file-event! dir path "change")))
+        (.on dir-watcher "unlink"
+             (fn [path]
+               (publish-file-event! dir path "unlink")))
+        (.on dir-watcher "error"
+             (fn [path]
+               (println "Watch error happened: "
+                        {:path path})))
 
-      ;; electron app extends `EventEmitter`
-      ;; TODO check: duplicated with the logic in "window-all-closed" ?
-      (.on app "quit" watcher-del-f)
+        ;; electron app extends `EventEmitter`
+        ;; TODO check: duplicated with the logic in "window-all-closed" ?
+        (.on app "quit" watcher-del-f)
 
-      true)))
+        true)
+      ;; retry if the `dir` not exists, which is useful when a graph's folder is
+      ;; back after refreshing the window
+      (js/setTimeout #(watch-dir! dir) 5000))))
 
 (defn close-watcher!
   "If no `dir` provided, close all watchers;

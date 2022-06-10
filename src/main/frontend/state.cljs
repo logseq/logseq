@@ -1699,3 +1699,7 @@
   [repo]
   (:feature/enable-encryption?
    (get (sub-config) repo)))
+
+(defn unlinked-dir?
+  [dir]
+  (contains? (:file/unlinked-dirs @state) dir))
