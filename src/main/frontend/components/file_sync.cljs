@@ -179,7 +179,7 @@
     (pick-local-graph-for-sync graph)))
 
 (rum/defc page-history-list
-  [graph-uuid page-entity set-page]
+  [graph-uuid page-entity set-list-ready? set-page]
 
   (let [[version-files set-version-files] (rum/use-state nil)
         [current-page set-current-page] (rum/use-state nil)
@@ -200,7 +200,8 @@
            (try
              (let [files (as/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
                (set-version-files files)
-               (set-page-fn (first files)))
+               (set-page-fn (first files))
+               (set-list-ready? true))
              (finally (set-loading? false)))))
        #())
      [])
@@ -236,18 +237,19 @@
         file-uuid       (:FileUUID selected-page)
         version-uuid    (:VersionUUID selected-page)
         [version-content set-version-content] (rum/use-state nil)
-        [ready? set-ready?] (rum/use-state false)
+        [list-ready? set-list-ready?] (rum/use-state false)
+        [content-ready? set-content-ready?] (rum/use-state false)
         *ref-contents   (rum/use-ref (atom {}))]
 
     (rum/use-effect!
      #(when selected-page
-        (set-ready? false)
+        (set-content-ready? false)
         (let [k               (get-version-key selected-page)
               loaded-contents @(rum/deref *ref-contents)]
           (if (contains? loaded-contents k)
             (do
               (set-version-content (get loaded-contents k))
-              (js/setTimeout (fn [] (set-ready? true)) 100))
+              (js/setTimeout (fn [] (set-content-ready? true)) 100))
 
             ;; without cache
             (let [load-file (fn [repo-url file]
@@ -255,7 +257,7 @@
                                   (p/then
                                    (fn [content]
                                      (set-version-content content)
-                                     (set-ready? true)
+                                     (set-content-ready? true)
                                      (swap! (rum/deref *ref-contents) assoc k content)))))]
               (if (and file-uuid version-uuid)
                 ;; read remote content
@@ -270,18 +272,20 @@
      [selected-page])
 
     [:div.cp__file-sync-page-histories.flex-wrap
-     [:h1.absolute.w-full.top-0.left-0.text-xl.px-4.py-4.leading-4
+     {:class (util/classnames [{:is-list-ready list-ready?}])}
+
+     [:h1.absolute.top-0.left-0.text-xl.px-4.py-4.leading-4
       (ui/icon "history") " History versions of <" page-name "> page"]
 
      ;; history versions
      [:div.cp__file-sync-page-histories-left.flex-wrap
       ;; sidebar lists
-      (page-history-list graph-uuid page-entity set-selected-page)
+      (page-history-list graph-uuid page-entity set-list-ready? set-selected-page)
 
       ;; content detail
       [:article
        (when-let [inst-id (and selected-page (get-version-key selected-page))]
-         (if ready?
+         (if content-ready?
            (lazy-editor/editor
             nil inst-id {:data-lang "markdown"}
             version-content {:lineWrapping true :readOnly true})
@@ -290,8 +294,11 @@
 
      ;; current version
      [:div.cp__file-sync-page-histories-right
+      (page/page-blocks-cp (state/get-current-repo) page-entity nil)]
 
-      (page/page-blocks-cp (state/get-current-repo) page-entity nil)]]))
+     ;; ready loading
+     [:div.flex.items-center.h-full.justify-center.w-full.absolute.ready-loading
+      (ui/loading "Loading...")]]))
 
 (defn pick-page-histories-panel [graph-uuid page-name]
   (fn []
