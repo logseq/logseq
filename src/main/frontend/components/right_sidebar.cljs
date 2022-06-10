@@ -24,7 +24,7 @@
   []
   (when-not (util/mobile?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
-      [:a.button.fade-link.toggle-right-sidebar
+      [:button.button.icon.fade-link.toggle-right-sidebar
        {:on-click ui-handler/toggle-right-sidebar!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
@@ -197,15 +197,15 @@
 
      (sidebar-resizer)
      [:div.cp__right-sidebar-scrollable
-      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
-       [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
-        [:div.ml-4.text-sm
-         [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-4.h-12
+       [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
+        [:div.text-sm
+         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
 
-        [:div.ml-4.text-sm
-         [:a.cp__right-sidebar-settings-btn {:on-click (fn []
+        [:div.text-sm
+         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
                                                          (when-let [page (get-current-page)]
                                                            (state/sidebar-add-block!
                                                             repo
@@ -213,13 +213,12 @@
                                                             :page-graph)))}
           (t :right-side-bar/page)]]
 
-        [:div.ml-4.text-sm
-         [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+        [:div.text-sm
+         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                          (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]]
 
-       [:div.flex.align-items {:style {:z-index 999
-                                       :margin-right 2}}
+       [:div
         (toggle)]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing

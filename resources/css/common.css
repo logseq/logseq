@@ -808,6 +808,14 @@ li p:last-child,
   border-right-color: var(--ls-border-color, #ccc);
 }
 
+i.ti {
+  /*
+  compensates the wrong top spacing in the iconfont.
+  See https://github.com/tabler/tabler-icons/issues/118/
+  */
+  transform: translateY(-1px);
+}
+
 .dnd-separator {
   border-bottom: 3px solid #ccc;
 }
