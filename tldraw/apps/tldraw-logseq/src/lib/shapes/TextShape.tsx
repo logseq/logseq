@@ -269,4 +269,11 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     })
     return this
   }
+
+  getShapeSVGJsx() {
+    const {
+      props: { text, stroke },
+    } = this
+    return <text stroke={stroke} fill={stroke}>{text}</text>
+  }
 }

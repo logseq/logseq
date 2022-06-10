@@ -1,11 +1,5 @@
-import {
-  BoundsUtils,
-  TLBounds,
-  TLDocumentModel,
-  TLShapeConstructor,
-  TLViewport,
-} from '@tldraw/core'
-import React from 'react'
+import { BoundsUtils, TLDocumentModel, TLShapeConstructor, TLViewport } from '@tldraw/core'
+import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
 
 const SVG_EXPORT_PADDING = 16
@@ -35,7 +29,7 @@ export class WhiteboardPreview {
     })
   }
 
-  getPreview(viewport?: TLViewport) {
+  getSvg(viewport?: TLViewport) {
     const allBounds = [...(this.shapes ?? [])?.map(s => s.getRotatedBounds())]
     const vBounds = viewport?.currentView
     if (vBounds) {
@@ -48,11 +42,8 @@ export class WhiteboardPreview {
 
     commonBounds = BoundsUtils.expandBounds(commonBounds, SVG_EXPORT_PADDING)
 
-    if (viewport) {
-      // make sure commonBounds is of ratio 4/3 when having a viewport
-      commonBounds = BoundsUtils.ensureRatio(commonBounds, 4 / 3)
-    }
-
+    // make sure commonBounds is of ratio 4/3 (should we have another ratio setting?)
+    commonBounds = BoundsUtils.ensureRatio(commonBounds, 4 / 3)
 
     const translatePoint = (p: [number, number]): [string, string] => {
       return [(p[0] - commonBounds.minX).toFixed(2), (p[1] - commonBounds.minY).toFixed(2)]
@@ -84,7 +75,7 @@ export class WhiteboardPreview {
           <rect
             fill="transparent"
             stroke="#500"
-            strokeWidth={4 / viewport.camera.zoom}
+            strokeWidth={16 / Math.sqrt(viewport.camera.zoom)}
             transform={`translate(${vx}, ${vy})`}
             width={vBounds.width}
             height={vBounds.height}
@@ -92,7 +83,15 @@ export class WhiteboardPreview {
         )}
       </svg>
     )
+    return svgElement
+  }
 
+  getExportedSVG() {
+    const svgElement = this.getSvg()
+    return svgElement ? ReactDOMServer.renderToString(svgElement) : ''
+  }
+
+  getPreview(viewport?: TLViewport) {
     return (
       <div
         style={{
@@ -105,7 +104,7 @@ export class WhiteboardPreview {
           border: '1px solid black',
         }}
       >
-        {svgElement}
+        {this.getSvg(viewport)}
       </div>
     )
   }

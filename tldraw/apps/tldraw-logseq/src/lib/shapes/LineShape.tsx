@@ -46,9 +46,6 @@ export class LineShape extends TLLineShape<LineShapeProps> {
   ReactComponent = observer(({ events, isErasing, isEditing, onEditingEnd }: TLComponentProps) => {
     const {
       stroke,
-      fill,
-      strokeWidth,
-      decorations,
       handles: { start, end },
       opacity,
       label,
@@ -90,17 +87,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
         <SVGContainer opacity={isErasing ? 0.2 : opacity} id={id + '_svg'}>
           <LabelMask id={id} bounds={bounds} labelSize={labelSize} offset={offset} scale={scale} />
           <g pointerEvents="none" mask={label || isEditing ? `url(#${id}_clip)` : ``}>
-            <Arrow
-              style={{
-                stroke,
-                fill,
-                strokeWidth,
-              }}
-              start={start.point}
-              end={end.point}
-              decorationStart={decorations?.start}
-              decorationEnd={decorations?.end}
-            />
+            {this.getShapeSVGJsx()}
           </g>
         </SVGContainer>
       </div>
@@ -157,5 +144,28 @@ export class LineShape extends TLLineShape<LineShapeProps> {
 
   validateProps = (props: Partial<LineShapeProps>) => {
     return withClampedStyles(props)
+  }
+
+  getShapeSVGJsx() {
+    const {
+      stroke,
+      fill,
+      strokeWidth,
+      decorations,
+      handles: { start, end },
+    } = this.props
+    return (
+      <Arrow
+        style={{
+          stroke,
+          fill,
+          strokeWidth,
+        }}
+        start={start.point}
+        end={end.point}
+        decorationStart={decorations?.start}
+        decorationEnd={decorations?.end}
+      />
+    )
   }
 }

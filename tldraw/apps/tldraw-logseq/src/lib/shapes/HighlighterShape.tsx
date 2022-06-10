@@ -68,4 +68,23 @@ export class HighlighterShape extends TLDrawShape<HighlighterShapeProps> {
     if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
     return props
   }
+
+  getShapeSVGJsx() {
+    const {
+      pointsPath,
+      props: { stroke, strokeWidth },
+    } = this
+    return (
+      <path
+        d={pointsPath}
+        strokeWidth={strokeWidth * 16}
+        stroke={stroke}
+        fill="none"
+        pointerEvents="all"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        opacity={0.5}
+      />
+    )
+  }
 }
