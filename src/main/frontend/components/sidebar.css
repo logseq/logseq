@@ -428,7 +428,6 @@ html[data-theme='dark'] {
 
   &-settings {
     @apply flex flex-row;
-    margin: -15px;
     margin-bottom: 0;
     margin-top: 0;
     overflow: auto;
