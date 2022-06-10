@@ -1,6 +1,11 @@
-import { BoundsUtils, TLDocumentModel, TLShapeConstructor } from '@tldraw/core'
+import {
+  BoundsUtils,
+  TLBounds,
+  TLDocumentModel,
+  TLShapeConstructor,
+  TLViewport,
+} from '@tldraw/core'
 import React from 'react'
-import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
 
 const SVG_EXPORT_PADDING = 16
@@ -30,63 +35,78 @@ export class WhiteboardPreview {
     })
   }
 
-  getPreview() {
-    const commonBounds = BoundsUtils.getCommonBounds(
-      this.shapes?.map(s => s.getRotatedBounds()) ?? []
-    )
-
+  getPreview(viewport?: TLViewport) {
+    const allBounds = [...(this.shapes ?? [])?.map(s => s.getRotatedBounds())]
+    const vBounds = viewport?.currentView
+    if (vBounds) {
+      allBounds.push(vBounds)
+    }
+    let commonBounds = BoundsUtils.getCommonBounds(allBounds)
     if (!commonBounds) {
       return null
     }
 
-    return (
+    commonBounds = BoundsUtils.expandBounds(commonBounds, SVG_EXPORT_PADDING)
+
+    if (viewport) {
+      // make sure commonBounds is of ratio 4/3 when having a viewport
+      commonBounds = BoundsUtils.ensureRatio(commonBounds, 4 / 3)
+    }
+
+
+    const translatePoint = (p: [number, number]): [string, string] => {
+      return [(p[0] - commonBounds.minX).toFixed(2), (p[1] - commonBounds.minY).toFixed(2)]
+    }
+
+    const [vx, vy] = vBounds ? translatePoint([vBounds.minX, vBounds.minY]) : [0, 0]
+
+    const svgElement = commonBounds && (
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        style={{
-          pointerEvents: 'none',
-          height: '100%',
-          width: '100%',
-          bottom: 0,
-          right: 0,
-          position: 'fixed',
-          border: '1px solid black',
-          transformOrigin: 'bottom right',
-          // transform: 'scale(0.5)',
-        }}
-        viewBox={[
-          0,
-          0,
-          commonBounds.width + SVG_EXPORT_PADDING * 2,
-          commonBounds.height + SVG_EXPORT_PADDING * 2,
-        ].join(' ')}
+        viewBox={[0, 0, commonBounds.width, commonBounds.height].join(' ')}
       >
         {this.shapes?.map(s => {
           const {
             bounds,
             props: { rotation },
           } = s
-          const [tx, ty] = [
-            (SVG_EXPORT_PADDING + bounds.minX - commonBounds.minX).toFixed(2),
-            (SVG_EXPORT_PADDING + bounds.minY - commonBounds.minY).toFixed(2),
-          ]
-          const r = +((rotation ?? 0) + (bounds.rotation ?? 0)).toFixed(2)
-          const transformArr = [`translate(${tx}px, ${ty}px)`]
-
-          if (r) {
-            const [dx, dy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
-            transformArr.push(
-              `translate(${dx}px, ${dy}px)`,
-              `rotate(${r}rad)`,
-              `translate(-${dx}px, -${dy}px)`
-            )
-          }
+          const [tx, ty] = translatePoint([bounds.minX, bounds.minY])
+          const r = +((((rotation ?? 0) + (bounds.rotation ?? 0)) * 180) / Math.PI).toFixed(2)
+          const [rdx, rdy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
+          const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
           return (
-            <g style={{ transform: transformArr.join(' ') }} key={s.id}>
+            <g transform={transformArr.join(' ')} key={s.id}>
               {s.getShapeSVGJsx()}
             </g>
           )
         })}
+        {vBounds && (
+          <rect
+            fill="transparent"
+            stroke="#500"
+            strokeWidth={4 / viewport.camera.zoom}
+            transform={`translate(${vx}, ${vy})`}
+            width={vBounds.width}
+            height={vBounds.height}
+          />
+        )}
       </svg>
+    )
+
+    return (
+      <div
+        style={{
+          pointerEvents: 'none',
+          height: '300px',
+          width: '400px',
+          top: '16px',
+          left: '16px',
+          position: 'fixed',
+          border: '1px solid black',
+        }}
+      >
+        {svgElement}
+      </div>
     )
   }
 }

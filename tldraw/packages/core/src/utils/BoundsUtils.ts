@@ -852,4 +852,19 @@ left past the initial left edge) then swap points on that axis.
 
     return { offset, snapLines }
   }
+
+  static ensureRatio(bounds: TLBounds, ratio: number): TLBounds {
+    const { width, height } = bounds
+
+    const newBounds = { ...bounds }
+
+    if (width / height < ratio) {
+      newBounds.width = height * ratio
+      newBounds.maxX += width - bounds.width
+    } else {
+      newBounds.height = width / ratio
+      newBounds.maxY += height - bounds.height
+    }
+    return newBounds
+  }
 }

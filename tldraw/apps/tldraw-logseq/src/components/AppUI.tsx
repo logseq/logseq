@@ -14,8 +14,11 @@ export const AppUI = observer(function AppUI() {
 
   const preview = React.useMemo(() => {
     const WP = new WhiteboardPreview(app.serialized)
-    return WP.getPreview()
-  }, [app.serialized])
+    return WP.getPreview(app.viewport)
+  }, [
+    app.serialized,
+    app.viewport.camera.point,
+  ])
 
   return (
     <>
