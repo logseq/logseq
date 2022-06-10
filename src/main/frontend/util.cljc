@@ -1107,7 +1107,6 @@
              (do (async/onto-chan! ch coll false)
                  (flush-fn coll)
                  (drain-chan flush-now-ch*)
-                 (when (= max-duration 20000) (println :ratelimit flush-now timeout))
                  (recur (async/timeout max-duration) []))
 
              (some? e)
