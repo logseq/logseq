@@ -167,6 +167,10 @@
   [dir]
   (protocol/watch-dir! (get-record) dir))
 
+(defn unwatch-dir!
+  [dir]
+  (protocol/unwatch-dir! (get-record) dir))
+
 (defn mkdir-if-not-exists
   [dir]
   (->
