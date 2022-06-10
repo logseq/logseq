@@ -1560,8 +1560,8 @@
                      (if collapsed?
                        (editor-handler/expand-block! uuid)
                        (editor-handler/collapse-block! uuid))))}
-      [:span {:class (if (or collapsed?
-                             (and control-show?
+      [:span {:class (if (and control-show?
+                              (or collapsed?
                                   (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
