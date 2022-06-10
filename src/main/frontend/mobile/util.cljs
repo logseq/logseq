@@ -1,5 +1,6 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
+            ["@capacitor/filesystem" :refer [Directory Encoding]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
             [clojure.string :as string]
             [promesa.core :as p]))
@@ -93,3 +94,25 @@
     (when (:isZoomed is-zoomed?)
       (let [^js cl (.-classList js/document.documentElement)]
         (.add cl "is-zoomed-native-ios")))))
+
+(defn iCloud-container-path?
+  "Check whether `path' is logseq's iCloud container path on iOS"
+  [path]
+  (string/includes? path "iCloud~com~logseq~logseq"))
+
+(defn handle-fs-opts
+  ([path]
+   (handle-fs-opts path false))
+  ([path encoding?]
+   (when-not (string/blank? path)
+     (let [relative-path (when-not (and (native-ios?)
+                                        (iCloud-container-path? path))
+                           (last (string/split path #"Application/[0-9\w-]+/Documents/")))
+           opts (if relative-path
+                  {:path (some-> relative-path
+                                 js/decodeURI)
+                   :directory (.-Documents Directory)}
+                  {:path path})]
+       (if encoding?
+         (merge opts {:encoding (.-UTF8 Encoding)})
+         opts)))))

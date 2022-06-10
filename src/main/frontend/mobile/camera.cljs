@@ -1,15 +1,16 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
             ["@capacitor/filesystem" :refer [Filesystem]]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.state :as state]
-            [frontend.date :as date]
-            [frontend.util :as util]
             [frontend.commands :as commands]
+            [frontend.date :as date]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.object :as gobj]
-            [frontend.util.cursor :as cursor]))
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn- save-photo []
   (p/let [photo (p/catch
@@ -24,9 +25,10 @@
           filename (str (date/get-date-time-string-2) ".jpeg")
           path (editor-handler/get-asset-path filename)
           _file (p/catch
-                    (.writeFile Filesystem (clj->js {:data (.-base64String photo)
-                                                     :path path
-                                                     :recursive true}))
+                    (.writeFile Filesystem (clj->js (merge
+                                                     (mobile-util/handle-fs-opts path)
+                                                     {:data (.-base64String photo)
+                                                      :recursive true})))
                     (fn [error]
                       (log/error :file/write-failed {:path path
                                                      :error error})))]

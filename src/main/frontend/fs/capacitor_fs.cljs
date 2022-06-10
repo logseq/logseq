@@ -1,16 +1,16 @@
 (ns frontend.fs.capacitor-fs
-  (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+  (:require ["@capacitor/filesystem" :refer [Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.encrypt :as encrypt]))
+            [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -26,6 +26,7 @@
       (p/do!
        (.requestPermissions Filesystem)))))
 
+
 (defn- clean-uri
   [uri]
   (when (string? uri)
@@ -35,9 +36,7 @@
   [path]
   (when-not (string/blank? path)
     (.readFile Filesystem
-               (clj->js
-                {:path path
-                 :encoding (.-UTF8 Encoding)}))))
+               (clj->js (mobile-util/handle-fs-opts path true)))))
 
 (defn readdir
   "readdir recursively"
@@ -47,7 +46,7 @@
                    (if (empty? dirs)
                      result
                      (p/let [d (first dirs)
-                             files (.readdir Filesystem (clj->js {:path d}))
+                             files (.readdir Filesystem (clj->js (mobile-util/handle-fs-opts d)))
                              files (-> files
                                        js->clj
                                        (get "files" []))
@@ -69,7 +68,7 @@
                                                (mapv
                                                 (fn [file]
                                                   (p/chain
-                                                   (.stat Filesystem (clj->js {:path file}))
+                                                   (.stat Filesystem (clj->js (mobile-util/handle-fs-opts file)))
                                                    #(js->clj % :keywordize-keys true)))
                                                 files))
                              files-dir (->> files-with-stats
@@ -111,10 +110,10 @@
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
     (p/catch
-     (p/let [result (.writeFile Filesystem (clj->js {:path path
-                                                     :data content
-                                                     :encoding (.-UTF8 Encoding)
-                                                     :recursive true}))]
+        (p/let [result (.writeFile Filesystem
+                                   (clj->js (merge (mobile-util/handle-fs-opts path true)
+                                                   {:data content
+                                                    :recursive true})))]
        (when ok-handler
          (ok-handler repo path result)))
      (fn [error]
@@ -145,10 +144,9 @@
 
         :else
         (->
-         (p/let [result (.writeFile Filesystem (clj->js {:path path
-                                                         :data content
-                                                         :encoding (.-UTF8 Encoding)
-                                                         :recursive true}))]
+         (p/let [result (.writeFile Filesystem (clj->js (merge (mobile-util/handle-fs-opts path true)
+                                                              {:data content
+                                                               :recursive true})))]
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
                              content)]
@@ -184,11 +182,6 @@
   [path localDocumentsPath]
   (string/includes? path localDocumentsPath))
 
-(defn- iCloud-container-path?
-  "Check whether `path' is logseq's iCloud container path on iOS"
-  [path]
-  (string/includes? path "iCloud~com~logseq~logseq"))
-
 (rum/defc instruction
   []
   [:div.instruction
@@ -211,17 +204,14 @@
   (mkdir! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
-                            {:path dir
-                             ;; :directory (.-ExternalStorage Directory)
-                             }))]
+                            (mobile-util/handle-fs-opts dir)))]
       (js/console.log result)
       result))
   (mkdir-recur! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
-                            {:path dir
-                             ;; :directory (.-ExternalStorage Directory)
-                             :recursive true}))]
+                            (merge (mobile-util/handle-fs-opts dir)
+                                   {:recursive true})))]
       (js/console.log result)
       result))
   (readdir [_this dir]                  ; recursive
@@ -246,7 +236,7 @@
       (p/catch
        (p/let [result (.deleteFile Filesystem
                                    (clj->js
-                                    {:path path}))]
+                                    (mobile-util/handle-fs-opts path)))]
          (when ok-handler
            (ok-handler repo path result)))
        (fn [error]
@@ -256,7 +246,7 @@
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
-                    (.stat Filesystem (clj->js {:path path}))
+                    (.stat Filesystem (clj->js (mobile-util/handle-fs-opts path)))
                     (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
@@ -271,9 +261,7 @@
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
-                                        {:path path
-                                         ;; :directory (.-ExternalStorage Directory)
-                                         }))]
+                                        (mobile-util/handle-fs-opts path)))]
         result)))
   (open-dir [_this _ok-handler]
     (p/let [_    (when (= (mobile-util/platform) "android") (check-permission-android))
@@ -283,13 +271,16 @@
             _ (when (mobile-util/native-ios?)
                 (cond
                   (not (or (local-container-path? path localDocumentsPath)
-                           (iCloud-container-path? path)))
+                           (mobile-util/iCloud-container-path? path)))
                   (state/pub-event! [:modal/show-instruction])
 
-                  (iCloud-container-path? path)
+                  (mobile-util/iCloud-container-path? path)
                   (mobile-util/sync-icloud-repo path)
 
                   :else nil))
+            path (if (local-container-path? path localDocumentsPath)
+                   (string/replace path "private/" "")
+                   path)
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))

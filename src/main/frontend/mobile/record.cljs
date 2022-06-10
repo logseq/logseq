@@ -8,7 +8,8 @@
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn request-audio-recording-permission []
   (p/then
@@ -49,9 +50,10 @@
           format (or (:block/format edit-block) (db/get-page-format page))
           path (editor-handler/get-asset-path filename)
           _file (p/catch
-                 (.writeFile Filesystem (clj->js {:data database64
-                                                  :path path
-                                                  :recursive true}))
+                 (.writeFile Filesystem (clj->js (merge
+                                                  (mobile-util/handle-fs-opts path)
+                                                  {:data database64
+                                                   :recursive true})))
                  (fn [error]
                    (log/error :file/write-failed {:path path
                                                   :error error})))
