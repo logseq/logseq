@@ -386,7 +386,7 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:

@@ -8,7 +8,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.notification :as notification]
             [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
