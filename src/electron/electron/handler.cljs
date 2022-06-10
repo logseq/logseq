@@ -395,6 +395,10 @@
   (when dir
     (watcher/watch-dir! dir)))
 
+(defmethod handle :unwatchDir [^js _window [_ dir]]
+  (when dir
+    (watcher/close-watcher! dir)))
+
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"
   []

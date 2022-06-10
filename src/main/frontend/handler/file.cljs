@@ -258,6 +258,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
+      (fs/unwatch-dir! dir)
       (fs/watch-dir! dir))))
 
 (defn create-metadata-file
