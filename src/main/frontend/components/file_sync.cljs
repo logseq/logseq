@@ -5,12 +5,16 @@
             [frontend.handler.notification :as notifications]
             [frontend.ui :as ui]
             [frontend.handler.page :as page-handler]
+            [frontend.components.page :as page]
             [promesa.core :as p]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.util :as util]
+            [frontend.db.model :as db-model]
+            [frontend.components.lazy-editor :as lazy-editor]
             [rum.core :as rum]
+            [cljs-time.coerce :as tc]
             [electron.ipc :as ipc]
             [frontend.util.fs :as fs-util]
             [cljs.core.async :as as]))
@@ -90,7 +94,7 @@
                                           :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
           (and graph-txid-exists? idle?)
           (concat
-           [{:title [:strong "Save now"]
+           [{:title   [:strong "Save now"]
              :options {:on-click
                        #(as/offer! fs-sync/immediately-local->remote-chan true)}}])
           graph-txid-exists?
@@ -163,3 +167,124 @@
 (defn pick-dest-to-sync-panel [graph]
   (fn []
     (pick-local-graph-for-sync graph)))
+
+(rum/defc page-history-list
+  [graph-uuid page-entity set-page]
+
+  (let [[version-files set-version-files] (rum/use-state nil)
+        [current-page set-current-page] (rum/use-state nil)
+        [loading? set-loading?] (rum/use-state false)
+
+        set-page-fn     (fn [page-meta]
+                          (set-current-page page-meta)
+                          (set-page page-meta))
+
+        get-version-key #(or (:VersionUUID %) (:relative-path %))]
+
+    ;; fetch version files
+    (rum/use-effect!
+     (fn []
+       (when-not loading?
+         (as/go
+           (set-loading? true)
+           (try
+             (let [files (as/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
+               (set-version-files files)
+               (set-page-fn (first files)))
+             (finally (set-loading? false)))))
+       #())
+     [])
+
+    [:div.version-list
+     (if loading?
+       [:div.p-4 (ui/loading "Loading...")]
+       (for [version version-files]
+         (let [version-uuid (get-version-key version)
+               _local?       (some? (:relative-path version))]
+           [:div.version-list-item {:key version-uuid}
+            [:a.item-link.block
+             {:title    version-uuid
+              :class    (util/classnames
+                         [{:active (and current-page (= version-uuid (get-version-key current-page)))}])
+              :on-click #(set-page-fn version)}
+
+             [:strong.text-sm
+              version-uuid]
+
+             ;(when-not local?
+             ;  [:div.opacity-70.text-xs.pt-1
+             ;   (str "Size: " (:Size version))])
+
+             [:div.opacity-50.text-sm.pt-1
+              (util/time-ago (or (tc/from-string (:CreateTime version))
+                                 (:create-time version)))]]])))]))
+
+(rum/defc pick-page-histories-for-sync
+  [repo-url graph-uuid page-name page-entity]
+  (let [[selected-page set-selected-page] (rum/use-state nil)
+        get-version-key #(or (:VersionUUID %) (:relative-path %))
+        file-uuid       (:FileUUID selected-page)
+        version-uuid    (:VersionUUID selected-page)
+        [version-content set-version-content] (rum/use-state nil)
+        [ready? set-ready?] (rum/use-state false)
+        *ref-contents   (rum/use-ref (atom {}))]
+
+    (rum/use-effect!
+     #(when selected-page
+        (set-ready? false)
+        (let [k               (get-version-key selected-page)
+              loaded-contents @(rum/deref *ref-contents)]
+          (if (contains? loaded-contents k)
+            (do
+              (set-version-content (get loaded-contents k))
+              (js/setTimeout (fn [] (set-ready? true)) 100))
+
+            ;; without cache
+            (let [load-file (fn [repo-url file]
+                              (-> (fs-util/read-repo-file repo-url file)
+                                  (p/then
+                                   (fn [content]
+                                     (set-version-content content)
+                                     (set-ready? true)
+                                     (swap! (rum/deref *ref-contents) assoc k content)))))]
+              (if (and file-uuid version-uuid)
+                ;; read remote content
+                (as/go
+                  (let [downloaded-path (as/<! (file-sync-handler/download-version-file graph-uuid file-uuid version-uuid true))]
+                    (when downloaded-path
+                      (load-file repo-url downloaded-path))))
+
+                ;; read local content
+                (when-let [relative-path (:relative-path selected-page)]
+                  (load-file repo-url relative-path)))))))
+     [selected-page])
+
+    [:div.cp__file-sync-page-histories.flex-wrap
+     [:h1.absolute.w-full.top-0.left-0.text-xl.px-4.py-4.leading-4
+      (ui/icon "history") " History versions of <" page-name "> page"]
+
+     ;; history versions
+     [:div.cp__file-sync-page-histories-left.flex-wrap
+      ;; sidebar lists
+      (page-history-list graph-uuid page-entity set-selected-page)
+
+      ;; content detail
+      [:article
+       (when-let [inst-id (and selected-page (get-version-key selected-page))]
+         (if ready?
+           (lazy-editor/editor
+            nil inst-id {:data-lang "markdown"}
+            version-content {:lineWrapping true :readOnly true})
+           [:span.flex.p-15.items-center.justify-center (ui/loading "")]
+           ))]]
+
+     ;; current version
+     [:div.cp__file-sync-page-histories-right
+
+      (page/page-blocks-cp (state/get-current-repo) page-entity nil)]]))
+
+(defn pick-page-histories-panel [graph-uuid page-name]
+  (fn []
+    (if-let [page-entity (db-model/get-page page-name)]
+      (pick-page-histories-for-sync (state/get-current-repo) graph-uuid page-name page-entity)
+      (ui/admonition :warning (str "The page (" page-name ") does not exist!")))))

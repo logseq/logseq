@@ -225,7 +225,9 @@
   (if (seq graphs)
     (for [{:keys [root] :as graph} graphs]
       (if-let [sync-meta (read-txid-info! root)]
-        (assoc graph :sync-meta sync-meta)
+        (assoc graph
+               :sync-meta sync-meta
+               :GraphUUID (second sync-meta))
         graph))
     []))
 

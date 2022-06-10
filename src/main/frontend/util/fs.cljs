@@ -2,6 +2,7 @@
   (:require ["path" :as path]
             [clojure.string :as string]
             [frontend.fs :as fs]
+            [frontend.config :as config]
             [promesa.core :as p]
             [cljs.reader :as reader]))
 
@@ -50,6 +51,13 @@
     (p/all (for [{:keys [root] :as graph} graphs]
              (p/let [sync-meta (read-graph-txid-info root)]
                     (if sync-meta
-                      (assoc graph :sync-meta sync-meta)
+                      (assoc graph
+                             :sync-meta sync-meta
+                             :GraphUUID (second sync-meta))
                       graph))))
     []))
+
+(defn read-repo-file
+  [repo-url file]
+  (when-let [repo-dir (config/get-repo-dir repo-url)]
+    (fs/read-file repo-dir file)))

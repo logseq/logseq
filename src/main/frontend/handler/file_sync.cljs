@@ -81,18 +81,22 @@
     (swap! refresh-file-sync-component not)
     (state/pub-event! [:graph/switch repo {:persist? false}])))
 
-(defn- download-version-file [graph-uuid file-uuid version-uuid]
-  (go
-    (let [key (path/join "version-files" file-uuid version-uuid)
-          r (<! (sync/update-local-files
-                 sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
-      (if (instance? ExceptionInfo r)
-        (notification/show! (ex-cause r) :error)
-        (notification/show! [:div
-                             [:div "Downloaded version file at: "]
-                             [:div key]] :success false))
-      (when-not (instance? ExceptionInfo r)
-        (path/join "logseq" key)))))
+(defn download-version-file
+  ([graph-uuid file-uuid version-uuid]
+   (download-version-file graph-uuid file-uuid version-uuid false))
+  ([graph-uuid file-uuid version-uuid silent-download?]
+   (go
+     (let [key (path/join "version-files" file-uuid version-uuid)
+           r   (<! (sync/update-local-files
+                    sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
+       (if (instance? ExceptionInfo r)
+         (notification/show! (ex-cause r) :error)
+         (when-not silent-download?
+           (notification/show! [:div
+                                [:div "Downloaded version file at: "]
+                                [:div key]] :success false)))
+       (when-not (instance? ExceptionInfo r)
+         (path/join "logseq" key))))))
 
 (defn- list-file-local-versions
   [page]
@@ -125,6 +129,22 @@
                          (#(tf/parse (tf/formatter "yyyy-MM-dd'T'HH_mm_ss.SSSZZ") %)))]
                  {:create-time create-time :path path :relative-path (string/replace-first path base-path "")}))
              version-file-paths)))))))
+
+(defn fetch-page-file-versions [graph-uuid page]
+  []
+  (let [file-id (:db/id (:block/file page))]
+    (when-let [path (:file/path (db/entity file-id))]
+      (let [base-path (config/get-repo-dir (state/get-current-repo))
+            path*     (string/replace-first path base-path "")]
+        (go
+          (let [version-list       (:VersionList
+                                    (<! (sync/get-remote-file-versions sync/remoteapi graph-uuid path*)))
+                local-version-list (<! (list-file-local-versions page))
+                all-version-list   (->> (concat version-list local-version-list)
+                                        (sort-by #(or (tc/from-string (:CreateTime %))
+                                                      (:create-time %))
+                                                 >))]
+            all-version-list))))))
 
 (defn list-file-versions [graph-uuid page]
   (let [file-id (:db/id (:block/file page))]

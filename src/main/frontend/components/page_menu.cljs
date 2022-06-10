@@ -136,7 +136,7 @@
                        (fn []
                          (cond
                            file-sync-graph-uuid
-                           (file-sync-handler/list-file-versions file-sync-graph-uuid page)
+                           (state/pub-event! [:graph/pick-page-histories file-sync-graph-uuid page-name])
 
                            (util/electron?)
                            (shell/get-file-latest-git-log page 100)
