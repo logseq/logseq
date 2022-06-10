@@ -81,7 +81,7 @@
                                            (state/pub-event! [:graph/switch url])))
 
            [:div.controls
-            (when (or (e/encrypted-db? url))
+            (when (e/encrypted-db? url)
               [:a.control {:title    "Show encryption information about this graph"
                            :on-click (fn []
                                        (if remote?
