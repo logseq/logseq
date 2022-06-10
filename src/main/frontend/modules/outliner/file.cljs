@@ -53,9 +53,9 @@
 
 (def *writes-finished? (atom true))
 
-(defn ratelimit-file-writes!
+(defn <ratelimit-file-writes!
   []
-  (util/ratelimit write-chan batch-write-interval
+  (util/<ratelimit write-chan batch-write-interval
                  :filter-fn
                  #(do (reset! *writes-finished? false) true)
                  :flush-fn

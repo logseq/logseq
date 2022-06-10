@@ -30,7 +30,7 @@
 (defn create-graph
   [name]
   (go
-    (let [r* (<! (sync/create-graph sync/remoteapi name))
+    (let [r* (<! (sync/<create-graph sync/remoteapi name))
           r (if (instance? ExceptionInfo r*) r* (:GraphUUID r*))]
       (if (and (not (instance? ExceptionInfo r))
                (string? r))
@@ -45,7 +45,7 @@
   [graph-uuid]
   (sync/sync-stop)
   (go
-    (let [r (<! (sync/delete-graph sync/remoteapi graph-uuid))]
+    (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
         (notification/show! (str "Delete graph failed: " graph-uuid) :warning)
         (let [[_ local-graph-uuid _] @sync/graphs-txid]
@@ -56,7 +56,7 @@
 
 (defn list-graphs
   []
-  (go (:Graphs (<! (sync/list-remote-graphs sync/remoteapi)))))
+  (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
 
 
 (defn load-session-graphs
@@ -74,7 +74,7 @@
   (let [repo (state/get-current-repo)
         user-uuid (user/user-uuid)]
     ;; FIXME: when switching graph, sync-start is not called. set-env is not called as well.
-    (sync/set-env sync/rsapi config/FILE-SYNC-PROD?
+    (sync/<set-env sync/rsapi config/FILE-SYNC-PROD?
                   "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
                   "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg")
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
@@ -87,7 +87,7 @@
   ([graph-uuid file-uuid version-uuid silent-download?]
    (go
      (let [key (path/join "version-files" file-uuid version-uuid)
-           r   (<! (sync/update-local-files
+           r   (<! (sync/<update-local-files
                     sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
        (if (instance? ExceptionInfo r)
          (notification/show! (ex-cause r) :error)
@@ -138,7 +138,7 @@
             path*     (string/replace-first path base-path "")]
         (go
           (let [version-list       (:VersionList
-                                    (<! (sync/get-remote-file-versions sync/remoteapi graph-uuid path*)))
+                                    (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
                 local-version-list (<! (list-file-local-versions page))
                 all-version-list   (->> (concat version-list local-version-list)
                                         (sort-by #(or (tc/from-string (:CreateTime %))
@@ -153,7 +153,7 @@
             path*     (string/replace-first path base-path "")]
         (go
           (let [version-list       (:VersionList
-                                    (<! (sync/get-remote-file-versions sync/remoteapi graph-uuid path*)))
+                                    (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
                 local-version-list (<! (list-file-local-versions page))
                 all-version-list   (->> (concat version-list local-version-list)
                                         (sort-by #(or (tc/from-string (:CreateTime %))

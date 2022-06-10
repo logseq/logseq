@@ -1081,7 +1081,7 @@
           (take-while identity))))
 
 #?(:cljs
-   (defn ratelimit
+   (defn <ratelimit
      "return a channel CH,
   ratelimit flush items in in-ch every max-duration(ms),
   opts:

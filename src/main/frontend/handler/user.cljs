@@ -94,12 +94,12 @@
    (set-token-to-localstorage! id-token access-token refresh-token)))
 
 
-(defn refresh-id-token&access-token
+(defn <refresh-id-token&access-token
   "refresh id-token and access-token, if refresh_token expired, clear all tokens
    return true if success, else false"
   []
-  (when-let [refresh-token (state/get-auth-refresh-token)]
-    (go
+  (go
+    (when-let [refresh-token (state/get-auth-refresh-token)]
       (let [resp (<! (http/get (str "https://" config/API-DOMAIN "/auth_refresh_token?refresh_token=" refresh-token)
                                {:with-credentials? false}))]
         (if (= 400 (:status resp))
@@ -129,10 +129,11 @@
       (when-not (or (nil? id-token) (nil? access-token)
                     (-> id-token parse-jwt almost-expired?)
                     (-> access-token parse-jwt almost-expired?))
-        ;; id-token or access-token expired
-        (refresh-id-token&access-token)
-        ;; refresh remote graph list by pub login event
-        (when (user-uuid) (state/pub-event! [:user/login]))))))
+        (go
+          ;; id-token or access-token expired
+          (<! (<refresh-id-token&access-token))
+          ;; refresh remote graph list by pub login event
+          (when (user-uuid) (state/pub-event! [:user/login])))))))
 
 (defn login-callback [code]
   (state/set-state! [:ui/loading? :login] true)
@@ -163,6 +164,6 @@
         (when (or (nil? id-token)
                   (-> id-token (parse-jwt) (almost-expired?)))
           (debug/pprint (str "refresh tokens... " (tc/to-string(t/now))))
-          (refresh-id-token&access-token))))
+          (<! (<refresh-id-token&access-token)))))
     (when-not stop-refresh
       (recur))))

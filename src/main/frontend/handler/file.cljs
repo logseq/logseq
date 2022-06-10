@@ -253,7 +253,7 @@
           (catch js/Error e
             (log/error :file/write-failed e))))
       (recur))
-    (outliner-file/ratelimit-file-writes!)
+    (outliner-file/<ratelimit-file-writes!)
     chan))
 
 (defn watch-for-current-graph-dir!
