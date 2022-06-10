@@ -190,7 +190,7 @@
     }
 
     &-right {
-      @apply flex-1 h-full hidden;
+      @apply flex-1 h-full hidden pt-4;
 
       visibility: hidden;
       border-left: 1px solid var(--ls-secondary-border-color);
