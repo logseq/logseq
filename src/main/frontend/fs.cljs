@@ -200,3 +200,7 @@
    (stat dir path)
    (fn [_stat] true)
    (fn [_e] false)))
+
+(defn dir-exists?
+  [dir]
+  (file-exists? dir ""))
