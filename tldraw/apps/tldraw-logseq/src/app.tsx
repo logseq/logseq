@@ -21,7 +21,7 @@ import {
   LineTool,
   LogseqPortalTool,
   NuEraseTool,
-  PenTool,
+  PencilTool,
   PolygonTool,
   TextTool,
   YouTubeTool
@@ -38,7 +38,7 @@ const tools: TLReactToolConstructor<Shape>[] = [
   NuEraseTool,
   HighlighterTool,
   LineTool,
-  PenTool,
+  PencilTool,
   PolygonTool,
   TextTool,
   YouTubeTool,

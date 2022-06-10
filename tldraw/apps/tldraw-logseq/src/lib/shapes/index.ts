@@ -4,7 +4,7 @@ import { EllipseShape } from './EllipseShape'
 import { HighlighterShape } from './HighlighterShape'
 import { ImageShape } from './ImageShape'
 import { LineShape } from './LineShape'
-import { PenShape } from './PenShape'
+import { PencilShape } from './PencilShape'
 import { PolygonShape } from './PolygonShape'
 import { TextShape } from './TextShape'
 import { YouTubeShape } from './YouTubeShape'
@@ -19,7 +19,7 @@ export type Shape =
   | ImageShape
   | LineShape
   | LineShape
-  | PenShape
+  | PencilShape
   | PolygonShape
   | TextShape
   | YouTubeShape
@@ -31,7 +31,7 @@ export * from './EllipseShape'
 export * from './HighlighterShape'
 export * from './ImageShape'
 export * from './LineShape'
-export * from './PenShape'
+export * from './PencilShape'
 export * from './PolygonShape'
 export * from './TextShape'
 export * from './YouTubeShape'
@@ -44,7 +44,7 @@ export const shapes: TLReactShapeConstructor<Shape>[] = [
   HighlighterShape,
   ImageShape,
   LineShape,
-  PenShape,
+  PencilShape,
   PolygonShape,
   TextShape,
   YouTubeShape,

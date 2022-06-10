@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
 import { SvgPathUtils, TLDrawShape, TLDrawShapeProps } from '@tldraw/core'
 import { SVGContainer, TLComponentProps } from '@tldraw/react'
-import { observer } from 'mobx-react-lite'
 import { computed, makeObservable } from 'mobx'
+import { observer } from 'mobx-react-lite'
+import getStroke from 'perfect-freehand'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface PencilShapeProps extends TLDrawShapeProps, CustomStyleProps {
@@ -32,34 +32,53 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
   }
 
   @computed get pointsPath() {
-    const { points } = this.props
-    return SvgPathUtils.getCurvedPathForPoints(points)
+    const {
+      props: { points, isComplete, strokeWidth },
+    } = this
+    if (points.length < 2) {
+      return `M -4, 0
+      a 4,4 0 1,0 8,0
+      a 4,4 0 1,0 -8,0`
+    }
+    const stroke = getStroke(points, { size: 4 + strokeWidth * 2, last: isComplete })
+    return SvgPathUtils.getCurvedPathForPolygon(stroke)
   }
 
   ReactComponent = observer(({ events, isErasing }: TLComponentProps) => {
     const {
-      pointsPath,
-      props: { stroke, fill, strokeWidth, opacity },
+      props: { opacity },
     } = this
     return (
       <SVGContainer {...events} opacity={isErasing ? 0.2 : opacity}>
-        <polyline
-          points={pointsPath}
-          stroke={stroke}
-          fill={fill}
-          strokeWidth={strokeWidth}
-          pointerEvents="all"
-        />
+        {this.getShapeSVGJsx()}
       </SVGContainer>
     )
   })
 
   ReactIndicator = observer(() => {
     const { pointsPath } = this
-    return <path d={pointsPath} fill="none" />
+    return <path d={pointsPath} />
   })
 
   validateProps = (props: Partial<PencilShapeProps>) => {
-    return withClampedStyles(props)
+    props = withClampedStyles(props)
+    if (props.strokeWidth !== undefined) props.strokeWidth = Math.max(props.strokeWidth, 1)
+    return props
+  }
+
+  getShapeSVGJsx() {
+    const {
+      pointsPath,
+      props: { stroke, strokeWidth },
+    } = this
+    return (
+      <path
+        d={pointsPath}
+        strokeWidth={strokeWidth}
+        stroke={stroke}
+        fill={stroke}
+        pointerEvents="all"
+      />
+    )
   }
 }

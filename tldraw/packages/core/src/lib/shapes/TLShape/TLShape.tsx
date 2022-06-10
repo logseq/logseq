@@ -104,13 +104,21 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   bindingDistance = BINDING_DISTANCE
 
-  private isDirty = false
-  private lastSerialized: TLShapeModel<P> | undefined
+  @observable private isDirty = false
+  @observable private lastSerialized: TLShapeModel<P> | undefined
 
   abstract getBounds: () => TLBounds
 
   @computed get id() {
     return this.props.id
+  }
+
+  @action setIsDirty(isDirty: boolean) {
+    this.isDirty = isDirty
+  }
+
+  @action setLastSerialized(serialized: TLShapeModel<P>) {
+    this.lastSerialized = serialized
   }
 
   getCenter = () => {
@@ -260,12 +268,16 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   protected getCachedSerialized = (): TLShapeModel<P> => {
     if (this.isDirty || !this.lastSerialized) {
       this.nonce++
-      this.isDirty = false
-      this.lastSerialized = this.getSerialized()
+      this.setIsDirty(false)
+      this.setLastSerialized(this.getSerialized())
     }
-    return this.lastSerialized
+    if (this.lastSerialized) {
+      return this.lastSerialized
+    }
+    throw new Error('Should not get here for getCachedSerialized')
   }
 
+  @computed
   get serialized(): TLShapeModel<P> {
     return this.getCachedSerialized()
   }

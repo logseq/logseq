@@ -43,7 +43,11 @@ export const PrimaryTools = observer(function PrimaryTools() {
         >
           <CursorArrowIcon />
         </Button>
-        <Button data-tool="pen" data-selected={selectedToolId === 'pen'} onClick={handleToolClick}>
+        <Button
+          data-tool="pencil"
+          data-selected={selectedToolId === 'pencil'}
+          onClick={handleToolClick}
+        >
           <Pencil1Icon />
         </Button>
         <Button

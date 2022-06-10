@@ -8,7 +8,7 @@ import { computed, makeObservable } from 'mobx'
 import { CustomStyleProps, withClampedStyles } from './style-props'
 
 export interface PenShapeProps extends TLDrawShapeProps, CustomStyleProps {
-  type: 'draw'
+  type: 'pen'
 }
 
 export class PenShape extends TLDrawShape<PenShapeProps> {
@@ -17,12 +17,12 @@ export class PenShape extends TLDrawShape<PenShapeProps> {
     makeObservable(this)
   }
 
-  static id = 'draw'
+  static id = 'pen'
 
   static defaultProps: PenShapeProps = {
-    id: 'draw',
+    id: 'pen',
     parentId: 'page',
-    type: 'draw',
+    type: 'pen',
     point: [0, 0],
     points: [],
     isComplete: false,
