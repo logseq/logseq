@@ -43,7 +43,8 @@
 
 (defn delete-graph
   [graph-uuid]
-  (sync/sync-stop)
+  (when (= graph-uuid @sync/graphs-txid)
+    (sync/sync-stop))
   (go
     (let [r (<! (sync/<delete-graph sync/remoteapi graph-uuid))]
       (if (instance? ExceptionInfo r)
