@@ -453,14 +453,13 @@
                              :else
                              nil))
           nfs-dbs (seq (bean/->clj nfs-dbs))]
+    (cond
+      (seq nfs-dbs)
+      nfs-dbs
 
-         (cond
-           (seq nfs-dbs)
-           nfs-dbs
-
-           :else
-           [{:url config/local-repo
-             :example? true}])))
+      :else
+      [{:url config/local-repo
+        :example? true}])))
 
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
@@ -469,11 +468,15 @@
                                       local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
-    (let [repos' (group-by :GraphUUID repos')]
-      (mapcat (fn [[k vs]]
-                (if-not (nil? k)
-                  [(merge (first vs) (second vs))] vs))
-              repos'))))
+    (let [repos' (group-by :GraphUUID repos')
+          repos'' (mapcat (fn [[k vs]]
+                            (if-not (nil? k)
+                              [(merge (first vs) (second vs))] vs))
+                          repos')]
+      (sort-by (fn [repo]
+                 (let [graph-name (or (:GraphName repo)
+                                      (last (string/split (:root repo) #"/")))]
+                   [(:remote? repo) (string/lower-case graph-name)])) repos''))))
 
 (defn get-detail-graph-info
   [url]
