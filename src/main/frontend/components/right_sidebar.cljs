@@ -221,7 +221,7 @@
        [:div
         (toggle)]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing
+      [:.sidebar-item-list.flex-1.scrollbar-spacing.flex.flex-col.gap-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key

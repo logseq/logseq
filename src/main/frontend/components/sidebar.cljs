@@ -47,7 +47,7 @@
   [:div.nav-content-item.is-expand
    {:class class}
    [:div.nav-content-item-inner
-    [:div.header.items-center.mb-1
+    [:div.header.items-center
      {:on-click (fn [^js/MouseEvent e]
                   (let [^js target (.-target e)
                         ^js parent (.closest target ".nav-content-item")]
@@ -223,11 +223,11 @@
                    (when (some (fn [sel] (boolean (.closest target sel)))
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
-     [:div.flex.flex-col.pb-4.wrap
-      [:nav.px-4.pt-1.space-y-1 {:aria-label "Sidebar"}
+     [:div.flex.flex-col.pb-4.wrap.gap-4
+      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Sidebar"}
        (repo/repos-dropdown)
 
-       [:div.nav-header
+       [:div.nav-header.flex.gap-1.flex-col
         (if-let [page (:page default-home)]
           (sidebar-item
             {:class            "home-nav"
