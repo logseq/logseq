@@ -92,7 +92,6 @@
   a.item {
     user-select: none;
     transition: background-color .3s;
-    margin-bottom: 2px;
 
     > .ti {
       font-size: 16px;
@@ -116,8 +115,6 @@
   }
 
   .nav-content-item {
-    margin-top: 14px;
-
     &-inner {
       border-radius: 8px;
     }
@@ -242,7 +239,7 @@
     background-color: var(--ls-secondary-background-color);
 
     > .wrap {
-      margin-top: 50px;
+      margin-top: 52px;
     }
 
     .new-page {
@@ -472,9 +469,7 @@ html[data-theme='dark'] {
   }
 
   .sidebar-item {
-    padding-top: 24px;
-    padding-bottom: 24px;
-    margin-bottom: 8px;
+    @apply p-4;
 
     .close {
       transform: scale(0.8);
