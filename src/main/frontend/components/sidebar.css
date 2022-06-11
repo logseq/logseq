@@ -82,11 +82,13 @@
   }
 
   .page-icon {
+    @apply mr-1 align-baseline;
+    width: 16px;
+    height: 16px;
     text-align: center;
     display: inline-block;
     line-height: 1em;
-    color: #aaa;
-    padding: 0 4px 0 8px;
+    color: var(--ls-icon-color);
   }
 
   a.item {
@@ -120,12 +122,12 @@
     }
 
     .header {
+      @apply px-6 py-1;
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       cursor: pointer;
-      padding: 4px 25px;
 
       > span {
         > a {
@@ -173,7 +175,6 @@
         > span {
           font-size: 11px;
           font-weight: 600;
-          padding-top: 2px;
         }
       }
     }
@@ -188,7 +189,7 @@
 
         a {
           width: 100%;
-          padding: 2px 18px;
+          padding: 2px 24px;
           display: block;
           text-overflow: ellipsis;
           overflow: hidden;
