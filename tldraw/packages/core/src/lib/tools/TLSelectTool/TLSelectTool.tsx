@@ -18,6 +18,7 @@ import {
   PinchingState,
   HoveringSelectionHandleState,
   EditingShapeState,
+  PointingMinimapState,
 } from './states'
 
 export class TLSelectTool<
@@ -42,6 +43,7 @@ export class TLSelectTool<
     HoveringSelectionHandleState,
     PointingResizeHandleState,
     PointingRotateHandleState,
+    PointingMinimapState,
     PointingHandleState,
     TranslatingHandleState,
     TranslatingState,

@@ -97,6 +97,10 @@ export class IdleState<
         this.tool.transition('pointingCanvas')
         break
       }
+      case TLTargetType.Minimap: {
+        this.tool.transition('pointingMinimap', { ...event, ...info })
+        break
+      }
     }
   }
 

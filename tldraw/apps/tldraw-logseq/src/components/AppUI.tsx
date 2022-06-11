@@ -4,26 +4,15 @@ import { ToolBar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { PrimaryTools } from './PrimaryTools'
 import { DevTools } from './Devtools'
-import { useApp } from '@tldraw/react'
-import { WhiteboardPreview } from '~lib'
+import { Minimap } from './Minimap'
 
 const isDev = process.env.NODE_ENV === 'development'
 
 export const AppUI = observer(function AppUI() {
-  const app = useApp()
-
-  const preview = React.useMemo(() => {
-    const WP = new WhiteboardPreview(app.serialized)
-    return WP.getPreview(app.viewport)
-  }, [
-    app.serialized,
-    app.viewport.camera.point,
-  ])
-
   return (
     <>
       {/* <ToolBar /> */}
-      {preview}
+      <Minimap />
       {isDev && <StatusBar />}
       {isDev && <DevTools />}
       <PrimaryTools />

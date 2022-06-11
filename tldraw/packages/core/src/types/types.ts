@@ -215,11 +215,14 @@ export interface TLCallbacks<
 export enum TLTargetType {
   Canvas = 'canvas',
   Shape = 'shape',
+  Minimap = 'minimap',
   Selection = 'selection',
   Handle = 'handle',
 }
 
 export type TLEventCanvasInfo = { type: TLTargetType.Canvas; order?: number }
+
+export type TLEventMinimapInfo = { type: TLTargetType.Minimap; order?: number }
 
 export type TLEventShapeInfo<S extends TLShape> = {
   type: TLTargetType.Shape
@@ -243,6 +246,7 @@ export type TLEventSelectionInfo = {
 
 export type TLEventInfo<S extends TLShape = TLShape> =
   | TLEventCanvasInfo
+  | TLEventMinimapInfo
   | TLEventShapeInfo<S>
   | TLEventHandleInfo<S>
   | TLEventSelectionInfo

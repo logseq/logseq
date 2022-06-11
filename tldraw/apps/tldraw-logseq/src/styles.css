@@ -115,7 +115,7 @@
 .logseq-tldraw .primary-tools {
   display: flex;
   position: absolute;
-  right: 48px;
+  right: 24px;
   top: 0;
   height: 100%;
   width: 64px;
@@ -351,4 +351,36 @@
 .logseq-tldraw .text-label-textarea:focus {
   outline: none;
   border: none;
+}
+
+.logseq-tldraw .preview-minimap {
+  height: 300px;
+  width: 400px;
+  top: 16px;
+  left: 16px;
+  position: fixed;
+  border: 1px solid black;
+  background-color: #fff;
+  pointer-events: all;
+}
+
+.logseq-tldraw .preview-minimap-toggle {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+  background: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.logseq-tldraw .preview-minimap-toggle[data-active='true'] {
+  background: #eee;
 }

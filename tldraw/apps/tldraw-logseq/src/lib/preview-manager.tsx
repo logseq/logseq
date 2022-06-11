@@ -2,7 +2,7 @@ import { BoundsUtils, TLDocumentModel, TLShapeConstructor, TLViewport } from '@t
 import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
 
-const SVG_EXPORT_PADDING = 16
+const SVG_EXPORT_PADDING = 0
 
 const ShapesMap = new Map(shapes.map(shape => [shape.id, shape]))
 
@@ -13,7 +13,7 @@ const getShapeClass = (type: string): TLShapeConstructor<Shape> => {
   return Shape
 }
 
-export class WhiteboardPreview {
+export class PreviewManager {
   shapes: Shape[] | undefined
   constructor(serializedApp?: TLDocumentModel<Shape>) {
     if (serializedApp) {
@@ -54,31 +54,63 @@ export class WhiteboardPreview {
     const svgElement = commonBounds && (
       <svg
         xmlns="http://www.w3.org/2000/svg"
+        data-common-bound-x={commonBounds.minX.toFixed(2)}
+        data-common-bound-y={commonBounds.minY.toFixed(2)}
+        data-common-bound-width={commonBounds.width.toFixed(2)}
+        data-common-bound-height={commonBounds.height.toFixed(2)}
         viewBox={[0, 0, commonBounds.width, commonBounds.height].join(' ')}
       >
-        {this.shapes?.map(s => {
-          const {
-            bounds,
-            props: { rotation },
-          } = s
-          const [tx, ty] = translatePoint([bounds.minX, bounds.minY])
-          const r = +((((rotation ?? 0) + (bounds.rotation ?? 0)) * 180) / Math.PI).toFixed(2)
-          const [rdx, rdy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
-          const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
-          return (
-            <g transform={transformArr.join(' ')} key={s.id}>
-              {s.getShapeSVGJsx()}
-            </g>
-          )
-        })}
+        <defs>
+          {vBounds && (
+            <>
+              <rect
+                id="camera-rect"
+                transform={`translate(${vx}, ${vy})`}
+                width={vBounds.width}
+                height={vBounds.height}
+              />
+              <mask id="camera-mask">
+                <rect width={commonBounds.width} height={commonBounds.height} fill="white" />
+                <use href="#camera-rect" fill="black" />
+              </mask>
+            </>
+          )}
+          <g id="preview-shapes">
+            {this.shapes?.map(s => {
+              const {
+                bounds,
+                props: { rotation },
+              } = s
+              const [tx, ty] = translatePoint([bounds.minX, bounds.minY])
+              const r = +((((rotation ?? 0) + (bounds.rotation ?? 0)) * 180) / Math.PI).toFixed(2)
+              const [rdx, rdy] = [(bounds.width / 2).toFixed(2), (bounds.height / 2).toFixed(2)]
+              const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
+              return (
+                <g transform={transformArr.join(' ')} key={s.id}>
+                  {s.getShapeSVGJsx()}
+                </g>
+              )
+            })}
+          </g>
+        </defs>
+        <use href="#preview-shapes" />
+        <rect
+          mask={vBounds ? 'url(#camera-mask)' : ''}
+          width={commonBounds.width}
+          height={commonBounds.height}
+          fill="rgba(0, 0, 0, 0.2)"
+        />
         {vBounds && (
-          <rect
+          <use
+            id="minimap-camera-rect"
+            data-x={vx}
+            data-y={vy}
+            data-width={vBounds.width}
+            data-height={vBounds.height}
+            href="#camera-rect"
             fill="transparent"
-            stroke="#500"
-            strokeWidth={16 / Math.sqrt(viewport.camera.zoom)}
-            transform={`translate(${vx}, ${vy})`}
-            width={vBounds.width}
-            height={vBounds.height}
+            stroke="red"
+            strokeWidth={4 / viewport.camera.zoom}
           />
         )}
       </svg>
@@ -89,23 +121,5 @@ export class WhiteboardPreview {
   getExportedSVG() {
     const svgElement = this.getSvg()
     return svgElement ? ReactDOMServer.renderToString(svgElement) : ''
-  }
-
-  getPreview(viewport?: TLViewport) {
-    return (
-      <div
-        style={{
-          pointerEvents: 'none',
-          height: '300px',
-          width: '400px',
-          top: '16px',
-          left: '16px',
-          position: 'fixed',
-          border: '1px solid black',
-        }}
-      >
-        {this.getSvg(viewport)}
-      </div>
-    )
   }
 }

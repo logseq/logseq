@@ -1,3 +1,3 @@
 export * from './shapes'
 export * from './tools'
-export * from './preview'
+export * from './preview-manager'
