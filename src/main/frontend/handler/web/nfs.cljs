@@ -182,18 +182,26 @@
                                                 content (encrypt/decrypt content)]
                                                (assoc file :file/content content))) markup-files))
                           (p/then (fn [result]
-                                    (let [files (map #(dissoc % :file/file) result)]
-                                      (repo-handler/start-repo-db-if-not-exists! repo)
-                                      (async/go
-                                        (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
-                                                                                                  {:new-graph?   true
-                                                                                                   :empty-graph? (nil? (seq markup-files))
-                                                                                                   :nfs-files    files}))]
-                                          (state/add-repo! {:url repo :nfs? true})
-                                          (state/set-loading-files! repo false)
-                                          (when ok-handler (ok-handler {:url repo}))
-                                          (fs/watch-dir! dir-name)
-                                          (db/persist-if-idle! repo))))))
+                                    (p/let [files (map #(dissoc % :file/file) result)
+                                            graph-txid-meta (util-fs/read-graph-txid-info dir-name)
+                                            graph-uuid (and (vector? graph-txid-meta) (second graph-txid-meta))]
+                                      (if-let [exists-graph (state/get-sync-graph-by-uuid graph-uuid)]
+                                        (state/pub-event!
+                                         [:notification/show
+                                          {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
+                                           :status :warning}])
+                                        (do
+                                          (repo-handler/start-repo-db-if-not-exists! repo)
+                                          (async/go
+                                            (let [_finished? (async/<! (repo-handler/load-repo-to-db! repo
+                                                                                                      {:new-graph?   true
+                                                                                                       :empty-graph? (nil? (seq markup-files))
+                                                                                                       :nfs-files    files}))]
+                                              (state/add-repo! {:url repo :nfs? true})
+                                              (state/set-loading-files! repo false)
+                                              (when ok-handler (ok-handler {:url repo}))
+                                              (fs/watch-dir! dir-name)
+                                              (db/persist-if-idle! repo))))))))
                           (p/catch (fn [error]
                                      (log/error :nfs/load-files-error repo)
                                      (log/error :exception error)))))))

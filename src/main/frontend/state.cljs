@@ -1694,3 +1694,8 @@
   (set-state! :mobile/app-state-change
               {:is-active? is-active?
                :timestamp (inst-ms (js/Date.))}))
+
+(defn get-sync-graph-by-uuid
+  [graph-uuid]
+  (when graph-uuid
+    (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
