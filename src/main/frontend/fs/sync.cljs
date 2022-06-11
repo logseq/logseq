@@ -865,8 +865,9 @@
 
 (def remoteapi (->RemoteAPI nil))
 
-(defn- add-new-version-file
+(defn add-new-version-file
   [repo path content]
+  ;; TODO @leizhe mobile implementation
   (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))
 
 (defn- is-journals-or-pages?

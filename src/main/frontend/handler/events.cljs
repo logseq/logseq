@@ -464,6 +464,21 @@
            template
            {:target page}))))))
 
+(defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
+  (when-let [db (db/get-db graph)]
+    (let [file (:block/file page-entity)]
+      (when-let [path (:file/path file)]
+        (when (not= content (:file/content file))
+          (sync/add-new-version-file graph path (:file/content file)))
+        (p/let [_ (file-handler/alter-file graph
+                                           path
+                                           content
+                                           {:re-render-root? true
+                                            :skip-compare? true})]
+          (state/close-modal!)
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name (:block/name page-entity)}}))))))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

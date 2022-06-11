@@ -208,20 +208,13 @@
          (let [version-uuid (get-version-key version)
                _local?      (some? (:relative-path version))]
            [:div.version-list-item {:key version-uuid}
-            [:a.item-link.block
+            [:a.item-link.block.fade-link
              {:title    version-uuid
               :class    (util/classnames
                          [{:active (and current-page (= version-uuid (get-version-key current-page)))}])
               :on-click #(set-page-fn version)}
 
-             [:strong.text-sm
-              version-uuid]
-
-             ;(when-not local?
-             ;  [:div.opacity-70.text-xs.pt-1
-             ;   (str "Size: " (:Size version))])
-
-             [:div.opacity-50.text-sm.pt-1
+             [:div.text-sm.pt-1
               (util/time-ago (or (tc/from-string (:CreateTime version))
                                  (:create-time version)))]]])))]))
 
@@ -234,8 +227,8 @@
         [version-content set-version-content] (rum/use-state nil)
         [list-ready? set-list-ready?] (rum/use-state false)
         [content-ready? set-content-ready?] (rum/use-state false)
-        *ref-contents   (rum/use-ref (atom {}))]
-
+        *ref-contents   (rum/use-ref (atom {}))
+        original-page-name (or (:block/original-name page-entity) page-name)]
     (rum/use-effect!
      #(when selected-page
         (set-content-ready? false)
@@ -270,7 +263,9 @@
      {:class (util/classnames [{:is-list-ready list-ready?}])}
 
      [:h1.absolute.top-0.left-0.text-xl.px-4.py-4.leading-4
-      (ui/icon "history") " History versions of <" page-name "> page"]
+      (ui/icon "history")
+      " History for page "
+      [:span.font-medium original-page-name]]
 
      ;; history versions
      [:div.cp__file-sync-page-histories-left.flex-wrap
@@ -281,11 +276,15 @@
       [:article
        (when-let [inst-id (and selected-page (get-version-key selected-page))]
          (if content-ready?
-           (lazy-editor/editor
-            nil inst-id {:data-lang "markdown"}
-            version-content {:lineWrapping true :readOnly true})
-           [:span.flex.p-15.items-center.justify-center (ui/loading "")]
-           ))]]
+           [:div.relative.raw-content-editor
+            (lazy-editor/editor
+             nil inst-id {:data-lang "markdown"}
+             version-content {:lineWrapping true :readOnly true})
+            [:div.absolute.top-1.right-1.opacity-50.hover:opacity-100
+             (ui/button "Restore"
+               :small? true
+               :on-click #(state/pub-event! [:file-sync-graph/restore-file (state/get-current-repo) page-entity version-content]))]]
+           [:span.flex.p-15.items-center.justify-center (ui/loading "")]))]]
 
      ;; current version
      [:div.cp__file-sync-page-histories-right
