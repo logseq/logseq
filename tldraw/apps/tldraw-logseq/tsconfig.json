@@ -7,7 +7,7 @@
     "baseUrl": ".",
     "paths": {
       "~*": ["src/*"]
-    }
+    },
   },
   "references": [
     { "path": "../../packages/core" },
