@@ -45,7 +45,7 @@ export abstract class TLRootState<S extends TLShape, K extends TLEventMap>
 
   private _id: string
   private _initial?: string
-  private _states: TLStateClass<S, K, any, any>[]
+  protected _states: TLStateClass<S, K, any, any>[]
   private _isActive = false
   readonly cursor?: TLCursor
 

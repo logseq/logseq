@@ -51,6 +51,7 @@ export class TLApp<
     Tools?: TLToolConstructor<S, K>[]
   ) {
     super()
+    this._states = [TLSelectTool]
     this.history.pause()
     if (this.states && this.states.length > 0) {
       this.registerStates(this.states)
@@ -152,7 +153,6 @@ export class TLApp<
   }
 
   static id = 'app'
-  static states: TLToolConstructor<any, any>[] = [TLSelectTool]
   static initial = 'select'
 
   readonly api: TLApi<S, K>

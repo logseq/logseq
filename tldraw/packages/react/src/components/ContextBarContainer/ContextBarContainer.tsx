@@ -1,8 +1,7 @@
 import * as React from 'react'
 import { observer } from 'mobx-react-lite'
-import { useRendererContext } from '~hooks/useRendererContext'
 import { TLBounds, BoundsUtils, TLOffset } from '@tldraw/core'
-import { useCounterScaledPosition } from '~hooks'
+import { useCounterScaledPosition, useRendererContext } from '~hooks'
 import type { TLReactShape } from '~lib'
 
 const stopEventPropagation = (e: React.PointerEvent) => e.stopPropagation()
@@ -14,7 +13,7 @@ export interface TLContextBarContainerProps<S extends TLReactShape> {
   rotation?: number
 }
 
-export const ContextBarContainer = observer(function ContextBar<S extends TLReactShape>({
+export const ContextBarContainer = observer(function ContextBarContainer<S extends TLReactShape>({
   shapes,
   hidden,
   bounds,

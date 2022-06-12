@@ -25,6 +25,7 @@
     "start:tools": "lerna run start:tools --stream",
     "start": "lerna run start --stream --parallel",
     "start:packages": "lerna run start:packages --parallel",
+    "dev": "yarn workspace demo dev",
     "fix:style": "yarn run pretty-quick",
     "lerna": "lerna",
     "test": "lerna run test --stream",

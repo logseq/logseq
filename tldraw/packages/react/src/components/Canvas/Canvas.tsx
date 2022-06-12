@@ -89,7 +89,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   onEditingEnd = NOOP,
   theme = EMPTY_OBJECT,
   children,
-}: Partial<TLCanvasProps<S>>): JSX.Element {
+}: Partial<TLCanvasProps<S>>) {
   const rContainer = React.useRef<HTMLDivElement>(null)
   const { viewport, components, meta } = useRendererContext()
   const { zoom } = viewport.camera
@@ -110,6 +110,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
     onlySelectedShape && 'handles' in onlySelectedShape.props ? selectedShapes?.[0] : undefined
   const selectedShapesSet = React.useMemo(() => new Set(selectedShapes || []), [selectedShapes])
   const erasingShapesSet = React.useMemo(() => new Set(erasingShapes || []), [erasingShapes])
+
   return (
     <div ref={rContainer} className={`tl-container ${className ?? ''}`}>
       <div tabIndex={-1} className="tl-absolute tl-canvas" {...events}>
