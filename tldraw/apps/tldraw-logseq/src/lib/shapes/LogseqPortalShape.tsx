@@ -144,7 +144,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             border: `${strokeWidth}px solid`,
             borderColor: isActivated ? 'var(--tl-selectStroke)' : 'rgb(52, 52, 52)',
             backgroundColor: '#ffffff',
-            boxShadow: isBinding ? '0px 0px 0 16px var(--tl-binding)' : '',
+            boxShadow: isBinding ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)' : '',
           }}
           {...events}
         >

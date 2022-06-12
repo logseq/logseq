@@ -8,9 +8,9 @@ export class TLViewport {
     makeObservable(this)
   }
 
-  readonly minZoom = 0.1
-  readonly maxZoom = 8
-  readonly zooms = [0.1, 0.25, 0.5, 1, 2, 4, 8]
+  static readonly minZoom = 0.25
+  static readonly maxZoom = 4
+  static readonly zooms = [0.25, 0.5, 1, 2, 4]
 
   /* ------------------- Properties ------------------- */
 
@@ -84,7 +84,8 @@ export class TLViewport {
   }
 
   zoomIn = (): this => {
-    const { camera, bounds, zooms } = this
+    const zooms = TLViewport.zooms
+    const { camera, bounds } = this
     let zoom: number | undefined
     for (let i = 1; i < zooms.length; i++) {
       const z1 = zooms[i - 1]
@@ -101,7 +102,8 @@ export class TLViewport {
   }
 
   zoomOut = (): this => {
-    const { camera, bounds, zooms } = this
+    const zooms = TLViewport.zooms
+    const { camera, bounds } = this
     let zoom: number | undefined
     for (let i = zooms.length - 1; i > 0; i--) {
       const z1 = zooms[i - 1]
@@ -135,8 +137,11 @@ export class TLViewport {
       (bounds.height - FIT_TO_SCREEN_PADDING) / height
     )
     zoom = Math.min(
-      this.maxZoom,
-      Math.max(this.minZoom, camera.zoom === zoom || camera.zoom < 1 ? Math.min(1, zoom) : zoom)
+      TLViewport.maxZoom,
+      Math.max(
+        TLViewport.minZoom,
+        camera.zoom === zoom || camera.zoom < 1 ? Math.min(1, zoom) : zoom
+      )
     )
     const delta = [
       (bounds.width - width * zoom) / 2 / zoom,

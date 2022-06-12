@@ -17,11 +17,11 @@ export class PreviewManager {
   shapes: Shape[] | undefined
   constructor(serializedApp?: TLDocumentModel<Shape>) {
     if (serializedApp) {
-      this.deserialize(serializedApp)
+      this.load(serializedApp)
     }
   }
 
-  deserialize(snapshot: TLDocumentModel) {
+  load(snapshot: TLDocumentModel) {
     const page = snapshot.pages.find(p => snapshot.currentPageId === p.id)
     this.shapes = page?.shapes.map(s => {
       const ShapeClass = getShapeClass(s.type)
@@ -29,7 +29,7 @@ export class PreviewManager {
     })
   }
 
-  getSvg(viewport?: TLViewport) {
+  generatePreviewJsx(viewport?: TLViewport) {
     const allBounds = [...(this.shapes ?? [])?.map(s => s.getRotatedBounds())]
     const vBounds = viewport?.currentView
     if (vBounds) {
@@ -118,8 +118,8 @@ export class PreviewManager {
     return svgElement
   }
 
-  getExportedSVG() {
-    const svgElement = this.getSvg()
+  exportAsSVG() {
+    const svgElement = this.generatePreviewJsx()
     return svgElement ? ReactDOMServer.renderToString(svgElement) : ''
   }
 }

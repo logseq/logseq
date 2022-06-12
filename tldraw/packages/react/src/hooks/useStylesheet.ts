@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { TLTheme } from '@tldraw/core'
+import { BINDING_DISTANCE, TLTheme } from '@tldraw/core'
 
 const styles = new Map<string, HTMLStyleElement>()
 
@@ -71,7 +71,7 @@ const defaultTheme: TLTheme = {
   brushStroke: 'rgba(0,0,0,.25)',
   selectStroke: 'rgb(66, 133, 244)',
   selectFill: 'rgba(65, 132, 244, 0.05)',
-  binding: 'rgba(65, 55, 55, 0.05)',
+  binding: 'rgba(65, 132, 244, 0.5)',
   background: 'rgb(248, 249, 250)',
   foreground: 'rgb(51, 51, 51)',
   grid: 'rgba(144, 144, 144, .9)',
@@ -117,6 +117,7 @@ const tlcss = css`
     --tl-scale: calc(1 / var(--tl-zoom));
     --tl-padding: 64px;
     --tl-shadow-color: 0deg 0% 0%;
+    --tl-binding-distance: ${BINDING_DISTANCE}px;
     --tl-shadow-elevation-low: 0px 0.4px 0.5px hsl(var(--tl-shadow-color) / 0.04),
       0px 0.6px 0.8px -0.7px hsl(var(--tl-shadow-color) / 0.06),
       0.1px 1.2px 1.5px -1.4px hsl(var(--tl-shadow-color) / 0.08);

@@ -3,7 +3,7 @@ import type { Handler, WebKitGestureEvent } from '@use-gesture/core/types'
 import { useGesture } from '@use-gesture/react'
 import * as React from 'react'
 import { useRendererContext } from '~hooks'
-import { TLTargetType } from '@tldraw/core'
+import { TLTargetType, TLViewport } from '@tldraw/core'
 
 type PinchHandler = Handler<
   'pinch',
@@ -93,8 +93,12 @@ export function useGestureEvents(ref: React.RefObject<HTMLDivElement>) {
     target: ref,
     eventOptions: { passive: false },
     pinch: {
-      from: viewport.camera.zoom,
-      scaleBounds: () => ({ from: viewport.camera.zoom, max: 8, min: 0.1 }),
+      from: [viewport.camera.zoom, viewport.camera.zoom],
+      scaleBounds: () => ({
+        from: viewport.camera.zoom,
+        max: TLViewport.maxZoom,
+        min: TLViewport.minZoom,
+      }),
     },
   })
 }
