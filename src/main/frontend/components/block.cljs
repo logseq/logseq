@@ -2700,6 +2700,8 @@
   (let [[config query] (:rum/args state)
         repo (state/get-current-repo)
         result-atom (atom nil)
+        current-block-uuid (or (:block/uuid (:block config))
+                               (:block/uuid config))
         query-atom (if (:dsl-query? config)
                      (let [q (:query query)
                            form (safe-read-string q false)]
@@ -2717,7 +2719,7 @@
 
                          :else
                          (query-dsl/query (state/get-current-repo) q)))
-                     (db/custom-query query))
+                     (db/custom-query query {:current-block-uuid current-block-uuid}))
         query-atom (if (instance? Atom query-atom)
                      query-atom
                      result-atom)]

@@ -735,8 +735,11 @@
 ;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
 ;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
 #?(:cljs
-   (defn today-at-local-ms [hours mins secs millisecs]
-     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
+   (defn date-at-local-ms
+     ([hours mins secs millisecs]
+      (date-at-local-ms (.now js/Date) hours mins secs millisecs))
+     ([date hours mins secs millisecs]
+      (.setHours (js/Date. date) hours mins secs millisecs))))
 
 (defn d
   [k f]

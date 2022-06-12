@@ -16,40 +16,56 @@
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
-  [input]
-  (cond
-    (= :right-now-ms input) (util/time-ms)
-    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
-    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
+  ([input]
+   (resolve-input input nil))
+  ([input current-block-uuid]
+   (cond
+     (= :right-now-ms input) (util/time-ms)
+     (= :start-of-today-ms input) (util/date-at-local-ms 0 0 0 0)
+     (= :end-of-today-ms input) (util/date-at-local-ms 24 0 0 0)
 
-    (= :today input)
-    (date->int (t/today))
-    (= :yesterday input)
-    (date->int (t/minus (t/today) (t/days 1)))
-    (= :tomorrow input)
-    (date->int (t/plus (t/today) (t/days 1)))
-    (= :current-page input)
-    (some-> (or (state/get-current-page)
-                (:page (state/get-default-home))
-                (date/today)) string/lower-case)
+     (= :today input)
+     (date->int (t/today))
+     (= :yesterday input)
+     (date->int (t/minus (t/today) (t/days 1)))
+     (= :tomorrow input)
+     (date->int (t/plus (t/today) (t/days 1)))
+     (= :current-page input)
+     (some-> (or (state/get-current-page)
+                 (:page (state/get-default-home))
+                 (date/today)) string/lower-case)
+     (= :current-block-uuid input)
+     current-block-uuid
+     (= :parent-block-uuid input)
+     (:block/uuid (model/get-block-parent current-block-uuid))
 
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-before)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/minus (t/today) (t/days days))))
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-after)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/plus (t/today) (t/days days))))
+     (and (keyword? input)
+          (util/safe-re-find #"^\d+d(-before-ms)?$" (name input)))
+     (let [input (name input)
+           days (parse-long (re-find #"^\d+" input))]
+       (util/date-at-local-ms (t/minus (t/today) (t/days days)) 0 0 0 0))
+     (and (keyword? input)
+          (util/safe-re-find #"^\d+d(-after-ms)?$" (name input)))
+     (let [input (name input)
+           days (parse-long (re-find #"^\d+" input))]
+       (util/date-at-local-ms (t/plus (t/today) (t/days days)) 24 0 0 0))
+     (and (keyword? input)
+          (util/safe-re-find #"^\d+d(-before)?$" (name input)))
+     (let [input (name input)
+           days (parse-long (re-find #"^\d+" input))]
+       (date->int (t/minus (t/today) (t/days days))))
+     (and (keyword? input)
+          (util/safe-re-find #"^\d+d(-after)?$" (name input)))
+     (let [input (name input)
+           days (parse-long (re-find #"^\d+" input))]
+       (date->int (t/plus (t/today) (t/days days))))
 
-    (and (string? input) (text/page-ref? input))
-    (-> (text/page-ref-un-brackets! input)
-        (string/lower-case))
+     (and (string? input) (text/page-ref? input))
+     (-> (text/page-ref-un-brackets! input)
+         (string/lower-case))
 
-    :else
-    input))
+     :else
+     input)))
 
 (defn- remove-nested-children-blocks
   [blocks]
@@ -129,7 +145,8 @@
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
     (let [query (resolve-query query)
-          resolved-inputs (mapv resolve-input inputs)
+          current-block-uuid (:current-block-uuid query-opts)
+          resolved-inputs (mapv #(resolve-input % current-block-uuid) inputs)
           inputs (cond-> resolved-inputs
                          rules
                          (conj rules))
