@@ -363,10 +363,10 @@
   (plugin/uninstall! id))
 
 (defmethod handle :httpRequest [_ [_ _req-id opts]]
-  (let [{:keys [url method dataType data headers]} opts]
+  (let [{:keys [url method data returnType headers]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
-                                   (keyword (string/lower-case (or dataType "json")))])]
+                                   (keyword (string/lower-case (or returnType "json")))])]
       (-> (utils/fetch url
                        (-> {:method  method
                             :headers (and headers (bean/->js headers))}

@@ -7,7 +7,7 @@ export type IRequestOptions<R = any> = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   data: Object | ArrayBuffer
   timeout: number
-  dataType: 'json' | 'text' | 'base64' | 'arraybuffer'
+  returnType: 'json' | 'text' | 'base64' | 'arraybuffer'
   success: (result: R) => void
   fail: (err: any) => void
   final: () => void
@@ -27,7 +27,8 @@ export class LSPluginRequestTask<R = any> {
 
   constructor(
     private _client: LSPluginRequest,
-    private _requestId: RequestTaskID
+    private _requestId: RequestTaskID,
+    private _requestOptions: Partial<IRequestOptions> = {}
   ) {
 
     this._promise = new Promise<any>((resolve, reject) => {
@@ -39,10 +40,24 @@ export class LSPluginRequestTask<R = any> {
       this._client.once(
         genTaskCallbackType(this._requestId),
         (e) => {
+          // handle error
           resolve(e)
         }
       )
     })
+
+    const { success, fail, final } = this._requestOptions
+
+    this._promise
+      .then((res) => {
+        success?.(res)
+      })
+      .catch((e) => {
+        fail?.(e)
+      })
+      .finally(() => {
+        final?.()
+      })
   }
 
   abort() {
@@ -85,21 +100,23 @@ export class LSPluginRequest extends EventEmitter {
 
   static createRequestTask(
     client: LSPluginRequest,
-    requestID: RequestTaskID
+    requestID: RequestTaskID,
+    requestOptions: Partial<IRequestOptions>
   ) {
     return new LSPluginRequestTask(
-      client, requestID
+      client, requestID, requestOptions
     )
   }
 
   _request<R = any>(options: WithOptional<IRequestOptions<R>, keyof Omit<IRequestOptions, 'url'>>): LSPluginRequestTask<R> {
     const pid = this.ctx.baseInfo.id
-    const reqID = this.ctx.Experiments.invokeExperMethod('request', pid, options)
+    const { success, fail, final, ...requestOptions } = options
+    const reqID = this.ctx.Experiments.invokeExperMethod('request', pid, requestOptions)
 
     // TODO: impl
     const task = LSPluginRequest.createRequestTask(
       this.ctx.Request,
-      reqID
+      reqID, { success, fail, final }
     )
 
     return task
