@@ -155,16 +155,18 @@
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
                                        (assoc (when original-content {:old-content original-content})
-                                              :skip-compare? skip-compare?)))]
+                                              :skip-compare? skip-compare?)))
+        opts {:new-graph? new-graph?
+              :from-disk? from-disk?}]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]
           (db/transact! repo
             [[:db/retract page-id :block/alias]
-             [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content {:new-graph? new-graph?
-                                        :from-disk? from-disk?}))
-      (db/set-file-content! repo path content))
+             [:db/retract page-id :block/tags]]
+            opts))
+        (reset-file! repo path content opts))
+      (db/set-file-content! repo path content opts))
     (util/p-handle (write-file!)
                    (fn [_]
                      (when (= path (config/get-config-path repo))

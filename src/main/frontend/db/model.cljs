@@ -1450,11 +1450,13 @@
       (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map util/page-name-sanity-lc pages)))))
 
 (defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (let [tx-data {:file/path path
-                   :file/content content}]
-      (db-utils/transact! repo [tx-data] {:skip-refresh? true}))))
+  ([repo path content]
+   (set-file-content! repo path content {}))
+  ([repo path content opts]
+   (when (and repo path)
+     (let [tx-data {:file/path path
+                    :file/content content}]
+       (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
 (defn get-pre-block
   [repo page-id]

@@ -268,7 +268,8 @@
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
-                                                      :refresh? (not re-index?)}))
+                                                      :refresh? (not re-index?)
+                                                      :new-graph? re-index?}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
 
