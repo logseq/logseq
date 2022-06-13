@@ -169,7 +169,7 @@
                                          (not= updated-at (:block/created-at page)))))) metadata)
                            (remove nil?))]
              (when (seq metadata)
-               (db/transact! repo metadata))))))
+               (db/transact! repo metadata {:new-graph? true}))))))
      (catch js/Error e
        (log/error :exception e)))))
 
@@ -180,7 +180,7 @@
         files [{:file/path path
                 :file/content content}]
         file-paths [path]]
-    (util/profile "update-pages-metadata!" (load-pages-metadata! repo file-paths files force?))))
+    (load-pages-metadata! repo file-paths files force?)))
 
 (defn- parse-and-load-file!
   [repo-url file new-graph?]
