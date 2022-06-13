@@ -242,7 +242,7 @@
                                       (.. target -classList (contains "cp__header")))
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
       :style           {:fontSize  50}}
-     [:div.l.flex.gap-1
+     [:div.l.flex
       (when-not (mobile-util/native-platform?)
         [left-menu
          (when current-repo ;; this is for the Search button
@@ -261,7 +261,7 @@
              {:title "Go back" :on-click #(js/window.history.back)}
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
-     [:div.r.flex.gap-1
+     [:div.r.flex
       (when-not file-sync-handler/hiding-login&file-sync
         (file-sync))
       (when-not file-sync-handler/hiding-login&file-sync
