@@ -298,6 +298,8 @@
 
      ;; current version
      [:div.cp__file-sync-page-histories-right
+      [:h1.title.text-xl
+       "Current version"]
       (page/page-blocks-cp (state/get-current-repo) page-entity nil)]
 
      ;; ready loading
