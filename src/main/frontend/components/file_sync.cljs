@@ -229,6 +229,7 @@
         [content-ready? set-content-ready?] (rum/use-state false)
         *ref-contents   (rum/use-ref (atom {}))
         original-page-name (or (:block/original-name page-entity) page-name)]
+
     (rum/use-effect!
      #(when selected-page
         (set-content-ready? false)
@@ -259,6 +260,15 @@
                   (load-file repo-url relative-path)))))))
      [selected-page])
 
+    (rum/use-effect!
+     (fn []
+       (state/update-state! :editor/hidden-editors #(conj % page-name))
+
+       ;; clear effect
+       (fn []
+         (state/update-state! :editor/hidden-editors #(disj % page-name))))
+     [page-name])
+
     [:div.cp__file-sync-page-histories.flex-wrap
      {:class (util/classnames [{:is-list-ready list-ready?}])}
 
@@ -279,7 +289,7 @@
            [:div.relative.raw-content-editor
             (lazy-editor/editor
              nil inst-id {:data-lang "markdown"}
-             version-content {:lineWrapping true :readOnly true})
+             version-content {:lineWrapping true :readOnly true :lineNumbers true})
             [:div.absolute.top-1.right-1.opacity-50.hover:opacity-100
              (ui/button "Restore"
                :small? true

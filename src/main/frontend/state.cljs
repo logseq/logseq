@@ -96,6 +96,7 @@
 
      :config                                {}
      :block/component-editing-mode?         false
+     :editor/hidden-editors                 #{}             ;; page names
      :editor/draw-mode?                     false
      :editor/show-page-search?              false
      :editor/show-page-search-hashtag?      false

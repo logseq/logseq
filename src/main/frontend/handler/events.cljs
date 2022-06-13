@@ -134,7 +134,7 @@
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (state/set-modal!
    (file-sync/pick-page-histories-panel graph-uuid page-name)
-   {:label "modal-page-histories"}))
+   {:id :page-histories :label "modal-page-histories"}))
 
 (defmethod handle :graph/open-new-window [[ev repo]]
   (p/let [current-repo (state/get-current-repo)
