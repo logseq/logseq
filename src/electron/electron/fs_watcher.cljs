@@ -15,17 +15,22 @@
 
 (defonce file-watcher-chan "file-watcher")
 (defn- send-file-watcher! [dir type payload]
-  ;; Should only send to one window; then dbsync will do his job
-  ;; If no window is on this graph, just ignore
-  (let [sent? (some (fn [^js win]
-                      (when-not (.isDestroyed win)
-                        (.. win -webContents
-                            (send file-watcher-chan
-                                  (bean/->js {:type type :payload payload})))
-                        true)) ;; break some loop on success
-                    (window/get-graph-all-windows dir))]
-    (when-not sent? (prn "unhandled file event will cause uncatched file modifications!.
-                          target:" dir))))
+  (let [send-fn (fn [^js win]
+                  (when-not (.isDestroyed win)
+                    (.. win -webContents
+                        (send file-watcher-chan
+                              (bean/->js {:type type :payload payload})))
+                    true))
+        wins (window/get-graph-all-windows dir)]
+    (if (contains? #{"unlinkDir" "addDir"} type)
+      ;; notify every windows
+      (doseq [win wins] (send-fn win))
+
+      ;; Should only send to one window; then dbsync will do his job
+      ;; If no window is on this graph, just ignore
+      (let [sent? (some send-fn wins)]
+        (when-not sent? (prn "unhandled file event will cause uncatched file modifications!.
+                          target:" dir))))))
 
 (defn- publish-file-event!
   [dir path event]
