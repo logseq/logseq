@@ -820,9 +820,9 @@
           (p/catch #(req-cb %)))
       req-id)))
 
-(defn ^:export exper_abort_request
+(defn ^:export http_request_abort
   [req-id]
-  nil)
+  (ipc/ipc :httpRequestAbort req-id))
 
 ;; helpers
 (defn ^:export query_element_by_id

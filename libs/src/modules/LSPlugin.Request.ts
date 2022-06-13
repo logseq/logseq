@@ -3,6 +3,7 @@ import { EventEmitter } from 'eventemitter3'
 
 export type IRequestOptions<R = any> = {
   url: string
+  abortable: boolean
   headers: Record<string, string>
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   data: Object | ArrayBuffer
@@ -40,8 +41,11 @@ export class LSPluginRequestTask<R = any> {
       this._client.once(
         genTaskCallbackType(this._requestId),
         (e) => {
-          // handle error
-          resolve(e)
+          if (e && e instanceof Error) {
+            reject(e)
+          } else {
+            resolve(e)
+          }
         }
       )
     })
@@ -61,9 +65,17 @@ export class LSPluginRequestTask<R = any> {
   }
 
   abort() {
-    if (this._aborted) return
+    if (
+      !this._requestOptions.abortable ||
+      this._aborted
+    ) return
 
-    // TODO: impl
+    this._client.ctx._execCallableAPI(
+      'http_request_abort',
+      this._requestId
+    )
+
+    this._aborted = true
   }
 
   get promise(): Promise<R> {
@@ -83,7 +95,7 @@ export class LSPluginRequestTask<R = any> {
  * A simple request client
  */
 export class LSPluginRequest extends EventEmitter {
-  constructor(private ctx: LSPluginUser) {
+  constructor(private _ctx: LSPluginUser) {
     super()
 
     // request callback listener
@@ -108,17 +120,26 @@ export class LSPluginRequest extends EventEmitter {
     )
   }
 
-  _request<R = any>(options: WithOptional<IRequestOptions<R>, keyof Omit<IRequestOptions, 'url'>>): LSPluginRequestTask<R> {
+  async _request<R extends {},
+    T extends WithOptional<IRequestOptions<R>, keyof Omit<IRequestOptions, 'url'>>>(options: T):
+    Promise<T extends Pick<IRequestOptions, 'abortable'> ? LSPluginRequestTask<R> : R> {
     const pid = this.ctx.baseInfo.id
     const { success, fail, final, ...requestOptions } = options
     const reqID = this.ctx.Experiments.invokeExperMethod('request', pid, requestOptions)
 
-    // TODO: impl
     const task = LSPluginRequest.createRequestTask(
       this.ctx.Request,
-      reqID, { success, fail, final }
+      reqID, options
     )
 
-    return task
+    if (!requestOptions.abortable) {
+      return task.promise
+    }
+
+    return task as any
+  }
+
+  get ctx(): LSPluginUser {
+    return this._ctx
   }
 }

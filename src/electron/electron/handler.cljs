@@ -8,6 +8,7 @@
             ["os" :as os]
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
+            ["abort-controller" :as AbortController]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -368,8 +369,10 @@
 (defmethod handle :uninstallMarketPlugin [_ [_ id]]
   (plugin/uninstall! id))
 
+(def *request-abort-signals (atom {}))
+
 (defmethod handle :httpRequest [_ [_ _req-id opts]]
-  (let [{:keys [url method data returnType headers]} opts]
+  (let [{:keys [url abortable method data returnType headers]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
                                    (keyword (string/lower-case (or returnType "json")))])]
@@ -378,7 +381,11 @@
                             :headers (and headers (bean/->js headers))}
                            (merge (when (and (not (contains? #{:GET :HEAD} method)) data)
                                     ;; TODO: support type of arrayBuffer
-                                    {:body (js/JSON.stringify (bean/->js data))}))))
+                                    {:body (js/JSON.stringify (bean/->js data))})
+
+                                  (when-let [^js controller (and abortable (AbortController.))]
+                                    (swap! *request-abort-signals assoc _req-id controller)
+                                    {:signal (.-signal controller)}))))
           (p/then (fn [^js res]
                     (case type
                       :json
@@ -393,7 +400,17 @@
 
                       :text
                       (.text res))))
-          (p/catch identity)))))
+          (p/catch
+           (fn [^js e]
+             ;; TODO: handle special cases
+             (throw e)))
+          (p/finally
+           (fn []
+             (swap! *request-abort-signals dissoc _req-id)))))))
+
+(defmethod handle :httpRequestAbort [_ [_ _req-id]]
+  (when-let [^js controller (get @*request-abort-signals _req-id)]
+    (.abort controller)))
 
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
