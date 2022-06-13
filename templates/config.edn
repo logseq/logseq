@@ -24,7 +24,11 @@
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
 
+ ;; Enable Block timestamp
  :feature/enable-block-timestamps? false
+
+ ;; Disable Built-in Scheduled and deadline Query
+ ;; :feature/disable-scheduled-and-deadline-query? true
 
  ;; Specify the date on which the week starts.
  ;; Goes from 0 to 6 (Monday to Sunday), default to 6
@@ -36,6 +40,15 @@
  ;; https://github.com/logseq/awesome-logseq#css-themes
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
+
+ ;; Set Bullet indentation when exporting
+ ;; default option: tab
+ ;; Possible options are for `:sidebar` are
+ ;; 1. `:eight-spaces` as eight spaces
+ ;; 2. `:four-spaces` as four spaces
+ ;; 3. `:two-spaces` as two spaces
+ ;; :export/bullet-indentation :tab
+
 
  ;; When :all-pages-public? true, export repo would export all pages within that repo.
  ;; Regardless of whether you've set any page to public or not.

@@ -55,12 +55,13 @@
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
       (fn [resolve reject]
-        (-> (util/fetch plugins-url
-                        (fn [res]
-                          (let [pkgs (:packages res)]
-                            (state/set-state! :plugin/marketplace-pkgs pkgs)
-                            (resolve pkgs)))
-                        reject)
+        (-> (ipc/ipc :httpFetchJSON plugins-url)
+            (p/then (fn [res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (let [pkgs (:packages res)]
+                          (state/set-state! :plugin/marketplace-pkgs pkgs)
+                          (resolve pkgs))
+                        (reject nil))))
             (p/catch reject))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
@@ -69,18 +70,20 @@
   (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
     (p/create
       (fn [resolve reject]
-        (util/fetch stats-url
-                    (fn [res]
-                      (when res
-                        (state/set-state!
-                          :plugin/marketplace-stats
-                          (into {} (map (fn [[k stat]]
-                                          [k (assoc stat
-                                               :total_downloads
-                                               (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
-                                        res)))
-                        (resolve nil)))
-                    reject)))
+        (-> (ipc/ipc :httpFetchJSON stats-url)
+            (p/then (fn [^js res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (do
+                          (state/set-state!
+                           :plugin/marketplace-stats
+                           (into {} (map (fn [[k stat]]
+                                           [k (assoc stat
+                                                     :total_downloads
+                                                     (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                         res)))
+                          (resolve nil))
+                        (reject nil))))
+            (p/catch reject))))
     (p/resolved nil)))
 
 (defn installed?
@@ -614,7 +617,7 @@
                                             (state/set-custom-theme! mode theme)
                                             (state/set-theme-mode! mode))
                                           (state/set-state! :plugin/selected-theme url))))
-                                        
+
                 (.on "reset-custom-theme" (fn [^js themes]
                                             (let [themes (bean/->clj themes)
                                                   custom-theme (dissoc themes :mode)

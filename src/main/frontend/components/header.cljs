@@ -25,7 +25,7 @@
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
-    [:a.button
+    [:button.button.icon.inline
      {:href     (rfe/href :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
@@ -40,13 +40,13 @@
       (if (user-handler/logged-in?)
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
-           [:a.button
+           [:button.button
             {:on-click toggle-fn}
             [:span.text-sm.font-medium (user-handler/email)]])
          [{:title (t :logout)
            :options {:on-click user-handler/logout}}]
          {})
-        [:a.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
+        [:button.button.text-sm.font-medium.block {:on-click #(js/window.open config/LOGIN-URL)}
          [:span (t :login)]]))))
 
 (rum/defcs file-sync-remote-graphs <
@@ -90,10 +90,10 @@
         (ui/dropdown-with-links
          (fn [{:keys [toggle-fn]}]
            (if not-syncing?
-             [:a.button
+             [:button.button.icon.inline
               {:on-click toggle-fn}
               (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
-             [:a.button
+             [:button.button.icon.inline
               {:on-click toggle-fn}
               (ui/icon "cloud" {:style {:fontSize ui/icon-size}})]))
          (cond-> []
@@ -131,11 +131,9 @@
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
-    [:a#left-menu.cp__header-left-menu.button
-     {:on-click on-click
-      :style    {:margin-left 12}}
-     [:span.inner
-      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]]))
+    [:button.#left-menu.cp__header-left-menu.button.icon
+     {:on-click on-click}
+      (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
@@ -144,7 +142,7 @@
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:a.button
+       [:button.button.icon
         {:on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
@@ -188,12 +186,12 @@
   [:div.flex.flex-row
 
    (ui/with-shortcut :go/backward "bottom"
-     [:a.it.navigation.nav-left.button
+     [:button.it.navigation.nav-left.button.icon
       {:title "Go back" :on-click #(js/window.history.back)}
       (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
 
    (ui/with-shortcut :go/forward "bottom"
-     [:a.it.navigation.nav-right.button
+     [:button.it.navigation.nav-right.button.icon
       {:title "Go forward" :on-click #(js/window.history.forward)}
       (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
 
@@ -244,12 +242,12 @@
                                       (.. target -classList (contains "cp__header")))
                              (js/window.apis.toggleMaxOrMinActiveWindow))))
       :style           {:fontSize  50}}
-     [:div.l.flex
+     [:div.l.flex.gap-1
       (when-not (mobile-util/native-platform?)
         [left-menu
          (when current-repo ;; this is for the Search button
            (ui/with-shortcut :go/search "right"
-             [:a.button#search-button
+             [:button.button.icon#search-button
               {:on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
@@ -259,11 +257,11 @@
         (if (state/home?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
-            [:a.it.navigation.nav-left.button
+            [:button.it.navigation.nav-left.button.icon
              {:title "Go back" :on-click #(js/window.history.back)}
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
-     [:div.r.flex
+     [:div.r.flex.gap-1
       (when-not file-sync-handler/hiding-login&file-sync
         (file-sync))
       (when-not file-sync-handler/hiding-login&file-sync
@@ -281,7 +279,7 @@
         (new-block-mode))
 
       (when show-open-folder?
-        [:a.text-sm.font-medium.button.add-graph-btn.flex.items-center
+        [:a.text-sm.font-medium.button.icon.add-graph-btn.flex.items-center
          {:on-click #(route-handler/redirect! {:to :repo-add})}
          (ui/icon "folder-plus")
          (when-not config/mobile?
@@ -289,7 +287,7 @@
             (t :on-boarding/add-graph)])])
 
       (when config/publishing?
-        [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
+        [:button.text-sm.font-medium.button {:href (rfe/href :graph)}
          (t :graph)])
 
       (dropdown-menu {:t            t

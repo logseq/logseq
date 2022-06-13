@@ -296,6 +296,11 @@
   (p/let [_ (utils/fetch url)]
     (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
 
+(defmethod handle :httpFetchJSON [_win [_ url options]]
+  (p/let [res (utils/fetch url options)
+          json (.json res)]
+         json))
+
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 

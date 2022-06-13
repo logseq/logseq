@@ -372,7 +372,6 @@
       [:p [:label [:strong (t :type)]
            (ui/select [{:label "Disabled" :value "" :selected disabled?}
                        {:label "http" :value "http" :selected (= protocol "http")}
-                       {:label "https" :value "https" :selected (= protocol "https")}
                        {:label "socks5" :value "socks5" :selected (= protocol "socks5")}]
                       #(set-opts!
                          (assoc opts :protocol (if (= "disabled" (util/safe-lower-case %)) nil %))) nil)]]
