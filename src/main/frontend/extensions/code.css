@@ -19,6 +19,16 @@
     /* margin-top: 4px; */
     z-index: 9999;
     display: none;
+    font-size: 10px;
+    padding: 4px 6px;
+    line-height: 1em;
+    opacity: .8;
+
+    &:hover {
+      cursor: pointer;
+      opacity: 1;
+      user-select: none;
+    }
   }
 
   &-calc {
@@ -46,6 +56,11 @@
   font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
   border-radius: 2px;
   line-height: 1.45em;
+
+  &-scroll {
+    padding-top: 14px;
+    padding-bottom: 56px;
+  }
 
   &:not(.CodeMirror-focused) {
     .CodeMirror-activeline-background {
