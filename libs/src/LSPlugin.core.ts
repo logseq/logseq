@@ -1126,7 +1126,7 @@ class LSPluginCore
     | 'registered'
     | 'error'
     | 'unregistered'
-    | 'theme-changed'
+    | 'themes-changed'
     | 'theme-selected'
     | 'reset-custom-theme'
     | 'settings-changed'
@@ -1510,7 +1510,7 @@ class LSPluginCore
     }
 
     themes.push(opt)
-    this.emit('theme-changed', this.themes, { id, ...opt })
+    this.emit('themes-changed', this.themes, { id, ...opt })
   }
 
   async selectTheme(
@@ -1571,7 +1571,7 @@ class LSPluginCore
     }
 
     this._registeredThemes.delete(id)
-    this.emit('theme-changed', this.themes, { id })
+    this.emit('themes-changed', this.themes, { id })
     if (effect && this._currentTheme?.pid === id) {
       this._currentTheme.eject()
       this._currentTheme = null

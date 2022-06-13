@@ -605,7 +605,7 @@
                                   (clear-commands! pid)
                                   (unregister-plugin-themes pid)))
 
-                (.on "theme-changed" (fn [^js themes]
+                (.on "themes-changed" (fn [^js themes]
                                        (swap! state/state assoc :plugin/installed-themes
                                               (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
@@ -616,6 +616,7 @@
                                           (when mode
                                             (state/set-custom-theme! mode theme)
                                             (state/set-theme-mode! mode))
+                                          (hook-plugin-app :theme-changed theme)
                                           (state/set-state! :plugin/selected-theme url))))
 
                 (.on "reset-custom-theme" (fn [^js themes]
