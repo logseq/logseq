@@ -100,7 +100,6 @@
       margin-right: 8px;
       opacity: .6;
       position: relative;
-      top: -1px;
     }
 
     &.active, &:active {
