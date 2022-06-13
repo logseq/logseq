@@ -3606,6 +3606,7 @@
         :settings-page/tab-version-control "Sürüm denetimi"
         :settings-page/tab-advanced "Gelişmiş"
         :settings-page/plugin-system "Eklenti sistemi"
+        :settings-page/enable-flashcards "Bilgi kartları"
         :settings-page/network-proxy "Ağ ara sunucusu"
         :logseq "Logseq"
         :on "AÇIK"
