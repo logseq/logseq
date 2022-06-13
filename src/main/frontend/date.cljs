@@ -21,8 +21,11 @@
 
 (defn journal-title-formatters
   []
-  (conj
-   #{"do MMM yyyy"
+  (->
+   (cons
+    (state/get-date-formatter)
+    (list
+     "do MMM yyyy"
      "do MMMM yyyy"
      "MMM do, yyyy"
      "MMMM do, yyyy"
@@ -48,8 +51,8 @@
      "yyyy-MM-dd EEEE"
      "yyyy_MM_dd"
      "yyyyMMdd"
-     "yyyy年MM月dd日"}
-   (state/get-date-formatter)))
+     "yyyy年MM月dd日"))
+   (distinct)))
 
 (defn get-date-time-string
   ([]
