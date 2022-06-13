@@ -1105,15 +1105,16 @@
 
 (defn close-modal!
   []
-  (if (seq (get-sub-modals))
-    (close-sub-modal!)
-    (swap! state assoc
-           :modal/id nil
-           :modal/label ""
-           :modal/show? false
-           :modal/fullscreen? false
-           :modal/panel-content nil
-           :ui/open-select nil)))
+  (when-not (editing?)
+    (if (seq (get-sub-modals))
+      (close-sub-modal!)
+      (swap! state assoc
+             :modal/id nil
+             :modal/label ""
+             :modal/show? false
+             :modal/fullscreen? false
+             :modal/panel-content nil
+             :ui/open-select nil))))
 
 (defn get-db-batch-txs-chan
   []
