@@ -34,10 +34,10 @@
      (some-> (or (state/get-current-page)
                  (:page (state/get-default-home))
                  (date/today)) string/lower-case)
-     (= :current-block-uuid input)
-     current-block-uuid
-     (= :parent-block-uuid input)
-     (:block/uuid (model/get-block-parent current-block-uuid))
+     (= :current-block input)
+     (:db/id (db-utils/entity [:block/uuid current-block-uuid]))
+     (= :parent-block input)
+     (:db/id (model/get-block-parent current-block-uuid))
 
      (and (keyword? input)
           (util/safe-re-find #"^\d+d(-before-ms)?$" (name input)))
