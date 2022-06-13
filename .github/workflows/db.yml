@@ -1,27 +1,23 @@
-name: logseq/graph-parser CI
+name: logseq/db CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to graph-parser or
-  # its local dependencies
+  # Path filters ensure jobs only kick off if a change is made to db
   push:
     branches: [master]
     paths:
-      - 'deps/graph-parser/**'
-      # db is a local dep that could break functionality in this lib and should trigger this
       - 'deps/db/**'
-      - '.github/workflows/graph-parser.yml'
-      - '!deps/graph-parser/**.md'
+      - '.github/workflows/db.yml'
+      - '!deps/db/**.md'
   pull_request:
     branches: [master]
     paths:
-      - 'deps/graph-parser/**'
       - 'deps/db/**'
-      - '.github/workflows/graph-parser.yml'
-      - '!deps/graph-parser/**.md'
+      - '.github/workflows/db.yml'
+      - '!deps/db/**.md'
 
 defaults:
   run:
-    working-directory: deps/graph-parser
+    working-directory: deps/db
 
 env:
   CLOJURE_VERSION: '1.10.1.727'
@@ -44,7 +40,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/graph-parser/yarn.lock
+          cache-dependency-path: deps/db/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -56,34 +52,10 @@ jobs:
         uses: DeLaGuardo/setup-clojure@master
         with:
           cli: ${{ env.CLOJURE_VERSION }}
-
-      - name: Setup Babashka
-        uses: turtlequeue/setup-babashka@v1.3.0
-        with:
-          babashka-version: ${{ env.BABASHKA_VERSION }}
-
-      - name: Clojure cache
-        uses: actions/cache@v3
-        id: clojure-deps
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-deps-
-
-      - name: Fetch Clojure deps
-        if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:test -P
+          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
-
-      - name: Run ClojureScript tests
-        run: clojure -M:test
-
-      - name: Run nbb-logseq tests
-        run: yarn nbb-logseq -cp src:test:../db/src -m logseq.graph-parser.nbb-test-runner/run-tests
 
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
@@ -106,17 +78,16 @@ jobs:
         uses: DeLaGuardo/setup-clojure@master
         with:
           cli: ${{ env.CLOJURE_VERSION }}
-
-      - name: Setup Babashka
-        uses: turtlequeue/setup-babashka@v1.3.0
-        with:
-          babashka-version: ${{ env.BABASHKA_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --parallel --lint src test
+        run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
         run: bb lint:carve
 
       - name: Lint for vars that are too large
         run: bb lint:large-vars
+
+      - name: Lint datalog rules
+        run: bb lint:rules

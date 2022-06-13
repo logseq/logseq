@@ -4,7 +4,7 @@
             [frontend.db.query-react :as query-react]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.model :as model]
-            [frontend.db.rules :as rules]
+            [logseq.db.rules :as rules]
             [frontend.util.datalog :as datalog-util]
             [clojure.walk :as walk]))
 

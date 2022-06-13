@@ -245,8 +245,9 @@
              :on-click-handler route-handler/go-to-journals!
              :icon             "calendar"}))
 
-        [:div.flashcards-nav
-         (flashcards srs-open?)]
+        (when (state/enable-flashcards? (state/get-current-repo))
+          [:div.flashcards-nav
+           (flashcards srs-open?)])
 
         (sidebar-item
           {:class  "graph-view-nav"
@@ -333,7 +334,7 @@
 
       (when show-action-bar?
         (action-bar/action-bar))
-      
+
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width         (or global-graph-pages?
@@ -344,11 +345,11 @@
 
        (mobile-bar)
        (footer/footer)
-       
+
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-       
+
        (cond
          (not indexeddb-support?)
          nil

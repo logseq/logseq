@@ -6,19 +6,27 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.state :as state]
+            [frontend.handler.notification :as notification]
+            ["@sentry/react" :as Sentry]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defn extract-blocks
-  "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state"
+  "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
+and handles unexpected failure."
   [blocks content with-id? format]
-  (gp-block/extract-blocks blocks content with-id? format
-                           {:user-config (state/get-config)
-                            :block-pattern (config/get-block-pattern format)
-                            :supported-formats (gp-config/supported-formats)
-                            :db (db/get-db (state/get-current-repo))
-                            :date-formatter (state/get-date-formatter)}))
+  (try
+    (gp-block/extract-blocks blocks content with-id? format
+                             {:user-config (state/get-config)
+                              :block-pattern (config/get-block-pattern format)
+                              :supported-formats (gp-config/supported-formats)
+                              :db (db/get-db (state/get-current-repo))
+                              :date-formatter (state/get-date-formatter)})
+    (catch :default e
+      (Sentry/captureException e)
+      (notification/show! "An unexpected error occurred during block extraction." :error)
+      [])))
 
 (defn page-name->map
   "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"

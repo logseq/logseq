@@ -1,4 +1,4 @@
-(ns logseq.graph-parser.db.default
+(ns logseq.db.default
   (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names

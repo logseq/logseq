@@ -114,6 +114,11 @@
                page-ref (string/lower-case page-ref)]
            (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
 
+         (and (vector? f)
+              (= (first f) 'page-property)
+              (keyword? (util/nth-safe f 2)))
+         (update f 2 (fn [k] (keyword (string/replace (name k) "_" "-"))))
+
          :else
          f)) query)))
 

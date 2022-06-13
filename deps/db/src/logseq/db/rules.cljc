@@ -1,6 +1,7 @@
-(ns ^:bb-compatible ^:nbb-compatible frontend.db.rules)
+(ns ^:bb-compatible logseq.db.rules
+  "Datalog rules for use with logseq.db.schema")
 
-(def rules
+(def ^:large-vars/data-var rules
   ;; rule "parent" is optimized for child node -> parent node nesting queries
   '[[(parent ?p ?c)
      [?c :block/parent ?p]]
@@ -58,7 +59,7 @@
     ;;                      [?e ?a ?v]))]
     ])
 
-(def query-dsl-rules
+(def ^:large-vars/data-var query-dsl-rules
   "Rules used by frontend.db.query-dsl. The symbols ?b and ?p respectively refer
   to block and page. Do not alter them as they are programatically built by the
   query-dsl ns"

@@ -191,7 +191,7 @@
     
     .commands-button {
         overflow: hidden;
-        max-width: 50px;
+        max-width: 40px;
         text-align: center;
         margin: auto 0;
 
@@ -207,7 +207,6 @@
 
     .commands-button {
         overflow: hidden;
-        max-width: 80px;
         text-align: center;
         margin: auto 0;
 
@@ -228,7 +227,7 @@
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
   padding: 2px 0;
-  display: inline-block;
+  display: inherit;
 
   &:hover {
     color: var(--ls-link-text-hover-color);
@@ -236,6 +235,14 @@
 
   .block-content {
     cursor: inherit;
+
+    &-inner {
+      display: inherit;
+
+      > * {
+        display: inherit;
+      }
+    }
   }
 }
 

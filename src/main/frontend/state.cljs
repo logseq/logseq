@@ -27,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
@@ -366,7 +367,12 @@
 (defn enable-journals?
   [repo]
   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo)))))
+                (get (sub-config) repo)))))
+
+(defn enable-flashcards?
+  [repo]
+  (not (false? (:feature/enable-flashcards?
+                (get (sub-config) repo)))))
 
 (defn export-heading-to-list?
   []
