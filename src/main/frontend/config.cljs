@@ -17,6 +17,8 @@
 
 (reset! state/publishing? publishing?)
 
+(goog-define FILE_SYNC_ENABLED false)
+
 (def test? false)
 
 ;; prod env

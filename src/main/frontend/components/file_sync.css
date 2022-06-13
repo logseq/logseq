@@ -29,7 +29,7 @@
           right: 2px;
           width: 7px;
           height: 7px;
-          background-color: var(--ls-color-file-sync-error);
+          background-color: var(--ls-color-file-sync-pending);
           border-radius: 100%;
           opacity: 1;
         }

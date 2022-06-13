@@ -17,7 +17,7 @@
             [cljs-time.coerce :as tc]
             [electron.ipc :as ipc]
             [frontend.util.fs :as fs-util]
-            [cljs.core.async :as as]))
+            [cljs.core.async :as async]))
 
 (rum/defcs indicator <
   rum/reactive
@@ -44,12 +44,12 @@
         turn-on            #(when-not toggling?
                               (state/set-state! :file-sync/toggling? true)
                               (if-not graph-txid-exists?
-                                (as/go
+                                (async/go
                                   (notifications/show! "Going to init a remote graph!" :warn)
                                   (let [repo      (state/get-current-repo)
                                         GraphName (util/node-path.basename repo)]
-                                    (when-let [GraphUUID (get (as/<! (file-sync-handler/create-graph GraphName)) 2)]
-                                      (as/<! (fs-sync/sync-start))
+                                    (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph GraphName)) 2)]
+                                      (async/<! (fs-sync/sync-start))
                                       ;; update existing repo
                                       (state/set-repos! (map (fn [r]
                                                                (if (= (:url r) repo)
@@ -113,10 +113,9 @@
              (ui/button "Sync now"
                         :class "block"
                         :small? true
-                        :on-click #(as/offer! fs-sync/immediately-local->remote-chan true))])
+                        :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
           (when config/dev?
-            [:strong.debug-status (str status)])]
-         }))]))
+            [:strong.debug-status (str status)])]}))]))
 
 (rum/defc pick-local-graph-for-sync [graph]
   (rum/use-effect!
@@ -190,10 +189,10 @@
     (rum/use-effect!
      (fn []
        (when-not loading?
-         (as/go
+         (async/go
            (set-loading? true)
            (try
-             (let [files (as/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
+             (let [files (async/<! (file-sync-handler/fetch-page-file-versions graph-uuid page-entity))]
                (set-version-files files)
                (set-page-fn (first files))
                (set-list-ready? true))
@@ -250,8 +249,8 @@
                                      (swap! (rum/deref *ref-contents) assoc k content)))))]
               (if (and file-uuid version-uuid)
                 ;; read remote content
-                (as/go
-                  (let [downloaded-path (as/<! (file-sync-handler/download-version-file graph-uuid file-uuid version-uuid true))]
+                (async/go
+                  (let [downloaded-path (async/<! (file-sync-handler/download-version-file graph-uuid file-uuid version-uuid true))]
                     (when downloaded-path
                       (load-file repo-url downloaded-path))))
 

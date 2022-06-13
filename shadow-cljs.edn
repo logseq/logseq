@@ -31,7 +31,8 @@
                                                 "externs.js"]
                            :warnings           {:fn-deprecated false
                                                 :redef false}}
-        :closure-defines  {goog.debug.LOGGING_ENABLED      true}
+        :closure-defines  {goog.debug.LOGGING_ENABLED      true
+                           frontend.config/FILE_SYNC_ENABLED #shadow/env "LOGSEQ_FILESYNC_ENABLED"}
 
         ;; NOTE: electron, browser/mobile-app use different asset-paths.
         ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
