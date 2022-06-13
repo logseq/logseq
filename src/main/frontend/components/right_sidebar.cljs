@@ -197,7 +197,7 @@
 
      (sidebar-resizer)
      [:div.cp__right-sidebar-scrollable
-      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-4.h-12
+      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-2.h-12
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
