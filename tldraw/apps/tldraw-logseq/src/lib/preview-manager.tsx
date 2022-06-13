@@ -30,7 +30,7 @@ export class PreviewManager {
   }
 
   generatePreviewJsx(viewport?: TLViewport) {
-    const allBounds = [...(this.shapes ?? [])?.map(s => s.getRotatedBounds())]
+    const allBounds = [...(this.shapes ?? []).map(s => s.getRotatedBounds())]
     const vBounds = viewport?.currentView
     if (vBounds) {
       allBounds.push(vBounds)

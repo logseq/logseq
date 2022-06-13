@@ -195,6 +195,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                   overflow: 'hidden',
                   justifyContent: 'center',
                   padding: 16,
+                  fontSize: '24px'
                 }}
               >
                 LOGSEQ PORTAL PLACEHOLDER
