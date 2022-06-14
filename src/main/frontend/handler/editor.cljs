@@ -2936,35 +2936,28 @@
       :else
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+        (util/stop e)
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
+          (paste-text-parseable format text)
 
           [:org _ false _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
+          (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
+          (paste-segmented-text format text)
 
           [:markdown true _ true]
-          nil
+          (commands/simple-insert! (state/get-edit-input-id) text nil)
 
           [:org _ true false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
+          (paste-segmented-text format text)
 
           [:org _ true true]
-          nil)))))
+          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -2987,7 +2980,7 @@
           edit-block (state/get-edit-block)
           format (or (:block/format edit-block) :markdown)
           initial-text (.getData clipboard-data "text")
-          text (or (when (string/blank? html)
+          text (or (when-not (string/blank? html)
                      (html-parser/convert format html))
                    initial-text)
           input (state/get-input)]
@@ -3215,7 +3208,7 @@
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
 
-  
+
 (defn block-with-title?
   [format content semantic?]
   (and (string/includes? content "\n")

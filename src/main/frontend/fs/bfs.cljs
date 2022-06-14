@@ -35,4 +35,6 @@
   (get-files [_this _path-or-handle _ok-handler]
     nil)
   (watch-dir! [_this _dir]
+    nil)
+  (unwatch-dir! [_this _dir]
     nil))

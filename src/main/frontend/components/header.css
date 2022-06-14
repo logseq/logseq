@@ -53,6 +53,10 @@
     }
   }
 
+  .ui-items-container .button {
+    width: 2rem;
+  }
+
   svg.warning {
     transform: scale(0.6);
     color: red;

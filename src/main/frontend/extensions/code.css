@@ -19,7 +19,6 @@
     /* margin-top: 4px; */
     z-index: 9999;
     display: none;
-    font-size: 10px;
     padding: 4px 6px;
     line-height: 1em;
     opacity: .8;
@@ -58,8 +57,8 @@
   line-height: 1.45em;
 
   &-scroll {
-    padding-top: 14px;
-    padding-bottom: 56px;
+    padding-top: 18px;
+    padding-bottom: 62px;
   }
 
   &:not(.CodeMirror-focused) {

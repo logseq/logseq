@@ -1924,8 +1924,14 @@
         (state/conj-selection-block! (gdom/getElement block-id) :down))
       (when (contains? #{1 0} button)
         (when-not (target-forbidden-edit? target)
-          (if (and shift? (state/get-selection-start-block))
+          (cond
+            (and shift? (state/get-selection-start-block))
             (editor-handler/highlight-selection-area! block-id)
+
+            shift?
+            (util/clear-selection!)
+
+            :else
             (do
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
