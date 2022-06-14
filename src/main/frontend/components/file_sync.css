@@ -84,11 +84,11 @@
 
     .dropdown-wrapper {
       width: 90vw;
-      max-height: 80vh;
+      max-height: 75vh;
       overflow: hidden;
       overflow-y: auto;
       position: fixed;
-      right: 60px;
+      right: 5vw;
 
       @screen md {
         width: 400px;
