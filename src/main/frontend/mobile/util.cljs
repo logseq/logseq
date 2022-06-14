@@ -23,7 +23,6 @@
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (when (native-ios?)
-  (defonce download-icloud-files (registerPlugin "DownloadiCloudFiles"))
   (defonce ios-utils (registerPlugin "Utils"))
   (defonce ios-file-container (registerPlugin "FileContainer"))
   (defonce file-sync (registerPlugin "FileSync")))
@@ -31,14 +30,6 @@
 ;; NOTE: both iOS and android share the same FsWatcher API
 (when (native-platform?)
   (defonce fs-watcher (registerPlugin "FsWatcher")))
-
-(defn sync-icloud-repo [repo-dir]
-  (let [repo-name (-> (string/split repo-dir "Documents/")
-                      last
-                      string/trim
-                      js/decodeURI)]
-    (.syncGraph download-icloud-files
-                (clj->js {:graph repo-name}))))
 
 (defn hide-splash []
   (.hide SplashScreen))
