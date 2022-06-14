@@ -7,7 +7,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
@@ -160,19 +160,21 @@
      page-name)))
 
 (defn delete-file!
-  [repo page-name]
+  [repo page-name unlink-file?]
   (let [file (db/get-page-file page-name)
         file-path (:file/path file)]
     ;; delete file
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-      (->
-       (p/let [_ (and (config/local-db? repo)
-                      (mobile-util/native-platform?)
-                      (fs/delete-file! repo file-path file-path {}))
-               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
-       (p/catch (fn [err]
-                  (js/console.error "error: " err)))))))
+      (when unlink-file?
+        (->
+         (p/let [_ (and (config/local-db? repo)
+                        (mobile-util/native-platform?)
+                        ;; TODO: @leizhe remove fs/delete-file! and use fs/unlink!
+                        (fs/delete-file! repo file-path file-path {}))
+                 _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)])
+         (p/catch (fn [err]
+                    (js/console.error "error: " err))))))))
 
 (defn- compute-new-file-path
   [old-path new-name]
@@ -316,7 +318,7 @@
             page (db/entity [:block/name page-name])]
         (db/transact! tx-data)
 
-        (when delete-file? (delete-file! repo page-name))
+        (delete-file! repo page-name delete-file?)
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity

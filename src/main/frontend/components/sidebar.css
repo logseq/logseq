@@ -87,24 +87,24 @@
   }
 
   .page-icon {
+    @apply mr-1 align-baseline;
+    width: 16px;
+    height: 16px;
     text-align: center;
     display: inline-block;
     line-height: 1em;
-    color: #aaa;
-    padding: 0 4px 0 8px;
+    color: var(--ls-icon-color);
   }
 
   a.item {
     user-select: none;
     transition: background-color .3s;
-    margin-bottom: 2px;
 
     > .ti {
       font-size: 16px;
       margin-right: 8px;
       opacity: .6;
       position: relative;
-      top: -1px;
     }
 
     &.active, &:active {
@@ -121,19 +121,17 @@
   }
 
   .nav-content-item {
-    margin-top: 14px;
-
     &-inner {
       border-radius: 8px;
     }
 
     .header {
+      @apply px-6 py-1;
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       cursor: pointer;
-      padding: 4px 25px;
 
       > span {
         > a {
@@ -181,7 +179,6 @@
         > span {
           font-size: 11px;
           font-weight: 600;
-          padding-top: 2px;
         }
       }
     }
@@ -196,7 +193,7 @@
 
         a {
           width: 100%;
-          padding: 2px 18px;
+          padding: 2px 24px;
           display: block;
           text-overflow: ellipsis;
           overflow: hidden;
@@ -247,7 +244,7 @@
     background-color: var(--ls-secondary-background-color);
 
     > .wrap {
-      margin-top: 50px;
+      margin-top: 52px;
     }
 
     .new-page {
@@ -433,7 +430,6 @@ html[data-theme='dark'] {
 
   &-settings {
     @apply flex flex-row;
-    margin: -15px;
     margin-bottom: 0;
     margin-top: 0;
     overflow: auto;
@@ -478,9 +474,7 @@ html[data-theme='dark'] {
   }
 
   .sidebar-item {
-    padding-top: 24px;
-    padding-bottom: 24px;
-    margin-bottom: 8px;
+    @apply p-4;
 
     .close {
       transform: scale(0.8);

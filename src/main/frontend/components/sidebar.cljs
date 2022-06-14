@@ -223,11 +223,11 @@
                    (when (some (fn [sel] (boolean (.closest target sel)))
                                [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                      (close-modal-fn)))}
-     [:div.flex.flex-col.pb-4.wrap
-      [:nav.px-4.pt-1.space-y-1 {:aria-label "Sidebar"}
+     [:div.flex.flex-col.pb-4.wrap.gap-4
+      [:nav.px-4.flex.flex-col.gap-1 {:aria-label "Sidebar"}
        (repo/repos-dropdown)
 
-       [:div.nav-header
+       [:div.nav-header.flex.gap-1.flex-col
         (if-let [page (:page default-home)]
           (sidebar-item
             {:class            "home-nav"
@@ -245,8 +245,9 @@
              :on-click-handler route-handler/go-to-journals!
              :icon             "calendar"}))
 
-        [:div.flashcards-nav
-         (flashcards srs-open?)]
+        (when (state/enable-flashcards? (state/get-current-repo))
+          [:div.flashcards-nav
+           (flashcards srs-open?)])
 
         (sidebar-item
           {:class  "graph-view-nav"
@@ -340,7 +341,7 @@
 
       (when show-action-bar?
         (action-bar/action-bar))
-      
+
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?
         :data-is-full-width        (or margin-less-pages?
@@ -351,11 +352,11 @@
 
        (mobile-bar)
        (footer/footer)
-       
+
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
          (widgets/demo-graph-alert))
-       
+
        (cond
          (not indexeddb-support?)
          nil

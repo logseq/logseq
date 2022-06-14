@@ -33,6 +33,15 @@
         (recur (.-parentNode el))))
     state))
 
+(defn excalidraw-theme [ui-theme]
+  ;; One of these constants are meant to be used as a 'theme' argument for escalidraw:
+  ;; https://github.com/excalidraw/excalidraw/blob/master/src/constants.ts#L75
+  ;; But they are missing from the prod build of excalidraw we're using.
+  ;; They map to "light" and "dark", happens that :ui/theme uses same values, so we are safe to pass it directly, for now.
+  ;; Escalidraw may migrate to different values for these constants in future versions,
+  ;; so, in order to not watch out for it every time we bump a new version we better migrate to constants as soon as they appear in a prod build.
+  ui-theme)
+
 (rum/defcs draw-inner < rum/reactive
   (rum/local 800 ::draw-width)
   (rum/local true ::zen-mode?)
@@ -89,7 +98,8 @@
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
            :grid-mode-enabled @*grid-mode?
-           :initial-data data}))]])))
+           :initial-data data
+           :theme (excalidraw-theme (state/sub :ui/theme))}))]])))
 
 (rum/defc draw
   [option]

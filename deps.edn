@@ -47,5 +47,5 @@
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.28"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.31"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

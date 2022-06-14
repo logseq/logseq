@@ -70,7 +70,7 @@
          (p/let [result (ipc/ipc "writeFile" repo path content)
                  mtime (gobj/get result "mtime")]
            (when-not contents-matched?
-             (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content content))
+             (ipc/ipc "backupDbFile" (config/get-local-dir repo) path disk-content content))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
@@ -127,4 +127,6 @@
   (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
   (watch-dir! [_this dir]
-    (ipc/ipc "addDirWatcher" dir)))
+    (ipc/ipc "addDirWatcher" dir))
+  (unwatch-dir! [_this dir]
+    (ipc/ipc "unwatchDir" dir)))

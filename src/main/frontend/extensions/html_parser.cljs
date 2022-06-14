@@ -129,12 +129,13 @@
                            :a (let [href (:href attrs)
                                     label (or (map-join children) "")
                                     has-img-tag? (util/safe-re-find #"\[:img" (str x))]
-                                (if has-img-tag?
-                                  (export-hiccup x)
-                                  (case format
-                                    :markdown (util/format "[%s](%s)" label href)
-                                    :org (util/format "[[%s][%s]]" href label)
-                                    nil)))
+                                (when-not (string/blank? href)
+                                  (if has-img-tag?
+                                    (export-hiccup x)
+                                    (case format
+                                      :markdown (util/format "[%s](%s)" label href)
+                                      :org (util/format "[[%s][%s]]" href label)
+                                      nil))))
                            :img (let [src (:src attrs)
                                       alt (or (:alt attrs) "")]
                                   (case format

@@ -369,7 +369,12 @@
 (defn enable-journals?
   [repo]
   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo)))))
+                (get (sub-config) repo)))))
+
+(defn enable-flashcards?
+  [repo]
+  (not (false? (:feature/enable-flashcards?
+                (get (sub-config) repo)))))
 
 (defn export-heading-to-list?
   []
@@ -684,7 +689,8 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []
@@ -1706,3 +1712,7 @@
   []
   (some-> (get-current-whiteboard)
           (gobj/get "api")))
+
+(defn unlinked-dir?
+  [dir]
+  (contains? (:file/unlinked-dirs @state) dir))

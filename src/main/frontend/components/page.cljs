@@ -892,7 +892,7 @@
              [:a.button.journal
               {:class    (util/classnames [{:active (boolean @*journal?)}])
                :on-click #(reset! *journal? (not @*journal?))}
-              (ui/icon "calendar")])]
+              (ui/icon "calendar" {:style {:fontSize ui/icon-size}})])]
 
            [:div.paginates
             [:span.flex.items-center

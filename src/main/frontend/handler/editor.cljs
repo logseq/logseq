@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -1060,8 +1060,8 @@
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
-                           (or (= "true" (dom/attr block "data-transclude"))
-                               (= "true" (dom/attr block "data-query")))) blocks)]
+                              (or (= "true" (dom/attr block "data-transclude"))
+                                  (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -1940,7 +1940,8 @@
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
+                                                                         :outliner-op :paste})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
@@ -2914,11 +2915,11 @@
       (do
         (util/stop e)
         (let [blocks (or
-                     (:copy/full-blocks copied-blocks)
-                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-         (when (seq blocks)
-           (state/set-copied-full-blocks! blocks)
-           (paste-blocks blocks {}))))
+                      (:copy/full-blocks copied-blocks)
+                      (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
+          (when (seq blocks)
+            (state/set-copied-full-blocks! blocks)
+            (paste-blocks blocks {}))))
 
       (and (gp-util/url? text)
            (not (string/blank? (util/get-selected-text))))
@@ -2935,35 +2936,28 @@
       :else
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+        (util/stop e)
         (match [format
                 (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                 (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
                 (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
           [:markdown false _ _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
+          (paste-text-parseable format text)
 
           [:org _ false _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
+          (paste-text-parseable format text)
 
           [:markdown true _ false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
+          (paste-segmented-text format text)
 
           [:markdown true _ true]
-          nil
+          (commands/simple-insert! (state/get-edit-input-id) text nil)
 
           [:org _ true false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
+          (paste-segmented-text format text)
 
           [:org _ true true]
-          nil)))))
+          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -2986,7 +2980,7 @@
           edit-block (state/get-edit-block)
           format (or (:block/format edit-block) :markdown)
           initial-text (.getData clipboard-data "text")
-          text (or (when (string/blank? html)
+          text (or (when-not (string/blank? html)
                      (html-parser/convert format html))
                    initial-text)
           input (state/get-input)]
@@ -3026,17 +3020,24 @@
 
 ;; credits to @pengx17
 (defn- copy-current-block-ref
-  []
+  [format]
   (when-let [current-block (state/get-edit-block)]
     (when-let [block-id (:block/uuid current-block)]
-      (copy-block-ref! block-id #(str "((" % "))"))
+      (if (= format "embed")
+       (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
+       (copy-block-ref! block-id #(str "((" % "))")))
       (notification/show!
        [:div
-        [:span.mb-1.5 "Block ref copied!"]
-        [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
+        [:span.mb-1.5 (str "Block " format " copied!")]
+        [:div [:code.whitespace.break-all (if (= format "embed")
+                                         (str "{{embed ((" block-id "))}}")
+                                         (str "((" block-id "))"))]]]
        :success true
        ;; use uuid to make sure there is only one toast a time
        (str "copied-block-ref:" block-id)))))
+
+(defn copy-current-block-embed []
+  (copy-current-block-ref "embed"))
 
 (defn shortcut-copy
   "shortcut copy action:
@@ -3054,7 +3055,7 @@
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
         (if (= selected-start selected-end)
-          (copy-current-block-ref)
+          (copy-current-block-ref "ref")
           (js/document.execCommand "copy")))
 
       :else
@@ -3131,9 +3132,9 @@
           ;; if the move is to cross block boundary, select the whole block
          (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
              (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
-          (select-block-up-down direction)
+         (select-block-up-down direction)
           ;; simulate text selection
-          (cursor/select-up-down input direction anchor cursor-rect)))
+         (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
 
 (defn open-selected-block!
@@ -3205,6 +3206,8 @@
     (save-current-block! {:force? true})
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
+
+
 
 (defn block-with-title?
   [format content semantic?]

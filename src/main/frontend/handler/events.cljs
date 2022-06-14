@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
@@ -240,6 +240,11 @@
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :graph/ready [[_ repo]]
+  (when (config/local-db? repo)
+    (p/let [dir (config/get-repo-dir repo)
+            dir-exists? (fs/dir-exists? dir)]
+      (when-not dir-exists?
+        (state/pub-event! [:graph/dir-gone dir]))))
   (search-handler/rebuild-indices-when-stale! repo)
   (repo-handler/graph-ready! repo))
 
@@ -435,6 +440,24 @@
 (defmethod handle :whiteboard-go-to-link [[_ link]]
   (route-handler/redirect! {:to :whiteboard
                             :path-params {:name link}}))
+
+(defmethod handle :graph/dir-gone [[_ dir]]
+  (state/pub-event! [:notification/show
+                     {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
+                      :status :error
+                      :clear? false}])
+  (state/update-state! :file/unlinked-dirs (fn [dirs] (conj dirs dir))))
+
+(defmethod handle :graph/dir-back [[_ repo dir]]
+  (when (contains? (:file/unlinked-dirs @state/state) dir)
+    (notification/clear-all!)
+    (state/pub-event! [:notification/show
+                       {:content (str "The directory " dir " has been back, you can edit your graph now.")
+                        :status :success
+                        :clear? true}])
+    (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
+  (when (= dir (config/get-repo-dir repo))
+    (fs/watch-dir! dir)))
 
 (defn run!
   []

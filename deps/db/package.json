@@ -1,0 +1,8 @@
+{
+  "name": "@logseq/db",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "^0.5.103"
+  }
+}

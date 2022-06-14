@@ -491,7 +491,15 @@
          {:style {:top -18 :left 10}}
          (ui/button (t :plugin/restart)
                     :on-click #(js/logseq.api.relaunch)
-                    :small? true :intent "logseq")]])]))
+           :small? true :intent "logseq")]])]))
+
+(rum/defc flashcards-enabled-switcher
+  [enable-flashcards?]
+  (ui/toggle enable-flashcards?
+             (fn []
+               (let [value (not enable-flashcards?)]
+                 (config-handler/set-config! :feature/enable-flashcards? value)))
+             true))
 
 (rum/defc user-proxy-settings
   [{:keys [protocol host port] :as agent-opts}]
@@ -507,6 +515,11 @@
   (row-with-button-action
    {:left-label (t :settings-page/plugin-system)
     :action (plugin-enabled-switcher t)}))
+
+(defn flashcards-switcher-row [enable-flashcards?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-flashcards)
+    :action (flashcards-enabled-switcher enable-flashcards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
@@ -596,16 +609,18 @@
      :warning
      [:p (t :settings-page/git-confirm)])])
 
-(rum/defcs settings-advanced < rum/reactive
-  [_state]
+(rum/defc settings-advanced < rum/reactive
+  [current-repo]
   (let [instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
+        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
+        enable-flashcards? (state/enable-flashcards? current-repo)]
     [:div.panel-wrap.is-advanced
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (plugin-system-switcher-row))
+     (flashcards-switcher-row enable-flashcards?)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
 
@@ -678,6 +693,6 @@
          (settings-git)
 
          :advanced
-         (settings-advanced)
+         (settings-advanced current-repo)
 
          nil)]]]))

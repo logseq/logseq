@@ -179,6 +179,42 @@
       (outliner-core/indent-outdent-blocks! [(get-block 6) (get-block 9)] true))
     (is (= [4 5 6 9] (get-children 3)))))
 
+(deftest test-indent-blocks-regression-5604
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14, 15
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14) (get-block 15)] false))
+    (is (= [2 12 13 14 15 16] (get-children 22))))
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14)] false))
+    (is (= [2 12 13 14 16] (get-children 22)))))
+
 (deftest test-outdent-blocks
   (testing "
   [1 [[2 [[3]
@@ -415,7 +451,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 200]
+      (dotimes [_i 100]
         ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
