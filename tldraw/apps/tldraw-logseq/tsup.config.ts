@@ -9,4 +9,7 @@ export default defineConfig({
   loader: {
     '.png': 'base64',
   },
+  env: {
+    NODE_ENV: 'production'
+  }
 })

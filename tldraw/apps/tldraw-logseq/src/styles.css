@@ -16,6 +16,8 @@
   width: 100%;
   height: 100%;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .logseq-tldraw label {
@@ -79,6 +81,8 @@
   user-select: none;
   background: white;
   border-top: 1px solid black;
+  flex-shrink: 0;
+  height: 32px;
 }
 
 .logseq-tldraw .input {
@@ -136,7 +140,7 @@
   background-color: var(--color-panel);
   height: 32px;
   width: 32px;
-  border-radius: 50%;
+  border-radius: 4px;
   box-shadow: var(--shadow-medium);
   overflow: hidden;
 }
@@ -144,14 +148,14 @@
 .logseq-tldraw .primary-tools .floating-panel {
   display: flex;
   flex-flow: column;
-  border-radius: 128px;
+  border-radius: 8px;
   overflow: hidden;
   padding: 4px;
   gap: 4px;
 }
 
 .logseq-tldraw .floating-panel > button {
-  border-radius: 20px;
+  border-radius: 4px;
 }
 
 .logseq-tldraw .primary-tools .button {
@@ -358,7 +362,7 @@
   width: 400px;
   top: 16px;
   left: 16px;
-  position: fixed;
+  position: absolute;
   border: 1px solid black;
   background-color: #fff;
   pointer-events: all;
@@ -367,7 +371,7 @@
 .logseq-tldraw .preview-minimap-toggle {
   position: absolute;
   top: 24px;
-  left: 24px;
+  right: 40px;
   z-index: 1;
   width: 32px;
   height: 32px;
