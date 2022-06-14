@@ -36,6 +36,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
@@ -339,7 +340,7 @@
 
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
   (let [files (db-model/get-files-v2 deprecated-repo)
-        conn (conn/get-db false)
+        conn (conn/get-db deprecated-repo false)
         tx (mapv (fn [[id path]]
                    (let [new-path (string/replace path deprecated-app-id current-app-id)]
                      {:db/id id
@@ -373,27 +374,22 @@
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do
-            ;; (prn {:deprecated-app-id deprecated-app-id
-            ;;       :current-app-id current-app-id})
-            ;; (def deprecated-app-id deprecated-app-id)
-            ;; (def current-app-id current-app-id)
+            (.unwatch mobile-util/fs-watcher)
             (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
                   current-repo-dir (config/get-repo-dir current-repo)]
               (try
-                (do
-                  (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
-                  (db-persist/delete-graph! deprecated-repo)
-                  (search-db/remove-db! deprecated-repo)
-                  (state/delete-repo! {:url deprecated-repo})
-                  (state/add-repo! {:url current-repo :nfs? true}))
+                (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
+                (db-persist/delete-graph! deprecated-repo)
+                (search-db/remove-db! deprecated-repo)
+                (state/delete-repo! {:url deprecated-repo})
+                (state/add-repo! {:url current-repo :nfs? true})
                 (catch :default e
                   (js/console.error e)))
-              (println "set current repo: " current-repo)
               (state/set-current-repo! current-repo)
               (db/relisten-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
               (file-handler/restore-config! current-repo false)
-              (fs/watch-dir! current-repo-dir)
+              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
               (when graph-switch-f (graph-switch-f current-repo true)))))))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
@@ -498,6 +494,9 @@
            nil
            template
            {:target page}))))))
+
+(defmethod handle :graph/restored [[_ _graph]]
+  (mobile/init!))
 
 (defn run!
   []
