@@ -96,11 +96,14 @@
           graph-txid-exists?
           (concat
            (map (fn [f] {:title [:div.file-item f]
-                         :icon  (ui/icon "point")}) queuing-files)
-           (map (fn [f] {:title [:div.file-item f]
-                         :icon  (ui/icon "arrow-narrow-up")}) uploading-files)
-           (map (fn [f] {:title [:div.file-item f]
+                         :key   (str "downloading-" f)
                          :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
+           (map (fn [f] {:title [:div.file-item f]
+                         :key   (str "queue-" f)
+                         :icon  (ui/icon "point")}) (take 10 queuing-files))
+           (map (fn [f] {:title [:div.file-item f]
+                         :key   (str "uploading-" f)
+                         :icon  (ui/icon "arrow-narrow-up")}) uploading-files)
            (when sync-state
              (map-indexed (fn [i f] (:time f)
                             {:title [:div {:key i} [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})

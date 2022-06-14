@@ -125,14 +125,17 @@
    (fn [{:keys [close-fn]}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon key hr hover-detail]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
-                     {:title hover-detail
-                      :on-click (fn [e]
-                                  (when-let [on-click-fn (:on-click options)]
-                                    (on-click-fn e))
-                                  (close-fn))})
+                     (cond->
+                       {:title hover-detail
+                        :on-click (fn [e]
+                                    (when-let [on-click-fn (:on-click options)]
+                                      (on-click-fn e))
+                                    (close-fn))}
+                       key
+                       (assoc :key key)))
               child (if hr
                       nil
                       [:div.flex.items-center
