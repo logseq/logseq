@@ -29,8 +29,9 @@ class LSPluginFileStorage implements IAsyncStorage {
   }
 
   /**
-   * @param key A string as file name that support nested directory
-   * @param value Storage value
+   * Create a file, or edit a file with the specified key
+   * @param key - the file name of the file in plugin storage
+   * @param value The value of the contents on the file
    */
   setItem(key: string, value: string): Promise<void> {
     return this.ctx.caller.callAsync(`api:call`, {
@@ -40,7 +41,8 @@ class LSPluginFileStorage implements IAsyncStorage {
   }
 
   /**
-   * @param key
+   * Returns the contents of a speciifed file from plugin storage.
+   * @param key - the file name of the file in plugin storage
    */
   getItem(key: string): Promise<string | undefined> {
     return this.ctx.caller.callAsync(`api:call`, {
@@ -50,7 +52,8 @@ class LSPluginFileStorage implements IAsyncStorage {
   }
 
   /**
-   * @param key
+   * Removes an item from the plugin storage
+   * @param key - the file name of the file in plugin storage
    */
   removeItem(key: string): Promise<void> {
     return this.ctx.caller.call(`api:call`, {
@@ -70,7 +73,12 @@ class LSPluginFileStorage implements IAsyncStorage {
   }
 
   /**
-   * @param key
+   * Checks if the plugin storage has a file with specfied file name
+   * @param key - the file name of the file in plugin storage
+   * @example
+   * ```ts
+   * logseq.FileStorage.hasItem("fileName.md")
+   * ```
    */
   hasItem(key: string): Promise<boolean> {
     return this.ctx.caller.callAsync(`api:call`, {
