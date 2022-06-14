@@ -291,8 +291,16 @@ export interface IAppProxy {
 
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
-
   // commands
+
+  /**
+   * @param type
+   * @param opts.key
+   * @param opts.label
+   * @param opts.desc
+   * @param opts.pallete - optionally disable the command from being in the pallete
+   * @param opts.keybinding - optional
+   */
   registerCommand: (
     type: string,
     opts: {
@@ -878,9 +886,10 @@ export interface IUIProxy {
   /**
    * @added 0.0.2
    *
-   * @param content
-   * @param status
-   * @param opts
+   * @param content - the content to be displayed
+   * @param status - pass in hte type of warning, based on success, warning and error
+   * 
+   * @param opts - pass in a key or a timeout numbers 
    */
   showMsg: (
     content: string,
@@ -888,6 +897,9 @@ export interface IUIProxy {
     opts?: Partial<UIMsgOptions>
   ) => Promise<UIMsgKey>
 
+  /**
+   * @param key - takes the input of a key, set via showMsg. 
+   */
   closeMsg: (key: UIMsgKey) => void
 }
 
@@ -918,7 +930,14 @@ export interface ILSPluginThemeManager {
   registerTheme(id: PluginLocalIdentity, opt: Theme): Promise<void>
 
   unregisterTheme(id: PluginLocalIdentity, effect?: boolean): Promise<void>
-
+  
+  /**
+   * 
+   * @param opt - a parameter which takes an input of type theme or legacy theme. 
+   * 
+   * @param options 
+   * 
+   */
   selectTheme(
     opt: Theme | LegacyTheme,
     options: { effect?: boolean; emit?: boolean }
@@ -982,21 +1001,56 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   provideModel(model: Record<string, any>): this
 
   /**
-   * Set the theme for the main Logseq app
+   * Adds a theme to the theme switcher view
+   * Provide a "raw" url to the css file as an input which will then be added as a theme
+   * @example
+   * ```ts
+   * logseq.provideTheme({
+   *    name: "New Dev Theme Clone", 
+   *    url: "https://cdn.jsdelivr.net/gh/pengx17/logseq-dev-theme@main/custom.css",
+   *    pid: "fakeLogseqDevTheme"
+   *  })
+   * ```
    */
   provideTheme(theme: Theme): this
 
   /**
    * Inject custom css for the main Logseq app. Optionally provide a key to identify and later replace the css
+   * @param style - Will take either a string containing the css styles or a `styleOptions` object with a key and style string
    *
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-awesome-fonts
+   * 
    * @example
    * ```ts
    *   logseq.provideStyle(`
    *    @import url("https://at.alicdn.com/t/font_2409735_r7em724douf.css");
-   *  )
+   *  `)
    * ```
    * 
+   * Application of using a key
+   * @example
+   * ```ts
+   *  logseq.provideStyle({
+   *    key: "someKey",
+   *    style: `
+   *    .references {
+   *      background-color: blue;
+   *      font-size: 1px;
+   *    }
+   *  `
+   *  })
+   * 
+   *  logseq.provideStyle({
+   *    key: "someKey",
+   *    style: `
+   *    .references {
+   *      background-color: red;
+   *    }
+   *  `
+   *  })
+   * //The previous style will be removed and in it's place would be this
+   * //If the first method was used, the previous style would not be removed
+   * ```
    */
   provideStyle(style: StyleString | StyleOptions): this
 
@@ -1066,6 +1120,14 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    */
   hideSettingsUI(): void
 
+
+  /**
+   * @param attrs - a key value pair, can take inputs of type UIContainerAttrs
+   * @example
+   * ```ts
+   * logseq.setMainUIAttrs({draggable: true, resizable: false});
+   * ```
+   */
   setMainUIAttrs(attrs: Record<string, any>): void
 
   /**
@@ -1083,7 +1145,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   setMainUIInlineStyle(style: CSS.Properties): void
 
   /**
-   * show the plugin's UI
+   * Show the plugin's UI
+   * By default, the plugin's UI is hidden and this function sets the visibility of the plugin iframe sandbox
    */
   showMainUI(opts?: { autoFocus: boolean }): void
 
@@ -1099,6 +1162,11 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   isMainUIVisible: boolean
 
+  /**
+   * Resolves the URL to the plugin's location on the filesystem
+   * @param filePath - the file path in the form of "./resources"
+   * @example
+   */
   resolveResourceFullUrl(filePath: string): string
 
   App: IAppProxy & Record<string, any>
