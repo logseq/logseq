@@ -464,6 +464,7 @@
            template
            {:target page}))))))
 
+
 (defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
   (when-let [db (db/get-db graph)]
     (let [file (:block/file page-entity)]
@@ -478,6 +479,12 @@
           (state/close-modal!)
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:block/name page-entity)}}))))))
+
+
+(defmethod handle :file-sync/service-expired [[_]]
+  (notification/show! "file sync service expired" :warning false)
+  (file-sync-stop!))
+
 
 (defn run!
   []

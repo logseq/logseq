@@ -743,6 +743,20 @@
              :else
              nil))
 
+(defn service-expired?
+  [exp]
+  ((comp
+    (partial = [403 "file-sync-service-expired"])
+    (juxt :status (comp :message :body))
+    :err)
+   (ex-data exp)))
+
+(defn- fire-file-sync-service-expired-event!
+  [exp]
+  (when (service-expired? exp)
+    (state/pub-event! [:file-sync/service-expired])
+    true))
+
 (deftype RemoteAPI [*stopped?]
   Object
 
@@ -751,11 +765,13 @@
       (let [resp (<! (<request api-name body (<! (<get-token this)) #(<refresh-token this) *stopped?))]
         (if (http/unexceptional-status? (:status resp))
           (get-resp-json-body resp)
-          (ex-info "request failed"
-                   {:err resp
-                    :body (get-resp-json-body resp)
-                    :api-name api-name
-                    :request-body body})))))
+          (let [exp (ex-info "request failed"
+                             {:err          resp
+                              :body         (get-resp-json-body resp)
+                              :api-name     api-name
+                              :request-body body})]
+            (fire-file-sync-service-expired-event! exp)
+            exp)))))
 
   ;; for test
   (update-files [this graph-uuid txid files]
@@ -1109,7 +1125,7 @@
    cat))
 
 
-(def local-changes-chan (chan 1000))
+(def local-changes-chan (chan (async/dropping-buffer 1000)))
 (defn file-watch-handler
   "file-watcher callback"
   [type {:keys [dir path _content stat] :as _payload}]
@@ -1431,17 +1447,25 @@
     (go
       (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
-            remote-all-files-meta (<! remote-all-files-meta-c)
-            local-all-files-meta (<! local-all-files-meta-c)
-            diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
-            recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %)) (t/today))
-            sorted-diff-remote-files (sort-by (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-            latest-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-        (println "[full-sync(remote->local)]"
+            remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
+        (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
+                 (service-expired? remote-all-files-meta-or-exp))
+          {:stop true}
+          (let [remote-all-files-meta remote-all-files-meta-or-exp
+                local-all-files-meta (<! local-all-files-meta-c)
+                diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
+                recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %))
+                                      (t/today))
+                sorted-diff-remote-files
+                (sort-by
+                 (sort-file-metatdata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
+                latest-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
+            (println "[full-sync(remote->local)]"
                  (count sorted-diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map (juxt (comp js/encodeURIComponent relative-path) -checksum) sorted-diff-remote-files)
-             latest-txid))))))
+             this (map (juxt (comp js/encodeURIComponent relative-path) -checksum)
+                       sorted-diff-remote-files)
+             latest-txid))))))))
 
 (defn- <file-changed?
   "return true when file changed compared with remote"
@@ -1570,34 +1594,39 @@
       (go
         (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
               local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
-              remote-all-files-meta (<! remote-all-files-meta-c)
-              local-all-files-meta (<! local-all-files-meta-c)
-              diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
-              change-events-partitions
-              (sequence
-               (comp
-                ;; convert to FileChangeEvent
-                (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
-                ;; filter ignore-files & monitored-dirs
-                (filter #(let [path (relative-path %)]
-                           (and (not (contains-path? ignore-files path))
-                                (contains-path? monitored-dirs path))))
-                ;; partition FileChangeEvents
-                (partition-file-change-events 10))
-               diff-local-files)]
-          (println "[full-sync(local->remote)]" (count (flatten change-events-partitions)) "files need to sync")
-          (loop [es-partitions change-events-partitions]
-            (if @*stopped
-              {:stop true}
-              (if (empty? es-partitions)
-                {:succ true}
-                (let [{:keys [succ need-sync-remote unknown] :as r}
-                      (<! (<sync-local->remote! this (first es-partitions)))]
-                  (s/assert ::sync-local->remote!-result r)
-                  (cond
-                    succ
-                    (recur (next es-partitions))
-                    (or need-sync-remote unknown) r)))))))))
+              remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
+          (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
+                   (service-expired? remote-all-files-meta-or-exp))
+            {:stop true}
+            (let [remote-all-files-meta remote-all-files-meta-or-exp
+                  local-all-files-meta (<! local-all-files-meta-c)
+                  diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
+                  change-events-partitions
+                  (sequence
+                   (comp
+                    ;; convert to FileChangeEvent
+                    (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
+                    ;; filter ignore-files & monitored-dirs
+                    (filter #(let [path (relative-path %)]
+                               (and (not (contains-path? ignore-files path))
+                                    (contains-path? monitored-dirs path))))
+                    ;; partition FileChangeEvents
+                    (partition-file-change-events 10))
+                   diff-local-files)]
+              (println "[full-sync(local->remote)]"
+                       (count (flatten change-events-partitions)) "files need to sync")
+              (loop [es-partitions change-events-partitions]
+                (if @*stopped
+                  {:stop true}
+                  (if (empty? es-partitions)
+                    {:succ true}
+                    (let [{:keys [succ need-sync-remote unknown] :as r}
+                          (<! (<sync-local->remote! this (first es-partitions)))]
+                      (s/assert ::sync-local->remote!-result r)
+                      (cond
+                        succ
+                        (recur (next es-partitions))
+                        (or need-sync-remote unknown) r)))))))))))
 
 ;;; ### put all stuff together
 
@@ -1865,7 +1894,8 @@
                ;;      actually, each file corresponds to a file-change-event,
                ;;      we need to ignore all of them.
                (<! (timeout 5000))
-               (util/drain-chan local-changes-chan)
+               (println :drain-local-changes-chan-at-starting
+                        (count (util/drain-chan local-changes-chan)))
                (poll! stop-sync-chan)
                (poll! remote->local-sync-chan)
                (poll! remote->local-full-sync-chan)

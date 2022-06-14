@@ -39,9 +39,15 @@
         (let [tx-info [0 r (user/user-uuid) (state/get-current-repo)]]
           (apply sync/update-graphs-txid! tx-info)
           (swap! refresh-file-sync-component not) tx-info)
-        (if (= 404 (get-in (ex-data r) [:err :status]))
+        (cond
+          (sync/service-expired? r)
+          nil
+
+          (= 404 (get-in (ex-data r) [:err :status]))
           (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
-          (notification/show! (str "Create graph failed: " r) :warning))))))
+
+          :else
+          (notification/show! (str "Create graph failed:" r) :warning))))))
 
 (defn delete-graph
   [graph-uuid]
