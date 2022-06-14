@@ -515,7 +515,9 @@
         top-level-blocks-ids (set (map :db/id top-level-blocks))
         right-block (get-right-sibling (:db/id (last top-level-blocks)))]
     (when (and right-block
-               (not (contains? top-level-blocks-ids (:db/id right-block))))
+               (not (contains? top-level-blocks-ids (:db/id right-block)))
+               (not= (:db/id (last top-level-blocks))
+                     (:db/id (:block/left right-block))))
       {:db/id (:db/id right-block)
        :block/left (loop [block (:block/left right-block)]
                      (if (contains? top-level-blocks-ids (:db/id block))
