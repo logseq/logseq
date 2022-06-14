@@ -280,16 +280,10 @@
             {:keys [path localDocumentsPath]} (p/chain
                                                (.pickFolder mobile-util/folder-picker)
                                                #(js->clj % :keywordize-keys true))
-            _ (when (mobile-util/native-ios?)
-                (cond
-                  (not (or (local-container-path? path localDocumentsPath)
-                           (iCloud-container-path? path)))
-                  (state/pub-event! [:modal/show-instruction])
-
-                  (iCloud-container-path? path)
-                  (mobile-util/sync-icloud-repo path)
-
-                  :else nil))
+            _ (when (and (mobile-util/native-ios?) 
+                         (not (or (local-container-path? path localDocumentsPath)
+                                  (iCloud-container-path? path))))
+                (state/pub-event! [:modal/show-instruction]))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
