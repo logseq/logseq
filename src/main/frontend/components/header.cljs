@@ -283,7 +283,7 @@
          {:on-click #(route-handler/redirect! {:to :repo-add})}
          (ui/icon "folder-plus")
          (when-not config/mobile?
-           [:strong {:style {:margin-top (if electron-mac? 0 2)}}
+           [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
             (t :on-boarding/add-graph)])])
 
       (when config/publishing?
