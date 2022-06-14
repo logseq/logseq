@@ -277,7 +277,7 @@
                                                #(js->clj % :keywordize-keys true))
             _ (when (and (mobile-util/native-ios?) 
                          (not (or (local-container-path? path localDocumentsPath)
-                                  (iCloud-container-path? path))))
+                                  (mobile-util/iCloud-container-path? path))))
                 (state/pub-event! [:modal/show-instruction]))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
