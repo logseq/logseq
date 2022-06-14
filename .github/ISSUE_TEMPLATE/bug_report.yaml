@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug encountered while using Logseq
+description: [PLEASE USE ENGLISH] Report a bug encountered while using Logseq.
 body:
   - type: textarea
     id: problem
