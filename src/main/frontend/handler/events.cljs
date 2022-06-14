@@ -69,21 +69,25 @@
          (sync/sync-start)
 ))
 
-(defn- graph-switch [graph]
-  (when (mobile-util/native-ios?)
-    (state/pub-event! [:validate-appId]))
-  (state/set-current-repo! graph)
-  ;; load config
-  (common-handler/reset-config! graph nil)
-  (st/refresh!)
-  (when-not (= :draw (state/get-current-route))
-    (route-handler/redirect-to-home!))
-  (when-let [dir-name (config/get-repo-dir graph)]
-    (fs/watch-dir! dir-name))
-  (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph])
+(defn- graph-switch
+  ([graph]
+   (graph-switch graph false))
+  ([graph skip-ios-check?]
+   (if (and (mobile-util/native-ios?) (not skip-ios-check?))
+     (state/pub-event! [:validate-appId graph-switch graph])
+     (do
+       (state/set-current-repo! graph)
+       ;; load config
+       (common-handler/reset-config! graph nil)
+       (st/refresh!)
+       (when-not (= :draw (state/get-current-route))
+         (route-handler/redirect-to-home!))
+       (when-let [dir-name (config/get-repo-dir graph)]
+         (fs/watch-dir! dir-name))
+       (srs/update-cards-due-count!)
+       (state/pub-event! [:graph/ready graph])
 
-  (file-sync-stop-when-switch-graph))
+       (file-sync-stop-when-switch-graph)))))
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -336,11 +340,11 @@
 (defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
   (let [files (db-model/get-files-v2 deprecated-repo)
         conn (conn/get-db false)
-        tx (map (fn [[id path]]
-                  (let [new-path (string/replace path deprecated-app-id current-app-id)]
-                    {:db/id id
-                     :file/path new-path}))
-                files)]
+        tx (mapv (fn [[id path]]
+                   (let [new-path (string/replace path deprecated-app-id current-app-id)]
+                     {:db/id id
+                      :file/path new-path}))
+                 files)]
     (d/transact! conn tx)
     (reset! conn/conns
             (update-keys @conn/conns
@@ -356,25 +360,41 @@
                      last)]
       app-id)))
 
-(defmethod handle :validate-appId [[_]]
-  (when-let [deprecated-repo (state/get-current-repo)]
-    (when-not (mobile-util/iCloud-container-path? deprecated-repo)
+(defmethod handle :validate-appId [[_ graph-switch-f graph]]
+  (when-let [deprecated-repo (or graph (state/get-current-repo))]
+    ;; Installation is will not be changed for iCloud
+    (if (mobile-util/iCloud-container-path? deprecated-repo)
+      (when graph-switch-f (graph-switch-f graph true))
       (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
               current-document-url (.getUri Filesystem #js {:path ""
                                                             :directory (.-Documents Directory)})
               current-app-id (-> (js->clj current-document-url :keywordize-keys true)
                                  get-ios-app-id)]
-        (when-not (= deprecated-app-id current-app-id)
-          (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
-                current-repo-dir (config/get-repo-dir current-repo)]
-            (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
-            (db-persist/delete-graph! deprecated-repo)
-            (search-db/remove-db! deprecated-repo)
-            (state/delete-repo! {:url deprecated-repo})
-            (state/add-repo! {:url current-repo :nfs? true})
-            (db/persist-if-idle! current-repo)
-            (state/set-current-repo! current-repo)
-            (fs/watch-dir! current-repo-dir)))))))
+        (if (= deprecated-app-id current-app-id)
+          (when graph-switch-f (graph-switch-f graph true))
+          (do
+            ;; (prn {:deprecated-app-id deprecated-app-id
+            ;;       :current-app-id current-app-id})
+            ;; (def deprecated-app-id deprecated-app-id)
+            ;; (def current-app-id current-app-id)
+            (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
+                  current-repo-dir (config/get-repo-dir current-repo)]
+              (try
+                (do
+                  (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
+                  (db-persist/delete-graph! deprecated-repo)
+                  (search-db/remove-db! deprecated-repo)
+                  (state/delete-repo! {:url deprecated-repo})
+                  (state/add-repo! {:url current-repo :nfs? true}))
+                (catch :default e
+                  (js/console.error e)))
+              (println "set current repo: " current-repo)
+              (state/set-current-repo! current-repo)
+              (db/relisten-and-persist! current-repo)
+              (db/persist-if-idle! current-repo)
+              (file-handler/restore-config! current-repo false)
+              (fs/watch-dir! current-repo-dir)
+              (when graph-switch-f (graph-switch-f current-repo true)))))))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
@@ -494,3 +514,13 @@
                                               :error error}])))))
       (recur))
     chan))
+
+(comment
+  (let [{:keys [deprecated-app-id current-app-id]} {:deprecated-app-id "AFDADF9A-7466-4ED8-B74F-AAAA0D4565B9", :current-app-id "7563518E-0EFD-4AD2-8577-10CFFD6E4596"}]
+    (def deprecated-app-id deprecated-app-id)
+    (def current-app-id current-app-id))
+  (def deprecated-repo (state/get-current-repo))
+  (def new-repo (string/replace deprecated-repo deprecated-app-id current-app-id))
+
+  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id)
+  )
