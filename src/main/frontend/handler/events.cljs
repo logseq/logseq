@@ -1,8 +1,10 @@
 (ns frontend.handler.events
   (:refer-clojure :exclude [run!])
-  (:require [clojure.core.async :as async]
+  (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
+            [clojure.core.async :as async]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -13,7 +15,9 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
+            [frontend.db.conn :as conn]
+            [frontend.db.model :as db-model]
+            [frontend.db.persist :as db-persist]
             [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
@@ -32,15 +36,18 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
+            [frontend.search :as search-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
+            [logseq.db.schema :as db-schema]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -63,19 +70,25 @@
          (sync/sync-start)
 ))
 
-(defn- graph-switch [graph]
-  (state/set-current-repo! graph)
-  ;; load config
-  (common-handler/reset-config! graph nil)
-  (st/refresh!)
-  (when-not (= :draw (state/get-current-route))
-    (route-handler/redirect-to-home!))
-  (when-let [dir-name (config/get-repo-dir graph)]
-    (fs/watch-dir! dir-name))
-  (srs/update-cards-due-count!)
-  (state/pub-event! [:graph/ready graph])
+(defn- graph-switch
+  ([graph]
+   (graph-switch graph false))
+  ([graph skip-ios-check?]
+   (if (and (mobile-util/native-ios?) (not skip-ios-check?))
+     (state/pub-event! [:validate-appId graph-switch graph])
+     (do
+       (state/set-current-repo! graph)
+       ;; load config
+       (common-handler/reset-config! graph nil)
+       (st/refresh!)
+       (when-not (= :draw (state/get-current-route))
+         (route-handler/redirect-to-home!))
+       (when-let [dir-name (config/get-repo-dir graph)]
+         (fs/watch-dir! dir-name))
+       (srs/update-cards-due-count!)
+       (state/pub-event! [:graph/ready graph])
 
-  (file-sync-stop-when-switch-graph))
+       (file-sync-stop-when-switch-graph)))))
 
 (def persist-db-noti-m
   {:before     #(notification/show!
@@ -330,6 +343,60 @@
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
         (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
+(defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
+  (let [files (db-model/get-files-v2 deprecated-repo)
+        conn (conn/get-db deprecated-repo false)
+        tx (mapv (fn [[id path]]
+                   (let [new-path (string/replace path deprecated-app-id current-app-id)]
+                     {:db/id id
+                      :file/path new-path}))
+                 files)]
+    (d/transact! conn tx)
+    (reset! conn/conns
+            (update-keys @conn/conns
+                         (fn [key] (if (string/includes? key deprecated-repo)
+                                     (string/replace key deprecated-repo current-repo)
+                                     key))))))
+
+(defn get-ios-app-id
+  [repo-url]
+  (when repo-url
+    (let [app-id (-> (first (string/split repo-url "/Documents"))
+                     (string/split "/")
+                     last)]
+      app-id)))
+
+(defmethod handle :validate-appId [[_ graph-switch-f graph]]
+  (when-let [deprecated-repo (or graph (state/get-current-repo))]
+    ;; Installation is will not be changed for iCloud
+    (if (mobile-util/iCloud-container-path? deprecated-repo)
+      (when graph-switch-f (graph-switch-f graph true))
+      (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
+              current-document-url (.getUri Filesystem #js {:path ""
+                                                            :directory (.-Documents Directory)})
+              current-app-id (-> (js->clj current-document-url :keywordize-keys true)
+                                 get-ios-app-id)]
+        (if (= deprecated-app-id current-app-id)
+          (when graph-switch-f (graph-switch-f graph true))
+          (do
+            (.unwatch mobile-util/fs-watcher)
+            (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
+                  current-repo-dir (config/get-repo-dir current-repo)]
+              (try
+                (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
+                (db-persist/delete-graph! deprecated-repo)
+                (search-db/remove-db! deprecated-repo)
+                (state/delete-repo! {:url deprecated-repo})
+                (state/add-repo! {:url current-repo :nfs? true})
+                (catch :default e
+                  (js/console.error e)))
+              (state/set-current-repo! current-repo)
+              (db/relisten-and-persist! current-repo)
+              (db/persist-if-idle! current-repo)
+              (file-handler/restore-config! current-repo false)
+              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
+              (when graph-switch-f (graph-switch-f current-repo true)))))))))
+
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
 
@@ -433,6 +500,8 @@
            template
            {:target page}))))))
 
+(defmethod handle :graph/restored [[_ _graph]]
+  (mobile/init!))
 (defmethod handle :graph/dir-gone [[_ dir]]
   (state/pub-event! [:notification/show
                      {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
@@ -466,3 +535,13 @@
                                               :error error}])))))
       (recur))
     chan))
+
+(comment
+  (let [{:keys [deprecated-app-id current-app-id]} {:deprecated-app-id "AFDADF9A-7466-4ED8-B74F-AAAA0D4565B9", :current-app-id "7563518E-0EFD-4AD2-8577-10CFFD6E4596"}]
+    (def deprecated-app-id deprecated-app-id)
+    (def current-app-id current-app-id))
+  (def deprecated-repo (state/get-current-repo))
+  (def new-repo (string/replace deprecated-repo deprecated-app-id current-app-id))
+
+  (update-file-path deprecated-repo new-repo deprecated-app-id current-app-id)
+  )

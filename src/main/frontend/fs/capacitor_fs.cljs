@@ -2,15 +2,15 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.encrypt :as encrypt]))
+            [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -183,11 +183,6 @@
   "Check whether `path' is logseq's container `localDocumentsPath' on iOS"
   [path localDocumentsPath]
   (string/includes? path localDocumentsPath))
-
-(defn- iCloud-container-path?
-  "Check whether `path' is logseq's iCloud container path on iOS"
-  [path]
-  (string/includes? path "iCloud~com~logseq~logseq"))
 
 (rum/defc instruction
   []
