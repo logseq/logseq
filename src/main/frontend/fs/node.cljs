@@ -127,4 +127,6 @@
   (get-files [_this path-or-handle _ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
   (watch-dir! [_this dir]
-    (ipc/ipc "addDirWatcher" dir)))
+    (ipc/ipc "addDirWatcher" dir))
+  (unwatch-dir! [_this dir]
+    (ipc/ipc "unwatchDir" dir)))

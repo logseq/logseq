@@ -8,7 +8,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.notification :as notification]
             [logseq.graph-parser.util :as gp-util]
             [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
@@ -55,22 +54,10 @@
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "unlinkDir" type) dir)
-          (do
-            (state/pub-event! [:notification/show
-                               {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
-                                :status :error
-                                :clear? false}])
-            (state/update-state! :file/unlinked-dirs (fn [dirs] (conj dirs dir))))
+          (state/pub-event! [:graph/dir-gone dir])
 
-          (= "addDir" type)
-          (when (contains? (:file/unlinked-dirs @state/state) dir)
-            (notification/clear-all!)
-            (state/pub-event! [:notification/show
-                               {:content (str "The directory " dir " has been back, you can edit your graph now.")
-                                :status :success
-                                :clear? true}])
-            (fs/watch-dir! dir)
-            (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir))))
+          (and (= "addDir" type) dir)
+          (state/pub-event! [:graph/dir-back repo dir])
 
           (contains? (:file/unlinked-dirs @state/state) dir)
           nil

@@ -487,7 +487,7 @@ body[data-page=import] {
 
     .bd {
       ul a {
-        padding: 2px 4px !important;
+        padding: 2px 8px !important;
       }
     }
   }

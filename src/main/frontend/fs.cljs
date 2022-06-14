@@ -167,6 +167,10 @@
   [dir]
   (protocol/watch-dir! (get-record) dir))
 
+(defn unwatch-dir!
+  [dir]
+  (protocol/unwatch-dir! (get-record) dir))
+
 (defn mkdir-if-not-exists
   [dir]
   (->
@@ -200,3 +204,7 @@
    (stat dir path)
    (fn [_stat] true)
    (fn [_e] false)))
+
+(defn dir-exists?
+  [dir]
+  (file-exists? dir ""))

@@ -119,6 +119,7 @@
       font-size: 16px;
       display: inline-block;
       position: relative;
+      transform: none;
     }
 
     .l {
@@ -133,9 +134,11 @@
     .r {
       font-size: 14px;
 
-      a.journal {
+      a.button {
         color: var(--ls-primary-text-color);
         margin-top: 1px;
+        height: unset;
+        padding: 4px;
 
         &.active {
           opacity: 1;
@@ -194,7 +197,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 5px 0 0;
+    padding: 0 4px;
 
     > span {
       color: var(--ls-primary-text-color);

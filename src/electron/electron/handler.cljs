@@ -295,6 +295,11 @@
   (p/let [_ (utils/fetch url)]
     (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
 
+(defmethod handle :httpFetchJSON [_win [_ url options]]
+  (p/let [res (utils/fetch url options)
+          json (.json res)]
+         json))
+
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 
@@ -332,7 +337,8 @@
 (defn set-current-graph!
   [window graph-path]
   (let [old-path (state/get-window-graph-path window)]
-    (when old-path (close-watcher-when-orphaned! window old-path))
+    (when (and old-path graph-path (not= old-path graph-path))
+      (close-watcher-when-orphaned! window old-path))
     (swap! state/state assoc :graph/current graph-path)
     (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
@@ -385,17 +391,18 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
-    ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
-    ;; maintain only one file watcher when multiple windows on the same dir
-    (close-watcher-when-orphaned! window dir)
-    (watcher/watch-dir! window dir)))
+    (watcher/watch-dir! dir)))
+
+(defmethod handle :unwatchDir [^js _window [_ dir]]
+  (when dir
+    (watcher/close-watcher! dir)))
 
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"

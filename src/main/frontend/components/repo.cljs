@@ -148,7 +148,7 @@
             render-content (fn [{:keys [toggle-fn]}]
                              (let [repo-path (db/get-repo-name current-repo)
                                    short-repo-name (db/get-short-repo-name repo-path)]
-                               [:a.item.group.flex.items-center.px-1.py-2.text-sm.font-medium.rounded-md
+                               [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))

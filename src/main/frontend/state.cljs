@@ -685,7 +685,8 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []
@@ -1697,3 +1698,7 @@
   [repo]
   (:feature/enable-encryption?
    (get (sub-config) repo)))
+
+(defn unlinked-dir?
+  [dir]
+  (contains? (:file/unlinked-dirs @state) dir))
