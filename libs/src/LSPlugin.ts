@@ -297,7 +297,7 @@ export interface IAppProxy {
    * @param type
    * @param opts.key
    * @param opts.label
-   * @param opts.desc
+   * @param opts.desc 
    * @param opts.pallete - optionally disable the command from being in the pallete
    * @param opts.keybinding - optional
    */
