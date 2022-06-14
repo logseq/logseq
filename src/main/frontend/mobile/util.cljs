@@ -93,3 +93,9 @@
     (when (:isZoomed is-zoomed?)
       (let [^js cl (.-classList js/document.documentElement)]
         (.add cl "is-zoomed-native-ios")))))
+
+(defn iCloud-container-path?
+  "Check whether `path' is logseq's iCloud container path on iOS"
+  [path]
+  (string/includes? path "iCloud~com~logseq~logseq"))
+

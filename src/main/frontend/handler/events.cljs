@@ -1,8 +1,10 @@
 (ns frontend.handler.events
   (:refer-clojure :exclude [run!])
-  (:require [clojure.core.async :as async]
+  (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
+            [clojure.core.async :as async]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -13,7 +15,9 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
+            [frontend.db.conn :as conn]
+            [frontend.db.model :as db-model]
+            [frontend.db.persist :as db-persist]
             [frontend.encrypt :as encrypt]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
@@ -36,11 +40,13 @@
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.shortcut.core :as st]
+            [frontend.search :as search-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
+            [logseq.db.schema :as db-schema]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -64,6 +70,8 @@
 ))
 
 (defn- graph-switch [graph]
+  (when (mobile-util/native-ios?)
+    (state/pub-event! [:validate-appId]))
   (state/set-current-repo! graph)
   ;; load config
   (common-handler/reset-config! graph nil)
@@ -324,6 +332,49 @@
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
         (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
+
+(defn update-file-path [deprecated-repo current-repo deprecated-app-id current-app-id]
+  (let [files (db-model/get-files-v2 deprecated-repo)
+        conn (conn/get-db false)
+        tx (map (fn [[id path]]
+                  (let [new-path (string/replace path deprecated-app-id current-app-id)]
+                    {:db/id id
+                     :file/path new-path}))
+                files)]
+    (d/transact! conn tx)
+    (reset! conn/conns
+            (update-keys @conn/conns
+                         (fn [key] (if (string/includes? key deprecated-repo)
+                                     (string/replace key deprecated-repo current-repo)
+                                     key))))))
+
+(defn get-ios-app-id
+  [repo-url]
+  (when repo-url
+    (let [app-id (-> (first (string/split repo-url "/Documents"))
+                     (string/split "/")
+                     last)]
+      app-id)))
+
+(defmethod handle :validate-appId [[_]]
+  (when-let [deprecated-repo (state/get-current-repo)]
+    (when-not (mobile-util/iCloud-container-path? deprecated-repo)
+      (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
+              current-document-url (.getUri Filesystem #js {:path ""
+                                                            :directory (.-Documents Directory)})
+              current-app-id (-> (js->clj current-document-url :keywordize-keys true)
+                                 get-ios-app-id)]
+        (when-not (= deprecated-app-id current-app-id)
+          (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
+                current-repo-dir (config/get-repo-dir current-repo)]
+            (update-file-path deprecated-repo current-repo deprecated-app-id current-app-id)
+            (db-persist/delete-graph! deprecated-repo)
+            (search-db/remove-db! deprecated-repo)
+            (state/delete-repo! {:url deprecated-repo})
+            (state/add-repo! {:url current-repo :nfs? true})
+            (db/persist-if-idle! current-repo)
+            (state/set-current-repo! current-repo)
+            (fs/watch-dir! current-repo-dir)))))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
