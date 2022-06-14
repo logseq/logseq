@@ -114,8 +114,7 @@
   ([page-name replace-slash?]
    (let [page (some-> page-name
                       (remove-boundary-slashes)
-                      (path-normalize)
-                      (string/trim))]
+                      (path-normalize))]
      (if replace-slash?
        (string/replace page #"/" "%2A")
        page))))
