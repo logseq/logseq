@@ -4,6 +4,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -149,7 +150,7 @@
                        :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
-                                             :fn      (fn [_state e] ((editor-handler/editor-on-paste! nil true) e))}
+                                             :fn      (fn [_state e] ((paste-handler/editor-on-paste! nil true) e))}
 
    :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}

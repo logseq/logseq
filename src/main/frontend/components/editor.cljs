@@ -11,6 +11,7 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.mixins :as mixins]
@@ -530,7 +531,7 @@
        :minRows           (if (state/enable-grammarly?) 2 1)
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
-       :on-paste          (editor-handler/editor-on-paste! id)
+       :on-paste          (paste-handler/editor-on-paste! id)
        :auto-focus        false
        :class             heading-class})
 
