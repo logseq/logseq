@@ -427,9 +427,13 @@
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))
-        id (:e (gen/generate (gen/elements datoms)))]
-    (db/pull test-db '[*] id)))
+                    (remove (fn [datom] (= 1 (:e datom)))))]
+    (if (seq datoms)
+      (let [id (:e (gen/generate (gen/elements datoms)))]
+        (db/pull test-db '[*] id))
+      (do
+        (transact-random-tree!)
+        (get-random-block)))))
 
 (defn get-random-successive-blocks
   []
