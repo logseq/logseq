@@ -1927,7 +1927,7 @@
       (when (contains? #{1 0} button)
         (when-not (target-forbidden-edit? target)
           (cond
-            (and shift? (state/get-selection-start-block))
+            (and shift? (state/get-selection-start-block-or-first))
             (editor-handler/highlight-selection-area! block-id)
 
             shift?

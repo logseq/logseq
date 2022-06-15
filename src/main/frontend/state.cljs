@@ -700,6 +700,12 @@
                 (uuid id)))
        (distinct)))
 
+(defn get-selection-start-block-or-first
+  []
+  (or (get-selection-start-block)
+      (some-> (first (get-selection-blocks))
+              (gobj/get "id"))))
+
 (defn in-selection-mode?
   []
   (:selection/mode @state))

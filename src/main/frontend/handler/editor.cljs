@@ -1210,7 +1210,7 @@
 
 (defn highlight-selection-area!
   [end-block]
-  (when-let [start-block (state/get-selection-start-block)]
+  (when-let [start-block (state/get-selection-start-block-or-first)]
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
 
