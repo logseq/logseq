@@ -100,11 +100,11 @@
 ;; public exports
 (rum/defcs dropdown < (mixins/modal :open?)
   [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index]
+   & [{:keys [modal-class z-index trigger-class]
        :or   {z-index 999}}]]
   (let [{:keys [open?]} state
         modal-content (modal-content-fn state)]
-    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index}}
+    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index} :class trigger-class}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -125,20 +125,21 @@
    (fn [{:keys [close-fn]}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail item]} (if (fn? links) (links) links)]
         (let [new-options
               (merge options
-                     {:title hover-detail
+                     {:title    hover-detail
                       :on-click (fn [e]
-                                  (when-let [on-click-fn (:on-click options)]
-                                    (on-click-fn e))
-                                  (close-fn))})
+                                  (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                      (on-click-fn e)))
+                                    (close-fn)))})
               child (if hr
                       nil
-                      [:div.flex.items-center
-                       (when icon icon)
-                       [:div {:style {:margin-right "8px"
-                                      :margin-left "4px"}} title]])]
+                      (or item
+                          [:div.flex.items-center
+                           (when icon icon)
+                           [:div {:style {:margin-right "8px"
+                                          :margin-left  "4px"}} title]]))]
           (if hr
             [:hr.my-1 {:key "dropdown-hr"}]
             (rum/with-key
