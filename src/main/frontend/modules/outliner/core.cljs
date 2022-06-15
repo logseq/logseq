@@ -469,7 +469,7 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
-        blocks' (if (= outliner-op ::paste)
+        blocks' (if (= outliner-op :paste)
                   (fix-top-level-blocks blocks')
                   blocks')
         insert-opts {:sibling? sibling?
