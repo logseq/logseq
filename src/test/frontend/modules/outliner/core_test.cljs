@@ -416,7 +416,9 @@
 (defn transact-random-tree!
   []
   (let [tree (gen-safe-tree)]
-    (transact-tree! tree)))
+    (if (seq tree)
+      (transact-tree! tree)
+      (transact-random-tree!))))
 
 (defn get-datoms
   []
@@ -425,13 +427,9 @@
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))]
-    (if (seq datoms)
-      (let [id (:e (gen/generate (gen/elements datoms)))]
-        (db/pull test-db '[*] id))
-      (do
-        (transact-random-tree!)
-        (get-random-block)))))
+                    (remove (fn [datom] (= 1 (:e datom)))))
+        id (:e (gen/generate (gen/elements datoms)))]
+    (db/pull test-db '[*] id)))
 
 (defn get-random-successive-blocks
   []
@@ -458,9 +456,6 @@
                                   (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
         (let [total (get-blocks-count)]
-          ;; (when (not= total (count @*random-blocks))
-          ;;   (defonce wrong-db (db/get-db test-db))
-          ;;   (defonce random-blocks @*random-blocks))
           (is (= total (count @*random-blocks))))))))
 
 (deftest ^:long random-deletes
@@ -518,16 +513,17 @@
           *random-blocks (atom c1)]
       (dotimes [_i 100]
         ;; (prn "Random move indent/outdent: " i)
-        (let [blocks (gen-blocks)]
+        (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
-                                  (set/union old (set (map :block/uuid blocks)))))
-          (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
-          (when (seq blocks)
-            (outliner-tx/transact! {:graph test-db}
-              (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
-            (let [total (get-blocks-count)]
-              (is (= total (count @*random-blocks))))))))))
+                                  (set/union old (set (map :block/uuid new-blocks)))))
+          (insert-blocks! new-blocks (get-random-block))
+          (let [blocks (get-random-successive-blocks)
+                indent? (gen/generate gen/boolean)]
+            (when (seq blocks)
+              (outliner-tx/transact! {:graph test-db}
+                (outliner-core/indent-outdent-blocks! blocks indent?))
+              (let [total (get-blocks-count)]
+                (is (= total (count @*random-blocks)))))))))))
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
