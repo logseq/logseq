@@ -1694,6 +1694,11 @@
                  (if (fn? m) m
                    (fn [old-value] (merge old-value m)))))
 
+(defn http-proxy-enabled-or-val? []
+  (when-let [agent-opts (sub [:electron/user-cfgs :settings/agent])]
+    (when (every? not-empty (vals agent-opts))
+      (str (:protocol agent-opts) "://" (:host agent-opts) ":" (:port agent-opts)))))
+
 (defn enable-encryption?
   [repo]
   (:feature/enable-encryption?

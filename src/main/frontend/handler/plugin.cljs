@@ -55,14 +55,17 @@
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
       (fn [resolve reject]
-        (-> (ipc/ipc :httpFetchJSON plugins-url)
-            (p/then (fn [res]
+        (let [on-ok (fn [res]
                       (if-let [res (and res (bean/->clj res))]
                         (let [pkgs (:packages res)]
                           (state/set-state! :plugin/marketplace-pkgs pkgs)
                           (resolve pkgs))
-                        (reject nil))))
-            (p/catch reject))))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON plugins-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch plugins-url on-ok reject)))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
@@ -70,8 +73,7 @@
   (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
     (p/create
       (fn [resolve reject]
-        (-> (ipc/ipc :httpFetchJSON stats-url)
-            (p/then (fn [^js res]
+        (let [on-ok (fn [^js res]
                       (if-let [res (and res (bean/->clj res))]
                         (do
                           (state/set-state!
@@ -82,8 +84,12 @@
                                                      (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
                                          res)))
                           (resolve nil))
-                        (reject nil))))
-            (p/catch reject))))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON stats-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
 (defn installed?
