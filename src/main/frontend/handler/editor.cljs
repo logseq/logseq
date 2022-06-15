@@ -2897,21 +2897,21 @@
       nil)))
 
 (defn- paste-copied-blocks-or-text
-  [initial-text text e]
+  [text e html]
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
         input (state/get-input)]
-    (cond
-      ;; Internal blocks by either copy or cut blocks
-      (and
-       (= copied-graph (state/get-current-repo))
-       (or (seq copied-block-ids)
-           (seq (:copy/full-blocks copied-blocks)))
-       initial-text
-       ;; not copied from the external clipboard
-       (= (string/replace (string/trim initial-text) "\r" "")
-          (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
+    (if
+        ;; Internal blocks by either copy or cut blocks
+        (and
+         (= copied-graph (state/get-current-repo))
+         (or (seq copied-block-ids)
+             (seq (:copy/full-blocks copied-blocks)))
+         text
+         ;; not copied from the external clipboard
+         (= (string/replace (string/trim text) "\r" "")
+            (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
       (do
         (util/stop e)
         (let [blocks (or
@@ -2921,43 +2921,47 @@
             (state/set-copied-full-blocks! blocks)
             (paste-blocks blocks {}))))
 
-      (and (gp-util/url? text)
-           (not (string/blank? (util/get-selected-text))))
-      (do
-        (util/stop e)
-        (html-link-format! text))
+      (cond
+        (and (gp-util/url? text)
+             (not (string/blank? (util/get-selected-text))))
+        (do
+          (util/stop e)
+          (html-link-format! text))
 
-      (and (text/block-ref? text)
-           (wrapped-by? input "((" "))"))
-      (do
-        (util/stop e)
-        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
+        (and (text/block-ref? text)
+             (wrapped-by? input "((" "))"))
+        (do
+          (util/stop e)
+          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
-      :else
-      ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
-        (util/stop e)
-        (match [format
-                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-          [:markdown false _ _]
-          (paste-text-parseable format text)
+        :else
+        ;; from external
+        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+              text (or (when-not (string/blank? html)
+                         (html-parser/convert format html))
+                       text)]
+          (util/stop e)
+          (match [format
+                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+            [:markdown false _ _]
+            (paste-text-parseable format text)
 
-          [:org _ false _]
-          (paste-text-parseable format text)
+            [:org _ false _]
+            (paste-text-parseable format text)
 
-          [:markdown true _ false]
-          (paste-segmented-text format text)
+            [:markdown true _ false]
+            (paste-segmented-text format text)
 
-          [:markdown true _ true]
-          (commands/simple-insert! (state/get-edit-input-id) text nil)
+            [:markdown true _ true]
+            (commands/simple-insert! (state/get-edit-input-id) text nil)
 
-          [:org _ true false]
-          (paste-segmented-text format text)
+            [:org _ true false]
+            (paste-segmented-text format text)
 
-          [:org _ true true]
-          (commands/simple-insert! (state/get-edit-input-id) text nil))))))
+            [:org _ true true]
+            (commands/simple-insert! (state/get-edit-input-id) text nil)))))))
 
 (defn paste-text-in-one-block-at-point
   []
@@ -2972,13 +2976,13 @@
      (js/console.error error))))
 
 (defn- paste-text-or-blocks-aux
-  [input e initial-text text]
+  [input e text html]
   (if (or (thingatpt/markdown-src-at-point input)
           (thingatpt/org-admonition&src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)
       (paste-text-in-one-block-at-point))
-    (paste-copied-blocks-or-text initial-text text e)))
+    (paste-copied-blocks-or-text text e html)))
 
 (defn editor-on-paste!
   ([id]
@@ -2994,19 +2998,19 @@
              (let [text (or (when (gp-util/url? clipboard-data)
                               (wrap-macro-url clipboard-data))
                             clipboard-data)]
-               (paste-text-or-blocks-aux input e text text))))
+               (paste-text-or-blocks-aux input e text nil))))
          (fn [error]
            (js/console.error error)))
         (let [clipboard-data (gobj/get e "clipboardData")
               html (when-not raw-paste? (.getData clipboard-data "text/html"))
               edit-block (state/get-edit-block)
               format (or (:block/format edit-block) :markdown)
-              initial-text (.getData clipboard-data "text")
+              text (.getData clipboard-data "text")
               text (or (when-not (string/blank? html)
                          (html-parser/convert format html))
-                       initial-text)]
+                       text)]
           (if-not (string/blank? text)
-            (paste-text-or-blocks-aux input e initial-text text)
+            (paste-text-or-blocks-aux input e text html)
             (when id
               (let [_handled
                     (let [clipboard-data (gobj/get e "clipboardData")
