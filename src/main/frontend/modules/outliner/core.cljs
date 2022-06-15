@@ -370,20 +370,29 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
-(defn- fix-top-level-blocks
+(defn fix-top-level-blocks
   "Blocks with :block/level"
   [blocks]
-  (loop [blocks blocks
-         last-top-level-block nil
-         result []]
-    (if-let [block (first blocks)]
-      (if (= 1 (:block/level block))
-        (let [block' (assoc block
-                            :block/left {:db/id (:db/id last-top-level-block)}
-                            :block/parent (:block/parent last-top-level-block))]
-          (recur (rest blocks) block (conj result block')))
-        (recur (rest blocks) last-top-level-block (conj result block)))
-      result)))
+  (let [top-level-blocks (filter #(= (:block/level %) 1) blocks)
+        id->block (zipmap (map :db/id top-level-blocks) top-level-blocks)
+        uuid->block (zipmap (map :block/uuid top-level-blocks) top-level-blocks)]
+    (if (every? (fn [block]
+                  (let [left (:block/left block)
+                        id (if (map? left) (:db/id left) (second left))]
+                    (some? (or (get id->block id) (get uuid->block id))))) (rest top-level-blocks))
+      ;; no need to fix
+      blocks
+      (loop [blocks blocks
+             last-top-level-block nil
+             result []]
+        (if-let [block (first blocks)]
+          (if (= 1 (:block/level block))
+            (let [block' (assoc block
+                                :block/left {:db/id (:db/id last-top-level-block)}
+                                :block/parent (:block/parent last-top-level-block))]
+              (recur (rest blocks) block (conj result block')))
+            (recur (rest blocks) last-top-level-block (conj result block)))
+          result)))))
 
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move? outliner-op]}]

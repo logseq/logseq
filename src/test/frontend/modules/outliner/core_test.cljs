@@ -215,6 +215,37 @@
       (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14)] false))
     (is (= [2 12 13 14 16] (get-children 22)))))
 
+(deftest test-fix-top-level-blocks
+  (testing "no need to fix"
+    (let [blocks [{:block/uuid #uuid "62aa668b-e258-445d-aef6-5510054ff495",
+                   :block/properties {},
+                   :block/left #:db{:id 144},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "a",
+                   :db/id 145,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668d-65d1-440c-849b-a0717f691193",
+                   :block/properties {},
+                   :block/left #:db{:id 145},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "b",
+                   :db/id 146,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668e-f866-48ee-b8fe-737e101c548d",
+                   :block/properties {},
+                   :block/left #:db{:id 146},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "c",
+                   :db/id 147,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}]]
+      (= blocks (outliner-core/fix-top-level-blocks blocks)))))
+
 (deftest test-outdent-blocks
   (testing "
   [1 [[2 [[3]
