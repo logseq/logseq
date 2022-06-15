@@ -201,7 +201,12 @@
 }
 
 .button.icon {
-  @apply w-8 h-8 text-lg p-1;
+  @apply w-8 h-8 p-1;
+}
+
+.button.icon.add-graph-btn {
+    width: unset;
+    margin: 0 6px;
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {

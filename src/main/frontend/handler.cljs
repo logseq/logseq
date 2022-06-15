@@ -19,7 +19,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
@@ -111,7 +110,8 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/ready (state/get-current-repo)])))
+         (state/pub-event! [:graph/ready (state/get-current-repo)])
+         (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))
 
@@ -183,8 +183,6 @@
     (i18n/start)
     (instrument/init)
     (set-network-watcher!)
-
-    (mobile/init!)
 
     (util/indexeddb-check?
      (fn [_error]

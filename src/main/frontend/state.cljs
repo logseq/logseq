@@ -531,9 +531,7 @@
            (->> (remove #(= (:url repo)
                             (:url %))
                         repos)
-                (util/distinct-by :url))))
-  (when (= (get-current-repo) (:url repo))
-    (set-current-repo! (:url (first (get-repos))))))
+                (util/distinct-by :url)))))
 
 (defn set-timestamp-block!
   [value]
