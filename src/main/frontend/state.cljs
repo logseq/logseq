@@ -160,6 +160,7 @@
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
                                                  ((fnil identity true) (storage/get :lsp-core-enabled)))
+     :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []

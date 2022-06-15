@@ -12,7 +12,7 @@
             [rum.core :as rum]))
 
 (rum/defc container
-  [{:keys [t route theme on-click current-repo nfs-granted? db-restoring?
+  [{:keys [route theme on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
@@ -37,8 +37,9 @@
 
     (rum/use-effect!
      #(when lsp-enabled?
-        (plugin-handler/setup-install-listener! t))
-     [t])
+        (plugin-handler/setup-install-listener!)
+        (plugin-handler/load-plugin-preferences))
+     [])
 
     (rum/use-effect!
      (fn []

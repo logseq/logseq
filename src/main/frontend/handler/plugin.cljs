@@ -14,6 +14,7 @@
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [frontend.components.svg :as svg]
+            [frontend.context.i18n :refer [t]]
             [frontend.format :as format]))
 
 (defonce lsp-enabled?
@@ -41,6 +42,23 @@
 (defonce plugins-url (str central-endpoint "plugins.json"))
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
+
+(defn load-plugin-preferences
+  []
+  (-> (invoke-exported-api "load_user_preferences")
+      (p/then #(bean/->clj %))
+      (p/then #(state/set-state! :plugin/preferences %))
+      (p/catch
+       #(js/console.error %))))
+
+(defn save-plugin-preferences!
+  ([input] (save-plugin-preferences! input true))
+  ([input reload-state?]
+   (when-let [^js input (and (map? input) (bean/->js input))]
+     (p/then
+      (js/LSPluginCore.saveUserPreferences input)
+      #(when reload-state?
+         (load-plugin-preferences))))))
 
 (defn gh-repo-url [repo]
   (str "https://github.com/" repo))
@@ -159,7 +177,7 @@
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
-  [t]
+  []
   (let [channel (name :lsp-installed)
         listener (fn [^js _ ^js e]
                    (js/console.debug :lsp-installed e)
@@ -539,6 +557,15 @@
 (defn request-callback
   [^js pl req-id payload]
   (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+
+(defn op-pinned-toolbar-item!
+  [key op]
+  (let [pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (into #{} pinned)]
+    (when-let [op-fn (case op
+                       :add conj
+                       :remove disj)]
+      (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
 
 ;; components
 (rum/defc lsp-indicator < rum/reactive
