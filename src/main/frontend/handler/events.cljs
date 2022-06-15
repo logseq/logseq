@@ -336,6 +336,8 @@
         (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
+      (when-let [card-preview-el (js/document.querySelector ".encrytion-password")]
+        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
       (js/setTimeout (fn []
                        (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
@@ -349,6 +351,8 @@
       (state/set-state! :mobile/show-recording-bar? false))
     (when (mobile-util/native-ios?)
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
+        (set! (.. card-preview-el -style -marginBottom) "0px"))
+      (when-let [card-preview-el (js/document.querySelector ".encrytion-password")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (set! (.. main-node -style -marginBottom) "0px")
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]

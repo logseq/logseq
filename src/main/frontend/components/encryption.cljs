@@ -59,7 +59,7 @@
         local-pw?  (= type :local)
         verify-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])]
-    [:div.sm:max-w-2xl
+    [:div.encrytion-password.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
