@@ -438,6 +438,20 @@
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (cursor/move-cursor-to input new-pos)))
 
+(defn delete-selection!
+  [id]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        start (util/get-selection-start input)
+        end (util/get-selection-end input)]
+    (when-not (= start end)
+      (let [prefix (subs edit-content 0 start)
+            new-value (str prefix
+                           (subs edit-content end))
+            new-pos (count prefix)]
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input new-pos)))))
+
 (defn get-matched-commands
   ([text]
    (get-matched-commands text @*initial-commands))

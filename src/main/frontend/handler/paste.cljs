@@ -109,7 +109,11 @@
           (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
                 text (or (when-not (string/blank? html)
                            (html-parser/convert format html))
-                         text)]
+                         text)
+                input-id (state/get-edit-input-id)
+                replace-text-f (fn []
+                                 (commands/delete-selection! input-id)
+                                 (commands/simple-insert! input-id text nil))]
             (util/stop e)
             (match [format
                     (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
@@ -125,13 +129,13 @@
               (paste-segmented-text format text)
 
               [:markdown true _ true]
-              (commands/simple-insert! (state/get-edit-input-id) text nil)
+              (replace-text-f)
 
               [:org _ true false]
               (paste-segmented-text format text)
 
               [:org _ true true]
-              (commands/simple-insert! (state/get-edit-input-id) text nil))))))))
+              (replace-text-f))))))))
 
 (defn paste-text-in-one-block-at-point
   []
