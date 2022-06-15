@@ -1938,7 +1938,8 @@
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
               result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
-                                                                         :outliner-op :paste})]
+                                                                         :outliner-op :paste
+                                                                         :replace-empty-target? true})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
