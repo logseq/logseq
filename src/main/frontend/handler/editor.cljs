@@ -2971,33 +2971,50 @@
    (fn [error]
      (js/console.error error))))
 
+(defn- paste-text-or-blocks-aux
+  [input e initial-text text]
+  (if (or (thingatpt/markdown-src-at-point input)
+          (thingatpt/org-admonition&src-at-point input))
+    (when-not (mobile-util/native-ios?)
+      (util/stop e)
+      (paste-text-in-one-block-at-point))
+    (paste-copied-blocks-or-text initial-text text e)))
+
 (defn editor-on-paste!
-  [id]
-  (fn [e]
-    (state/set-state! :editor/on-paste? true)
-    (let [clipboard-data (gobj/get e "clipboardData")
-          html (.getData clipboard-data "text/html")
-          edit-block (state/get-edit-block)
-          format (or (:block/format edit-block) :markdown)
-          initial-text (.getData clipboard-data "text")
-          text (or (when-not (string/blank? html)
-                     (html-parser/convert format html))
-                   initial-text)
-          input (state/get-input)]
-      (if-not (string/blank? text)
-        (if (or (thingatpt/markdown-src-at-point input)
-                (thingatpt/org-admonition&src-at-point input))
-          (when-not (mobile-util/native-ios?)
-            (util/stop e)
-            (paste-text-in-one-block-at-point))
-          (paste-copied-blocks-or-text initial-text text e))
-        (let [_handled
-              (let [clipboard-data (gobj/get e "clipboardData")
-                    files (.-files clipboard-data)]
-                (when-let [file (first files)]
-                  (when-let [block (state/get-edit-block)]
-                    (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
-          (util/stop e))))))
+  ([id]
+   (editor-on-paste! id false))
+  ([id raw-paste?]
+   (fn [e]
+     (state/set-state! :editor/on-paste? true)
+     (let [input (state/get-input)]
+       (if raw-paste?
+        (utils/getClipText
+         (fn [clipboard-data]
+           (when-let [_ (state/get-input)]
+             (let [text (or (when (gp-util/url? clipboard-data)
+                              (wrap-macro-url clipboard-data))
+                            clipboard-data)]
+               (paste-text-or-blocks-aux input e text text))))
+         (fn [error]
+           (js/console.error error)))
+        (let [clipboard-data (gobj/get e "clipboardData")
+              html (when-not raw-paste? (.getData clipboard-data "text/html"))
+              edit-block (state/get-edit-block)
+              format (or (:block/format edit-block) :markdown)
+              initial-text (.getData clipboard-data "text")
+              text (or (when-not (string/blank? html)
+                         (html-parser/convert format html))
+                       initial-text)]
+          (if-not (string/blank? text)
+            (paste-text-or-blocks-aux input e initial-text text)
+            (when id
+              (let [_handled
+                    (let [clipboard-data (gobj/get e "clipboardData")
+                          files (.-files clipboard-data)]
+                      (when-let [file (first files)]
+                        (when-let [block (state/get-edit-block)]
+                          (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
+                (util/stop e))))))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
