@@ -91,7 +91,7 @@
         "codemirror": "5.58.1",
         "d3-force": "3.0.0",
         "diff": "5.0.0",
-        "electron": "15.1.2",
+        "electron": "15.3.5",
         "electron-dl": "3.3.0",
         "fs": "0.0.1-security",
         "fs-extra": "9.1.0",
