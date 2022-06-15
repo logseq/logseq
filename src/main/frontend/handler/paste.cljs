@@ -171,8 +171,6 @@
            (js/console.error error)))
         (let [clipboard-data (gobj/get e "clipboardData")
               html (when-not raw-paste? (.getData clipboard-data "text/html"))
-              edit-block (state/get-edit-block)
-              format (or (:block/format edit-block) :markdown)
               text (.getData clipboard-data "text")]
           (if-not (string/blank? text)
             (paste-text-or-blocks-aux input e text html)
