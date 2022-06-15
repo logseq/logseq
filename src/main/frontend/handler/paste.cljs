@@ -89,47 +89,49 @@
           (when (seq blocks)
             (state/set-copied-full-blocks! blocks)
             (editor-handler/paste-blocks blocks {}))))
-      (cond
-        (and (gp-util/url? text)
-             (not (string/blank? (util/get-selected-text))))
-        (do
-          (util/stop e)
-          (editor-handler/html-link-format! text))
+      (let [{:keys [value]} (editor-handler/get-selection-and-format)]
+        (cond
+          (and (or (gp-util/url? text)
+                   (and value (gp-util/url? (string/trim value))))
+               (not (string/blank? (util/get-selected-text))))
+          (do
+            (util/stop e)
+            (editor-handler/html-link-format! text))
 
-        (and (text/block-ref? text)
-             (editor-handler/wrapped-by? input "((" "))"))
-        (do
-          (util/stop e)
-          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
+          (and (text/block-ref? text)
+               (editor-handler/wrapped-by? input "((" "))"))
+          (do
+            (util/stop e)
+            (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
-        :else
-        ;; from external
-        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-              text (or (when-not (string/blank? html)
-                         (html-parser/convert format html))
-                       text)]
-          (util/stop e)
-          (match [format
-                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-            [:markdown false _ _]
-            (paste-text-parseable format text)
+          :else
+          ;; from external
+          (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+                text (or (when-not (string/blank? html)
+                           (html-parser/convert format html))
+                         text)]
+            (util/stop e)
+            (match [format
+                    (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                    (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                    (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+              [:markdown false _ _]
+              (paste-text-parseable format text)
 
-            [:org _ false _]
-            (paste-text-parseable format text)
+              [:org _ false _]
+              (paste-text-parseable format text)
 
-            [:markdown true _ false]
-            (paste-segmented-text format text)
+              [:markdown true _ false]
+              (paste-segmented-text format text)
 
-            [:markdown true _ true]
-            (commands/simple-insert! (state/get-edit-input-id) text nil)
+              [:markdown true _ true]
+              (commands/simple-insert! (state/get-edit-input-id) text nil)
 
-            [:org _ true false]
-            (paste-segmented-text format text)
+              [:org _ true false]
+              (paste-segmented-text format text)
 
-            [:org _ true true]
-            (commands/simple-insert! (state/get-edit-input-id) text nil)))))))
+              [:org _ true true]
+              (commands/simple-insert! (state/get-edit-input-id) text nil))))))))
 
 (defn paste-text-in-one-block-at-point
   []

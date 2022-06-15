@@ -62,7 +62,7 @@
 (defonce *asset-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
 
-(defn- get-selection-and-format
+(defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
     (when (:block/uuid block)
