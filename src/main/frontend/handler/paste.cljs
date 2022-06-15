@@ -73,17 +73,14 @@
   (let [copied-blocks (state/get-copied-blocks)
         copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)]
-    (if
-        ;; Internal blocks by either copy or cut blocks
-        (and
-         (= copied-graph (state/get-current-repo))
-         (or (seq copied-block-ids)
-             (seq (:copy/full-blocks copied-blocks)))
-         text
-         ;; not copied from the external clipboard
-         (= (string/replace (string/trim text) "\r" "")
-            (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
+        input (state/get-input)
+        internal-paste? (and
+                         (= copied-graph (state/get-current-repo))
+                         (or (seq copied-block-ids)
+                             (seq (:copy/full-blocks copied-blocks)))
+                         ;; not copied from the external clipboard
+                         (= text (:copy/content copied-blocks)))]
+    (if internal-paste?
       (do
         (util/stop e)
         (let [blocks (or
@@ -92,7 +89,6 @@
           (when (seq blocks)
             (state/set-copied-full-blocks! blocks)
             (editor-handler/paste-blocks blocks {}))))
-
       (cond
         (and (gp-util/url? text)
              (not (string/blank? (util/get-selected-text))))
@@ -177,10 +173,7 @@
               html (when-not raw-paste? (.getData clipboard-data "text/html"))
               edit-block (state/get-edit-block)
               format (or (:block/format edit-block) :markdown)
-              text (.getData clipboard-data "text")
-              text (or (when-not (string/blank? html)
-                         (html-parser/convert format html))
-                       text)]
+              text (.getData clipboard-data "text")]
           (if-not (string/blank? text)
             (paste-text-or-blocks-aux input e text html)
             (when id
