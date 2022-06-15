@@ -39,4 +39,8 @@ export class PointingCanvasState<
   onPinchStart: TLEvents<S>['pinch'] = (info, event) => {
     this.tool.transition('pinching', { info, event })
   }
+
+  onDoubleClick: TLEvents<S>['pointer'] = info => {
+    console.log('TODO: bringing up Logseq autocomplete here', info)
+  }
 }

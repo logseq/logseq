@@ -6,7 +6,7 @@ const iconBase64 =
 export function LogseqIcon() {
   return (
     <img
-      style={{ borderRadius: '50%', width: '20px', height: '20px' }}
+      style={{ borderRadius: '4px', width: '20px', height: '20px' }}
       src={'data:image/png;base64,' + iconBase64}
       alt="logseq"
     />

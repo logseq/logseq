@@ -3,10 +3,13 @@ import { useRendererContext } from '~hooks'
 import { TLTargetType } from '@tldraw/core'
 import type { TLReactCustomEvents } from '~types'
 import { useApp } from './useApp'
+import { DOUBLE_CLICK_DURATION } from '~constants'
 
 export function useCanvasEvents() {
   const app = useApp()
   const { callbacks } = useRendererContext()
+
+  const rDoubleClickTimer = React.useRef<number>(-1)
 
   const events = React.useMemo(() => {
     const onPointerMove: TLReactCustomEvents['pointer'] = e => {
@@ -18,6 +21,17 @@ export function useCanvasEvents() {
       const { order = 0 } = e
       if (!order) e.currentTarget?.setPointerCapture(e.pointerId)
       callbacks.onPointerDown?.({ type: TLTargetType.Canvas, order }, e)
+
+      const now = Date.now()
+      const elapsed = now - rDoubleClickTimer.current
+      if (elapsed > DOUBLE_CLICK_DURATION) {
+        rDoubleClickTimer.current = now
+      } else {
+        if (elapsed <= DOUBLE_CLICK_DURATION) {
+          callbacks.onDoubleClick?.({ type: TLTargetType.Canvas, order }, e)
+          rDoubleClickTimer.current = -1
+        }
+      }
     }
 
     const onPointerUp: TLReactCustomEvents['pointer'] = e => {
