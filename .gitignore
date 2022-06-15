@@ -14,6 +14,10 @@ pom.xml.asc
 node_modules/
 static/
 tmp
+.yarn/cache
+resources/.yarn/cache
+deps/graph-parser/.yarn/cache
+install-state.gz
 
 .cpcache/
 /src/gen

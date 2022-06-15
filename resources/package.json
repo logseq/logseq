@@ -19,26 +19,26 @@
     "forge": "./forge.config.js"
   },
   "dependencies": {
+    "@logseq/rsapi": "0.0.20",
+    "@sentry/electron": "2.5.1",
+    "abort-controller": "3.0.0",
     "better-sqlite3": "7.4.5",
     "chokidar": "^3.5.1",
+    "diff-match-patch": "1.0.5",
     "dugite": "1.108.0",
+    "electron-deeplink": "1.0.10",
     "electron-dl": "3.3.0",
     "electron-log": "4.3.1",
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
+    "extract-zip": "2.0.1",
     "fs-extra": "9.1.0",
+    "https-proxy-agent": "5.0.0",
     "node-fetch": "2.6.1",
     "open": "7.3.1",
-    "semver": "7.3.5",
-    "update-electron-app": "2.0.1",
-    "extract-zip": "2.0.1",
-    "diff-match-patch": "1.0.5",
-    "https-proxy-agent": "5.0.0",
-    "@sentry/electron": "2.5.1",
     "posthog-js": "1.10.2",
-    "@logseq/rsapi": "0.0.20",
-    "electron-deeplink": "1.0.10",
-    "abort-controller": "3.0.0"
+    "semver": "7.3.5",
+    "update-electron-app": "2.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
@@ -53,6 +53,6 @@
     "electron-rebuild": "3.2.5"
   },
   "resolutions": {
-    "**/electron": "15.1.2"
+    "electron": "15.1.2"
   }
 }

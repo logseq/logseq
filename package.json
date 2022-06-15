@@ -3,6 +3,9 @@
     "version": "0.0.1",
     "private": true,
     "main": "static/electron.js",
+    "workspaces": [
+        "deps/*"
+    ],
     "devDependencies": {
         "@capacitor/cli": "3.2.2",
         "@playwright/test": "^1.19.2",
@@ -143,5 +146,6 @@
         "pixi-graph-fork/@pixi/settings": "6.2.0",
         "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
         "pixi-graph-fork/@pixi/math": "6.2.0"
-    }
+    },
+    "packageManager": "yarn@3.2.1"
 }
