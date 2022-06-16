@@ -406,7 +406,7 @@
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
         edit-content (gobj/get input "value")]
-    (when-not (string/blank? edit-content)
+    (when edit-content
       (let [current-pos (cursor/pos input)
             prefix (subs edit-content 0 current-pos)
             postfix (if selected?
