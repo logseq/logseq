@@ -14,8 +14,6 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
-		5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */; };
-		5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */; };
 		5FF8632A283B5ADB0047731B /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF86329283B5ADB0047731B /* Utils.swift */; };
 		5FF8632C283B5BFD0047731B /* Utils.m in Sources */ = {isa = PBXBuildFile; fileRef = 5FF8632B283B5BFD0047731B /* Utils.m */; };
 		5FFF7D6D27E343FA00B00DA8 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFF7D6C27E343FA00B00DA8 /* ShareViewController.swift */; };
@@ -70,8 +68,6 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
-		5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DownloadiCloudFiles.swift; sourceTree = "<group>"; };
-		5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DownloadiCloudFiles.m; sourceTree = "<group>"; };
 		5FF86329283B5ADB0047731B /* Utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
 		5FF8632B283B5BFD0047731B /* Utils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Utils.m; sourceTree = "<group>"; };
 		5FFF7D6A27E343FA00B00DA8 /* ShareViewController.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareViewController.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -144,8 +140,6 @@
 			children = (
 				5FF86329283B5ADB0047731B /* Utils.swift */,
 				5FF8632B283B5BFD0047731B /* Utils.m */,
-				5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */,
-				5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */,
 				D32752BF2754C5AB0039291C /* AppDebug.entitlements */,
 				D32752BC275496A60039291C /* App.entitlements */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
@@ -359,13 +353,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
-				5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */,
 				FE443F1E27FF54AA007ECE65 /* Payload.swift in Sources */,
 				5FF8632C283B5BFD0047731B /* Utils.m in Sources */,
 				FE8C946B27FD762700C8017B /* FileSync.swift in Sources */,
 				FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */,
 				5FF8632A283B5ADB0047731B /* Utils.swift in Sources */,
-				5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */,
 				D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
 				D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,
 				FE443F1C27FF5420007ECE65 /* Extensions.swift in Sources */,
