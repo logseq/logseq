@@ -127,18 +127,19 @@
                       (let [local? (config/local-db? url)
                             repo-path (if local? (db/get-repo-name url) GraphName )
                             short-repo-name (if local? (text-util/get-graph-name-from-path repo-path) GraphName)]
-                        {:title        [:span.flex.items-center short-repo-name
-                                        (when remote? [:span.pl-1
-                                                       {:title (str "<" GraphName "> #" GraphUUID)}
-                                                       (ui/icon "cloud")])]
-                         :hover-detail repo-path ;; show full path on hover
-                         :options      {:class    "ml-1"
-                                        :on-click (fn [e]
-                                                    (if (gobj/get e "shiftKey")
-                                                      (state/pub-event! [:graph/open-new-window url])
-                                                      (if-not local?
-                                                        (state/pub-event! [:graph/pick-dest-to-sync graph])
-                                                        (state/pub-event! [:graph/switch url]))))}}))
+                        (when short-repo-name
+                          {:title        [:span.flex.items-center short-repo-name
+                                          (when remote? [:span.pl-1
+                                                         {:title (str "<" GraphName "> #" GraphUUID)}
+                                                         (ui/icon "cloud")])]
+                           :hover-detail repo-path ;; show full path on hover
+                           :options      {:class    "ml-1"
+                                          :on-click (fn [e]
+                                                      (if (gobj/get e "shiftKey")
+                                                        (state/pub-event! [:graph/open-new-window url])
+                                                        (if-not local?
+                                                          (state/pub-event! [:graph/pick-dest-to-sync graph])
+                                                          (state/pub-event! [:graph/switch url]))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-db? current-repo)]
                        (when (and nfs-repo?
