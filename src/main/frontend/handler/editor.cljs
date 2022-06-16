@@ -974,6 +974,16 @@
                  (into [] (state/get-export-block-text-remove-options)))]
     [top-level-block-uuids content]))
 
+(defn- get-all-blocks-by-ids
+  [repo ids]
+  (loop [ids ids
+         result []]
+    (if (seq ids)
+      (let [blocks (db/get-block-and-children repo (first ids))
+            result (vec (concat result blocks))]
+        (recur (remove (set (map :block/uuid result)) (rest ids)) result))
+      result)))
+
 (defn copy-selection-blocks
   [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
@@ -985,7 +995,7 @@
       (when block
         (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
-        (state/set-copied-blocks content ids)
+        (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1068,7 +1078,6 @@
               sorted-blocks (mapcat (fn [block]
                                       (tree/get-sorted-block-and-children repo (:db/id block)))
                                     top-level-blocks)]
-          (state/set-copied-full-blocks nil sorted-blocks)
           (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))
 
 (def url-regex
@@ -1199,7 +1208,7 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export/export-blocks-as-html repo [block-id])
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (state/set-copied-full-blocks md-content sorted-blocks)
+      (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 

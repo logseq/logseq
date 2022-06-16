@@ -18,7 +18,8 @@
             [logseq.graph-parser.text :as text]
             [frontend.handler.notification :as notification]
             [frontend.util.text :as text-util]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [lambdaisland.glogi :as log]))
 
 (defn- paste-text-parseable
   [format text]
@@ -44,16 +45,6 @@
                            paragraphs))]
     (paste-text-parseable format updated-paragraphs)))
 
-(defn- get-all-blocks-by-ids
-  [repo ids]
-  (loop [ids ids
-         result []]
-    (if (seq ids)
-      (let [blocks (db/get-block-and-children repo (first ids))
-            result (vec (concat result blocks))]
-        (recur (remove (set (map :block/uuid result)) (rest ids)) result))
-      result)))
-
 (defn- wrap-macro-url
   [url]
   (cond
@@ -70,51 +61,44 @@
 
 (defn- paste-copied-blocks-or-text
   [text e html]
+  (util/stop e)
   (let [copied-blocks (state/get-copied-blocks)
-        copied-block-ids (:copy/block-ids copied-blocks)
         copied-graph (:copy/graph copied-blocks)
         input (state/get-input)
         internal-paste? (and
-                         (= copied-graph (state/get-current-repo))
-                         (or (seq copied-block-ids)
-                             (seq (:copy/full-blocks copied-blocks)))
+                         (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
                          (= text (:copy/content copied-blocks)))]
     (if internal-paste?
-      (do
-        (util/stop e)
-        (let [blocks (or
-                      (:copy/full-blocks copied-blocks)
-                      (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-          (when (seq blocks)
-            (state/set-copied-full-blocks! blocks)
-            (editor-handler/paste-blocks blocks {}))))
+      (let [blocks (:copy/blocks copied-blocks)]
+        (when (seq blocks)
+          (editor-handler/paste-blocks blocks {})))
       (let [{:keys [value]} (editor-handler/get-selection-and-format)]
         (cond
           (and (or (gp-util/url? text)
                    (and value (gp-util/url? (string/trim value))))
                (not (string/blank? (util/get-selected-text))))
-          (do
-            (util/stop e)
-            (editor-handler/html-link-format! text))
+          (editor-handler/html-link-format! text)
 
           (and (text/block-ref? text)
                (editor-handler/wrapped-by? input "((" "))"))
-          (do
-            (util/stop e)
-            (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
+          (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil)
 
           :else
           ;; from external
           (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-                text (or (when-not (string/blank? html)
-                           (html-parser/convert format html))
-                         text)
+                html-text (let [result (when-not (string/blank? html)
+                                         (try
+                                           (html-parser/convert format html)
+                                           (catch :default e
+                                             (log/error :exception e)
+                                             nil)))]
+                            (if (string/blank? result) nil result))
+                text (or html-text text)
                 input-id (state/get-edit-input-id)
                 replace-text-f (fn []
                                  (commands/delete-selection! input-id)
                                  (commands/simple-insert! input-id text nil))]
-            (util/stop e)
             (match [format
                     (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
                     (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
