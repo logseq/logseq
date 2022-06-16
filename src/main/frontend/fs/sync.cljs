@@ -1114,7 +1114,7 @@
   (-pr-writer [_ w _opts]
     (write-all w (str {:type type :base-path dir :path path :size (:size stat)}))))
 
-(defn- file-change-event=>recent-remote->local-file-item
+(defn- <file-change-event=>recent-remote->local-file-item
   [^FileChangeEvent e]
   (go
     (let [tp (case (.-type e)
@@ -1520,133 +1520,134 @@
 
 
 (defrecord ^:large-vars/cleanup-todo
-    Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
-                         ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
-    Object
-    (filter-file-change-events-fn [_]
-      (fn [^FileChangeEvent e]
-        (go (and (instance? FileChangeEvent e)
-                 (string/starts-with? (.-dir e) base-path)
-                 (not (contains-path? ignore-files (relative-path e)))
-                 (contains-path? monitored-dirs (relative-path e))
-                 (let [r (not (contains? (:recent-remote->local-files @*sync-state)
-                                         (<! (file-change-event=>recent-remote->local-file-item e))))]
+ Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
+                      ^:mutable rate *txid ^:mutable remote->local-syncer stop-chan *stopped]
+  Object
+  (filter-file-change-events-fn [_]
+    (fn [^FileChangeEvent e]
+      (go (and (instance? FileChangeEvent e)
+               (string/starts-with? (.-dir e) base-path)
+               (not (contains-path? ignore-files (relative-path e)))
+               (contains-path? monitored-dirs (relative-path e))
+               (let [r (not (contains? (:recent-remote->local-files @*sync-state)
+                                       (<! (<file-change-event=>recent-remote->local-file-item e))))]
+                 (when (and (contains? #{::remote->local ::remote->local-full-sync} (:state @*sync-state))
+                            r)
                    (println :debug :filter-recent-remote->local-files
-                            e
-                            (file-change-event=>recent-remote->local-file-item e))
-                   r
-                   )))))
+                            (<! (<file-change-event=>recent-remote->local-file-item e))
+                            (:recent-remote->local-files @*sync-state)))
+                 r)))))
 
-    (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
+  (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
-    ILocal->RemoteSync
-    (stop-local->remote! [_]
-      (async/close! stop-chan)
-      (vreset! *stopped true))
+  ILocal->RemoteSync
+  (stop-local->remote! [_]
+    (async/close! stop-chan)
+    (vreset! *stopped true))
 
-    (<ratelimit [this from-chan]
-      (let [<fast-filter-e-fn (.filter-file-change-events-fn this)]
-        (util/<ratelimit
-         from-chan rate
-         :filter-fn
-         (fn [e]
-           (go
-             (and (<! (<fast-filter-e-fn e))
-                  (let [e-path [(relative-path e)]]
-                    (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
-                    (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
-                      (when-not v
-                        (swap! *sync-state sync-state--remove-queued-local->remote-files e-path))
-                      v)))))
-         :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
-         :stop-ch stop-chan
-         :distinct-coll? true
-         :flush-now-ch immediately-local->remote-chan)))
+  (<ratelimit [this from-chan]
+    (let [<fast-filter-e-fn (.filter-file-change-events-fn this)]
+      (util/<ratelimit
+       from-chan rate
+       :filter-fn
+       (fn [e]
+         (go
+           (and (<! (<fast-filter-e-fn e))
+                (let [e-path [(relative-path e)]]
+                  (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
+                  (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
+                    (when-not v
+                      (swap! *sync-state sync-state--remove-queued-local->remote-files e-path))
+                    v)))))
+       :flush-fn #(swap! *sync-state sync-state-reset-queued-local->remote-files)
+       :stop-ch stop-chan
+       :distinct-coll? true
+       :flush-now-ch immediately-local->remote-chan)))
 
-    (<sync-local->remote! [_ es]
-      (if (empty? es)
-        (go {:succ true})
-        (let [type (.-type ^FileChangeEvent (first es))
-              es->paths-xf (comp
-                            (map #(relative-path %))
-                            (filter #(not (contains-path? ignore-files %))))
-              paths (sequence es->paths-xf es)]
-          (println :sync-local->remote type paths)
-          (let [r (case type
-                    ("add" "change")
-                    (<update-remote-files rsapi graph-uuid base-path paths @*txid)
+  (<sync-local->remote! [_ es]
+    (if (empty? es)
+      (go {:succ true})
+      (let [type (.-type ^FileChangeEvent (first es))
+            es->paths-xf (comp
+                          (map #(relative-path %))
+                          (filter #(not (contains-path? ignore-files %))))
+            paths (sequence es->paths-xf es)]
+        (println :sync-local->remote type paths)
+        (let [r (case type
+                  ("add" "change")
+                  (<update-remote-files rsapi graph-uuid base-path paths @*txid)
 
-                    "unlink"
-                    (do
+                  "unlink"
+                  (do
                       ;; ensure local-file deleted, may return no such file exception, but ignore it.
-                      (<delete-local-files rsapi graph-uuid base-path paths)
-                      (<delete-remote-files rsapi graph-uuid base-path paths @*txid)))]
-            (go
-              (let [_ (swap! *sync-state sync-state--add-current-local->remote-files paths)
-                    r* (<! r)
-                    _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
-                (cond
-                  (need-sync-remote? r*)
-                  (do (println :need-sync-remote r*)
-                      {:need-sync-remote true})
+                    (<delete-local-files rsapi graph-uuid base-path paths)
+                    (<delete-remote-files rsapi graph-uuid base-path paths @*txid)))]
+          (go
+            (let [_ (swap! *sync-state sync-state--add-current-local->remote-files paths)
+                  r* (<! r)
+                  _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
+              (cond
+                (need-sync-remote? r*)
+                (do (println :need-sync-remote r*)
+                    {:need-sync-remote true})
 
-                  (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
+                (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
                   ;; but some potential bugs cause local-txid > remote-txid
-                  (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
-                    (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
-                    (reset! *txid remote-txid)
-                    {:succ true})
+                (let [remote-txid (:TXId (<! (<get-remote-graph remoteapi nil graph-uuid)))]
+                  (update-graphs-txid! remote-txid graph-uuid user-uuid repo)
+                  (reset! *txid remote-txid)
+                  {:succ true})
 
-                  (number? r*)          ; succ
-                  (do
-                    (println "sync-local->remote! update txid" r*)
+                (number? r*)          ; succ
+                (do
+                  (println "sync-local->remote! update txid" r*)
                     ;; persist txid
-                    (update-graphs-txid! r* graph-uuid user-uuid repo)
-                    (reset! *txid r*)
-                    {:succ true})
+                  (update-graphs-txid! r* graph-uuid user-uuid repo)
+                  (reset! *txid r*)
+                  {:succ true})
 
-                  :else
-                  (do
-                    (println "sync-local->remote unknown:" r*)
-                    {:unknown r*}))))))))
+                :else
+                (do
+                  (println "sync-local->remote unknown:" r*)
+                  {:unknown r*}))))))))
 
-    (<sync-local->remote-all-files! [this]
-      (go
-        (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
-              local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
-              remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
-          (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
-                   (storage-exceed-limit? remote-all-files-meta-or-exp))
-            {:stop true}
-            (let [remote-all-files-meta remote-all-files-meta-or-exp
-                  local-all-files-meta (<! local-all-files-meta-c)
-                  diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
-                  change-events-partitions
-                  (sequence
-                   (comp
+  (<sync-local->remote-all-files! [this]
+    (go
+      (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
+            local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
+            remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
+        (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
+                 (storage-exceed-limit? remote-all-files-meta-or-exp))
+          {:stop true}
+          (let [remote-all-files-meta remote-all-files-meta-or-exp
+                local-all-files-meta (<! local-all-files-meta-c)
+                diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
+                change-events-partitions
+                (sequence
+                 (comp
                     ;; convert to FileChangeEvent
-                    (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
+                  (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
                     ;; filter ignore-files & monitored-dirs
-                    (filter #(let [path (relative-path %)]
-                               (and (not (contains-path? ignore-files path))
-                                    (contains-path? monitored-dirs path))))
+                  (filter #(let [path (relative-path %)]
+                             (and (not (contains-path? ignore-files path))
+                                  (contains-path? monitored-dirs path))))
                     ;; partition FileChangeEvents
-                    (partition-file-change-events 10))
-                   diff-local-files)]
-              (println "[full-sync(local->remote)]"
-                       (count (flatten change-events-partitions)) "files need to sync")
-              (loop [es-partitions change-events-partitions]
-                (if @*stopped
-                  {:stop true}
-                  (if (empty? es-partitions)
-                    {:succ true}
-                    (let [{:keys [succ need-sync-remote unknown] :as r}
-                          (<! (<sync-local->remote! this (first es-partitions)))]
-                      (s/assert ::sync-local->remote!-result r)
-                      (cond
-                        succ
-                        (recur (next es-partitions))
-                        (or need-sync-remote unknown) r)))))))))))
+                  (partition-file-change-events 10))
+                 diff-local-files)]
+            (println "[full-sync(local->remote)]"
+                     (count (flatten change-events-partitions)) "files need to sync")
+            (loop [es-partitions change-events-partitions]
+              (if @*stopped
+                {:stop true}
+                (if (empty? es-partitions)
+                  {:succ true}
+                  (let [{:keys [succ need-sync-remote unknown] :as r}
+                        (<! (<sync-local->remote! this (first es-partitions)))]
+                    (s/assert ::sync-local->remote!-result r)
+                    (cond
+                      succ
+                      (recur (next es-partitions))
+                      (or need-sync-remote unknown) r)))))))))))
 
 ;;; ### put all stuff together
 
