@@ -26,7 +26,7 @@
         current-repo       (state/get-current-repo)
         sync-state         (state/sub [:file-sync/sync-state current-repo])
         _                  (rum/react file-sync-handler/refresh-file-sync-component)
-        graph-txid-exists? (file-sync-handler/graph-txid-exists?)
+        synced-file-graph? (file-sync-handler/synced-file-graph? current-repo)
         uploading-files    (:current-local->remote-files sync-state)
         downloading-files  (:current-remote->local-files sync-state)
         queuing-files      (:queued-local->remote-files sync-state)
@@ -40,9 +40,9 @@
         need-password?     (contains? #{:need-password} status)
         queuing?           (and idle? (boolean (seq queuing-files)))
 
-        turn-on            #(if-not graph-txid-exists?
+        turn-on            #(if-not synced-file-graph?
                               (async/go
-                                (notifications/show! "Going to init a remote graph!" :warn)
+                                (notifications/show! "Creating a remote graph!" :info)
                                 (let [repo      (state/get-current-repo)
                                       GraphName (util/node-path.basename repo)]
                                   (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph GraphName)) 2)]
@@ -87,7 +87,7 @@
                                          [:modal/remote-encryption-input-pw-dialog current-repo current-graph
                                           :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
 
-          graph-txid-exists?
+          synced-file-graph?
           (concat
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)
@@ -105,7 +105,7 @@
 
         {:links-header
          [:<>
-          (when (and graph-txid-exists? queuing?)
+          (when (and synced-file-graph? queuing?)
             [:div.px-2.py-1
              (ui/button "Sync now"
                         :class "block"

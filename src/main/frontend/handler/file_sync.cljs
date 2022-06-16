@@ -29,6 +29,11 @@
   (when-let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])]
     (not (sync/sync-state--stopped? sync-state))))
 
+(defn synced-file-graph?
+  [graph]
+  (some (fn [item] (and (= graph (:url item))
+                        (:GraphUUID item))) (state/get-repos)))
+
 (defn create-graph
   [name]
   (go

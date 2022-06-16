@@ -109,7 +109,7 @@
          (fs/watch-dir! dir-name))
        (srs/update-cards-due-count!)
        (state/pub-event! [:graph/ready graph])
-
+       (repo-handler/refresh-repos!)
        (file-sync-restart!)))))
 
 (def persist-db-noti-m
