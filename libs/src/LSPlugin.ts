@@ -4,6 +4,9 @@ import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { LSPluginRequest } from './modules/LSPlugin.Request'
+
+export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type PluginLocalIdentity = string
 
@@ -407,6 +410,7 @@ export interface IAppProxy {
   // hook events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
+  onThemeChanged: IUserHook<Partial<{name: string, mode: string, pid: string, url: string}>>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
 
   /**
@@ -948,6 +952,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Git: IGitProxy
   UI: IUIProxy
 
+  Request: LSPluginRequest
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments
 }

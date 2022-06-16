@@ -281,7 +281,7 @@
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
-     
+
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
@@ -405,25 +405,26 @@
     :as _option}]
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
-        edit-content (gobj/get input "value")
-        current-pos (cursor/pos input)
-        prefix (subs edit-content 0 current-pos)
-        postfix (if selected?
-                  (string/replace-first (subs edit-content current-pos)
-                                        selected
-                                        "")
-                  (subs edit-content current-pos))
-        new-value (str prefix value postfix)
-        new-pos (- (+ (count prefix)
-                      (count value)
-                      (or forward-pos 0))
-                   (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (cursor/move-cursor-to input new-pos)
-    (when selected?
-      (.setSelectionRange input new-pos (+ new-pos (count selected))))
-    (when check-fn
-      (check-fn new-value (dec (count prefix))))))
+        edit-content (gobj/get input "value")]
+    (when edit-content
+      (let [current-pos (cursor/pos input)
+            prefix (subs edit-content 0 current-pos)
+            postfix (if selected?
+                      (string/replace-first (subs edit-content current-pos)
+                                            selected
+                                            "")
+                      (subs edit-content current-pos))
+            new-value (str prefix value postfix)
+            new-pos (- (+ (count prefix)
+                          (count value)
+                          (or forward-pos 0))
+                       (or backward-pos 0))]
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input new-pos)
+        (when selected?
+          (.setSelectionRange input new-pos (+ new-pos (count selected))))
+        (when check-fn
+          (check-fn new-value (dec (count prefix))))))))
 
 (defn delete-pair!
   [id]
@@ -436,6 +437,20 @@
         new-pos (count prefix)]
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (cursor/move-cursor-to input new-pos)))
+
+(defn delete-selection!
+  [id]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        start (util/get-selection-start input)
+        end (util/get-selection-end input)]
+    (when-not (= start end)
+      (let [prefix (subs edit-content 0 start)
+            new-value (str prefix
+                           (subs edit-content end))
+            new-pos (count prefix)]
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input new-pos)))))
 
 (defn get-matched-commands
   ([text]

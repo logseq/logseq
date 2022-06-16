@@ -229,9 +229,11 @@
                                (not (mobile-util/native-platform?))
                                (not config/publishing?))
         left-menu (left-menu-button {:on-click (fn []
-                                       (open-fn)
-                                       (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})]
+                                                 (open-fn)
+                                                 (state/set-left-sidebar-open!
+                                                  (not (:ui/left-sidebar-open? @state/state))))})
+        custom-home-page? (and (state/custom-home-page?)
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -254,7 +256,7 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
-        (if (state/home?)
+        (if (or (state/home?) custom-home-page?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
             [:button.it.navigation.nav-left.button.icon
@@ -269,7 +271,8 @@
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
-      (when (not= (state/get-current-route) :home)
+      (when (and (not= (state/get-current-route) :home)
+                 (not custom-home-page?))
         (home-button))
 
       (when (util/electron?)

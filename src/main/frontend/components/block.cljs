@@ -1921,11 +1921,13 @@
     (if (and meta? (not (state/get-edit-input-id)))
       (do
         (util/stop e)
-        (state/conj-selection-block! (gdom/getElement block-id) :down))
+        (state/conj-selection-block! (gdom/getElement block-id) :down)
+        (when (and block-id (not (state/get-selection-start-block)))
+          (state/set-selection-start-block! block-id)))
       (when (contains? #{1 0} button)
         (when-not (target-forbidden-edit? target)
           (cond
-            (and shift? (state/get-selection-start-block))
+            (and shift? (state/get-selection-start-block-or-first))
             (editor-handler/highlight-selection-area! block-id)
 
             shift?
