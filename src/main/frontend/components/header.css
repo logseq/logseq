@@ -54,7 +54,8 @@
   }
 
   .ui-items-container .button {
-    width: 2rem;
+    width: auto;
+    padding: 0 8px;
   }
 
   svg.warning {
