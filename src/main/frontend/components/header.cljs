@@ -185,6 +185,9 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
+      (when (not= (state/get-current-route) :home)
+        (home-button))
+      
       (when-not (or file-sync-handler/hiding-login&file-sync
                     graph-file-sync-init-downloading?)
         (fs-sync/indicator))
@@ -193,9 +196,7 @@
 
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
-
-      (when (not= (state/get-current-route) :home)
-        (home-button))
+      
 
       (when (util/electron?)
         (back-and-forward))
