@@ -165,10 +165,13 @@
   (let [[dir path] (map #(some-> %
                                  js/decodeURI)
                         [dir path])
-        dir (string/replace dir #"/+$" "")
+        dir (some-> dir (string/replace #"/+$" ""))
         path (some-> path (string/replace #"^/+" ""))
         path (cond (nil? path)
                    dir
+
+                   (nil? dir)
+                   path
 
                    (string/starts-with? path dir)
                    path
@@ -226,8 +229,19 @@
       result))
   (readdir [_this dir]                  ; recursive
     (readdir dir))
-  (unlink! [_this _repo _path _opts]
-    nil)
+  (unlink! [_this repo path {:keys [ok-handler error-handler]}]
+    (let [path (get-file-path nil path)]
+      (prn :unlink :path path)
+      (p/catch
+          (p/let [result (.deleteFile Filesystem
+                                      (clj->js
+                                       {:path path}))]
+            (when ok-handler
+              (ok-handler repo path result)))
+          (fn [error]
+            (if error-handler
+              (error-handler error)
+              (log/error :delete-file-failed error))))))
   (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
@@ -241,23 +255,13 @@
          content)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
-    (let [path (get-file-path dir path)]
-      (p/catch
-       (p/let [result (.deleteFile Filesystem
-                                   (clj->js
-                                    {:path path}))]
-         (when ok-handler
-           (ok-handler repo path result)))
-       (fn [error]
-         (if error-handler
-           (error-handler error)
-           (log/error :delete-file-failed error))))))
+  (delete-file! [_this _repo _dir _path _opts]
+    nil)
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
-                    (.stat Filesystem (clj->js {:path path}))
-                    (fn [_e] :not-found))]
+                       (.stat Filesystem (clj->js {:path path}))
+                       (fn [_e] :not-found))]
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [_this _repo old-path new-path]
     (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
