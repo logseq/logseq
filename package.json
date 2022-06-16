@@ -5,7 +5,6 @@
     "main": "static/electron.js",
     "devDependencies": {
         "@capacitor/cli": "3.2.2",
-        "@logseq/nbb-logseq": "^0.5.103",
         "@playwright/test": "^1.19.2",
         "@tailwindcss/ui": "0.7.2",
         "@types/gulp": "^4.0.7",
@@ -55,7 +54,7 @@
         "cljs:electron-watch": "clojure -M:cljs watch app electron --config-merge '{:asset-path \"./js\"}'",
         "cljs:release": "clojure -M:cljs release app publishing electron",
         "cljs:release-electron": "clojure -M:cljs release app electron --debug && clojure -M:cljs release publishing",
-        "cljs:release-app": "clojure -M:cljs release app",
+        "cljs:release-app": "clojure -M:cljs release app --config-merge '{:compiler-options {:output-feature-set :es6}}'",
         "cljs:release-android-app": "clojure -M:cljs release app --config-merge '{:compiler-options {:output-feature-set :es6}}'",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",

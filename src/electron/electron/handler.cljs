@@ -8,6 +8,7 @@
             ["os" :as os]
             ["diff-match-patch" :as google-diff]
             ["/electron/utils" :as js-utils]
+            ["abort-controller" :as AbortController]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -320,6 +321,11 @@
   (p/let [_ (utils/fetch url)]
     (utils/send-to-renderer win :notification {:type "success" :payload (str "Successfully: " url)})))
 
+(defmethod handle :httpFetchJSON [_win [_ url options]]
+  (p/let [res (utils/fetch url options)
+          json (.json res)]
+         json))
+
 (defmethod handle :getUserDefaultPlugins []
   (utils/get-ls-default-plugins))
 
@@ -357,7 +363,8 @@
 (defn set-current-graph!
   [window graph-path]
   (let [old-path (state/get-window-graph-path window)]
-    (when old-path (close-watcher-when-orphaned! window old-path))
+    (when (and old-path graph-path (not= old-path graph-path))
+      (close-watcher-when-orphaned! window old-path))
     (swap! state/state assoc :graph/current graph-path)
     (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
@@ -387,6 +394,49 @@
 (defmethod handle :uninstallMarketPlugin [_ [_ id]]
   (plugin/uninstall! id))
 
+(def *request-abort-signals (atom {}))
+
+(defmethod handle :httpRequest [_ [_ _req-id opts]]
+  (let [{:keys [url abortable method data returnType headers]} opts]
+    (when-let [[method type] (and (not (string/blank? url))
+                                  [(keyword (string/upper-case (or method "GET")))
+                                   (keyword (string/lower-case (or returnType "json")))])]
+      (-> (utils/fetch url
+                       (-> {:method  method
+                            :headers (and headers (bean/->js headers))}
+                           (merge (when (and (not (contains? #{:GET :HEAD} method)) data)
+                                    ;; TODO: support type of arrayBuffer
+                                    {:body (js/JSON.stringify (bean/->js data))})
+
+                                  (when-let [^js controller (and abortable (AbortController.))]
+                                    (swap! *request-abort-signals assoc _req-id controller)
+                                    {:signal (.-signal controller)}))))
+          (p/then (fn [^js res]
+                    (case type
+                      :json
+                      (.json res)
+
+                      :arraybuffer
+                      (.arrayBuffer res)
+
+                      :base64
+                      (-> (.buffer res)
+                          (p/then #(.toString % "base64")))
+
+                      :text
+                      (.text res))))
+          (p/catch
+           (fn [^js e]
+             ;; TODO: handle special cases
+             (throw e)))
+          (p/finally
+           (fn []
+             (swap! *request-abort-signals dissoc _req-id)))))))
+
+(defmethod handle :httpRequestAbort [_ [_ _req-id]]
+  (when-let [^js controller (get @*request-abort-signals _req-id)]
+    (.abort controller)))
+
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
 
@@ -410,17 +460,18 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js window [_ dir]]
+(defmethod handle :addDirWatcher [^js _window [_ dir]]
   ;; receive dir path (not repo / graph) from frontend
   ;; Windows on same dir share the same watcher
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
   (when dir
-    ;; adding dir watcher when the window has watcher already - must be cmd + r refreshing
-    ;; maintain only one file watcher when multiple windows on the same dir
-    (close-watcher-when-orphaned! window dir)
-    (watcher/watch-dir! window dir)))
+    (watcher/watch-dir! dir)))
+
+(defmethod handle :unwatchDir [^js _window [_ dir]]
+  (when dir
+    (watcher/close-watcher! dir)))
 
 (defn open-new-window!
   "Persist db first before calling! Or may break db persistency"

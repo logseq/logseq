@@ -164,6 +164,7 @@
      :plugin/enabled                        (and (util/electron?)
                                                  ;; true false :theme-only
                                                  ((fnil identity true) (storage/get :lsp-core-enabled)))
+     :plugin/preferences                    nil
      :plugin/indicator-text                 nil
      :plugin/installed-plugins              {}
      :plugin/installed-themes               []
@@ -197,8 +198,8 @@
 
      ;; copied blocks
      :copy/blocks                           {:copy/content nil
-                                             :copy/block-ids nil
-                                             :copy/graph nil}
+                                             :copy/graph nil
+                                             :copy/blocks nil}
 
      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                 "dashes")
@@ -371,7 +372,12 @@
 (defn enable-journals?
   [repo]
   (not (false? (:feature/enable-journals?
-                 (get (sub-config) repo)))))
+                (get (sub-config) repo)))))
+
+(defn enable-flashcards?
+  [repo]
+  (not (false? (:feature/enable-flashcards?
+                (get (sub-config) repo)))))
 
 (defn export-heading-to-list?
   []
@@ -533,9 +539,7 @@
            (->> (remove #(= (:url repo)
                             (:url %))
                         repos)
-                (util/distinct-by :url))))
-  (when (= (get-current-repo) (:url repo))
-    (set-current-repo! (:url (first (get-repos))))))
+                (util/distinct-by :url)))))
 
 (defn set-timestamp-block!
   [value]
@@ -690,7 +694,8 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down))
+         :selection/direction :down
+         :selection/start-block nil))
 
 (defn get-selection-blocks
   []
@@ -702,6 +707,12 @@
        (keep #(when-let [id (dom/attr % "blockid")]
                 (uuid id)))
        (distinct)))
+
+(defn get-selection-start-block-or-first
+  []
+  (or (get-selection-start-block)
+      (some-> (first (get-selection-blocks))
+              (gobj/get "id"))))
 
 (defn in-selection-mode?
   []
@@ -1437,22 +1448,11 @@
   []
   (:copy/blocks @state))
 
-(defn set-copied-blocks
-  [content ids]
-  (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
-                            :copy/block-ids ids
-                            :copy/full-blocks nil}))
-
-(defn set-copied-full-blocks
+(defn set-copied-blocks!
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
                             :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
-                            :copy/full-blocks blocks}))
-
-(defn set-copied-full-blocks!
-  [blocks]
-  (set-state! [:copy/blocks :copy/full-blocks] blocks))
+                            :copy/blocks blocks}))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -1700,3 +1700,7 @@
   [graph-uuid]
   (when graph-uuid
     (first (filter #(= graph-uuid (:GraphUUID %))(get-repos)))))
+
+(defn unlinked-dir?
+  [dir]
+  (contains? (:file/unlinked-dirs @state) dir))

@@ -119,15 +119,17 @@
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
             journal-page? (date/valid-journal-title? title)
+            filename (if journal-page?
+                       (date/date->file-name journal-page?)
+                       (-> (or (:block/original-name page) (:block/name page))
+                           (util/file-name-sanity)))
             path (str
                   (if journal-page?
                     (config/get-journals-directory)
                     (config/get-pages-directory))
                   "/"
-                  (if journal-page?
-                    (date/date->file-name journal-page?)
-                    (-> (or (:block/original-name page) (:block/name page))
-                        (util/file-name-sanity))) "."
+                  filename
+                  "."
                   (if (= format "markdown") "md" format))
             file-path (config/get-file-path repo path)
             file {:file/path file-path}

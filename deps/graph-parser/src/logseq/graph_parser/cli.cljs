@@ -6,7 +6,7 @@
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.db :as ldb]))
 
 (defn slurp
   "Return file contents like clojure.core/slurp"
@@ -60,7 +60,7 @@ TODO: Fail fast when process exits 1"
    (parse-graph dir {}))
   ([dir options]
    (let [files (or (:files options) (build-graph-files dir))
-         conn (gp-db/start-conn)
+         conn (ldb/start-conn)
          config (read-config dir)]
      (when-not (:files options) (println "Parsing" (count files) "files..."))
      (parse-files conn files (merge options {:config config}))

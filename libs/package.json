@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -16,9 +16,9 @@
     "build:docs": "typedoc --plugin typedoc-plugin-lsp-docs src/LSPlugin.user.ts"
   },
   "dependencies": {
-    "csstype": "3.0.8",
-    "debug": "4.3.1",
-    "dompurify": "2.3.1",
+    "csstype": "3.1.0",
+    "debug": "4.3.4",
+    "dompurify": "2.3.8",
     "eventemitter3": "4.0.7",
     "fast-deep-equal": "3.1.3",
     "lodash-es": "4.17.21",
@@ -27,16 +27,16 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.5",
-    "@types/dompurify": "^2.2.1",
-    "@types/lodash-es": "^4.17.4",
+    "@types/dompurify": "2.3.3",
+    "@types/lodash-es": "4.17.6",
     "prettier": "^2.6.2",
     "prettier-config-standard": "^5.0.0",
-    "ts-loader": "^8.0.17",
+    "ts-loader": "9.3.0",
+    "typescript": "4.7.3",
     "typedoc": "^0.22.15",
-    "typescript": "^4.2.2",
-    "webpack": "^5.24.3",
-    "webpack-bundle-analyzer": "^4.4.0",
-    "webpack-cli": "^4.5.0",
-    "typedoc-plugin-lsp-docs": "*"
+    "typedoc-plugin-lsp-docs": "*",
+    "webpack": "5.73.0",
+    "webpack-bundle-analyzer": "4.5.0",
+    "webpack-cli": "4.9.2"
   }
 }

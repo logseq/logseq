@@ -25,8 +25,8 @@
         &:after {
           content: " ";
           position: absolute;
-          bottom: 7px;
-          right: 2px;
+          bottom: 10px;
+          right: 8px;
           width: 7px;
           height: 7px;
           background-color: var(--ls-color-file-sync-pending);
@@ -50,24 +50,6 @@
           &:after {
             background-color: var(--ls-color-file-sync-idle);
           }
-        }
-      }
-
-      small.full-loading {
-        position: absolute;
-        transform-origin: center;
-        top: 14px;
-        right: 0;
-        display: flex;
-        line-height: 1em;
-        overflow: hidden;
-        z-index: 2;
-        color: var(--ls-color-file-sync-pending);
-
-        > .ti {
-          font-size: 11px;
-          line-height: 1em;
-          font-weight: 500;
         }
       }
     }

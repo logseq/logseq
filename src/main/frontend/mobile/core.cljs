@@ -2,7 +2,7 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
-            [frontend.fs.capacitor-fs :as fs]
+            [frontend.fs.capacitor-fs :as mobile-fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
@@ -20,8 +20,10 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (let [path (fs/iOS-ensure-documents!)]
+  (let [path (mobile-fs/iOS-ensure-documents!)]
     (println "iOS container path: " path))
+
+  (state/pub-event! [:validate-appId])
 
   (.addEventListener js/window
                      "load"

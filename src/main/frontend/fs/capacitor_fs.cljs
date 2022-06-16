@@ -2,15 +2,15 @@
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.encrypt :as encrypt]))
+            [rum.core :as rum]))
 
 (when (mobile-util/native-ios?)
   (defn iOS-ensure-documents!
@@ -187,11 +187,6 @@
   [path localDocumentsPath]
   (string/includes? path localDocumentsPath))
 
-(defn- iCloud-container-path?
-  "Check whether `path' is logseq's iCloud container path on iOS"
-  [path]
-  (string/includes? path "iCloud~com~logseq~logseq"))
-
 (rum/defc instruction
   []
   [:div.instruction
@@ -284,16 +279,10 @@
             {:keys [path localDocumentsPath]} (p/chain
                                                (.pickFolder mobile-util/folder-picker)
                                                #(js->clj % :keywordize-keys true))
-            _ (when (mobile-util/native-ios?)
-                (cond
-                  (not (or (local-container-path? path localDocumentsPath)
-                           (iCloud-container-path? path)))
-                  (state/pub-event! [:modal/show-instruction])
-
-                  (iCloud-container-path? path)
-                  (mobile-util/sync-icloud-repo path)
-
-                  :else nil))
+            _ (when (and (mobile-util/native-ios?) 
+                         (not (or (local-container-path? path localDocumentsPath)
+                                  (mobile-util/iCloud-container-path? path))))
+                (state/pub-event! [:modal/show-instruction]))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
@@ -302,4 +291,6 @@
   (watch-dir! [_this dir]
     (p/do!
      (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher #js {:path dir}))))
+     (.watch mobile-util/fs-watcher #js {:path dir})))
+  (unwatch-dir! [_this _dir]
+    (.unwatch mobile-util/fs-watcher)))

@@ -72,8 +72,7 @@
                                            :idle    (and (not queuing?) idle?)}])}
              [:span.flex.items-center
               (ui/icon "cloud"
-                       {:style {:fontSize ui/icon-size}})]
-             (when full-syncing? [:small.full-loading.animate-spin (ui/icon "rotate-clockwise")])]
+                       {:style {:fontSize ui/icon-size}})]]
 
             [:a.button.cloud.off
              {:on-click turn-on}

@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -37,7 +37,8 @@
     "@sentry/electron": "2.5.1",
     "posthog-js": "1.10.2",
     "@logseq/rsapi": "0.0.20",
-    "electron-deeplink": "1.0.10"
+    "electron-deeplink": "1.0.10",
+    "abort-controller": "3.0.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",

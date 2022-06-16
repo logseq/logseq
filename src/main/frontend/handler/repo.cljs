@@ -172,7 +172,7 @@
                                          (not= updated-at (:block/created-at page)))))) metadata)
                            (remove nil?))]
              (when (seq metadata)
-               (db/transact! repo metadata))))))
+               (db/transact! repo metadata {:new-graph? true}))))))
      (catch js/Error e
        (log/error :exception e)))))
 
@@ -183,7 +183,7 @@
         files [{:file/path path
                 :file/content content}]
         file-paths [path]]
-    (util/profile "update-pages-metadata!" (load-pages-metadata! repo file-paths files force?))))
+    (load-pages-metadata! repo file-paths files force?)))
 
 (defn- parse-and-load-file!
   [repo-url file new-graph?]
@@ -339,7 +339,9 @@
                         (db-persist/delete-graph! url)
                         (search/remove-db! url)
                         (state/delete-repo! repo)
-                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))))]
+                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))
+                        (when (= (state/get-current-repo) url)
+                          (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f)))))
@@ -384,26 +386,29 @@
 
 (defn rebuild-index!
   [url]
-  (when url
-    (search/reset-indice! url)
-    (db/remove-conn! url)
-    (db/clear-query-state!)
-    (-> (p/do! (db-persist/delete-graph! url))
-        (p/catch (fn [error]
-                   (prn "Delete repo failed, error: " error))))))
+  (when-not (state/unlinked-dir? (config/get-repo-dir url))
+    (when url
+      (search/reset-indice! url)
+      (db/remove-conn! url)
+      (db/clear-query-state!)
+      (-> (p/do! (db-persist/delete-graph! url))
+          (p/catch (fn [error]
+                     (prn "Delete repo failed, error: " error)))))))
 
 (defn re-index!
   [nfs-rebuild-index! ok-handler]
-  (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
-    (let [local? (config/local-db? repo)]
-      (if local?
-        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
-          (nfs-rebuild-index! repo ok-handler))
-        (rebuild-index! repo))
-      (js/setTimeout
+    (let [dir (config/get-repo-dir repo)]
+      (when-not (state/unlinked-dir? dir)
        (route-handler/redirect-to-home!)
-       500))))
+       (let [local? (config/local-db? repo)]
+         (if local?
+           (p/let [_ (metadata-handler/set-pages-metadata! repo)]
+             (nfs-rebuild-index! repo ok-handler))
+           (rebuild-index! repo))
+         (js/setTimeout
+          (route-handler/redirect-to-home!)
+          500))))))
 
 (defn persist-db!
   ([]

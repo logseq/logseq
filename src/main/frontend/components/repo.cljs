@@ -200,7 +200,8 @@
                                                (db/get-repo-name current-repo) "")
                                    short-repo-name (if-not valid-remotes-but-locals?
                                                      (db/get-short-repo-name repo-path) "Select a Graph")]
-                               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                               [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
+
                                 {:on-click (fn []
                                              (check-multiple-windows? state)
                                              (toggle-fn))

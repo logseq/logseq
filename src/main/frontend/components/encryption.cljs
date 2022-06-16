@@ -170,7 +170,20 @@
   (rum/local false ::loading)
   [state _repo-url db-encrypted-secret close-fn]
   (let [secret (::secret state)
-        loading (::loading state)]
+        loading (::loading state)
+        on-click-fn (fn []
+                      (reset! loading true)
+                      (let [value @secret]
+                        (when-not (string/blank? value) ; TODO: length or other checks
+                          (let [repo (state/get-current-repo)]
+                            (p/do!
+                             (-> (e/decrypt-with-passphrase value db-encrypted-secret)
+                                 (p/then (fn [keys]
+                                           (e/save-key-pair! repo keys)
+                                           (close-fn true)
+                                           (state/set-state! :encryption/graph-parsing? false)))
+                                 (p/catch #(notification/show! "The password is not matched." :warning true))
+                                 (p/finally #(reset! loading false))))))))]
     [:div
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -181,25 +194,16 @@
       {:type "password"
        :auto-focus true
        :on-change (fn [e]
-                    (reset! secret (util/evalue e)))}]
+                    (reset! secret (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= (.-key e) "Enter")
+                        (on-click-fn)))}]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
         {:type "button"
-         :on-click (fn []
-                     (reset! loading true)
-                     (let [value @secret]
-                       (when-not (string/blank? value) ; TODO: length or other checks
-                         (let [repo (state/get-current-repo)]
-                           (p/do!
-                            (-> (e/decrypt-with-passphrase value db-encrypted-secret)
-                                (p/then (fn [keys]
-                                          (e/save-key-pair! repo keys)
-                                          (close-fn true)
-                                          (state/set-state! :encryption/graph-parsing? false)))
-                                (p/catch #(notification/show! "The password is not matched." :warning true))
-                                (p/finally #(reset! loading false))))))))}
+         :on-click on-click-fn}
         (if @loading (ui/loading "Decrypting") "Decrypt")]]]]))
 
 (defn encryption-input-secret-dialog
