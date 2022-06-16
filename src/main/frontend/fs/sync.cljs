@@ -1529,8 +1529,13 @@
                  (string/starts-with? (.-dir e) base-path)
                  (not (contains-path? ignore-files (relative-path e)))
                  (contains-path? monitored-dirs (relative-path e))
-                 (not (contains? (:recent-remote->local-files @*sync-state)
-                                 (<! (file-change-event=>recent-remote->local-file-item e))))))))
+                 (let [r (not (contains? (:recent-remote->local-files @*sync-state)
+                                         (<! (file-change-event=>recent-remote->local-file-item e))))]
+                   (println :debug :filter-recent-remote->local-files
+                            e
+                            (file-change-event=>recent-remote->local-file-item e))
+                   r
+                   )))))
 
     (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
