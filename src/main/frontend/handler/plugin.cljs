@@ -317,11 +317,13 @@
   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
 (defn register-plugin-ui-item
-  [pid {:keys [type] :as opts}]
+  [pid {:keys [key type] :as opts}]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/installed-ui-items pid]
-             (fnil conj []) [type opts pid])
+      (let [items (or (get-in @state/state [:plugin/installed-ui-items pid]) [])
+            items (filter #(not= key (:key (second %))) items)]
+        (swap! state/state assoc-in [:plugin/installed-ui-items pid]
+               (conj items [type opts pid])))
       true)))
 
 (defn unregister-plugin-ui-items

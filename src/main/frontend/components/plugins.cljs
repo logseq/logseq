@@ -814,7 +814,7 @@
        (when-let [^js el (rum/deref *el)]
          (js/LSPlugin.pluginHelpers.setupInjectedUI.call
           pl #js {:slot (.-id el) :key key :template template} #js {})))
-     [])
+     [template])
 
     (if-not (nil? pl)
       [:div
