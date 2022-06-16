@@ -743,18 +743,32 @@
              :else
              nil))
 
-(defn service-expired?
+;;; remote api exceptions
+(defn storage-exceed-limit?
   [exp]
-  ((comp
-    (partial = [403 "file-sync-service-expired"])
-    (juxt :status (comp :message :body))
-    :err)
-   (ex-data exp)))
+  (->> (ex-data exp)
+       :err
+       ((juxt :status (comp set :events :body)))
+       ((fn [[status events]] (and (= 403 status) (contains? events "storage-limit"))))))
 
-(defn- fire-file-sync-service-expired-event!
+(defn graph-count-exceed-limit?
   [exp]
-  (when (service-expired? exp)
-    (state/pub-event! [:file-sync/service-expired])
+  (->> (ex-data exp)
+       :err
+       ((juxt :status (comp set :events :body)))
+       ((fn [[status events]]
+          (and (= 403 status) (contains? events "graph-count-exceed-limit"))))))
+
+(defn- fire-file-sync-storage-exceed-limit-event!
+  [exp]
+  (when (storage-exceed-limit? exp)
+    (state/pub-event! [:file-sync/storage-exceed-limit])
+    true))
+
+(defn- fire-file-sync-graph-count-exceed-limit-event!
+  [exp]
+  (when (graph-count-exceed-limit? exp)
+    (state/pub-event! [:file-sync/graph-count-exceed-limit])
     true))
 
 (deftype RemoteAPI [*stopped?]
@@ -770,7 +784,8 @@
                               :body         (get-resp-json-body resp)
                               :api-name     api-name
                               :request-body body})]
-            (fire-file-sync-service-expired-event! exp)
+            (fire-file-sync-storage-exceed-limit-event! exp)
+            (fire-file-sync-graph-count-exceed-limit-event! exp)
             exp)))))
 
   ;; for test
@@ -1449,7 +1464,7 @@
             local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
         (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
-                 (service-expired? remote-all-files-meta-or-exp))
+                 (storage-exceed-limit? remote-all-files-meta-or-exp))
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
@@ -1596,7 +1611,7 @@
               local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
               remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
           (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
-                   (service-expired? remote-all-files-meta-or-exp))
+                   (storage-exceed-limit? remote-all-files-meta-or-exp))
             {:stop true}
             (let [remote-all-files-meta remote-all-files-meta-or-exp
                   local-all-files-meta (<! local-all-files-meta-c)

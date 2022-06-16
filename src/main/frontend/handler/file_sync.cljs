@@ -40,14 +40,18 @@
           (apply sync/update-graphs-txid! tx-info)
           (swap! refresh-file-sync-component not) tx-info)
         (cond
-          (sync/service-expired? r)
+          ;; already processed this exception by events
+          ;; - :file-sync/storage-exceed-limit
+          ;; - :file-sync/graph-count-exceed-limit
+          (or (sync/storage-exceed-limit? r)
+              (sync/graph-count-exceed-limit? r))
           nil
 
           (= 404 (get-in (ex-data r) [:err :status]))
           (notification/show! (str "Create graph failed: already existed graph: " name) :warning)
 
           :else
-          (notification/show! (str "Create graph failed:" r) :warning))))))
+          (notification/show! (str "Create graph failed:" r) :warning false))))))
 
 (defn delete-graph
   [graph-uuid]

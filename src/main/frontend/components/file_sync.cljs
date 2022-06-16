@@ -23,7 +23,6 @@
   rum/reactive
   [_state]
   (let [_                  (state/sub :auth/id-token)
-        toggling?          (state/sub :file-sync/toggling?)
         current-repo       (state/get-current-repo)
         sync-state         (state/sub [:file-sync/sync-state current-repo])
         _                  (rum/react file-sync-handler/refresh-file-sync-component)
@@ -41,26 +40,22 @@
         need-password?     (contains? #{:need-password} status)
         queuing?           (and idle? (boolean (seq queuing-files)))
 
-        turn-on            #(when-not toggling?
-                              (state/set-state! :file-sync/toggling? true)
-                              (if-not graph-txid-exists?
-                                (async/go
-                                  (notifications/show! "Going to init a remote graph!" :warn)
-                                  (let [repo      (state/get-current-repo)
-                                        GraphName (util/node-path.basename repo)]
-                                    (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph GraphName)) 2)]
-                                      (async/<! (fs-sync/sync-start))
-                                      ;; update existing repo
-                                      (state/set-repos! (map (fn [r]
-                                                               (if (= (:url r) repo)
-                                                                 (assoc r :GraphUUID GraphUUID
-                                                                        :GraphName GraphName
-                                                                        :remote? true)
-                                                                 r))
-                                                             (state/get-repos))))))
-                                (fs-sync/sync-start)))
-
-        _                  (when (and (not off?) toggling?) (state/set-state! :file-sync/toggling? false))]
+        turn-on            #(if-not graph-txid-exists?
+                              (async/go
+                                (notifications/show! "Going to init a remote graph!" :warn)
+                                (let [repo      (state/get-current-repo)
+                                      GraphName (util/node-path.basename repo)]
+                                  (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph GraphName)) 2)]
+                                    (async/<! (fs-sync/sync-start))
+                                    ;; update existing repo
+                                    (state/set-repos! (map (fn [r]
+                                                             (if (= (:url r) repo)
+                                                               (assoc r :GraphUUID GraphUUID
+                                                                      :GraphName GraphName
+                                                                      :remote? true)
+                                                               r))
+                                                           (state/get-repos))))))
+                              (fs-sync/sync-start))]
 
     [:div.cp__file-sync-indicator
      (when (and (not config/publishing?)
@@ -68,7 +63,7 @@
 
        (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
-          (if (or (true? toggling?) (not off?))
+          (if (not off?)
             [:a.button.cloud.on
              {:on-click toggle-fn
               :class    (util/classnames [{:syncing syncing?

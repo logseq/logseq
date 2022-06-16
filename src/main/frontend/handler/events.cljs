@@ -470,7 +470,7 @@
 
 
 (defmethod handle :file-sync-graph/restore-file [[_ graph page-entity content]]
-  (when-let [db (db/get-db graph)]
+  (when (db/get-db graph)
     (let [file (:block/file page-entity)]
       (when-let [path (:file/path file)]
         (when (not= content (:file/content file))
@@ -485,10 +485,13 @@
                                     :path-params {:name (:block/name page-entity)}}))))))
 
 
-(defmethod handle :file-sync/service-expired [[_]]
-  (notification/show! "file sync service expired" :warning false)
+(defmethod handle :file-sync/storage-exceed-limit [[_]]
+  (notification/show! "file sync storage exceed limit" :warning false)
   (file-sync-stop!))
 
+(defmethod handle :file-sync/graph-count-exceed-limit [[_]]
+  (notification/show! "file sync graph count exceed limit" :warning false)
+  (file-sync-stop!))
 
 (defn run!
   []
