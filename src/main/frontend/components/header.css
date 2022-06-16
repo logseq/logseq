@@ -134,7 +134,7 @@
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
-  padding-left: 0;
+  padding-left: 1rem;
 }
 
 .cp__header a, .cp__header svg {
