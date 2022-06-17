@@ -144,7 +144,7 @@
                                          (string/replace "{time}" time)
                                          (string/replace "{url}" link)
                                          (string/replace "{text}" text))]
-                         (if (state/get-edit-block)
+                         (if (and (state/get-edit-block) (state/editing?))
                            (editor-handler/insert content)
                            (editor-handler/api-insert-new-block! content {:page page
                                                                           :edit-block? false
