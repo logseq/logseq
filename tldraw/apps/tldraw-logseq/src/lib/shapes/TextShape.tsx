@@ -272,8 +272,25 @@ export class TextShape extends TLTextShape<TextShapeProps> {
 
   getShapeSVGJsx() {
     const {
-      props: { text, stroke },
+      props: { text, stroke, fontSize, fontFamily },
     } = this
-    return <text stroke={stroke} fill={stroke}>{text}</text>
+    // Stretch to the bound size 
+    const bounds = this.getBounds()
+
+    return (
+      <text
+        style={{
+          transformOrigin: 'top left',
+        }}
+        transform={`translate(${bounds.width / 2}, ${bounds.height / 2})`}
+        textAnchor="middle"
+        fontFamily={fontFamily}
+        fontSize={fontSize}
+        stroke={stroke}
+        fill={stroke}
+      >
+        {text}
+      </text>
+    )
   }
 }

@@ -146,26 +146,47 @@ export class LineShape extends TLLineShape<LineShapeProps> {
     return withClampedStyles(props)
   }
 
-  getShapeSVGJsx() {
+  getShapeSVGJsx(preview = false) {
     const {
       stroke,
       fill,
       strokeWidth,
       decorations,
+      label,
       handles: { start, end },
     } = this.props
+    const midPoint = Vec.med(start.point, end.point)
     return (
-      <Arrow
-        style={{
-          stroke,
-          fill,
-          strokeWidth,
-        }}
-        start={start.point}
-        end={end.point}
-        decorationStart={decorations?.start}
-        decorationEnd={decorations?.end}
-      />
+      <>
+        <Arrow
+          style={{
+            stroke,
+            fill,
+            strokeWidth,
+          }}
+          start={start.point}
+          end={end.point}
+          decorationStart={decorations?.start}
+          decorationEnd={decorations?.end}
+        />
+        {preview && (
+          <>
+            <text
+              style={{
+                transformOrigin: 'top left',
+              }}
+              fontFamily="Inter"
+              fontSize={20}
+              transform={`translate(${midPoint[0]}, ${midPoint[1]})`}
+              textAnchor="middle"
+              stroke={stroke}
+              fill={stroke}
+            >
+              {label}
+            </text>
+          </>
+        )}
+      </>
     )
   }
 }

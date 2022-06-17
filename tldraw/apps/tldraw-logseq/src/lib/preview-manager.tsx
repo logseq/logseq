@@ -87,7 +87,7 @@ export class PreviewManager {
               const transformArr = [`translate(${tx}, ${ty})`, `rotate(${r}, ${rdx}, ${rdy})`]
               return (
                 <g transform={transformArr.join(' ')} key={s.id}>
-                  {s.getShapeSVGJsx()}
+                  {s.getShapeSVGJsx(true)}
                 </g>
               )
             })}
