@@ -46,8 +46,12 @@ TODO: Fail fast when process exits 1"
   [conn files {:keys [config] :as options}]
   (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)}
                                (select-keys options [:verbose]))]
-    (doseq [{:file/keys [path content]} files]
-      (graph-parser/parse-file conn path content {:extract-options extract-options}))))
+    (mapv
+     (fn [{:file/keys [path content]}]
+       (let [{:keys [ast]}
+             (graph-parser/parse-file conn path content {:extract-options extract-options})]
+         {:file path :ast ast}))
+     files)))
 
 (defn parse-graph
   "Parses a given graph directory and returns a datascript connection and all
@@ -61,8 +65,9 @@ TODO: Fail fast when process exits 1"
   ([dir options]
    (let [files (or (:files options) (build-graph-files dir))
          conn (ldb/start-conn)
-         config (read-config dir)]
-     (when-not (:files options) (println "Parsing" (count files) "files..."))
-     (parse-files conn files (merge options {:config config}))
+         config (read-config dir)
+        _ (when-not (:files options) (println "Parsing" (count files) "files..."))
+         asts (parse-files conn files (merge options {:config config}))]
      {:conn conn
-      :files (map :file/path files)})))
+      :files (map :file/path files)
+      :asts asts})))
