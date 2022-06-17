@@ -65,11 +65,13 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     if (this.app.selectedTool.currentState.id !== 'idle') return
     if (this.pointer < this.stack.length - 1) {
       this.pointer++
+      this.pointer++
       const snapshot = this.stack[this.pointer]
       this.deserialize(snapshot)
     }
-
-    this.app.notify('persist', null)
+    else{
+      this.app.notify('persist', null)
+    }
   }
 
   deserialize = (snapshot: TLDocumentModel) => {
