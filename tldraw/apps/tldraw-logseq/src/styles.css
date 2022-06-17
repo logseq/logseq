@@ -30,7 +30,6 @@
   background: none;
   border: none;
   cursor: pointer;
-  border-radius: 2px;
   padding: 4px 8px;
 }
 
@@ -48,6 +47,35 @@
   background: white;
   border-bottom: 1px solid black;
   font-size: inherit;
+}
+
+
+.logseq-tldraw .action-bar {
+  position: relative;
+  top: 0;
+  /* width: 100%; */
+  float:right;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  color: black;
+  /* border-radius: 15px; */
+  border-bottom-left-radius: 15px;
+  z-index: 100000;
+  user-select: none;
+  background: white;
+  border-left: 1px solid black;
+  border-bottom: 1px solid black;
+  font-size: inherit;
+}
+
+.logseq-tldraw .action-bar button:hover {
+  background-color: var(--color-hover);
+}
+
+.logseq-tldraw .action-bar button {
+  border-radius: 4px;
 }
 
 .logseq-tldraw .contextbar {
@@ -370,8 +398,8 @@
 
 .logseq-tldraw .preview-minimap-toggle {
   position: absolute;
-  top: 24px;
-  right: 40px;
+  top: 60px;
+  right: 50px;
   z-index: 1;
   width: 32px;
   height: 32px;
