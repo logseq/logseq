@@ -130,9 +130,6 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets }) => {
             ) : null}
           </>
         )}
-        <a className="shape-link" onClick={() => app.pubEvent('whiteboard-link', shapes)}>
-          Link
-        </a>
       </div>
     </HTMLContainer>
   )

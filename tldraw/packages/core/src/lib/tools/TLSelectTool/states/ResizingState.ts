@@ -64,8 +64,9 @@ export class ResizingState<
     this.isSingle = selectedShapesArray.length === 1
     this.selectionRotation = this.isSingle ? selectedShapesArray[0].props.rotation ?? 0 : 0
     this.initialCommonBounds = { ...selectionBounds }
+    // @ts-expect-error maybe later
     this.snapshots = Object.fromEntries(
-      selectedShapesArray.map(shape => {
+      selectedShapesArray.filter(s => !s.draft).map(shape => {
         const bounds = { ...shape.bounds }
         const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
         return [

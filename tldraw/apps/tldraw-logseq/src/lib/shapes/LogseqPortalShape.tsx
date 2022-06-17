@@ -1,8 +1,7 @@
-// TODO: provide "frontend.components.page/page" component?
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { makeObservable, transaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { TextInput } from '~components/inputs/TextInput'
@@ -16,17 +15,84 @@ export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProp
   pageId: string // page name or UUID
 }
 
+interface LogseqQuickSearchProps {
+  onChange: (id: string) => void
+}
+
+const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
+  const [q, setQ] = React.useState('')
+  const rInput = React.useRef<HTMLInputElement>(null)
+  const { search } = React.useContext(LogseqContext)
+
+  const secretPrefix = 'œ::'
+
+  const commitChange = React.useCallback((id: string) => {
+    setQ(id)
+    onChange(id)
+    rInput.current?.blur()
+  }, [])
+
+  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const _q = e.currentTarget.value
+    if (_q.startsWith(secretPrefix)) {
+      const id = _q.substring(secretPrefix.length)
+      commitChange(id)
+    } else {
+      setQ(_q)
+    }
+  }, [])
+
+  const options = React.useMemo(() => {
+    if (search && q) {
+      return search(q)
+    }
+    return null
+  }, [search, q])
+
+  React.useEffect(() => {
+    setTimeout(() => {
+      rInput.current?.focus()
+    })
+  }, [])
+
+  return (
+    <>
+      <TextInput
+        ref={rInput}
+        label="Page name or block UUID"
+        type="text"
+        value={q}
+        onChange={handleChange}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            commitChange(q)
+          }
+        }}
+        list="logseq-portal-search-results"
+      />
+      <datalist id="logseq-portal-search-results">
+        {options?.map(option => (
+          <option key={option} value={secretPrefix + option}>
+            {option}
+          </option>
+        ))}
+      </datalist>
+    </>
+  )
+})
+
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
+  static smart = true
 
   static defaultProps: LogseqPortalShapeProps = {
     id: 'logseq-portal',
     type: 'logseq-portal',
     parentId: 'page',
     point: [0, 0],
-    size: [600, 320],
-    stroke: '#000000',
-    fill: '#ffffff',
+    size: [180, 75],
+    stroke: 'transparent',
+    fill: 'var(--ls-secondary-background-color)',
     strokeWidth: 2,
     opacity: 1,
     pageId: '',
@@ -38,174 +104,88 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canActivate = true
   canEdit = true
 
-  ReactContextBar = observer(() => {
-    const { pageId } = this.props
-    const [q, setQ] = React.useState(pageId)
-    const rInput = React.useRef<HTMLInputElement>(null)
-    const { search } = React.useContext(LogseqContext)
-    const app = useApp()
+  constructor(props = {} as Partial<LogseqPortalShapeProps>) {
+    super(props)
+    makeObservable(this)
+    this.draft = true
+  }
 
-    const secretPrefix = 'œ::'
+  ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
+    const {
+      props: { opacity, pageId, strokeWidth, stroke },
+    } = this
+
+    const app = useApp<Shape>()
+    const isMoving = useCameraMovingRef()
+    const { Page } = React.useContext(LogseqContext)
+    const isSelected = app.selectedIds.has(this.id)
+    const tlEventsEnabled = isMoving || isSelected || app.selectedTool.id !== 'select'
+    const stop = React.useCallback(
+      e => {
+        if (!tlEventsEnabled) {
+          e.stopPropagation()
+        }
+      },
+      [tlEventsEnabled]
+    )
 
     const commitChange = React.useCallback((id: string) => {
-      setQ(id)
-      this.update({ pageId: id, size: LogseqPortalShape.defaultProps.size })
-      app.persist()
-      rInput.current?.blur()
+      transaction(() => {
+        this.update({
+          pageId: id,
+          size: [600, 320],
+        })
+        this.setDraft(false)
+        app.setActivatedShapes([])
+        app.persist()
+      })
     }, [])
-
-    const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-      const _q = e.currentTarget.value
-      if (_q.startsWith(secretPrefix)) {
-        const id = _q.substring(secretPrefix.length)
-        commitChange(id)
-      } else {
-        setQ(_q)
-      }
-    }, [])
-
-    const options = React.useMemo(() => {
-      if (search && q) {
-        return search(q)
-      }
-      return null
-    }, [search, q])
 
     return (
-      <>
-        <TextInput
-          ref={rInput}
-          label="Page name or block UUID"
-          type="text"
-          value={q}
-          onChange={handleChange}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              commitChange(q)
-            }
-          }}
-          list="logseq-portal-search-results"
-        />
-        <datalist id="logseq-portal-search-results">
-          {options?.map(option => (
-            <option key={option} value={secretPrefix + option}>
-              {option}
-            </option>
-          ))}
-        </datalist>
-      </>
-    )
-  })
-
-  ReactComponent = observer(
-    ({ events, isEditing, isErasing, isBinding, isActivated }: TLComponentProps) => {
-      const {
-        props: { opacity, pageId, strokeWidth },
-      } = this
-
-      const app = useApp<Shape>()
-      const isMoving = useCameraMovingRef()
-      const { Page } = React.useContext(LogseqContext)
-      const isSelected = app.selectedIds.has(this.id)
-      const enableTlEvents = () => {
-        return isMoving || isEditing || isSelected || app.selectedTool.id !== 'select'
-      }
-
-      const stop = React.useCallback(
-        e => {
-          if (!enableTlEvents()) {
-            e.stopPropagation()
-          }
-        },
-        [enableTlEvents]
-      )
-
-      if (!Page) {
-        return null
-      }
-
-      let linkButton = null
-      const logseqLink = this.props.logseqLink
-      if (logseqLink) {
-        const f = () => app.pubEvent('whiteboard-go-to-link', logseqLink)
-        linkButton = (
-          <a className="ml-2" onMouseDown={f}>
-            🔗 {logseqLink}
-          </a>
-        )
-      }
-
-      return (
-        <HTMLContainer
+      <HTMLContainer
+        style={{
+          overflow: 'hidden',
+          pointerEvents: 'all',
+          opacity: isErasing ? 0.2 : opacity,
+          backgroundColor: 'var(--ls-primary-background-color)',
+        }}
+        {...events}
+      >
+        <div
+          onWheelCapture={stop}
+          onPointerDown={stop}
+          onPointerUp={stop}
           style={{
-            overflow: 'hidden',
-            pointerEvents: 'all',
-            opacity: isErasing ? 0.2 : opacity,
-            border: `${strokeWidth}px solid`,
-            borderColor: isActivated ? 'var(--tl-selectStroke)' : 'rgb(52, 52, 52)',
-            backgroundColor: '#ffffff',
-            boxShadow: isBinding ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)' : '',
+            pointerEvents: isActivated ? 'all' : 'none',
           }}
-          {...events}
         >
-          {pageId && (
+          {this.draft ? (
+            <LogseqQuickSearch onChange={commitChange} />
+          ) : (
             <div
-              className="ls-whiteboard-card-header"
               style={{
-                height: '32px',
                 width: '100%',
-                background: isActivated ? 'var(--tl-selectStroke)' : '#bbb',
-                display: 'flex',
-                alignItems: 'center',
-                color: isActivated ? '#fff' : '#000',
-                justifyContent: 'center',
+                overflow: 'auto',
+                overscrollBehavior: 'none',
+                height: pageId ? 'calc(100% - 33px)' : '100%',
+                userSelect: 'none',
+                boxShadow: isActivated
+                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
+                  : '',
+                opacity: isSelected ? 0.5 : 1,
               }}
             >
-              {pageId}
-              {linkButton}
+              {pageId && Page ? (
+                <div style={{ padding: '12px', height: '100%', cursor: 'default' }}>
+                  <Page pageId={pageId} />
+                </div>
+              ) : null}
             </div>
           )}
-          <div
-            style={{
-              width: '100%',
-              overflow: 'auto',
-              overscrollBehavior: 'none',
-              height: pageId ? 'calc(100% - 33px)' : '100%',
-              pointerEvents: isActivated ? 'all' : 'none',
-              userSelect: 'none',
-              opacity: isSelected ? 0.5 : 1,
-            }}
-          >
-            {pageId ? (
-              <div
-                onWheelCapture={stop}
-                onPointerDown={stop}
-                onPointerUp={stop}
-                style={{ padding: '12px', height: '100%', cursor: 'default' }}
-              >
-                <Page pageId={pageId} />
-              </div>
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  overflow: 'hidden',
-                  justifyContent: 'center',
-                  padding: 16,
-                  fontSize: '24px'
-                }}
-              >
-                LOGSEQ PORTAL PLACEHOLDER
-              </div>
-            )}
-          </div>
-        </HTMLContainer>
-      )
-    }
-  )
+        </div>
+      </HTMLContainer>
+    )
+  })
 
   ReactIndicator = observer(() => {
     const {
