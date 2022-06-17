@@ -41,20 +41,20 @@
         queuing?           (and idle? (boolean (seq queuing-files)))
 
         turn-on            #(if-not synced-file-graph?
-                              (async/go
-                                (notifications/show! "Creating a remote graph!" :info)
-                                (let [repo      (state/get-current-repo)
-                                      GraphName (util/node-path.basename repo)]
-                                  (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph GraphName)) 2)]
-                                    (async/<! (fs-sync/sync-start))
-                                    ;; update existing repo
-                                    (state/set-repos! (map (fn [r]
-                                                             (if (= (:url r) repo)
-                                                               (assoc r :GraphUUID GraphUUID
-                                                                      :GraphName GraphName
-                                                                      :remote? true)
-                                                               r))
-                                                           (state/get-repos))))))
+                              (let [repo       (state/get-current-repo)
+                                    graph-name (util/node-path.basename repo)]
+                                (when (js/confirm (str "Are you sure to create a new remote graph (" graph-name ")?"))
+                                  (async/go
+                                    (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+                                      (async/<! (fs-sync/sync-start))
+                                      ;; update existing repo
+                                      (state/set-repos! (map (fn [r]
+                                                               (if (= (:url r) repo)
+                                                                 (assoc r :GraphUUID GraphUUID
+                                                                        :GraphName graph-name
+                                                                        :remote? true)
+                                                                 r))
+                                                          (state/get-repos)))))))
                               (fs-sync/sync-start))]
 
     [:div.cp__file-sync-indicator

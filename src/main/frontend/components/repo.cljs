@@ -98,7 +98,7 @@
                              "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk.")
                  :on-click (fn []
                              (if only-cloud?
-                               (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")!"))
+                               (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")?"))
                                  (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
                                  (go (<! (file-sync/delete-graph GraphUUID))
                                      (file-sync/load-session-graphs)
