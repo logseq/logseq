@@ -1,10 +1,10 @@
-import { TLDotShape, TLApp, TLShape, TLToolState } from '~lib'
+import { TLBoxShape, TLApp, TLShape, TLToolState } from '~lib'
 import type { TLEventMap, TLStateEvents } from '~types'
 import type { TLDotTool } from '../TLDotTool'
 
 export class IdleState<
   S extends TLShape,
-  T extends S & TLDotShape,
+  T extends S & TLBoxShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
   P extends TLDotTool<T, S, K, R>
