@@ -138,16 +138,17 @@
     (catch :default e
       (log/error :exception e))))
 
-(defn extract-blocks-pages
+(defn extract
+  "Extracts pages, blocks and ast from given file"
   [file content {:keys [user-config verbose] :or {verbose true} :as options}]
   (if (string/blank? content)
     []
     (let [format (gp-util/get-format file)
           _ (when verbose (println "Parsing start: " file))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
-                                                         ;; {:parse_outline_only? true}
-                                                         )
-                           user-config)]
+                                        ;; {:parse_outline_only? true}
+                                        )
+                              user-config)]
       (when verbose (println "Parsing finished: " file))
       (let [first-block (ffirst ast)
             properties (let [properties (and (gp-property/properties-ast? first-block)
@@ -165,10 +166,11 @@
                              (update properties :filters
                                      (fn [v]
                                        (string/replace (or v "") "\\" "")))
-                             properties)))]
-        (extract-pages-and-blocks
-         format ast properties
-         file content options)))))
+                             properties)))
+            [pages blocks] (extract-pages-and-blocks format ast properties file content options)]
+        {:pages pages
+         :blocks blocks
+         :ast ast}))))
 
 (defn- with-block-uuid
   [pages]

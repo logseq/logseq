@@ -5,16 +5,15 @@
 
 (defn- extract
   [text]
-  (let [result (extract/extract-blocks-pages "a.md" text {:block-pattern "-"})
-          result (last result)
-          lefts (map (juxt :block/parent :block/left) result)]
+  (let [{:keys [blocks]} (extract/extract "a.md" text {:block-pattern "-"})
+          lefts (map (juxt :block/parent :block/left) blocks)]
     (if (not= (count lefts) (count (distinct lefts)))
       (do
-        (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) result))
+        (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) blocks))
         (throw (js/Error. ":block/parent && :block/left conflicts")))
-      (mapv :block/content result))))
+      (mapv :block/content blocks))))
 
-(deftest test-extract-blocks-pages
+(deftest test-extract
   []
   (is (= ["a" "b" "c"]
          (extract
