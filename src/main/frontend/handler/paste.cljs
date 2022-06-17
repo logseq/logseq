@@ -64,6 +64,7 @@
   (util/stop e)
   (let [copied-blocks (state/get-copied-blocks)
         input (state/get-input)
+        text (string/replace text "\r\n" "\n") ;; Fix for Windows platform
         internal-paste? (and
                          (seq (:copy/blocks copied-blocks))
                          ;; not copied from the external clipboard
