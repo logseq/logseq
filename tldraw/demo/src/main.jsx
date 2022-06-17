@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import 'tldraw-logseq/styles.css'
-import '../../../public/static/css/common.css'
+import '../../../public/static/css/style.css'
 
 import App from './App'
 

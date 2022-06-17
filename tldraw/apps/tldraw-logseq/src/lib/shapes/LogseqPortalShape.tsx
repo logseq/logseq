@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { makeObservable, transaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
-import { TextInput } from '~components/inputs/TextInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
 import { LogseqContext } from '~lib/logseq-context'
@@ -56,28 +56,34 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
   }, [])
 
   return (
-    <>
-      <TextInput
-        ref={rInput}
-        label="Page name or block UUID"
-        type="text"
-        value={q}
-        onChange={handleChange}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            commitChange(q)
-          }
-        }}
-        list="logseq-portal-search-results"
-      />
-      <datalist id="logseq-portal-search-results">
-        {options?.map(option => (
-          <option key={option} value={secretPrefix + option}>
-            {option}
-          </option>
+    <div className="tl-quick-search">
+      <div className="tl-quick-search-input-container">
+        <MagnifyingGlassIcon className="tl-quick-search-icon" width={24} height={24} />
+        <div className="tl-quick-search-input-sizer" data-value={q}>
+          <input
+            ref={rInput}
+            type="text"
+            value={q}
+            placeholder="Search or create page"
+            onChange={handleChange}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                commitChange(q)
+              }
+            }}
+            className="tl-quick-search-input text-input"
+          />
+        </div>
+      </div>
+
+      <div className="tl-quick-search-options">
+        {options?.map(name => (
+          <div key={name} className="tl-quick-search-option" onClick={() => commitChange(name)}>
+            {name}
+          </div>
         ))}
-      </datalist>
-    </>
+      </div>
+    </div>
   )
 })
 
@@ -90,7 +96,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     type: 'logseq-portal',
     parentId: 'page',
     point: [0, 0],
-    size: [180, 75],
+    size: [600, 50],
     stroke: 'transparent',
     fill: 'var(--ls-secondary-background-color)',
     strokeWidth: 2,
@@ -104,15 +110,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canActivate = true
   canEdit = true
 
-  constructor(props = {} as Partial<LogseqPortalShapeProps>) {
-    super(props)
-    makeObservable(this)
-    this.draft = true
-  }
-
   ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
     const {
-      props: { opacity, pageId, strokeWidth, stroke },
+      props: { opacity, pageId, strokeWidth, stroke, fill },
     } = this
 
     const app = useApp<Shape>()
@@ -141,13 +141,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       })
     }, [])
 
+    if (!Page) {
+      return null // not being correctly configured
+    }
+
     return (
       <HTMLContainer
         style={{
-          overflow: 'hidden',
           pointerEvents: 'all',
           opacity: isErasing ? 0.2 : opacity,
-          backgroundColor: 'var(--ls-primary-background-color)',
         }}
         {...events}
       >
@@ -156,6 +158,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           onPointerDown={stop}
           onPointerUp={stop}
           style={{
+            width: '100%',
+            height: '100%',
             pointerEvents: isActivated ? 'all' : 'none',
           }}
         >
@@ -166,20 +170,42 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               style={{
                 width: '100%',
                 overflow: 'auto',
+                borderRadius: '8px',
                 overscrollBehavior: 'none',
-                height: pageId ? 'calc(100% - 33px)' : '100%',
-                userSelect: 'none',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                background: fill,
                 boxShadow: isActivated
                   ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                   : '',
-                opacity: isSelected ? 0.5 : 1,
+                opacity: isSelected ? 0.8 : 1,
               }}
             >
-              {pageId && Page ? (
-                <div style={{ padding: '12px', height: '100%', cursor: 'default' }}>
+              <div className="tl-logseq-portal-header">
+                <span className="text-xs rounded border mr-2 px-1">P</span>
+                {pageId}
+              </div>
+              <div
+                style={{
+                  width: '100%',
+                  overflow: 'auto',
+                  borderRadius: '8px',
+                  overscrollBehavior: 'none',
+                  // height: '100%',
+                  flex: 1,
+                }}
+              >
+                <div
+                  style={{
+                    padding: '12px',
+                    height: '100%',
+                    cursor: 'default',
+                  }}
+                >
                   <Page pageId={pageId} />
                 </div>
-              ) : null}
+              </div>
             </div>
           )}
         </div>

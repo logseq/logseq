@@ -15,7 +15,7 @@ function makeCssTheme<T = AnyTheme>(prefix: string, theme: T) {
   }, '')
 }
 
-function useTheme<T = AnyTheme>(prefix: string, theme: T, selector = ':root') {
+function useTheme<T = AnyTheme>(prefix: string, theme: T, selector = '.logseq-tldraw') {
   React.useLayoutEffect(() => {
     const style = document.createElement('style')
     const cssTheme = makeCssTheme(prefix, theme)
@@ -72,9 +72,9 @@ const defaultTheme: TLTheme = {
   selectStroke: 'rgb(66, 133, 244)',
   selectFill: 'rgba(65, 132, 244, 0.05)',
   binding: 'rgba(65, 132, 244, 0.5)',
-  background: 'rgb(248, 249, 250)',
-  foreground: 'rgb(51, 51, 51)',
-  grid: 'rgba(144, 144, 144, .9)',
+  background: 'var(--ls-primary-background-color)',
+  foreground: 'var(--ls-secondary-text-color)',
+  grid: 'var(--ls-quaternary-background-color)',
 }
 
 const tlcss = css`
@@ -151,6 +151,7 @@ const tlcss = css`
     background-color: var(--tl-background);
     cursor: var(--tl-cursor) !important;
     box-sizing: border-box;
+    color: var(--tl-foreground);
   }
 
   .tl-overlay {

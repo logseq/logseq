@@ -51,6 +51,8 @@ export const DevTools = observer(() => {
         <div
           style={{
             flex: 1,
+            display: 'flex',
+            alignItems: 'center',
           }}
         >
           {rendererStatusText}

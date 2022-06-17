@@ -108,7 +108,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   bindingDistance = BINDING_DISTANCE
 
   // For smart shape
-  @observable draft = false
+  @observable private _draft = false
   @observable private isDirty = false
   @observable private lastSerialized: TLShapeModel<P> | undefined
 
@@ -118,8 +118,13 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this.props.id
   }
 
+  @computed
+  get draft() {
+    return this._draft
+  }
+
   @action setDraft(draft: boolean) {
-    this.draft = draft
+    this._draft = draft
   }
 
   @action setIsDirty(isDirty: boolean) {

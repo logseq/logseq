@@ -1,4 +1,5 @@
 import React from 'react'
+import ReactDOM from 'react-dom'
 import { App as TldrawApp } from 'tldraw-logseq'
 
 const storingKey = 'playground.index'
@@ -53,9 +54,53 @@ const Page = props => {
   )
 }
 
+const ThemeSwitcher = ({ theme, setTheme }) => {
+  const [anchor, setAnchor] = React.useState(null)
+  React.useEffect(() => {
+    if (anchor) {
+      return
+    }
+    let el = document.querySelector('#theme-switcher')
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'theme-switcher'
+      let timer = setInterval(() => {
+        const statusBarAnchor = document.querySelector('#tl-statusbar-anchor')
+        if (statusBarAnchor) {
+          statusBarAnchor.appendChild(el)
+          setAnchor(el)
+          clearInterval(timer)
+        }
+      }, 50)
+    }
+  })
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
+  if (!anchor) {
+    return null
+  }
+
+  return ReactDOM.createPortal(
+    <button
+      className="flex items-center justify-center mx-2 bg-grey"
+      style={{ fontSize: '1em' }}
+      onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+    >
+      {theme} theme
+    </button>,
+    anchor
+  )
+}
+
 export default function App() {
+  const [theme, setTheme] = React.useState('dark')
+
   return (
-    <div className="h-screen w-screen">
+    <div className={`h-screen w-screen`}>
+      <ThemeSwitcher theme={theme} setTheme={setTheme} />
       <TldrawApp
         PageComponent={Page}
         searchHandler={q => (q ? list : [])}

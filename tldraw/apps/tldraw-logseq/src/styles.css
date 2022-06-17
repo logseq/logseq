@@ -1,10 +1,10 @@
 /* TODO: move to useStylesheet */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500&display=swap');
 
-:root {
-  --color-panel: #ffffff;
-  --color-text: #000000;
-  --color-hover: #00000011;
+.logseq-tldraw {
+  --color-panel: var(--ls-secondary-background-color);
+  --color-text: var(--ls-primary-text-color);
+  --color-hover: var(--ls-tertiary-background-color);
   --color-selectedStroke: rgb(42, 123, 253);
   --color-selectedFill: rgba(66, 133, 244);
   --color-selectedContrast: #ffffff;
@@ -32,6 +32,7 @@
   cursor: pointer;
   border-radius: 2px;
   padding: 4px 8px;
+  opacity: 1;
 }
 
 .logseq-tldraw .toolbar {
@@ -54,6 +55,7 @@
   pointer-events: all;
   position: relative;
   background-color: var(--color-panel);
+  color: var(--color-text);
   padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
@@ -106,14 +108,13 @@
 
 .logseq-tldraw .text-input {
   height: 24px;
-  padding: 4px;
+  padding: 0;
   background: none;
-  border: 1px solid black;
   border-radius: 2px;
 }
 
-.logseq-tldraw .input > label {
-  font-size: 10px;
+.logseq-tldraw .text-input:focus {
+  outline: none;
 }
 
 .logseq-tldraw .primary-tools {
@@ -150,8 +151,8 @@
   flex-flow: column;
   border-radius: 8px;
   overflow: hidden;
-  padding: 4px;
-  gap: 4px;
+  padding: 8px;
+  gap: 8px;
 }
 
 .logseq-tldraw .floating-panel > button {
@@ -160,8 +161,8 @@
 
 .logseq-tldraw .primary-tools .button {
   position: relative;
-  height: 40px;
-  width: 40px;
+  height: 36px;
+  width: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -170,6 +171,7 @@
   background: none;
   border: none;
   cursor: pointer;
+  color: var(--ls-secondary-text-color);
 }
 
 .logseq-tldraw .primary-tools .button:hover {
@@ -383,4 +385,92 @@
 
 .logseq-tldraw .preview-minimap-toggle[data-active='true'] {
   background: #eee;
+}
+
+.logseq-tldraw .tl-quick-search {
+  width: fit-content;
+  position: relative;
+}
+
+.logseq-tldraw .tl-quick-search-icon {
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.logseq-tldraw .tl-quick-search-input-container {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  background-color: var(--ls-secondary-background-color);
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+
+.logseq-tldraw .tl-quick-search-input-sizer {
+  display: inline-grid;
+  vertical-align: top;
+  align-items: center;
+  position: relative;
+  margin: 5px;
+}
+
+.logseq-tldraw .tl-quick-search-input {
+  grid-area: 1/2;
+  width: auto;
+}
+
+.logseq-tldraw .tl-quick-search-input-sizer::after {
+  content: attr(data-value) ' ';
+  visibility: hidden;
+  white-space: pre-wrap;
+  grid-area: 1/2;
+  width: auto;
+}
+
+.logseq-tldraw .tl-quick-search-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background-color: var(--ls-primary-background-color);
+  max-height: 300px;
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  --tw-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+    var(--tw-shadow);
+  overscroll-behavior: none;
+}
+
+.logseq-tldraw .tl-quick-search-option {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.logseq-tldraw .tl-quick-search-option:hover {
+  background-color: var(--ls-menu-hover-color, #f4f5f7);
+}
+
+.logseq-tldraw .tl-logseq-portal-header {
+  height: 40px;
+  width: 100%;
+  flex-shrink: 0;
+  background: transparent;
+  display: flex;
+  color: var(--ls-title-text-color);
+  padding: 0px 1rem;
+  align-items: center;
+}
+
+html[data-theme='light'] .logseq-tldraw .tl-logseq-portal-header {
+  backdrop-filter: brightness(0.9);
+}
+
+html[data-theme='dark'] .logseq-tldraw .tl-logseq-portal-header {
+  backdrop-filter: brightness(1.2);
 }

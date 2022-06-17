@@ -52,6 +52,7 @@ export class PointingCanvasState<
           parentId: this.app.currentPage.id,
           point: [...this.app.inputs.originPoint],
         })
+        shape.setDraft(true)
         this.app.setActivatedShapes([shape.id])
         this.app.currentPage.addShapes(shape)
       }
