@@ -50,6 +50,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         shapes: this.shapes.map(shape => toJS(shape.props)),
         bindings: toJS(this.bindings),
         nonce: this.nonce,
+        activatedShape: toJS(this.app.activatedIds),
       }),
       (curr, prev) => {
         this.cleanup(curr, prev)
@@ -71,7 +72,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     return {
       id: this.id,
       name: this.name,
-      shapes: this.shapes.map(shape => shape.serialized),
+      // @ts-expect-error maybe later
+      shapes: this.shapes.map(shape => shape.serialized).filter(s => !!s),
       bindings: deepCopy(this.bindings),
       nonce: this.nonce,
     }
@@ -178,20 +180,22 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         direction === 'horizontal',
         direction === 'vertical'
       )
-      shape.onResize(shape.serialized, {
-        bounds: relativeBounds,
-        center: BoundsUtils.getBoundsCenter(relativeBounds),
-        rotation: shape.props.rotation ?? 0 * -1,
-        type: TLResizeCorner.TopLeft,
-        scale:
-          shape.canFlip && shape.props.scale
-            ? direction === 'horizontal'
-              ? [-shape.props.scale[0], 1]
-              : [1, -shape.props.scale[1]]
-            : [1, 1],
-        clip: false,
-        transformOrigin: [0.5, 0.5],
-      })
+      if (shape.serialized) {
+        shape.onResize(shape.serialized, {
+          bounds: relativeBounds,
+          center: BoundsUtils.getBoundsCenter(relativeBounds),
+          rotation: shape.props.rotation ?? 0 * -1,
+          type: TLResizeCorner.TopLeft,
+          scale:
+            shape.canFlip && shape.props.scale
+              ? direction === 'horizontal'
+                ? [-shape.props.scale[0], 1]
+                : [1, -shape.props.scale[1]]
+              : [1, 1],
+          clip: false,
+          transformOrigin: [0.5, 0.5],
+        })
+      }
     })
     return this
   }
@@ -271,11 +275,16 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       }
     })
 
-    if (!deepEqual(updated, curr)) {
+    // Cleanup inactive drafts
+    const shapesToDelete = this.shapes.filter(s => s.draft && !this.app.activatedShapes.includes(s))
+
+    if (!deepEqual(updated, curr) || shapesToDelete.length) {
       transaction(() => {
         this.update({
           bindings: updated.bindings,
         })
+
+        this.removeShapes(...shapesToDelete)
 
         updated.shapes.forEach(shape => {
           this.getShapeById(shape.id)?.update(shape)

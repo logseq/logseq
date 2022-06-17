@@ -1,9 +1,9 @@
-import { IdleState, CreatingState } from './states'
-import { TLTool, TLApp, TLShape, TLDotShape, TLDotShapeProps } from '~lib'
+import { TLApp, TLBoxShape, TLShape, TLTool } from '~lib'
 import { TLCursor, TLEventMap } from '~types'
+import { CreatingState, IdleState } from './states'
 
 export abstract class TLDotTool<
-  T extends TLDotShape = TLDotShape,
+  T extends TLBoxShape = TLBoxShape,
   S extends TLShape = TLShape,
   K extends TLEventMap = TLEventMap,
   R extends TLApp<S, K> = TLApp<S, K>
@@ -17,8 +17,9 @@ export abstract class TLDotTool<
   cursor = TLCursor.Cross
 
   abstract Shape: {
-    new (props: Partial<TLDotShapeProps>): T
+    new (props: Partial<T['props']>): T
     id: string
-    defaultProps: TLDotShapeProps
+    smart: boolean
+    defaultProps: T['props']
   }
 }

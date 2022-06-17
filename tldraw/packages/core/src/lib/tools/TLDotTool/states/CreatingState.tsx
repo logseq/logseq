@@ -1,12 +1,13 @@
 import Vec from '@tldraw/vec'
-import { TLApp, TLShape, TLToolState, TLDotShape } from '~lib'
+import { TLApp, TLShape, TLToolState, TLBoxShape } from '~lib'
 import { uniqueId } from '~utils'
 import type { TLEventMap, TLStateEvents } from '~types'
 import type { TLDotTool } from '../TLDotTool'
+import { transaction } from 'mobx'
 
 export class CreatingState<
-  S extends TLShape,
-  T extends S & TLDotShape,
+  S extends TLBoxShape,
+  T extends S & TLShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
   P extends TLDotTool<T, S, K, R>
@@ -19,15 +20,14 @@ export class CreatingState<
 
   onEnter = () => {
     const { Shape } = this.tool
-    this.offset = [Shape.defaultProps.radius, Shape.defaultProps.radius]
+    this.offset = [Shape.defaultProps.size[0] / 2, Shape.defaultProps.size[1] / 2]
     const shape = new Shape({
       id: uniqueId(),
       parentId: this.app.currentPage.id,
       point: Vec.sub(this.app.inputs.originPoint, this.offset),
-    })
+      size: Shape.defaultProps.size,
+    } as any)
     this.creatingShape = shape
-    this.app.currentPage.addShapes(shape)
-    this.app.setSelectedShapes([shape])
   }
 
   onPointerMove: TLStateEvents<S, K>['onPointerMove'] = () => {
@@ -41,7 +41,15 @@ export class CreatingState<
   onPointerUp: TLStateEvents<S, K>['onPointerUp'] = () => {
     this.tool.transition('idle')
     if (this.creatingShape) {
-      this.app.setSelectedShapes([this.creatingShape])
+      const shape = this.creatingShape
+      transaction(() => {
+        this.app.currentPage.addShapes(shape)
+        if (this.tool.Shape.smart && shape.draft) {
+          this.app.setActivatedShapes([shape])
+        } else {
+          this.app.setSelectedShapes([shape])
+        }
+      })
     }
     if (!this.app.settings.isToolLocked) {
       this.app.transition('select')

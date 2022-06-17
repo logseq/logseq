@@ -310,10 +310,6 @@
   -webkit-user-select: text;
 }
 
-.logseq-tldraw .tl-positioned-inner:focus-within {
-  box-shadow: 0 0 12px var(--ls-active-primary-color);
-}
-
 .logseq-tldraw .tl-stroke-hitarea {
   fill: none;
   stroke: transparent;

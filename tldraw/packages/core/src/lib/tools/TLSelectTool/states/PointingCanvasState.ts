@@ -1,6 +1,8 @@
 import { Vec } from '@tldraw/vec'
+import { transaction } from 'mobx'
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
 import type { TLEventMap, TLEvents } from '~types'
+import { uniqueId } from '~utils'
 
 export class PointingCanvasState<
   S extends TLShape,
@@ -40,7 +42,19 @@ export class PointingCanvasState<
     this.tool.transition('pinching', { info, event })
   }
 
-  onDoubleClick: TLEvents<S>['pointer'] = info => {
-    console.log('TODO: bringing up Logseq autocomplete here', info)
+  onDoubleClick: TLEvents<S>['pointer'] = () => {
+    transaction(() => {
+      const Shape = this.app.SmartShape
+      if (Shape) {
+        const shape = new Shape({
+          id: uniqueId(),
+          type: Shape.id,
+          parentId: this.app.currentPage.id,
+          point: [...this.app.inputs.originPoint],
+        })
+        this.app.setActivatedShapes([shape.id])
+        this.app.currentPage.addShapes(shape)
+      }
+    })
   }
 }

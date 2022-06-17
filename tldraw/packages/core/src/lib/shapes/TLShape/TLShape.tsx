@@ -18,6 +18,7 @@ export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
 export interface TLShapeConstructor<S extends TLShape = TLShape> {
   new (props: any): S
   id: string
+  smart: boolean
 }
 
 export type TLFlag = boolean
@@ -79,6 +80,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     makeObservable(this)
   }
 
+  // there should be only one Shape that is smart (created by double click canvas)
+  static smart: boolean
   static type: string
 
   @observable props: P
@@ -104,6 +107,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   bindingDistance = BINDING_DISTANCE
 
+  // For smart shape
+  @observable draft = false
   @observable private isDirty = false
   @observable private lastSerialized: TLShapeModel<P> | undefined
 
@@ -111,6 +116,10 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   @computed get id() {
     return this.props.id
+  }
+
+  @action setDraft(draft: boolean) {
+    this.draft = draft
   }
 
   @action setIsDirty(isDirty: boolean) {
@@ -278,8 +287,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   }
 
   @computed
-  get serialized(): TLShapeModel<P> {
-    return this.getCachedSerialized()
+  get serialized(): TLShapeModel<P> | null {
+    return this.draft ? null : this.getCachedSerialized()
   }
 
   validateProps = (
@@ -345,7 +354,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
    * Get a svg group element that can be used to render the shape with only the props data. In the
    * base, draw any shape as a box. Can be overridden by subclasses.
    */
-  getShapeSVGJsx() {
+  getShapeSVGJsx(preview = false) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
     return (

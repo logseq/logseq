@@ -30,6 +30,7 @@ export interface TLComponentProps<M = unknown> extends TLCommonShapeProps<M> {
 export interface TLReactShapeConstructor<S extends TLReactShape = TLReactShape> {
   new (props: S['props'] & { type: any }): S
   id: string
+  smart: boolean
 }
 
 export abstract class TLReactShape<P extends TLShapeProps = TLShapeProps, M = any> extends TLShape<
