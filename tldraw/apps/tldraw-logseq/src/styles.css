@@ -59,7 +59,7 @@
   pointer-events: all;
   position: relative;
   background-color: #fff;
-  color: var(--color-text);
+  color: #a4b5b6;
   padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
@@ -127,7 +127,7 @@
 }
 
 .logseq-tldraw .switch-input-root[data-state='checked'] {
-  background: var(--ls-active-primary-color);
+  background: var(--ls-selection-background-color);
 }
 
 .logseq-tldraw .switch-input-thumb {

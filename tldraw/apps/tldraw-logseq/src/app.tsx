@@ -32,14 +32,14 @@ const components: TLReactComponents<Shape> = {
 }
 
 const tools: TLReactToolConstructor<Shape>[] = [
-  BoxTool,
-  DotTool,
-  EllipseTool,
+  // BoxTool,
+  // DotTool,
+  // EllipseTool,
+  // PolygonTool,
   NuEraseTool,
   HighlighterTool,
   LineTool,
   PencilTool,
-  PolygonTool,
   TextTool,
   YouTubeTool,
   LogseqPortalTool,
