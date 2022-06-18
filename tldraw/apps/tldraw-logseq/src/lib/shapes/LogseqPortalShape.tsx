@@ -227,6 +227,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                     ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                     : 'var(--shadow-large)',
                 opacity: isSelected ? 0.8 : 1,
+                color: stroke,
+                // @ts-expect-error ???
+                '--ls-primary-background-color': fill,
+                '--ls-primary-text-color': stroke,
               }}
             >
               <div className="tl-logseq-portal-header">
