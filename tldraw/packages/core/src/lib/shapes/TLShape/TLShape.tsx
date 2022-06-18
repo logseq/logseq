@@ -97,7 +97,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   // Behavior options
   canChangeAspectRatio: TLFlag = true
   canUnmount: TLFlag = true
-  canResize: TLFlag = true
+  canResize: [TLFlag, TLFlag] = [true, true]
   canScale: TLFlag = true
   canFlip: TLFlag = true
   canEdit: TLFlag = false

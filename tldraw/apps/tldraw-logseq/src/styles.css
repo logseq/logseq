@@ -2,14 +2,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500&display=swap');
 
 .logseq-tldraw {
-  --color-panel: var(--ls-secondary-background-color);
+  --color-panel: var(--ls-tertiary-background-color);
+  --color-panel-inverted: var(--ls-secondary-text-color);
   --color-text: var(--ls-primary-text-color);
-  --color-hover: var(--ls-tertiary-background-color);
+  --color-text-inverted: var(--ls-tertiary-background-color);
+  --color-hover: var(--ls-secondary-background-color);
   --color-selectedStroke: rgb(42, 123, 253);
   --color-selectedFill: rgba(66, 133, 244);
-  --color-selectedContrast: #ffffff;
-  --shadow-medium: 0px 0px 16px -1px rgba(0, 0, 0, 0.05), 0px 0px 16px -8px rgba(0, 0, 0, 0.09),
-    0px 0px 16px -12px rgba(0, 0, 0, 0.2);
+  --color-selectedContrast: #fff;
+  --shadow-small: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .logseq-tldraw-wrapper {
@@ -20,13 +23,14 @@
   flex-direction: column;
 }
 
-.logseq-tldraw label {
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
+.logseq-tldraw .contextbar label {
+  font-family: var(--ls-font-family);
+  font-size: 10px;
 }
 
 .logseq-tldraw button {
   font-size: 13px;
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  font-family: var(--ls-font-family);
   background: none;
   border: none;
   cursor: pointer;
@@ -54,14 +58,14 @@
 .logseq-tldraw .contextbar {
   pointer-events: all;
   position: relative;
-  background-color: var(--color-panel);
+  background-color: #fff;
   color: var(--color-text);
   padding: 8px 12px;
   border-radius: 8px;
   white-space: nowrap;
   display: flex;
-  gap: 4px;
-  align-items: center;
+  gap: 12px;
+  align-items: stretch;
   font-size: 14px;
   will-change: transform, contents;
   box-shadow: var(--shadow-medium);
@@ -99,11 +103,46 @@
   padding: 2px;
 }
 
-.logseq-tldraw .color-input {
-  height: 24px;
-  padding: 0 2px;
-  background: none;
+.logseq-tldraw .color-input-wrapper {
+  overflow: hidden;
+  height: 18px;
+  width: 46px;
   border-radius: 2px;
+  margin: 2px;
+  box-shadow: 0 0 0 2px var(--ls-tertiary-background-color);
+}
+
+.logseq-tldraw .color-input {
+  transform: translate(-4px, -4px) scale(1.5);
+}
+
+.logseq-tldraw .switch-input-root {
+  all: unset;
+  width: 36px;
+  height: 20px;
+  background-color: rgba(0, 0, 0, 0.44);
+  position: relative;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  border-radius: 9999px;
+}
+
+.logseq-tldraw .switch-input-root[data-state='checked'] {
+  background: var(--ls-active-primary-color);
+}
+
+.logseq-tldraw .switch-input-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background-color: white;
+  border-radius: 9999px;
+  transition: transform 100ms ease 0s;
+  transform: translateX(3px);
+  will-change: transform;
+}
+
+.logseq-tldraw .switch-input-thumb[data-state='checked'] {
+  transform: translateX(17px);
 }
 
 .logseq-tldraw .text-input {
@@ -167,7 +206,7 @@
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  font-family: var(--ls-font-family);
   background: none;
   border: none;
   cursor: pointer;
@@ -200,21 +239,18 @@
   position: absolute;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  width: auto;
   border: 1px solid transparent;
-  margin: 0px;
-  padding: 0px;
+  margin: 0;
+  padding: 0;
   z-index: 9999;
   user-select: none;
   width: 100%;
   height: 100%;
-  z-index: 1;
   min-height: 1;
   min-width: 1;
   line-height: 1;
   outline: 0;
   backface-visibility: hidden;
-  user-select: none;
   pointer-events: all;
   vertical-align: baseline;
   -webkit-user-drag: none;
@@ -295,8 +331,8 @@
 
 .logseq-tldraw .text-label-wrapper {
   position: absolute;
-  top: 0px;
-  left: 0px;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
@@ -313,7 +349,7 @@
   min-height: 1px;
   min-width: 1px;
   line-height: 1;
-  outline: 0px;
+  outline: 0;
   font-weight: 500;
   text-align: center;
   backface-visibility: hidden;
@@ -324,8 +360,8 @@
 
 .logseq-tldraw .text-label-textarea {
   position: absolute;
-  top: 0px;
-  left: 0px;
+  top: 0;
+  left: 0;
   z-index: 1;
   width: 100%;
   height: 100%;
@@ -337,7 +373,7 @@
   min-width: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  outline: 0px;
+  outline: 0;
   font-weight: inherit;
   overflow: hidden;
   backface-visibility: hidden;
@@ -404,6 +440,7 @@
   background-color: var(--ls-secondary-background-color);
   padding: 4px 12px;
   border-radius: 8px;
+  box-shadow: var(--shadow-small);
 }
 
 .logseq-tldraw .tl-quick-search-input-sizer {
@@ -417,6 +454,7 @@
 .logseq-tldraw .tl-quick-search-input {
   grid-area: 1/2;
   width: auto;
+  line-height: 1;
 }
 
 .logseq-tldraw .tl-quick-search-input-sizer::after {
@@ -433,14 +471,13 @@
   left: 0;
   background-color: var(--ls-primary-background-color);
   max-height: 300px;
+  min-width: 320px;
+  box-shadow: var(--shadow-large);
   width: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   border-radius: 8px;
-  --tw-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
-    var(--tw-shadow);
   overscroll-behavior: none;
 }
 
@@ -475,7 +512,7 @@
   background: transparent;
   display: flex;
   color: var(--ls-title-text-color);
-  padding: 0px 1rem;
+  padding: 0 1rem;
   align-items: center;
 }
 

@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
+import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable, transaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
+import { ColorInput } from '~components/inputs/ColorInput'
+import { SwitchInput } from '~components/inputs/SwitchInput'
 import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
 import { LogseqContext } from '~lib/logseq-context'
@@ -13,6 +15,8 @@ import { CustomStyleProps, withClampedStyles } from './style-props'
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
   pageId: string // page name or UUID
+  collapsed: boolean
+  collapsedHeight: number
 }
 
 interface LogseqQuickSearchProps {
@@ -97,11 +101,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     parentId: 'page',
     point: [0, 0],
     size: [600, 50],
-    stroke: 'transparent',
+    collapsedHeight: 0,
+    stroke: 'var(--ls-primary-text-color)',
     fill: 'var(--ls-secondary-background-color)',
     strokeWidth: 2,
     opacity: 1,
     pageId: '',
+    collapsed: false,
   }
 
   hideRotateHandle = true
@@ -110,11 +116,53 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canActivate = true
   canEdit = true
 
+  constructor(props = {} as Partial<LogseqPortalShapeProps>) {
+    super(props)
+    makeObservable(this)
+    if (props.collapsed) {
+      this.canResize = [true, false]
+    }
+  }
+
   ReactContextBar = observer(() => {
-    return <>123</>
+    return (
+      <>
+        <ColorInput
+          label="Background"
+          value={this.props.fill}
+          onChange={e => {
+            this.update({
+              fill: e.target.value,
+            })
+          }}
+        />
+        <ColorInput
+          label="Text"
+          value={this.props.stroke}
+          onChange={e => {
+            this.update({
+              stroke: e.target.value,
+            })
+          }}
+        />
+        <SwitchInput
+          label="Collapsed"
+          checked={this.props.collapsed}
+          onCheckedChange={collapsing => {
+            const originalHeight = this.props.size[1]
+            this.canResize[1] = !collapsing
+            this.update({
+              collapsed: collapsing,
+              size: [this.props.size[0], collapsing ? 40 : this.props.collapsedHeight],
+              collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
+            })
+          }}
+        />
+      </>
+    )
   })
 
-  ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isActivated, isBinding }: TLComponentProps) => {
     const {
       props: { opacity, pageId, strokeWidth, stroke, fill },
     } = this
@@ -171,12 +219,13 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <LogseqQuickSearch onChange={commitChange} />
           ) : (
             <div
-              className="shadow-xl tl-logseq-portal-container"
+              className="tl-logseq-portal-container"
               style={{
                 background: fill,
-                boxShadow: isActivated
-                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                  : '',
+                boxShadow:
+                  isActivated || isBinding
+                    ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
+                    : 'var(--shadow-large)',
                 opacity: isSelected ? 0.8 : 1,
               }}
             >
@@ -184,26 +233,28 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 <span className="text-xs rounded border mr-2 px-1">P</span>
                 {pageId}
               </div>
-              <div
-                style={{
-                  width: '100%',
-                  overflow: 'auto',
-                  borderRadius: '8px',
-                  overscrollBehavior: 'none',
-                  // height: '100%',
-                  flex: 1,
-                }}
-              >
+              {!this.props.collapsed && (
                 <div
                   style={{
-                    padding: '12px',
-                    height: '100%',
-                    cursor: 'default',
+                    width: '100%',
+                    overflow: 'auto',
+                    borderRadius: '8px',
+                    overscrollBehavior: 'none',
+                    // height: '100%',
+                    flex: 1,
                   }}
                 >
-                  <Page pageId={pageId} />
+                  <div
+                    style={{
+                      padding: '12px',
+                      height: '100%',
+                      cursor: 'default',
+                    }}
+                  >
+                    <Page pageId={pageId} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -223,7 +274,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
       props.size[0] = Math.max(props.size[0], 50)
-      props.size[1] = Math.max(props.size[1], 50)
+      props.size[1] = Math.max(props.size[1], 40)
     }
     return withClampedStyles(props)
   }

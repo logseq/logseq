@@ -12,11 +12,14 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
   zoom,
   showResizeHandles,
   showRotateHandles,
+  shapes,
 }: TLSelectionComponentProps<S>) {
   const { width, height } = bounds
 
   const size = 8 / zoom
   const targetSize = 6 / zoom
+
+  const canResize = shapes.length === 1 ? shapes[0].canResize : [true, true]
 
   return (
     <SVGContainer>
@@ -33,6 +36,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         height={0}
         targetSize={targetSize}
         edge={TLResizeEdge.Top}
+        disabled={!canResize[1]}
         isHidden={!showResizeHandles}
       />
       <EdgeHandle
@@ -42,6 +46,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         height={height - targetSize * 4}
         targetSize={targetSize}
         edge={TLResizeEdge.Right}
+        disabled={!canResize[0]}
         isHidden={!showResizeHandles}
       />
       <EdgeHandle
@@ -51,6 +56,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         height={0}
         targetSize={targetSize}
         edge={TLResizeEdge.Bottom}
+        disabled={!canResize[1]}
         isHidden={!showResizeHandles}
       />
       <EdgeHandle
@@ -60,6 +66,7 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         height={height - targetSize * 4}
         targetSize={targetSize}
         edge={TLResizeEdge.Left}
+        disabled={!canResize[0]}
         isHidden={!showResizeHandles}
       />
       <RotateCornerHandle
@@ -90,38 +97,42 @@ export const SelectionForeground = observer(function SelectionForeground<S exten
         corner={TLRotateCorner.BottomLeft}
         isHidden={!showRotateHandles}
       />
-      <CornerHandle
-        cx={0}
-        cy={0}
-        size={size}
-        targetSize={targetSize}
-        corner={TLResizeCorner.TopLeft}
-        isHidden={!showResizeHandles}
-      />
-      <CornerHandle
-        cx={width}
-        cy={0}
-        size={size}
-        targetSize={targetSize}
-        corner={TLResizeCorner.TopRight}
-        isHidden={!showResizeHandles}
-      />
-      <CornerHandle
-        cx={width}
-        cy={height}
-        size={size}
-        targetSize={targetSize}
-        corner={TLResizeCorner.BottomRight}
-        isHidden={!showResizeHandles}
-      />
-      <CornerHandle
-        cx={0}
-        cy={height}
-        size={size}
-        targetSize={targetSize}
-        corner={TLResizeCorner.BottomLeft}
-        isHidden={!showResizeHandles}
-      />
+      {canResize?.every(r => r) && (
+        <>
+          <CornerHandle
+            cx={0}
+            cy={0}
+            size={size}
+            targetSize={targetSize}
+            corner={TLResizeCorner.TopLeft}
+            isHidden={!showResizeHandles}
+          />
+          <CornerHandle
+            cx={width}
+            cy={0}
+            size={size}
+            targetSize={targetSize}
+            corner={TLResizeCorner.TopRight}
+            isHidden={!showResizeHandles}
+          />
+          <CornerHandle
+            cx={width}
+            cy={height}
+            size={size}
+            targetSize={targetSize}
+            corner={TLResizeCorner.BottomRight}
+            isHidden={!showResizeHandles}
+          />
+          <CornerHandle
+            cx={0}
+            cy={height}
+            size={size}
+            targetSize={targetSize}
+            corner={TLResizeCorner.BottomLeft}
+            isHidden={!showResizeHandles}
+          />
+        </>
+      )}
       {/* {showRotateHandles && (
         <RotateHandle cx={width / 2} cy={0 - targetSize * 2} size={size} targetSize={targetSize} />
       )} */}

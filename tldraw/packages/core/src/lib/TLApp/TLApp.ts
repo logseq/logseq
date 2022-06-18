@@ -655,7 +655,7 @@ export class TLApp<
         'select.pointingRotateHandle',
         'select.pointingResizeHandle'
       ) &&
-      selectedShapesArray.length > 0 &&
+      selectedShapesArray.length === 1 &&
       !selectedShapesArray.every(shape => shape.hideResizeHandles)
     )
   }
