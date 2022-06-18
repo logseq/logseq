@@ -1,8 +1,6 @@
 module.exports = {
-  content: [
-    "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}",
-  ],
+  // just import everything for ease of dev 
+  safelist: [{ pattern: /.*/ }],
   theme: {
     extend: {},
   },

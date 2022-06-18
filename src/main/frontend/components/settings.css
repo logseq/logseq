@@ -116,7 +116,7 @@
 
         &.app-updater {
           padding-top: 15px;
-          align-items: start;
+          align-items: flex-start;
 
 
           > .wrap {

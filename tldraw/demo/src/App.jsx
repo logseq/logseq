@@ -96,7 +96,7 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
 }
 
 export default function App() {
-  const [theme, setTheme] = React.useState('dark')
+  const [theme, setTheme] = React.useState('light')
 
   return (
     <div className={`h-screen w-screen`}>

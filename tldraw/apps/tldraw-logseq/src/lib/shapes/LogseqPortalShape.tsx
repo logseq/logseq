@@ -110,6 +110,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canActivate = true
   canEdit = true
 
+  ReactContextBar = observer(() => {
+    return <>123</>
+  })
+
   ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
     const {
       props: { opacity, pageId, strokeWidth, stroke, fill },
@@ -167,14 +171,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             <LogseqQuickSearch onChange={commitChange} />
           ) : (
             <div
+              className="shadow-xl tl-logseq-portal-container"
               style={{
-                width: '100%',
-                overflow: 'auto',
-                borderRadius: '8px',
-                overscrollBehavior: 'none',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
                 background: fill,
                 boxShadow: isActivated
                   ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
