@@ -346,6 +346,14 @@ export class TLApp<
     return this
   }
 
+  paste = (e?: ClipboardEvent) => {
+    this.notify('paste', {
+      point: this.inputs.currentPoint
+    })
+    // This callback may be over-written manually, see useSetup.ts in React.
+    return void null
+  }
+
   dropFiles = (files: FileList, point?: number[]) => {
     this.notify('drop-files', {
       files: Array.from(files),

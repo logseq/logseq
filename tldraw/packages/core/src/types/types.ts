@@ -157,6 +157,10 @@ export type TLSubscriptionEvent =
       info: { files: File[]; point: number[] }
     }
   | {
+      event: 'paste'
+      info: { point: number[] }
+    }
+  | {
       event: 'create-assets'
       info: { assets: TLAsset[] }
     }

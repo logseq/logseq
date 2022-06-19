@@ -11,6 +11,7 @@ import * as React from 'react'
 import { AppUI } from '~components/AppUI'
 import { ContextBar } from '~components/ContextBar/ContextBar'
 import { useFileDrop } from '~hooks/useFileDrop'
+import { usePaste } from '~hooks/usePaste'
 import { LogseqContext } from '~lib/logseq-context'
 import { Shape, shapes } from '~lib/shapes'
 import {
@@ -55,6 +56,7 @@ interface LogseqTldrawProps {
 
 export const App = function App(props: LogseqTldrawProps): JSX.Element {
   const onFileDrop = useFileDrop()
+  const onPaste = usePaste()
 
   const Page = React.useMemo(() => React.memo(props.PageComponent), [])
 
@@ -65,6 +67,7 @@ export const App = function App(props: LogseqTldrawProps): JSX.Element {
         Shapes={shapes}
         Tools={tools}
         onFileDrop={onFileDrop}
+        onPaste={onPaste}
         {...props}
       >
         <div className="logseq-tldraw logseq-tldraw-wrapper">
