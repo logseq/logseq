@@ -217,6 +217,7 @@ export class TLApp<
       currentPageId: this.currentPageId,
       selectedIds: Array.from(this.selectedIds.values()),
       pages: Array.from(this.pages.values()).map(page => page.serialized),
+      assets: Object.values(this.assets)
     }
   }
 

@@ -257,7 +257,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 boxShadow:
                   isActivated || isBinding
                     ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                    : '',
+                    : 'var(--shadow-medium)',
                 opacity: isSelected ? 0.8 : 1,
                 color: stroke,
                 // @ts-expect-error ???
