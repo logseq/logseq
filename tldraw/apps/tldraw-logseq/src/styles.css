@@ -127,7 +127,7 @@
 }
 
 .logseq-tldraw .switch-input-root[data-state='checked'] {
-  background: var(--ls-selection-background-color);
+  background: #8ec2c2;
 }
 
 .logseq-tldraw .switch-input-thumb {
@@ -514,6 +514,23 @@
   color: var(--ls-title-text-color);
   padding: 0 1rem;
   align-items: center;
+  gap: 0.5em;
+}
+
+.logseq-tldraw .tl-logseq-portal-header .type-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 4px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #fff;
+  border-radius: 4px;
+  order: 0;
+  flex-grow: 0;
+  transform: translateY(-1px);
 }
 
 html[data-theme='light'] .logseq-tldraw .tl-logseq-portal-header {

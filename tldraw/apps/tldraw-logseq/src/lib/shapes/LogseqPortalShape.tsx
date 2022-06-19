@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { TLBounds, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable, transaction } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -11,6 +11,8 @@ import { useCameraMovingRef } from '~hooks/useCameraMoving'
 import type { Shape } from '~lib'
 import { LogseqContext } from '~lib/logseq-context'
 import { CustomStyleProps, withClampedStyles } from './style-props'
+
+const HEADER_HEIGHT = 40
 
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
@@ -91,6 +93,17 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
   )
 })
 
+const LogseqPortalShapeHeader = observer(
+  ({ type, pageId }: { type: 'P' | 'B'; pageId: string }) => {
+    return (
+      <div className="tl-logseq-portal-header">
+        <span className="type-tag">{type}</span>
+        {pageId}
+      </div>
+    )
+  }
+)
+
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
   static smart = true
@@ -101,6 +114,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     parentId: 'page',
     point: [0, 0],
     size: [600, 50],
+    // collapsedHeight is the height before collapsing
     collapsedHeight: 0,
     stroke: 'var(--ls-primary-text-color)',
     fill: 'var(--ls-secondary-background-color)',
@@ -153,7 +167,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             this.canResize[1] = !collapsing
             this.update({
               collapsed: collapsing,
-              size: [this.props.size[0], collapsing ? 40 : this.props.collapsedHeight],
+              size: [this.props.size[0], collapsing ? HEADER_HEIGHT : this.props.collapsedHeight],
               collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
             })
           }}
@@ -164,7 +178,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
   ReactComponent = observer(({ events, isErasing, isActivated, isBinding }: TLComponentProps) => {
     const {
-      props: { opacity, pageId, strokeWidth, stroke, fill },
+      props: { opacity, pageId, stroke, fill },
     } = this
 
     const app = useApp<Shape>()
@@ -180,6 +194,24 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       },
       [tlEventsEnabled]
     )
+
+    // It is a bit weird to update shapes here. Is there a better place?
+    React.useEffect(() => {
+      if (this.props.collapsed && isActivated) {
+        // Should temporarily disable collapsing
+        this.update({
+          size: [this.props.size[0], this.props.collapsedHeight],
+        })
+        return () => {
+          this.update({
+            size: [this.props.size[0], HEADER_HEIGHT],
+          })
+        }
+      }
+      return () => {
+        // no-ops
+      }
+    }, [isActivated])
 
     const commitChange = React.useCallback((id: string) => {
       transaction(() => {
@@ -225,7 +257,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 boxShadow:
                   isActivated || isBinding
                     ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                    : 'var(--shadow-large)',
+                    : '',
                 opacity: isSelected ? 0.8 : 1,
                 color: stroke,
                 // @ts-expect-error ???
@@ -233,18 +265,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-primary-text-color': stroke,
               }}
             >
-              <div className="tl-logseq-portal-header">
-                <span className="text-xs rounded border mr-2 px-1">P</span>
-                {pageId}
-              </div>
-              {!this.props.collapsed && (
+              <LogseqPortalShapeHeader type="P" pageId={pageId} />
+              {(!this.props.collapsed || isActivated) && (
                 <div
                   style={{
                     width: '100%',
                     overflow: 'auto',
                     borderRadius: '8px',
                     overscrollBehavior: 'none',
-                    // height: '100%',
+                    height: '100%',
                     flex: 1,
                   }}
                 >
@@ -267,18 +296,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   })
 
   ReactIndicator = observer(() => {
-    const {
-      props: {
-        size: [w, h],
-      },
-    } = this
-    return <rect width={w} height={h} fill="transparent" />
+    const bounds = this.getBounds()
+    return <rect width={bounds.width} height={bounds.height} fill="transparent" />
   })
 
   validateProps = (props: Partial<LogseqPortalShapeProps>) => {
     if (props.size !== undefined) {
-      props.size[0] = Math.max(props.size[0], 50)
-      props.size[1] = Math.max(props.size[1], 40)
+      props.size[0] = Math.max(props.size[0], 240)
+      props.size[1] = Math.max(props.size[1], HEADER_HEIGHT)
     }
     return withClampedStyles(props)
   }
