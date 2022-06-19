@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable } from 'mobx'
+import { action, computed, makeObservable, observable, toJS } from 'mobx'
 import { BoundsUtils, KeyUtils } from '~utils'
 import {
   TLSelectTool,
@@ -469,6 +469,12 @@ export class TLApp<
       this.selectionRotation = newSelectedShapes[0].props.rotation ?? 0
     } else {
       this.selectionRotation = 0
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        'setSelectedShapes',
+        newSelectedShapes.map(s => toJS(s.serialized))
+      )
     }
     return this
   }

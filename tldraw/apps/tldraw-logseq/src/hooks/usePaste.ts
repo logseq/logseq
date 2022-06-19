@@ -3,6 +3,7 @@ import {
   fileToBase64,
   getSizeFromSrc,
   TLAsset,
+  TLBinding,
   TLShapeModel,
   uniqueId,
 } from '@tldraw/core'
@@ -19,6 +20,7 @@ export function usePaste() {
 
     const assetsToCreate: ImageAsset[] = []
     const shapesToCreate: TLShapeModel[] = []
+    const bindingsToCreate: TLBinding[] = []
 
     async function handleImage(item: ClipboardItem) {
       const firstImageType = item.types.find(type => type.startsWith('image'))
@@ -62,10 +64,9 @@ export function usePaste() {
               maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
             }))
           )
-          const clonedShape = data.shapes.map((shape: TLShapeModel) => {
+          const clonedShapes = shapes.map((shape: TLShapeModel) => {
             return {
               ...shape,
-              handles: {}, // TODO: may add this later?
               id: uniqueId(),
               parentId: app.currentPageId,
               point: [
@@ -74,7 +75,34 @@ export function usePaste() {
               ],
             }
           })
-          shapesToCreate.push(...clonedShape)
+          shapesToCreate.push(...clonedShapes)
+
+          // Try to rebinding the shapes to the new assets
+          shapesToCreate.forEach((s, idx) => {
+            if (s.handles) {
+              Object.values(s.handles).forEach(h => {
+                if (h.bindingId) {
+                  // try to bind the new shape
+                  const binding = app.currentPage.bindings[h.bindingId]
+                  // if the copied binding from/to is in the source
+                  const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
+                  const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
+                  if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
+                    const newBinding: TLBinding = {
+                      ...binding,
+                      id: uniqueId(),
+                      fromId: shapesToCreate[oldFromIdx].id,
+                      toId: shapesToCreate[oldToIdx].id,
+                    }
+                    bindingsToCreate.push(newBinding)
+                    h.bindingId = newBinding.id
+                  } else {
+                    h.bindingId = undefined
+                  }
+                }
+              })
+            }
+          })
         }
       }
     }
@@ -91,7 +119,7 @@ export function usePaste() {
       }
     }
 
-    const allShapesToAdd = [
+    const allShapesToAdd: TLShapeModel[] = [
       ...assetsToCreate.map((asset, i) => ({
         id: uniqueId(),
         type: 'image',
@@ -103,9 +131,9 @@ export function usePaste() {
       })),
       ...shapesToCreate,
     ]
-
     app.createAssets(assetsToCreate)
     app.createShapes(allShapesToAdd)
+    app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
     app.setSelectedShapes(allShapesToAdd.map(s => s.id))
   }, [])
