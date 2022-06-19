@@ -20,6 +20,10 @@ export function useKeyboardEvents() {
       e.preventDefault()
       app.paste(e)
     })
+    document.addEventListener('copy', (e) => {
+      e.preventDefault()
+      app.copy()
+    })
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)

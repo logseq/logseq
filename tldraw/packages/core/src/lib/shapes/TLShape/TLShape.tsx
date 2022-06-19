@@ -29,6 +29,7 @@ export interface TLShapeProps {
   parentId: string
   name?: string
   point: number[]
+  size?: number[]
   scale?: number[]
   rotation?: number
   handles?: Record<string, TLHandle>

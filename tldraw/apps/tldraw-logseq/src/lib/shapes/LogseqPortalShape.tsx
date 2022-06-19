@@ -3,6 +3,7 @@ import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { TLBounds, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
 import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable, transaction } from 'mobx'
+import { useGesture } from '@use-gesture/react'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ColorInput } from '~components/inputs/ColorInput'
@@ -30,32 +31,18 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
   const rInput = React.useRef<HTMLInputElement>(null)
   const { search } = React.useContext(LogseqContext)
 
-  const secretPrefix = 'œ::'
-
   const commitChange = React.useCallback((id: string) => {
     setQ(id)
     onChange(id)
     rInput.current?.blur()
   }, [])
 
-  const handleChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const _q = e.currentTarget.value
-    if (_q.startsWith(secretPrefix)) {
-      const id = _q.substring(secretPrefix.length)
-      commitChange(id)
-    } else {
-      setQ(_q)
-    }
-  }, [])
-
   const options = React.useMemo(() => {
-    if (search && q) {
-      return search(q)
-    }
-    return null
+    return search?.(q)
   }, [search, q])
 
   React.useEffect(() => {
+    // autofocus seems not to be working
     setTimeout(() => {
       rInput.current?.focus()
     })
@@ -71,7 +58,7 @@ const LogseqQuickSearch = observer(({ onChange }: LogseqQuickSearchProps) => {
             type="text"
             value={q}
             placeholder="Search or create page"
-            onChange={handleChange}
+            onChange={q => setQ(q.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 commitChange(q)
@@ -189,6 +176,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
+          // TODO: pinching inside Logseq Shape issue
           e.stopPropagation()
         }
       },
@@ -213,7 +201,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [isActivated])
 
-    const commitChange = React.useCallback((id: string) => {
+    const onPageNameChanged = React.useCallback((id: string) => {
       transaction(() => {
         this.update({
           pageId: id,
@@ -248,7 +236,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           }}
         >
           {this.draft ? (
-            <LogseqQuickSearch onChange={commitChange} />
+            <LogseqQuickSearch onChange={onPageNameChanged} />
           ) : (
             <div
               className="tl-logseq-portal-container"
