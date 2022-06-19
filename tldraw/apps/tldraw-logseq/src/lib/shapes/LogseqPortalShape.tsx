@@ -263,6 +263,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 // @ts-expect-error ???
                 '--ls-primary-background-color': fill,
                 '--ls-primary-text-color': stroke,
+                '--ls-title-text-color': stroke,
               }}
             >
               <LogseqPortalShapeHeader type="P" pageId={pageId} />

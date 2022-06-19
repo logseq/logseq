@@ -32,7 +32,7 @@ export const Arrow = React.memo(function StraightArrow({
   // Path between start and end points
   const path = 'M' + Vec.toFixed(start) + 'L' + Vec.toFixed(end)
   // Arrowheads
-  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 8)
+  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 16)
   const startArrowHead = decorationStart
     ? getStraightArrowHeadPoints(start, end, arrowHeadLength)
     : null
