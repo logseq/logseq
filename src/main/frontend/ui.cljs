@@ -799,7 +799,7 @@
 
 (rum/defcs tippy < rum/reactive
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open? in-editor?] :as opts} child]
+  [state {:keys [fixed-position? open? in-editor? html] :as opts} child]
   (let [*mounted? (::mounted? state)
         manual (not= open? nil)
         edit-id (ffirst (state/sub :editor/editing?))
@@ -833,7 +833,7 @@
             (assoc :html (or
                           (when open?
                             (try
-                              (when-let [html (:html opts)]
+                              (when html
                                 (if (fn? html)
                                   (html)
                                   [:div.px-2.py-1

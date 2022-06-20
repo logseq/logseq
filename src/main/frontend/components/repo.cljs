@@ -50,6 +50,46 @@
           (db/get-repo-path (or url GraphName))
           (when remote? [:strong.pl-1 (ui/icon "cloud")])])])))
 
+(rum/defc repos-inner
+  [repos]
+  (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
+        :let [only-cloud? (and remote? (nil? url))]]
+    [:div.flex.justify-between.mb-4 {:key (or url GraphUUID)}
+     (normalized-graph-label repo #(if only-cloud?
+                                     (state/pub-event! [:graph/pick-dest-to-sync repo])
+                                     (state/pub-event! [:graph/switch url])))
+
+     [:div.controls
+      (when (e/encrypted-db? url)
+        [:a.control {:title    "Show encryption information about this graph"
+                     :on-click (fn []
+                                 (if remote?
+                                   (state/pub-event! [:modal/remote-encryption-input-pw-dialog url repo])
+                                   (state/set-modal! (encryption/encryption-dialog url))))}
+         "🔐"])
+
+      (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
+        [:div.flex.flex-row.items-center
+         (when loading? [:div.ml-2 (ui/loading "")])
+         (ui/tippy {:html [:div.text-sm.max-w-xs
+                           (if only-cloud?
+                             "Delete this remote graph, notice that this can't be recovered."
+                             "Unlink will remove Logseq's access to the local file path of your graph, it'll not remove your files on the disk.")]
+                    :class "tippy-hover"
+                    :interactive true}
+                   [:a.text-gray-400.ml-4.font-medium.text-sm
+                    {:on-click (fn []
+                                 (if only-cloud?
+                                   (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")?"))
+                                     (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
+                                     (go (<! (file-sync/delete-graph GraphUUID))
+                                         (file-sync/load-session-graphs)
+                                         (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))
+                                   (do
+                                     (repo-handler/remove-repo! repo)
+                                     (file-sync/load-session-graphs))))}
+                    (if only-cloud? "Remove" "Unlink")])])]]))
+
 (rum/defc repos < rum/reactive
   []
   (let [login? (boolean (state/sub :auth/id-token))
@@ -58,55 +98,32 @@
         remotes (state/sub [:file-sync/remote-graphs :graphs])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
-        repos (remove #(= (:url %) config/local-repo) repos)]
+        repos (remove #(= (:url %) config/local-repo) repos)
+        {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     (if (seq repos)
       [:div#graphs
-       [:h1.title "All Graphs"]
-       [:p.ml-2.opacity-70
-        "A \"graph\" in Logseq means a local directory."]
+       [:h1.title (t :graph/all-graphs)]
 
        [:div.pl-1.content.mt-3
-        [:div.flex.flex-row.my-4
-         (when (or (nfs-handler/supported?)
-                   (mobile-util/native-platform?))
-           [:div.mr-8
-            (ui/button
-             (t :open-a-directory)
-             :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]
-        (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
-              :let [only-cloud? (and remote? (nil? url))]]
-          [:div.flex.justify-between.mb-4 {:key (or url GraphUUID)}
-           (normalized-graph-label repo #(if only-cloud?
-                                           (state/pub-event! [:graph/pick-dest-to-sync repo])
-                                           (state/pub-event! [:graph/switch url])))
 
-           [:div.controls
-            (when (e/encrypted-db? url)
-              [:a.control {:title    "Show encryption information about this graph"
-                           :on-click (fn []
-                                       (if remote?
-                                         (state/pub-event! [:modal/remote-encryption-input-pw-dialog url repo])
-                                         (state/set-modal! (encryption/encryption-dialog url))))}
-               "🔐"])
+        [:div
+         [:h2.text-lg.font-medium.my-4 (str (t :graph/local-graphs) ":")]
+         (when (seq local-graphs)
+           (repos-inner local-graphs))
 
-            (let [loading? (state/sub [:ui/loading? :remove/remote-graph GraphUUID])]
-              [:div.flex.flex-row.items-center
-               (when loading? [:div.ml-2 (ui/loading "")])
-               [:a.text-gray-400.ml-4.font-medium.text-sm
-                {:title    (if only-cloud?
-                             "Warning: It can't be recovered!"
-                             "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk.")
-                 :on-click (fn []
-                             (if only-cloud?
-                               (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")?"))
-                                 (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
-                                 (go (<! (file-sync/delete-graph GraphUUID))
-                                     (file-sync/load-session-graphs)
-                                     (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))
-                               (do
-                                 (repo-handler/remove-repo! repo)
-                                 (file-sync/load-session-graphs))))}
-                (if only-cloud? "Remove" "Unlink")]])]])]]
+         [:div.flex.flex-row.my-4
+          (when (or (nfs-handler/supported?)
+                    (mobile-util/native-platform?))
+            [:div.mr-8
+             (ui/button
+               (t :open-a-directory)
+               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])]]
+
+        (when (seq remote-graphs)
+          [:div
+           [:hr]
+           [:h2.text-lg.font-medium.my-4 (str (t :graph/remote-graphs) ":")]
+           (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 
 (defn refresh-cb []

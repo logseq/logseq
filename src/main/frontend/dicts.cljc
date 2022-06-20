@@ -222,6 +222,9 @@
         :graph/save "Saving..."
         :graph/save-success "Saved successfully"
         :graph/save-error "Save failed"
+        :graph/all-graphs "All graphs"
+        :graph/local-graphs "Local graphs"
+        :graph/remote-graphs "Remote graphs"
         :cards-view "View cards"
         :publishing "Publishing"
         :export "Export"
@@ -327,7 +330,7 @@
         :select.graph/add-graph "Yes, add another graph"
 
         :file-sync/other-user-graph "Current local graph is bound to other user's remote graph. So can't start syncing."
-        :file-sync/graph-deleted "Current remote graph has been deleted"
+        :file-sync/graph-deleted "The current remote graph has been deleted"
         }
 
    :de {:help/about "Über Logseq"
@@ -955,6 +958,9 @@
            :graph/save "保存中……"
            :graph/save-success "保存成功"
            :graph/save-error "保存失败"
+           :graph/all-graphs "所有图谱"
+           :graph/local-graphs "本地图谱"
+           :graph/remote-graphs "同步图谱"
            :graph-view "全局图谱"
            :cards-view "卡片组"
            :all-journals "日记"
