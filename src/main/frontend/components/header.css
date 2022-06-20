@@ -54,7 +54,8 @@
   }
 
   .ui-items-container .button {
-    width: 2rem;
+    width: auto;
+    padding: 0 8px;
   }
 
   svg.warning {
@@ -134,7 +135,7 @@
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
-  padding-left: 0;
+  padding-left: 1rem;
 }
 
 .cp__header a, .cp__header svg {
@@ -201,7 +202,12 @@
 }
 
 .button.icon {
-  @apply w-8 h-8 text-lg p-1;
+  @apply w-8 h-8 p-1;
+}
+
+.button.icon.add-graph-btn {
+    width: unset;
+    margin: 0 6px;
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {

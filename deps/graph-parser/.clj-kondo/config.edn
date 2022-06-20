@@ -1,6 +1,7 @@
 {:linters
  {:consistent-alias
-  {:aliases {datascript.core d
+  {:aliases {clojure.string string
+             datascript.core d
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block

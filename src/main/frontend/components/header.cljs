@@ -26,11 +26,10 @@
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:href     (rfe/href :home)
-      :on-click #(do
+     {:on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
-                   (route-handler/go-to-journals!))}
+                   (route-handler/redirect-to-home!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login < rum/reactive
@@ -229,9 +228,11 @@
                                (not (mobile-util/native-platform?))
                                (not config/publishing?))
         left-menu (left-menu-button {:on-click (fn []
-                                       (open-fn)
-                                       (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})]
+                                                 (open-fn)
+                                                 (state/set-left-sidebar-open!
+                                                  (not (:ui/left-sidebar-open? @state/state))))})
+        custom-home-page? (and (state/custom-home-page?)
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -254,7 +255,7 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:style {:fontSize ui/icon-size}})]))])
       (when (mobile-util/native-platform?)
-        (if (state/home?)
+        (if (or (state/home?) custom-home-page?)
           left-menu
           (ui/with-shortcut :go/backward "bottom"
             [:button.it.navigation.nav-left.button.icon
@@ -269,7 +270,8 @@
       (when plugin-handler/lsp-enabled?
         (plugins/hook-ui-items :toolbar))
 
-      (when (not= (state/get-current-route) :home)
+      (when (and (not= (state/get-current-route) :home)
+                 (not custom-home-page?))
         (home-button))
 
       (when (util/electron?)
@@ -283,7 +285,7 @@
          {:on-click #(route-handler/redirect! {:to :repo-add})}
          (ui/icon "folder-plus")
          (when-not config/mobile?
-           [:strong {:style {:margin-top (if electron-mac? 0 2)}}
+           [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
             (t :on-boarding/add-graph)])])
 
       (when config/publishing?

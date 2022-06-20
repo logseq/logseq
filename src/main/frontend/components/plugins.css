@@ -776,6 +776,43 @@
       @apply pr-3 opacity-30 hover:opacity-100 transition-opacity;
     }
   }
+
+  .toolbar-plugins-manager {
+    &-trigger {
+      .dropdown-wrapper {
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+      
+      .menu-link {
+        padding: 3px 5px;
+      }
+
+      .item-wrap {
+        padding-right: 28px;
+        font-size: 13px;
+        position: relative;
+
+        div[data-injected-ui] .ti {
+          position: relative;
+          bottom: -1px;
+        }
+      }
+
+      .pin {
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        padding: 0 6px;
+
+        &.pinned {
+          color: var(--ls-link-ref-text-color);
+          opacity: 90;
+        }
+      }
+    }
+  }
 }
 
 .lsp-frame-readme {

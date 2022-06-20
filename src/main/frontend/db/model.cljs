@@ -170,6 +170,21 @@
          ;; (sort-by last)
          (reverse))))
 
+(defn get-files-v2
+  [repo]
+  (when-let [db (conn/get-db repo)]
+    (->> (d/q
+          '[:find ?file ?path
+            ;; ?modified-at
+            :where
+            [?file :file/path ?path]
+            ;; [?file :file/last-modified-at ?modified-at]
+            ]
+          db)
+         (seq)
+         ;; (sort-by last)
+         (reverse))))
+
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)

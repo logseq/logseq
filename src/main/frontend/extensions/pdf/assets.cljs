@@ -152,6 +152,7 @@
 (defn resolve-ref-page
   [pdf-current]
   (let [page-name (:key pdf-current)
+        page-name (string/trim page-name)
         page-name (str "hls__" page-name)
         page (db-model/get-page page-name)
         url (:url pdf-current)
