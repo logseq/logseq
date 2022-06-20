@@ -5,7 +5,8 @@ import {
   AppCanvas,
   AppProvider,
   TLReactCallbacks,
-  TLReactComponents, TLReactToolConstructor
+  TLReactComponents,
+  TLReactToolConstructor,
 } from '@tldraw/react'
 import * as React from 'react'
 import { AppUI } from '~components/AppUI'
@@ -25,7 +26,7 @@ import {
   PencilTool,
   PolygonTool,
   TextTool,
-  YouTubeTool
+  YouTubeTool,
 } from '~lib/tools'
 
 const components: TLReactComponents<Shape> = {
@@ -54,16 +55,18 @@ interface LogseqTldrawProps {
   onPersist?: TLReactCallbacks<Shape>['onPersist']
 }
 
-export const App = function App(props: LogseqTldrawProps): JSX.Element {
+export const App = function App({
+  searchHandler,
+  PageComponent,
+  ...props
+}: LogseqTldrawProps): JSX.Element {
   const onFileDrop = useFileDrop()
   const onPaste = usePaste()
 
-  const Page = React.useMemo(() => React.memo(props.PageComponent), [])
-
+  const Page = React.useMemo(() => React.memo(PageComponent), [])
   return (
-    <LogseqContext.Provider value={{ Page, search: props.searchHandler }}>
+    <LogseqContext.Provider value={{ Page, search: searchHandler }}>
       <AppProvider
-        onMount={props.onMount}
         Shapes={shapes}
         Tools={tools}
         onFileDrop={onFileDrop}

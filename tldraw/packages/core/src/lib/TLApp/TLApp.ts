@@ -191,6 +191,9 @@ export class TLApp<
   loadDocumentModel(model: TLDocumentModel<S>): this {
     this.history.deserialize(model)
     if (model.assets) this.addAssets(model.assets)
+
+    // Viewport should be focused to existing shapes
+    this.api.zoomToFit()
     return this
   }
 
@@ -471,7 +474,10 @@ export class TLApp<
       this.selectionRotation = 0
     }
     if (process.env.NODE_ENV === 'development') {
-      console.log('setSelectedShapes', newSelectedShapes.map(s => toJS(s.serialized)))
+      console.log(
+        'setSelectedShapes',
+        newSelectedShapes.map(s => toJS(s.serialized))
+      )
     }
     return this
   }
