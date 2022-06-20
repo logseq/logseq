@@ -192,8 +192,6 @@ export class TLApp<
     this.history.deserialize(model)
     if (model.assets) this.addAssets(model.assets)
 
-    // Viewport should be focused to existing shapes
-    this.api.zoomToFit()
     return this
   }
 

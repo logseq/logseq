@@ -1,3 +1,4 @@
+import Vec from '@tldraw/vec'
 import type { TLApp, TLPage, TLShapeModel, TLShape } from '~lib'
 import type { TLEventMap } from '~types'
 import { BoundsUtils } from '~utils'
@@ -129,6 +130,19 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     if (shapes.length === 0) return this
     const commonBounds = BoundsUtils.getCommonBounds(shapes.map(shape => shape.bounds))
     this.app.viewport.zoomToBounds(commonBounds)
+    return this
+  }
+
+  cameraToCenter = (): this => {
+    const { shapes } = this.app.currentPage
+    // Viewport should be focused to existing shapes
+    const commonBounds = BoundsUtils.getCommonBounds(shapes.map(shape => shape.bounds))
+    this.app.viewport.update({
+      point: Vec.add(Vec.neg(BoundsUtils.getBoundsCenter(commonBounds)), [
+        this.app.viewport.currentView.width / 2,
+        this.app.viewport.currentView.height/ 2,
+      ]),
+    })
     return this
   }
 
