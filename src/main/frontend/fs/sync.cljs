@@ -1510,7 +1510,8 @@
         "unlink"
         (let [r (<! (<get-local-files-meta rsapi "" basepath [r-path]))]
           ;; keep this e when it's not found
-          (some-> r ex-cause))
+          (or (some-> r ex-cause)
+              (zero? (count r))))
 
         ("add" "change")
         ;; 1. local file exists
