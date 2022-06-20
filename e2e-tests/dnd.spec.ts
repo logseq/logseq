@@ -33,21 +33,21 @@ test('drop to left center', async ({ page }) => {
 })
 
 
-test('drop to upper left', async ({ page }) => {
+test('drop to upper left', async ({ page, block }) => {
   await createRandomPage(page)
 
-  await page.fill('textarea >> nth=0', 'block a')
-  await enterNextBlock(page)
+  await block.mustFill('block a')
+  await block.enterNext()
 
-  await page.fill('textarea >> nth=0', 'block b')
-  await page.press('textarea >> nth=0', 'Escape')
+  await block.mustFill('block b')
+  await block.escapeEditing()
 
   const bullet = page.locator('span.bullet-container >> nth=-1')
   const where = page.locator('.ls-block >> nth=0')
   await bullet.dragTo(where, {
     targetPosition: {
-      x: 10,
-      y: 5
+      x: 0,
+      y: 0
     }
   })
 
