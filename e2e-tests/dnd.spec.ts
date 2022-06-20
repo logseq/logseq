@@ -46,8 +46,8 @@ test('drop to upper left', async ({ page }) => {
   const where = page.locator('.ls-block >> nth=0')
   await bullet.dragTo(where, {
     targetPosition: {
-      x: 30,
-      y: 2
+      x: 10,
+      y: 5
     }
   })
 
