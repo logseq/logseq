@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable, toJS } from 'mobx'
+import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { BoundsUtils, KeyUtils } from '~utils'
 import {
   TLSelectTool,
@@ -471,10 +471,7 @@ export class TLApp<
       this.selectionRotation = 0
     }
     if (process.env.NODE_ENV === 'development') {
-      console.log(
-        'setSelectedShapes',
-        newSelectedShapes.map(s => toJS(s.serialized))
-      )
+      console.log('setSelectedShapes', newSelectedShapes.map(s => toJS(s.serialized)))
     }
     return this
   }
@@ -717,6 +714,15 @@ export class TLApp<
     const Shape = this.Shapes.get(type)
     if (!Shape) throw Error(`Could not find shape class for ${type}`)
     return Shape
+  }
+
+  transaction = (fn: () => void) => {
+    transaction(() => {
+      this.history.pause()
+      fn()
+      this.history.resume()
+      this.persist()
+    })
   }
 
   /* ------------------ Subscriptions ----------------- */

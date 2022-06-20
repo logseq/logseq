@@ -8,6 +8,7 @@ import {
   uniqueId,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
+import { transaction } from 'mobx'
 import * as React from 'react'
 import { LogseqPortalShape, Shape } from '~lib'
 
@@ -65,7 +66,7 @@ export function usePaste() {
                 maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
               }))
             )
-            const clonedShapes = shapes.map((shape: TLShapeModel) => {
+            const clonedShapes = shapes.map(shape => {
               return {
                 ...shape,
                 id: uniqueId(),
@@ -76,6 +77,7 @@ export function usePaste() {
                 ],
               }
             })
+            // @ts-expect-error - This is a valid shape
             shapesToCreate.push(...clonedShapes)
 
             // Try to rebinding the shapes to the new assets
@@ -117,7 +119,7 @@ export function usePaste() {
               point: [point[0], point[1]],
               size: [600, 400],
               pageId: blockRef,
-              blockType: 'B'
+              blockType: 'B',
             })
           }
         }
@@ -149,10 +151,16 @@ export function usePaste() {
       })),
       ...shapesToCreate,
     ]
-    app.createAssets(assetsToCreate)
-    app.createShapes(allShapesToAdd)
-    app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
 
-    app.setSelectedShapes(allShapesToAdd.map(s => s.id))
+    app.transaction(() => {
+      if (assetsToCreate.length > 0) {
+        app.createAssets(assetsToCreate)
+      }
+      if (allShapesToAdd.length > 0) {
+        app.createShapes(allShapesToAdd)
+      }
+      app.currentPage.updateBindings(Object.fromEntries(bindingsToCreate.map(b => [b.id, b])))
+      app.setSelectedShapes(allShapesToAdd.map(s => s.id))
+    })
   }, [])
 }

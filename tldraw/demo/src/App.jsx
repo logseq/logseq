@@ -5,6 +5,7 @@ import { App as TldrawApp } from 'tldraw-logseq'
 const storingKey = 'playground.index'
 
 const onPersist = app => {
+  console.log('onPersist', app)
   window.sessionStorage.setItem(storingKey, JSON.stringify(app.serialized))
 }
 
