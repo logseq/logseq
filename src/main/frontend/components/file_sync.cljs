@@ -17,7 +17,11 @@
             [cljs-time.coerce :as tc]
             [electron.ipc :as ipc]
             [frontend.util.fs :as fs-util]
-            [cljs.core.async :as async]))
+            [cljs.core.async :as async]
+            [logseq.graph-parser.config :as gp-config]
+            [clojure.string :as string]
+            [reitit.frontend.easy :as rfe]
+            [frontend.db :as db]))
 
 (rum/defcs indicator <
   rum/reactive
@@ -100,7 +104,18 @@
                          :icon  (ui/icon "arrow-narrow-up")}) uploading-files)
            (when sync-state
              (map-indexed (fn [i f] (:time f)
-                            {:title [:div {:key i} [:div (:path f)] [:div.opacity-50 (util/time-ago (:time f))]]})
+                            (let [path (:path f)
+                                  ext (string/lower-case (util/get-file-ext path))
+                                  supported? (gp-config/mldoc-support? ext)
+                                  full-path (util/node-path.join (config/get-repo-dir current-repo) path)
+                                  page-name (db/get-file-page full-path)]
+                              {:title [:div {:key i}
+                                       [:a.file-sync-item
+                                        {:href (if page-name
+                                                 (rfe/href :page {:name page-name})
+                                                 (rfe/href :file {:path full-path}))}
+                                        (str (:path f) (when page-name (str " - " page-name)))]
+                                       [:div.opacity-50 (util/time-ago (:time f))]]}))
                           (take 10 (:history sync-state))))))
 
         {:links-header
