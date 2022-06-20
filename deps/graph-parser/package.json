@@ -6,6 +6,6 @@
     "@logseq/nbb-logseq": "^0.5.103"
   },
   "dependencies": {
-    "mldoc": "^1.3.3"
+    "mldoc": "^1.3.9"
   }
 }

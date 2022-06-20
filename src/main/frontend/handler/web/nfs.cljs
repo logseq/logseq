@@ -268,7 +268,8 @@
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
-                                                      :refresh? (not re-index?)}))
+                                                      :refresh? (not re-index?)
+                                                      :new-graph? re-index?}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
 
@@ -326,9 +327,11 @@
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))
 
+;; TODO: move to frontend.handler.repo
 (defn refresh!
   [repo ok-handler]
-  (when repo
+  (when (and repo
+             (not (state/unlinked-dir? (config/get-repo-dir repo))))
     (state/set-nfs-refreshing! true)
     (p/let [_ (reload-dir! repo)
             _ (ok-handler)]

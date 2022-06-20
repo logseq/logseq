@@ -1,7 +1,5 @@
 (ns frontend.handler.editor
-  (:require ["/frontend/utils" :as utils]
-            ["path" :as path]
-            [cljs.core.match :refer [match]]
+  (:require ["path" :as path]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
@@ -13,7 +11,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -56,8 +54,7 @@
             [promesa.core :as p]
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            [frontend.extensions.html-parser :as html-parser]))
+            [logseq.graph-parser.block :as gp-block]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -65,7 +62,7 @@
 (defonce *asset-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
 
-(defn- get-selection-and-format
+(defn get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
     (when (:block/uuid block)
@@ -977,6 +974,16 @@
                  (into [] (state/get-export-block-text-remove-options)))]
     [top-level-block-uuids content]))
 
+(defn- get-all-blocks-by-ids
+  [repo ids]
+  (loop [ids ids
+         result []]
+    (if (seq ids)
+      (let [blocks (db/get-block-and-children repo (first ids))
+            result (vec (concat result blocks))]
+        (recur (remove (set (map :block/uuid result)) (rest ids)) result))
+      result)))
+
 (defn copy-selection-blocks
   [html?]
   (when-let [blocks (seq (state/get-selection-blocks))]
@@ -988,7 +995,7 @@
       (when block
         (let [html (export/export-blocks-as-html repo top-level-block-uuids)]
           (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content (when html? html)))
-        (state/set-copied-blocks content ids)
+        (state/set-copied-blocks! content (get-all-blocks-by-ids repo top-level-block-uuids))
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
@@ -1060,8 +1067,8 @@
   (when-let [blocks (seq (get-selected-blocks))]
     ;; remove embeds, references and queries
     (let [dom-blocks (remove (fn [block]
-                           (or (= "true" (dom/attr block "data-transclude"))
-                               (= "true" (dom/attr block "data-query")))) blocks)]
+                              (or (= "true" (dom/attr block "data-transclude"))
+                                  (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -1071,7 +1078,6 @@
               sorted-blocks (mapcat (fn [block]
                                       (tree/get-sorted-block-and-children repo (:db/id block)))
                                     top-level-blocks)]
-          (state/set-copied-full-blocks nil sorted-blocks)
           (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))
 
 (def url-regex
@@ -1202,7 +1208,7 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export/export-blocks-as-html repo [block-id])
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (state/set-copied-full-blocks md-content sorted-blocks)
+      (state/set-copied-blocks! md-content sorted-blocks)
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content html)
       (delete-block-aux! block true))))
 
@@ -1213,7 +1219,7 @@
 
 (defn highlight-selection-area!
   [end-block]
-  (when-let [start-block (state/get-selection-start-block)]
+  (when-let [start-block (state/get-selection-start-block-or-first)]
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
 
@@ -1940,7 +1946,9 @@
               blocks' (map (fn [block]
                              (paste-block-cleanup block page exclude-properties format content-update-fn))
                         blocks)
-              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?})]
+              result (outliner-core/insert-blocks! blocks' target-block {:sibling? sibling?
+                                                                         :outliner-op :paste
+                                                                         :replace-empty-target? true})]
           (edit-last-block-after-inserted! result))))))
 
 (defn- block-tree->blocks
@@ -2847,164 +2855,6 @@
         (edit-box-on-change! e block id)
         (util/scroll-editor-cursor input)))))
 
-(defn- paste-text-parseable
-  [format text]
-  (when-let [editing-block (state/get-edit-block)]
-    (let [page-id (:db/id (:block/page editing-block))
-          blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format)) text true format)
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (paste-blocks blocks' {}))))
-
-(defn- paste-segmented-text
-  [format text]
-  (let [paragraphs (string/split text #"(?:\r?\n){2,}")
-        updated-paragraphs
-        (string/join "\n"
-                     (mapv (fn [p] (->> (string/trim p)
-                                        ((fn [p]
-                                           (if (util/safe-re-find (if (= format :org)
-                                                                    #"\s*\*+\s+"
-                                                                    #"\s*-\s+") p)
-                                             p
-                                             (str (if (= format :org) "* " "- ") p))))))
-                           paragraphs))]
-    (paste-text-parseable format updated-paragraphs)))
-
-(defn- get-all-blocks-by-ids
-  [repo ids]
-  (loop [ids ids
-         result []]
-    (if (seq ids)
-      (let [blocks (db/get-block-and-children repo (first ids))
-            result (vec (concat result blocks))]
-        (recur (remove (set (map :block/uuid result)) (rest ids)) result))
-      result)))
-
-(defn wrap-macro-url
-  [url]
-  (cond
-    (boolean (text-util/get-matched-video url))
-    (util/format "{{video %s}}" url)
-
-    (string/includes? url "twitter.com")
-    (util/format "{{twitter %s}}" url)
-
-    :else
-    (do
-      (notification/show! (util/format "No macro is available for %s" url) :warning)
-      nil)))
-
-(defn- paste-copied-blocks-or-text
-  [initial-text text e]
-  (let [copied-blocks (state/get-copied-blocks)
-        copied-block-ids (:copy/block-ids copied-blocks)
-        copied-graph (:copy/graph copied-blocks)
-        input (state/get-input)]
-    (cond
-      ;; Internal blocks by either copy or cut blocks
-      (and
-       (= copied-graph (state/get-current-repo))
-       (or (seq copied-block-ids)
-           (seq (:copy/full-blocks copied-blocks)))
-       initial-text
-       ;; not copied from the external clipboard
-       (= (string/replace (string/trim initial-text) "\r" "")
-          (string/replace (string/trim (or (:copy/content copied-blocks) "")) "\r" "")))
-      (do
-        (util/stop e)
-        (let [blocks (or
-                     (:copy/full-blocks copied-blocks)
-                     (get-all-blocks-by-ids (state/get-current-repo) copied-block-ids))]
-         (when (seq blocks)
-           (state/set-copied-full-blocks! blocks)
-           (paste-blocks blocks {}))))
-
-      (and (gp-util/url? text)
-           (not (string/blank? (util/get-selected-text))))
-      (do
-        (util/stop e)
-        (html-link-format! text))
-
-      (and (text/block-ref? text)
-           (wrapped-by? input "((" "))"))
-      (do
-        (util/stop e)
-        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
-
-      :else
-      ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
-        (match [format
-                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-          [:markdown false _ _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
-
-          [:org _ false _]
-          (do
-            (util/stop e)
-            (paste-text-parseable format text))
-
-          [:markdown true _ false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
-
-          [:markdown true _ true]
-          nil
-
-          [:org _ true false]
-          (do
-            (util/stop e)
-            (paste-segmented-text format text))
-
-          [:org _ true true]
-          nil)))))
-
-(defn paste-text-in-one-block-at-point
-  []
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
-       (let [data (or (when (gp-util/url? clipboard-data)
-                        (wrap-macro-url clipboard-data))
-                      clipboard-data)]
-         (insert data true))))
-   (fn [error]
-     (js/console.error error))))
-
-(defn editor-on-paste!
-  [id]
-  (fn [e]
-    (state/set-state! :editor/on-paste? true)
-    (let [clipboard-data (gobj/get e "clipboardData")
-          html (.getData clipboard-data "text/html")
-          edit-block (state/get-edit-block)
-          format (or (:block/format edit-block) :markdown)
-          initial-text (.getData clipboard-data "text")
-          text (or (when (string/blank? html)
-                     (html-parser/convert format html))
-                   initial-text)
-          input (state/get-input)]
-      (if-not (string/blank? text)
-        (if (or (thingatpt/markdown-src-at-point input)
-                (thingatpt/org-admonition&src-at-point input))
-          (when-not (mobile-util/native-ios?)
-            (util/stop e)
-            (paste-text-in-one-block-at-point))
-          (paste-copied-blocks-or-text initial-text text e))
-        (let [_handled
-              (let [clipboard-data (gobj/get e "clipboardData")
-                    files (.-files clipboard-data)]
-                (when-let [file (first files)]
-                  (when-let [block (state/get-edit-block)]
-                    (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
-          (util/stop e))))))
-
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (cut-selection-blocks copy?)
@@ -3026,17 +2876,24 @@
 
 ;; credits to @pengx17
 (defn- copy-current-block-ref
-  []
+  [format]
   (when-let [current-block (state/get-edit-block)]
     (when-let [block-id (:block/uuid current-block)]
-      (copy-block-ref! block-id #(str "((" % "))"))
+      (if (= format "embed")
+       (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
+       (copy-block-ref! block-id #(str "((" % "))")))
       (notification/show!
        [:div
-        [:span.mb-1.5 "Block ref copied!"]
-        [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
+        [:span.mb-1.5 (str "Block " format " copied!")]
+        [:div [:code.whitespace.break-all (if (= format "embed")
+                                         (str "{{embed ((" block-id "))}}")
+                                         (str "((" block-id "))"))]]]
        :success true
        ;; use uuid to make sure there is only one toast a time
        (str "copied-block-ref:" block-id)))))
+
+(defn copy-current-block-embed []
+  (copy-current-block-ref "embed"))
 
 (defn shortcut-copy
   "shortcut copy action:
@@ -3054,7 +2911,7 @@
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
         (if (= selected-start selected-end)
-          (copy-current-block-ref)
+          (copy-current-block-ref "ref")
           (js/document.execCommand "copy")))
 
       :else
@@ -3131,9 +2988,9 @@
           ;; if the move is to cross block boundary, select the whole block
          (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
              (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
-          (select-block-up-down direction)
+         (select-block-up-down direction)
           ;; simulate text selection
-          (cursor/select-up-down input direction anchor cursor-rect)))
+         (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
 
 (defn open-selected-block!
@@ -3205,6 +3062,8 @@
     (save-current-block! {:force? true})
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
+
+
 
 (defn block-with-title?
   [format content semantic?]

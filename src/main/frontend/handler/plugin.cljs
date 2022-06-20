@@ -14,6 +14,7 @@
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [frontend.components.svg :as svg]
+            [frontend.context.i18n :refer [t]]
             [frontend.format :as format]))
 
 (defonce lsp-enabled?
@@ -42,6 +43,23 @@
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
 
+(defn load-plugin-preferences
+  []
+  (-> (invoke-exported-api "load_user_preferences")
+      (p/then #(bean/->clj %))
+      (p/then #(state/set-state! :plugin/preferences %))
+      (p/catch
+       #(js/console.error %))))
+
+(defn save-plugin-preferences!
+  ([input] (save-plugin-preferences! input true))
+  ([input reload-state?]
+   (when-let [^js input (and (map? input) (bean/->js input))]
+     (p/then
+      (js/LSPluginCore.saveUserPreferences input)
+      #(when reload-state?
+         (load-plugin-preferences))))))
+
 (defn gh-repo-url [repo]
   (str "https://github.com/" repo))
 
@@ -55,13 +73,17 @@
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
       (fn [resolve reject]
-        (-> (util/fetch plugins-url
-                        (fn [res]
-                          (let [pkgs (:packages res)]
-                            (state/set-state! :plugin/marketplace-pkgs pkgs)
-                            (resolve pkgs)))
-                        reject)
-            (p/catch reject))))
+        (let [on-ok (fn [res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (let [pkgs (:packages res)]
+                          (state/set-state! :plugin/marketplace-pkgs pkgs)
+                          (resolve pkgs))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON plugins-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch plugins-url on-ok reject)))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
@@ -69,18 +91,23 @@
   (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
     (p/create
       (fn [resolve reject]
-        (util/fetch stats-url
-                    (fn [res]
-                      (when res
-                        (state/set-state!
-                          :plugin/marketplace-stats
-                          (into {} (map (fn [[k stat]]
-                                          [k (assoc stat
-                                               :total_downloads
-                                               (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
-                                        res)))
-                        (resolve nil)))
-                    reject)))
+        (let [on-ok (fn [^js res]
+                      (if-let [res (and res (bean/->clj res))]
+                        (do
+                          (state/set-state!
+                           :plugin/marketplace-stats
+                           (into {} (map (fn [[k stat]]
+                                           [k (assoc stat
+                                                     :total_downloads
+                                                     (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                         res)))
+                          (resolve nil))
+                        (reject nil)))]
+          (if (state/http-proxy-enabled-or-val?)
+            (-> (ipc/ipc :httpFetchJSON stats-url)
+                (p/then on-ok)
+                (p/catch reject))
+            (util/fetch stats-url on-ok reject)))))
     (p/resolved nil)))
 
 (defn installed?
@@ -156,7 +183,7 @@
     (filter #(has-setting-schema? (:id %)) plugins)))
 
 (defn setup-install-listener!
-  [t]
+  []
   (let [channel (name :lsp-installed)
         listener (fn [^js _ ^js e]
                    (js/console.debug :lsp-installed e)
@@ -296,11 +323,13 @@
   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
 (defn register-plugin-ui-item
-  [pid {:keys [type] :as opts}]
+  [pid {:keys [key type] :as opts}]
   (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
-      (swap! state/state update-in [:plugin/installed-ui-items pid]
-             (fnil conj []) [type opts pid])
+      (let [items (or (get-in @state/state [:plugin/installed-ui-items pid]) [])
+            items (filter #(not= key (:key (second %))) items)]
+        (swap! state/state assoc-in [:plugin/installed-ui-items pid]
+               (conj items [type opts pid])))
       true)))
 
 (defn unregister-plugin-ui-items
@@ -528,6 +557,24 @@
                         (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
       (state/pub-event! [:plugin/consume-updates]))))
 
+(defn call-plugin
+  [^js pl type payload]
+  (when pl
+    (.call (.-caller pl) (name type) (bean/->js payload))))
+
+(defn request-callback
+  [^js pl req-id payload]
+  (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+
+(defn op-pinned-toolbar-item!
+  [key op]
+  (let [pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (into #{} pinned)]
+    (when-let [op-fn (case op
+                       :add conj
+                       :remove disj)]
+      (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
@@ -593,7 +640,7 @@
                                   (clear-commands! pid)
                                   (unregister-plugin-themes pid)))
 
-                (.on "theme-changed" (fn [^js themes]
+                (.on "themes-changed" (fn [^js themes]
                                        (swap! state/state assoc :plugin/installed-themes
                                               (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
@@ -604,8 +651,9 @@
                                           (when mode
                                             (state/set-custom-theme! mode theme)
                                             (state/set-theme-mode! mode))
+                                          (hook-plugin-app :theme-changed theme)
                                           (state/set-state! :plugin/selected-theme url))))
-                                        
+
                 (.on "reset-custom-theme" (fn [^js themes]
                                             (let [themes (bean/->clj themes)
                                                   custom-theme (dissoc themes :mode)

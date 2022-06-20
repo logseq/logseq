@@ -4,6 +4,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -145,9 +146,11 @@
 
    :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
+   :editor/copy-embed {:binding "mod+e"
+                       :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
-                                             :fn      editor-handler/paste-text-in-one-block-at-point}
+                                             :fn      (fn [_state e] ((paste-handler/editor-on-paste! nil true) e))}
 
    :editor/insert-youtube-timestamp         {:binding "mod+shift+y"
                                              :fn      commands/insert-youtube-timestamp}
@@ -343,10 +346,6 @@
    :ui/toggle-contents              {:binding "alt+shift+c"
                                      :fn      ui-handler/toggle-contents!}
 
-   :ui/open-new-window              {:binding "mod+n"
-                                     :inactive (not (util/electron?))
-                                     :fn      #(state/pub-event! [:graph/open-new-window nil])}
-
    :command/toggle-favorite         {:binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
@@ -447,6 +446,7 @@
                           :editor/forward-kill-word
                           :editor/backward-kill-word
                           :editor/replace-block-reference-at-point
+                          :editor/copy-embed
                           :editor/paste-text-in-one-block-at-point
                           :editor/insert-youtube-timestamp])
      (with-meta {:before m/enable-when-editing-mode!}))
@@ -522,7 +522,6 @@
                           :ui/toggle-help
                           :ui/toggle-theme
                           :ui/toggle-contents
-                          :ui/open-new-window
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :editor/copy-current-file
@@ -578,8 +577,7 @@
     :go/tomorrow
     :go/next-journal
     :go/prev-journal
-    :go/keyboard-shortcuts
-    :ui/open-new-window]
+    :go/keyboard-shortcuts]
 
    :shortcut.category/block-editing
    [:editor/backspace
@@ -609,6 +607,7 @@
     :editor/forward-kill-word
     :editor/backward-kill-word
     :editor/replace-block-reference-at-point
+    :editor/copy-embed
     :editor/paste-text-in-one-block-at-point
     :editor/select-up
     :editor/select-down]

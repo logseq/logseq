@@ -183,6 +183,7 @@
         :settings-page/tab-version-control "Version control"
         :settings-page/tab-advanced "Advanced"
         :settings-page/plugin-system "Plug-in system"
+        :settings-page/enable-flashcards "Flashcards"
         :settings-page/network-proxy "Network proxy"
         :logseq "Logseq"
         :on "ON"
@@ -1564,9 +1565,9 @@
         :file-sync/graph-deleted "El gráfico remoto actual se ha eliminado"}
 
    :nb-NO {:tutorial/text #?(:cljs (rc/inline "tutorial-no.md")
-                                :default "tutorial-no.md")
+                             :default "tutorial-no.md")
            :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-no.md")
-                                       :default "dummy-notes-no.md")
+                                    :default "dummy-notes-no.md")
            :on-boarding/demo-graph "Dette er en demo graf, endringer vil ikke bli lagret før du åpner en lokal mappe."
            :on-boarding/add-graph "Legg til en graf"
            :on-boarding/open-local-dir "Åpne en lokal mappe"
@@ -1623,11 +1624,11 @@
            :right-side-bar/favorites "Favoritter"
            :right-side-bar/page-graph "Sidegraf"
            :right-side-bar/block-ref "Blokkreferanse"
-           :right-side-bar/graph-view "Graph view"
-           :right-side-bar/all-pages "All pages"
+           :right-side-bar/graph-view "Grafvisning"
+           :right-side-bar/all-pages "Alle sider"
            :right-side-bar/flashcards "Flashcards"
-           :right-side-bar/new-page "New page"
-           :left-side-bar/journals "Journals"
+           :right-side-bar/new-page "Ny side"
+           :left-side-bar/journals "Dagbøker"
            :left-side-bar/new-page "Ny side"
            :left-side-bar/nav-favorites "Favoritter"
            :left-side-bar/nav-shortcuts "Snarveier"
@@ -1864,8 +1865,28 @@
            :select.graph/empty-placeholder-description "Ingen grafer matcher. Vil du legge til en ny?"
            :select.graph/add-graph "Ja, legg til en ny graf"
 
-           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjernkontroll. Så kan ikke begynne å synkronisere."
-           :file-sync/graph-deleted "Nåværende fjernkontrollen er slettet"}
+           :file-sync/other-user-graph "Nåværende lokal graf er bundet til annen brukers fjerngraf. Kan ikke begynne å synkronisere."
+           :file-sync/graph-deleted "Nåværende fjerngraf er slettet"
+           :host "Vert"
+           :port "Port"
+           :re-index-discard-unsaved-changes-warning "Reindeksering vil forkaste nåværende graf, og deretter prosessere alle filene på nytt slik de er på disk akkurat nå. Du vil miste ulagrede endringer, og det kan ta litt tid. Forsette?"
+           :re-index-multiple-windows-warning "Du må lukke de andre vinduene før du kan reindeksere denne grafen"
+           :save "Lagrer..."
+           :settings-of-plugins "Innstillinger for utvidelser"
+           :sync-from-local-changes-detected "Oppfrisk oppdager og prosesserer filer på disk som er modifiserte og avviker fra sideinnholdet som vises i Logseq. Fortsett?"
+           :type "Type"
+           :graph/persist "Logeq synkroniserer intern status, vennligst vent i flere sekunder."
+           :graph/persist-error "Intern status synk feilet"
+           :graph/save "Lagrer..."
+           :graph/save-error "Lagring feilet"
+           :graph/save-success "Lagring vellykket"
+           :page/copy-page-url "Kopier side URL"
+           :page/file-sync-versions "Versjoner av siden"
+           :page/open-backup-directory "Åpne mappe med sidens sikkerhetskopier"
+           :plugin/not-installed "Ikke installert"
+           :settings-page/edit-export-css "Rediger export.css"
+           :settings-page/network-proxy "Nettverksproxy"
+           :settings-page/plugin-system "System for utvidelser"}
 
    :pt-BR {:on-boarding/demo-graph "Esse é um gráfico de demonstração, mudanças não serão salvas enquanto uma pasta local não for aberta."
            :on-boarding/add-graph "Adicionar gráfico"
@@ -2178,7 +2199,7 @@
 
            :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
            :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
-           
+
            :page/copy-page-url "Copiar URL da página"
            :page/file-sync-versions "Versões da página"
            :plugin/not-installed "Não instalado"
@@ -3585,6 +3606,7 @@
         :settings-page/tab-version-control "Sürüm denetimi"
         :settings-page/tab-advanced "Gelişmiş"
         :settings-page/plugin-system "Eklenti sistemi"
+        :settings-page/enable-flashcards "Bilgi kartları"
         :settings-page/network-proxy "Ağ ara sunucusu"
         :logseq "Logseq"
         :on "AÇIK"
@@ -3730,7 +3752,7 @@
 
         :file-sync/other-user-graph "Geçerli yerel grafik, diğer kullanıcının uzak grafiğine bağlıdır. Bu yüzden senkronizasyon başlatılamıyor."
         :file-sync/graph-deleted "Geçerli uzak grafik silindi"}
-   
+
    :ko {:tutorial/text #?(:cljs (rc/inline "tutorial-ko.md")
                           :default "tutorial-ko.md")
         :tutorial/dummy-notes #?(:cljs (rc/inline "dummy-notes-ko.md")
@@ -3827,7 +3849,7 @@
         :page/show-journals "일지 보기"
         :page/show-name "페이지 이름 보기"
         :page/hide-name "페이지 이름 숨기기"
-        :block/name "페이지 일므"
+        :block/name "페이지 이름"
         :page/last-modified "마지막 편집 시간:"
         :page/new-title "새 문서의 제목이 무엇입니까?"
         :page/earlier "이전"
@@ -4057,7 +4079,7 @@
         :file-sync/other-user-graph "현재 로컬 그래프가 다른 유저의 리모트 그래프와 충돌합니다. 동기화를 시작할 수 없습니다."
         :file-sync/graph-deleted "현재 리모트 그래프를 삭제했습니다."
         }
-     
+
      :tongue/fallback :en})
 
 (def languages [{:label "English" :value :en}

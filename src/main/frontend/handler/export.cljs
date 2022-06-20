@@ -1,5 +1,6 @@
 (ns frontend.handler.export
-  (:require [cljs.pprint :as pprint]
+  (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+            [cljs.pprint :as pprint]
             [clojure.set :as s]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -9,19 +10,23 @@
             [frontend.extensions.zip :as zip]
             [frontend.external.roam-export :as roam-export]
             [frontend.format :as f]
+            [frontend.format.mldoc :as mldoc]
             [frontend.format.protocol :as fp]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.publishing.html :as html]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.format.mldoc :as mldoc]
+            [frontend.util.property :as property]
+            [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.util :as gp-util]
-            [goog.dom :as gdom]
             [promesa.core :as p]
-            [frontend.util.property :as property])
-  (:import [goog.string StringBuffer]))
+            [frontend.handler.notification :as notification])
+  (:import
+   [goog.string StringBuffer]))
 
 (defn- get-page-content
   [repo page]
@@ -385,6 +390,18 @@
                                 :format (gp-util/get-format path)})))))
 
 
+(defn- export-file-on-mobile [data path]
+  (p/catch
+      (.writeFile Filesystem (clj->js {:path path
+                                       :data data
+                                       :encoding (.-UTF8 Encoding)
+                                       :recursive true}))
+      (notification/show! "Export succeeded! You can find you exported file in the root directory of your graph." :success)
+    (fn [error]
+        (notification/show! "Export failed!" :error)
+        (log/error :export-file-failed error))))
+
+
 (defn export-repo-as-markdown!
   [repo]
   (when-let [files (get-file-contents-with-suffix repo)]
@@ -479,13 +496,17 @@
 
 (defn export-repo-as-edn-v2!
   [repo]
-  (when-let [data-str (some->> (export-repo-as-edn-str repo)
-                               js/encodeURIComponent
-                               (str "data:text/edn;charset=utf-8,"))]
-    (when-let [anchor (gdom/getElement "download-as-edn-v2")]
-      (.setAttribute anchor "href" data-str)
-      (.setAttribute anchor "download" (file-name repo :edn))
-      (.click anchor))))
+  (when-let [edn-str (export-repo-as-edn-str repo)]
+    (let [data-str (some->> edn-str
+                            js/encodeURIComponent
+                            (str "data:text/edn;charset=utf-8,"))
+          filename (file-name repo :edn)]
+     (if (mobile-util/native-platform?)
+       (export-file-on-mobile edn-str filename)
+       (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+         (.setAttribute anchor "href" data-str)
+         (.setAttribute anchor "download" filename)
+         (.click anchor))))))
 
 (defn- nested-update-id
   [vec-tree]
@@ -504,12 +525,15 @@
               nested-update-id
               clj->js
               js/JSON.stringify)
+          filename (file-name repo :json)
           data-str (str "data:text/json;charset=utf-8,"
                         (js/encodeURIComponent json-str))]
-      (when-let [anchor (gdom/getElement "download-as-json-v2")]
-        (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (file-name repo :json))
-        (.click anchor)))))
+      (if (mobile-util/native-platform?)
+        (export-file-on-mobile json-str filename)
+        (when-let [anchor (gdom/getElement "download-as-json-v2")]
+          (.setAttribute anchor "href" data-str)
+          (.setAttribute anchor "download" filename)
+          (.click anchor))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

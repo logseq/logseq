@@ -17,6 +17,7 @@
   white-space: nowrap;
 
   > .l {
+    @apply pl-4;
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
@@ -24,8 +25,8 @@
   }
 
   > .r {
+    @apply pr-4;
     align-items: center;
-    padding-right: 0.5rem;
     flex: 1;
     justify-content: flex-end;
   }
@@ -41,10 +42,7 @@
     transform: scale(0.8);
   }
 
-  a.button {
-    margin: 0 4px;
-    height: 30px;
-    min-width: 30px;
+  .button {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -53,6 +51,11 @@
     .ti {
       font-size: 20px;
     }
+  }
+
+  .ui-items-container .button {
+    width: auto;
+    padding: 0 8px;
   }
 
   svg.warning {
@@ -119,18 +122,6 @@
       top: 1px;
     }
   }
-
-  &-left-menu {
-    &.button {
-      margin: 0;
-      padding: 0;
-    }
-
-    > .inner {
-      line-height: 0;
-      padding: 3px;
-    }
-  }
 }
 
 .is-electron.is-mac .cp__header {
@@ -144,7 +135,7 @@
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
-  padding-left: 0;
+  padding-left: 1rem;
 }
 
 .cp__header a, .cp__header svg {
@@ -191,11 +182,9 @@
   height: 14px;
 }
 
-a.button {
-  padding: 0.25rem;
-  opacity: 0.6;
+.button {
+  @apply h-8 px-2.5 py-1 rounded-md opacity-60;
   display: block;
-  border-radius: 4px;
   user-select: none;
 
   &:hover, &.active {
@@ -210,6 +199,15 @@ a.button {
   &:active {
     opacity: .7;
   }
+}
+
+.button.icon {
+  @apply w-8 h-8 p-1;
+}
+
+.button.icon.add-graph-btn {
+    width: unset;
+    margin: 0 6px;
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
@@ -257,7 +255,7 @@ html.is-native-ipad {
       display: flex;
     }
 
-    a.button {
+    .button {
       opacity: 1;
     }
   }

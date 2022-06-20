@@ -18,7 +18,7 @@
   cljs-http/cljs-http                   {:mvn/version "0.1.46"}
   org.babashka/sci                      {:mvn/version "0.3.2"}
   hickory/hickory                       {:git/url "https://github.com/logseq/hickory"
-                                         :sha     "9c2c2f1fc2c45efaad906e0faabc3201278deeaa"}
+                                         :sha     "86baee0319a66b7921719a5d2345e09734b23650"}
   hiccups/hiccups                       {:mvn/version "0.3.0"}
   tongue/tongue                         {:mvn/version "0.4.4"}
   org.clojure/core.async                {:mvn/version "1.3.610"}
@@ -47,5 +47,5 @@
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.28"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2022.05.31"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

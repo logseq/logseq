@@ -130,18 +130,19 @@
                 file)
          file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
-     (graph-parser/parse-file
-      (db/get-db repo-url false)
-      file
-      content
-      (merge options
-             {:new? new?
-              :delete-blocks-fn (partial get-delete-blocks repo-url)
-              :extract-options {:user-config (state/get-config)
-                                :date-formatter (state/get-date-formatter)
-                                :page-name-order (state/page-name-order)
-                                :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                :supported-formats (gp-config/supported-formats)}})))))
+     (:tx
+      (graph-parser/parse-file
+       (db/get-db repo-url false)
+       file
+       content
+       (merge options
+              {:new? new?
+               :delete-blocks-fn (partial get-delete-blocks repo-url)
+               :extract-options {:user-config (state/get-config)
+                                 :date-formatter (state/get-date-formatter)
+                                 :page-name-order (state/page-name-order)
+                                 :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                 :supported-formats (gp-config/supported-formats)}}))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
@@ -155,16 +156,18 @@
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content
                                        (assoc (when original-content {:old-content original-content})
-                                              :skip-compare? skip-compare?)))]
+                                              :skip-compare? skip-compare?)))
+        opts {:new-graph? new-graph?
+              :from-disk? from-disk?}]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]
           (db/transact! repo
             [[:db/retract page-id :block/alias]
-             [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content {:new-graph? new-graph?
-                                        :from-disk? from-disk?}))
-      (db/set-file-content! repo path content))
+             [:db/retract page-id :block/tags]]
+            opts))
+        (reset-file! repo path content opts))
+      (db/set-file-content! repo path content opts))
     (util/p-handle (write-file!)
                    (fn [_]
                      (when (= path (config/get-config-path repo))
@@ -258,6 +261,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [dir (config/get-repo-dir repo)]
+      (fs/unwatch-dir! dir)
       (fs/watch-dir! dir))))
 
 (defn create-metadata-file

@@ -45,4 +45,4 @@
 (defn init []
   (when-not config/dev?
     (let [config (clj->js config)]
-     (Sentry/init config))))
+      (Sentry/init config))))

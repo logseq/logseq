@@ -1,4 +1,4 @@
-(ns logseq.graph-parser.db.schema)
+(ns logseq.db.schema)
 
 (defonce version 1)
 (defonce ast-version 1)

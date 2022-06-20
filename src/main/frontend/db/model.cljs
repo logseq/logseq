@@ -8,15 +8,15 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [logseq.graph-parser.db.schema :as db-schema]
+            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
-            [frontend.db.rules :refer [rules]]
-            [logseq.graph-parser.db.default :as default-db]
+            [logseq.db.rules :refer [rules]]
+            [logseq.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
 
 ;; lazy loading
@@ -166,6 +166,21 @@
              ;; [?file :file/last-modified-at ?modified-at]
              ]
            db)
+         (seq)
+         ;; (sort-by last)
+         (reverse))))
+
+(defn get-files-v2
+  [repo]
+  (when-let [db (conn/get-db repo)]
+    (->> (d/q
+          '[:find ?file ?path
+            ;; ?modified-at
+            :where
+            [?file :file/path ?path]
+            ;; [?file :file/last-modified-at ?modified-at]
+            ]
+          db)
          (seq)
          ;; (sort-by last)
          (reverse))))
@@ -801,13 +816,6 @@
   (when-let [block (:block/parent (get-block-parents-v2 repo block-id))]
     (->> (tree-seq map? (fn [x] [(:block/parent x)]) block)
          (some util/collapsed?))))
-
-(defn block-collapsed?
-  ([block-id]
-   (block-collapsed? (state/get-current-repo) block-id))
-  ([repo block-id]
-   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
-     (util/collapsed? block))))
 
 (defn get-block-page
   [repo block-id]
@@ -1457,11 +1465,13 @@
       (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map util/page-name-sanity-lc pages)))))
 
 (defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (let [tx-data {:file/path path
-                   :file/content content}]
-      (db-utils/transact! repo [tx-data] {:skip-refresh? true}))))
+  ([repo path content]
+   (set-file-content! repo path content {}))
+  ([repo path content opts]
+   (when (and repo path)
+     (let [tx-data {:file/path path
+                    :file/content content}]
+       (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
 (defn get-pre-block
   [repo page-id]

@@ -179,6 +179,73 @@
       (outliner-core/indent-outdent-blocks! [(get-block 6) (get-block 9)] true))
     (is (= [4 5 6 9] (get-children 3)))))
 
+(deftest test-indent-blocks-regression-5604
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14, 15
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14) (get-block 15)] false))
+    (is (= [2 12 13 14 15 16] (get-children 22))))
+  (testing "
+  [22 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]]
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]                         ; outdents 13, 14
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+    (transact-tree! tree)
+    (outliner-tx/transact!
+      {:graph test-db}
+      (outliner-core/indent-outdent-blocks! [(get-block 13) (get-block 14)] false))
+    (is (= [2 12 13 14 16] (get-children 22)))))
+
+(deftest test-fix-top-level-blocks
+  (testing "no need to fix"
+    (let [blocks [{:block/uuid #uuid "62aa668b-e258-445d-aef6-5510054ff495",
+                   :block/properties {},
+                   :block/left #:db{:id 144},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "a",
+                   :db/id 145,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668d-65d1-440c-849b-a0717f691193",
+                   :block/properties {},
+                   :block/left #:db{:id 145},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "b",
+                   :db/id 146,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}
+                  {:block/uuid #uuid "62aa668e-f866-48ee-b8fe-737e101c548d",
+                   :block/properties {},
+                   :block/left #:db{:id 146},
+                   :block/format :markdown,
+                   :block/level 1,
+                   :block/content "c",
+                   :db/id 147,
+                   :block/parent #:db{:id 144},
+                   :block/page #:db{:id 144}}]]
+      (= blocks (outliner-core/fix-top-level-blocks blocks)))))
+
 (deftest test-outdent-blocks
   (testing "
   [1 [[2 [[3]
@@ -380,7 +447,9 @@
 (defn transact-random-tree!
   []
   (let [tree (gen-safe-tree)]
-    (transact-tree! tree)))
+    (if (seq tree)
+      (transact-tree! tree)
+      (transact-random-tree!))))
 
 (defn get-datoms
   []
@@ -415,16 +484,13 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 200]
+      (dotimes [_i 100]
         ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
         (let [total (get-blocks-count)]
-          ;; (when (not= total (count @*random-blocks))
-          ;;   (defonce wrong-db (db/get-db test-db))
-          ;;   (defonce random-blocks @*random-blocks))
           (is (= total (count @*random-blocks))))))))
 
 (deftest ^:long random-deletes
@@ -482,16 +548,17 @@
           *random-blocks (atom c1)]
       (dotimes [_i 100]
         ;; (prn "Random move indent/outdent: " i)
-        (let [blocks (gen-blocks)]
+        (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
-                                  (set/union old (set (map :block/uuid blocks)))))
-          (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
-          (when (seq blocks)
-            (outliner-tx/transact! {:graph test-db}
-              (outliner-core/indent-outdent-blocks! blocks (gen/generate gen/boolean)))
-            (let [total (get-blocks-count)]
-              (is (= total (count @*random-blocks))))))))))
+                                  (set/union old (set (map :block/uuid new-blocks)))))
+          (insert-blocks! new-blocks (get-random-block))
+          (let [blocks (get-random-successive-blocks)
+                indent? (gen/generate gen/boolean)]
+            (when (seq blocks)
+              (outliner-tx/transact! {:graph test-db}
+                (outliner-core/indent-outdent-blocks! blocks indent?))
+              (let [total (get-blocks-count)]
+                (is (= total (count @*random-blocks)))))))))))
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"

@@ -223,5 +223,5 @@ test('invalid page props #3944', async ({ page, block }) => {
   await block.mustFill('public:: true\nsize:: 65535')
   await page.press('textarea >> nth=0', 'Enter')
   // Force rendering property block
-  await block.clickNext()
+  await block.enterNext()
 })

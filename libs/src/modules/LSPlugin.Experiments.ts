@@ -24,7 +24,7 @@ export class LSPluginExperiments {
     )
   }
 
-  private invokeExperMethod(type: string, ...args: Array<any>) {
+  public invokeExperMethod(type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
     type = safeSnakeCase(type)?.toLowerCase()
     return host.logseq.api['exper_' + type]?.apply(host, args)

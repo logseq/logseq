@@ -1,6 +1,6 @@
-(ns logseq.graph-parser.db
-  (:require [logseq.graph-parser.db.default :as default-db]
-            [logseq.graph-parser.db.schema :as db-schema]
+(ns logseq.db
+  (:require [logseq.db.default :as default-db]
+            [logseq.db.schema :as db-schema]
             [datascript.core :as d]))
 
 (defn start-conn

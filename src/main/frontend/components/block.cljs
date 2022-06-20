@@ -1560,7 +1560,9 @@
                      (if collapsed?
                        (editor-handler/expand-block! uuid)
                        (editor-handler/collapse-block! uuid))))}
-      [:span {:class (if control-show? "control-show cursor-pointer" "control-hide")}
+      [:span {:class (if (and control-show?
+                              (or collapsed?
+                                  (editor-handler/collapsable? uuid {:semantic? true}))) "control-show cursor-pointer" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
                                    (bullet-on-click event block uuid))}
@@ -1919,11 +1921,19 @@
     (if (and meta? (not (state/get-edit-input-id)))
       (do
         (util/stop e)
-        (state/conj-selection-block! (gdom/getElement block-id) :down))
+        (state/conj-selection-block! (gdom/getElement block-id) :down)
+        (when (and block-id (not (state/get-selection-start-block)))
+          (state/set-selection-start-block! block-id)))
       (when (contains? #{1 0} button)
         (when-not (target-forbidden-edit? target)
-          (if (and shift? (state/get-selection-start-block))
+          (cond
+            (and shift? (state/get-selection-start-block-or-first))
             (editor-handler/highlight-selection-area! block-id)
+
+            shift?
+            (util/clear-selection!)
+
+            :else
             (do
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
@@ -2029,7 +2039,7 @@
        (merge attrs))
 
      [:<>
-      [:div.flex.flex-row.justify-between
+      [:div.flex.flex-row.justify-between.block-content-inner
        [:div.flex-1
         (cond
           (seq title)
@@ -2306,13 +2316,10 @@
   (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
-  [uuid e *control-show? block-id doc-mode?]
+  [e *control-show? block-id doc-mode?]
   (when-not @*dragging?
     (util/stop e)
-    (when (or
-           (model/block-collapsed? uuid)
-           (editor-handler/collapsable? uuid {:semantic? true}))
-      (reset! *control-show? true))
+    (reset! *control-show? true)
     (when-let [parent (gdom/getElement block-id)]
       (let [node (.querySelector parent ".bullet-container")]
         (when doc-mode?
@@ -2474,7 +2481,7 @@
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel block-handler/on-touch-cancel
        :on-mouse-over (fn [e]
-                        (block-mouse-over uuid e *control-show? block-id doc-mode?))
+                        (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
@@ -2791,12 +2798,12 @@
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
            ;;insert an "edit" button in the query view
-           [:a.opacity-70.hover:opacity-100.svg-small.inline 
-            {:on-mouse-down (fn [e]
-                              (util/stop e)
-                              (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-            svg/edit]]
-          
+           (when-not built-in?
+            [:a.opacity-70.hover:opacity-100.svg-small.inline
+                      {:on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+                      svg/edit])]
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))

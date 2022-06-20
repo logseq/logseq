@@ -14,7 +14,8 @@
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.fs :as fs]))
 
 ;; all IPC paths must be normalized! (via gp-util/path-normalize)
 
@@ -53,15 +54,10 @@
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "unlinkDir" type) dir)
-          (do
-            (state/pub-event! [:notification/show
-                               {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")
-                                :status :error
-                                :clear? false}])
-            (state/update-state! :file/unlinked-dirs (fn [dirs] (conj dirs dir))))
+          (state/pub-event! [:graph/dir-gone dir])
 
-          (= "addDir" type)
-          (state/update-state! :file/unlinked-dirs (fn [dirs] (disj dirs dir)))
+          (and (= "addDir" type) dir)
+          (state/pub-event! [:graph/dir-back repo dir])
 
           (contains? (:file/unlinked-dirs @state/state) dir)
           nil
@@ -90,9 +86,11 @@
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
-          (when-let [page-name (db/get-file-page path)]
-            (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #() :delete-file? false))
+          (p/let [dir-exists? (fs/file-exists? dir "")]
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :unlink-file? true))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
