@@ -17,6 +17,9 @@ module.exports = {
           800: '#01222a',
         },
       },
+      'fontSize': {
+        '6xl': '4rem'
+      }
     },
   },
   plugins: [

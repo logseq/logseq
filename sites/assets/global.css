@@ -36,7 +36,8 @@ body {
   }
 
   .text-1 {
-    padding-top: 90px;
+    padding-top: 75px;
+    line-height: 4.25rem;
   }
 
   .image-2 {
@@ -208,5 +209,6 @@ body {
 
   > .hd {
     letter-spacing: 2px;
+    line-height: 3.8rem;
   }
 }
