@@ -131,18 +131,19 @@
                 file)
          file (gp-util/path-normalize file)
          new? (nil? (db/entity [:file/path file]))]
-     (graph-parser/parse-file
-      (db/get-db repo-url false)
-      file
-      content
-      (merge options
-             {:new? new?
-              :delete-blocks-fn (partial get-delete-blocks repo-url)
-              :extract-options {:user-config (state/get-config)
-                                :date-formatter (state/get-date-formatter)
-                                :page-name-order (state/page-name-order)
-                                :block-pattern (config/get-block-pattern (gp-util/get-format file))
-                                :supported-formats (gp-config/supported-formats)}})))))
+     (:tx
+      (graph-parser/parse-file
+       (db/get-db repo-url false)
+       file
+       content
+       (merge options
+              {:new? new?
+               :delete-blocks-fn (partial get-delete-blocks repo-url)
+               :extract-options {:user-config (state/get-config)
+                                 :date-formatter (state/get-date-formatter)
+                                 :page-name-order (state/page-name-order)
+                                 :block-pattern (config/get-block-pattern (gp-util/get-format file))
+                                 :supported-formats (gp-config/supported-formats)}}))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file

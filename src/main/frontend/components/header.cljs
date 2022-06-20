@@ -24,11 +24,10 @@
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
     [:button.button.icon.inline
-     {:href     (rfe/href :home)
-      :on-click #(do
+     {:on-click #(do
                    (when (mobile-util/native-iphone?)
                      (state/set-left-sidebar-open! false))
-                   (route-handler/go-to-journals!))}
+                   (route-handler/redirect-to-home!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login < rum/reactive
