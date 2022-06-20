@@ -24,14 +24,15 @@
   (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
         file-content [{:file/path file}]
-        tx (if (contains? gp-config/mldoc-support-formats format)
+        {:keys [tx ast]}
+        (if (contains? gp-config/mldoc-support-formats format)
              (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
                                             :date-formatter "MMM do, yyyy"
                                             :supported-formats (gp-config/supported-formats)}
                                            extract-options
                                            {:db @conn})
-                   [pages blocks]
-                   (extract/extract-blocks-pages file content extract-options')
+                   {:keys [pages blocks ast]}
+                   (extract/extract file content extract-options')
                    delete-blocks (delete-blocks-fn (first pages) file)
                    block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                    block-refs-ids (->> (mapcat :block/refs blocks)
@@ -44,13 +45,16 @@
                    pages (extract/with-ref-pages pages blocks)
                    pages-index (map #(select-keys % [:block/name]) pages)]
                ;; does order matter?
-               (concat file-content pages-index delete-blocks pages block-ids blocks))
-             file-content)
+               {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
+                :ast ast})
+             {:tx file-content})
         tx (concat tx [(cond-> {:file/path file}
                                new?
                                ;; TODO: use file system timestamp?
                                (assoc :file/created-at (date-time-util/time-ms)))])]
-    (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))))
+    {:tx
+     (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))
+     :ast ast}))
 
 (defn filter-files
   "Filters files in preparation for parsing. Only includes files that are

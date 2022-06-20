@@ -440,14 +440,13 @@
 
      [:div.flex.items-center.r
       ;; extra info
-      (let [{:keys [protocol host port]} agent-opts]
-        (when (every? not-empty [protocol host port])
-          (ui/button
-           [:span.flex.items-center.text-indigo-500
-            (ui/icon "world-download") (str protocol "://" host ":" port)]
-           :small? true
-           :intent "link"
-           :on-click #(state/pub-event! [:go/proxy-settings agent-opts]))))
+      (when-let [proxy-val (state/http-proxy-enabled-or-val?)]
+        (ui/button
+         [:span.flex.items-center.text-indigo-500
+          (ui/icon "world-download") proxy-val]
+         :small? true
+         :intent "link"
+         :on-click #(state/pub-event! [:go/proxy-settings agent-opts])))
 
       ;; search
       (panel-tab-search search-key *search-key *search-ref)
@@ -814,7 +813,7 @@
        (when-let [^js el (rum/deref *el)]
          (js/LSPlugin.pluginHelpers.setupInjectedUI.call
           pl #js {:slot (.-id el) :key key :template template} #js {})))
-     [])
+     [template])
 
     (if-not (nil? pl)
       [:div
