@@ -47,7 +47,7 @@ test('drop to upper left', async ({ page }) => {
   await bullet.dragTo(where, {
     targetPosition: {
       x: 30,
-      y: 5
+      y: 2
     }
   })
 
