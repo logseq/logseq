@@ -9,17 +9,17 @@ import {
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
 import * as React from 'react'
-import type { Shape } from '~lib'
+import { LogseqPortalShape, Shape } from '~lib'
 
 export function usePaste() {
-  return React.useCallback<TLReactCallbacks<Shape>['onFileDrop']>(async (app, { point }) => {
+  return React.useCallback<TLReactCallbacks<Shape>['onPaste']>(async (app, { point }) => {
     const assetId = uniqueId()
     interface ImageAsset extends TLAsset {
       size: number[]
     }
 
     const assetsToCreate: ImageAsset[] = []
-    const shapesToCreate: TLShapeModel[] = []
+    const shapesToCreate: Shape['props'][] = []
     const bindingsToCreate: TLBinding[] = []
 
     async function handleImage(item: ClipboardItem) {
@@ -47,64 +47,82 @@ export function usePaste() {
     }
 
     async function handleLogseqShapes(item: ClipboardItem) {
-      const plainTextType = item.types.find(type => type.startsWith('text/plain'))
-      if (plainTextType) {
-        const blob = await item.getType(plainTextType)
-        const rawText = await blob.text()
-        const data = JSON.parse(rawText)
-        if (data.type === 'logseq/whiteboard-shapes') {
-          const shapes = data.shapes as TLShapeModel[]
-          const commonBounds = BoundsUtils.getCommonBounds(
-            shapes.map(shape => ({
-              minX: shape.point?.[0] ?? point[0],
-              minY: shape.point?.[1] ?? point[1],
-              width: shape.size?.[0] ?? 4,
-              height: shape.size?.[1] ?? 4,
-              maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
-              maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
-            }))
-          )
-          const clonedShapes = shapes.map((shape: TLShapeModel) => {
-            return {
-              ...shape,
+      if (item.types.includes('text/plain')) {
+        const blob = await item.getType('text/plain')
+        const rawText = (await blob.text()).trim()
+
+        try {
+          const data = JSON.parse(rawText)
+          if (data.type === 'logseq/whiteboard-shapes') {
+            const shapes = data.shapes as TLShapeModel[]
+            const commonBounds = BoundsUtils.getCommonBounds(
+              shapes.map(shape => ({
+                minX: shape.point?.[0] ?? point[0],
+                minY: shape.point?.[1] ?? point[1],
+                width: shape.size?.[0] ?? 4,
+                height: shape.size?.[1] ?? 4,
+                maxX: (shape.point?.[0] ?? point[0]) + (shape.size?.[0] ?? 4),
+                maxY: (shape.point?.[1] ?? point[1]) + (shape.size?.[1] ?? 4),
+              }))
+            )
+            const clonedShapes = shapes.map((shape: TLShapeModel) => {
+              return {
+                ...shape,
+                id: uniqueId(),
+                parentId: app.currentPageId,
+                point: [
+                  point[0] + shape.point![0] - commonBounds.minX,
+                  point[1] + shape.point![1] - commonBounds.minY,
+                ],
+              }
+            })
+            shapesToCreate.push(...clonedShapes)
+
+            // Try to rebinding the shapes to the new assets
+            shapesToCreate.forEach((s, idx) => {
+              if (s.handles) {
+                Object.values(s.handles).forEach(h => {
+                  if (h.bindingId) {
+                    // try to bind the new shape
+                    const binding = app.currentPage.bindings[h.bindingId]
+                    // if the copied binding from/to is in the source
+                    const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
+                    const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
+                    if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
+                      const newBinding: TLBinding = {
+                        ...binding,
+                        id: uniqueId(),
+                        fromId: shapesToCreate[oldFromIdx].id,
+                        toId: shapesToCreate[oldToIdx].id,
+                      }
+                      bindingsToCreate.push(newBinding)
+                      h.bindingId = newBinding.id
+                    } else {
+                      h.bindingId = undefined
+                    }
+                  }
+                })
+              }
+            })
+            return true
+          }
+        } catch {
+          const blockRefEg = '((62af02d0-0443-42e8-a284-946c162b0f89))'
+          if (/^\(\(.*\)\)$/.test(rawText) && rawText.length === blockRefEg.length) {
+            const blockRef = rawText.slice(2, -2)
+            shapesToCreate.push({
+              ...LogseqPortalShape.defaultProps,
               id: uniqueId(),
               parentId: app.currentPageId,
-              point: [
-                point[0] + shape.point![0] - commonBounds.minX,
-                point[1] + shape.point![1] - commonBounds.minY,
-              ],
-            }
-          })
-          shapesToCreate.push(...clonedShapes)
-
-          // Try to rebinding the shapes to the new assets
-          shapesToCreate.forEach((s, idx) => {
-            if (s.handles) {
-              Object.values(s.handles).forEach(h => {
-                if (h.bindingId) {
-                  // try to bind the new shape
-                  const binding = app.currentPage.bindings[h.bindingId]
-                  // if the copied binding from/to is in the source
-                  const oldFromIdx = shapes.findIndex(s => s.id === binding.fromId)
-                  const oldToIdx = shapes.findIndex(s => s.id === binding.toId)
-                  if (binding && oldFromIdx !== -1 && oldToIdx !== -1) {
-                    const newBinding: TLBinding = {
-                      ...binding,
-                      id: uniqueId(),
-                      fromId: shapesToCreate[oldFromIdx].id,
-                      toId: shapesToCreate[oldToIdx].id,
-                    }
-                    bindingsToCreate.push(newBinding)
-                    h.bindingId = newBinding.id
-                  } else {
-                    h.bindingId = undefined
-                  }
-                }
-              })
-            }
-          })
+              point: [point[0], point[1]],
+              size: [600, 400],
+              pageId: blockRef,
+              blockType: 'B'
+            })
+          }
         }
       }
+      return false
     }
 
     // TODO: supporting other pasting formats
