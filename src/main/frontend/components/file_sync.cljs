@@ -43,6 +43,7 @@
         idle?              (contains? #{:idle} status)
         need-password?     (contains? #{:need-password} status)
         queuing?           (and idle? (boolean (seq queuing-files)))
+        no-active-files?        (every? #(nil? (seq %)) [downloading-files queuing-files uploading-files])
 
         turn-on            #(if-not synced-file-graph?
                               (let [repo       (state/get-current-repo)
@@ -58,7 +59,7 @@
                                                                         :GraphName graph-name
                                                                         :remote? true)
                                                                  r))
-                                                          (state/get-repos)))))))
+                                                             (state/get-repos)))))))
                               (fs-sync/sync-start))]
 
     [:div.cp__file-sync-indicator
@@ -93,6 +94,9 @@
 
           synced-file-graph?
           (concat
+           (when no-active-files?
+             [{:title [:p.flex.justify-center "No active files"]}])
+
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)
                          :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
@@ -102,6 +106,7 @@
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "uploading-" f)
                          :icon  (ui/icon "arrow-narrow-up")}) uploading-files)
+
            (when sync-state
              (map-indexed (fn [i f] (:time f)
                             (let [path (:path f)
@@ -123,7 +128,7 @@
           (when (and synced-file-graph? queuing?)
             [:div.px-2.py-1
              (ui/button "Sync now"
-                        :class "block"
+                        :class "block cursor-pointer"
                         :small? true
                         :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
           (when config/dev?
@@ -232,13 +237,13 @@
 (rum/defc pick-page-histories-for-sync
   [repo-url graph-uuid page-name page-entity]
   (let [[selected-page set-selected-page] (rum/use-state nil)
-        get-version-key #(or (:VersionUUID %) (:relative-path %))
-        file-uuid       (:FileUUID selected-page)
-        version-uuid    (:VersionUUID selected-page)
+        get-version-key    #(or (:VersionUUID %) (:relative-path %))
+        file-uuid          (:FileUUID selected-page)
+        version-uuid       (:VersionUUID selected-page)
         [version-content set-version-content] (rum/use-state nil)
         [list-ready? set-list-ready?] (rum/use-state false)
         [content-ready? set-content-ready?] (rum/use-state false)
-        *ref-contents   (rum/use-ref (atom {}))
+        *ref-contents      (rum/use-ref (atom {}))
         original-page-name (or (:block/original-name page-entity) page-name)]
 
     (rum/use-effect!
@@ -303,8 +308,8 @@
              version-content {:lineWrapping true :readOnly true :lineNumbers true})
             [:div.absolute.top-1.right-1.opacity-50.hover:opacity-100
              (ui/button "Restore"
-               :small? true
-               :on-click #(state/pub-event! [:file-sync-graph/restore-file (state/get-current-repo) page-entity version-content]))]]
+                        :small? true
+                        :on-click #(state/pub-event! [:file-sync-graph/restore-file (state/get-current-repo) page-entity version-content]))]]
            [:span.flex.p-15.items-center.justify-center (ui/loading "")]))]]
 
      ;; current version
