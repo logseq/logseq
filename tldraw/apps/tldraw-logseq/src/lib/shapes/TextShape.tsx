@@ -4,7 +4,6 @@ import { HTMLContainer, TLComponentProps, TLTextMeasure } from '@tldraw/react'
 import { TextUtils, TLBounds, TLResizeStartInfo, TLTextShape, TLTextShapeProps } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { CustomStyleProps, withClampedStyles } from './style-props'
-import { NumberInput } from '~components/inputs/NumberInput'
 
 export interface TextShapeProps extends TLTextShapeProps, CustomStyleProps {
   borderRadius: number
@@ -33,7 +32,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     padding: 4,
     fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
     borderRadius: 0,
-    stroke: '#000000',
+    stroke: 'var(--tl-foreground)',
     fill: '#ffffff',
     strokeWidth: 2,
     opacity: 1,

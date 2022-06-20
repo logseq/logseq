@@ -12,7 +12,7 @@ const isDev = process.env.NODE_ENV === 'development'
 export const AppUI = observer(function AppUI() {
   return (
     <>
-    {/* <ToolBar /> */}
+      {/* <ToolBar /> */}
       <Minimap />
       {isDev && <StatusBar />}
       {isDev && <DevTools />}

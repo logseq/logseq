@@ -1,9 +1,10 @@
 import * as React from 'react'
-import { useRendererContext } from '~hooks'
+import { useApp, useRendererContext } from '~hooks'
 import { TLTargetType } from '@tldraw/core'
 import type { TLReactCustomEvents } from '~types'
 
 export function useKeyboardEvents() {
+  const app = useApp()
   const { callbacks } = useRendererContext()
 
   React.useEffect(() => {
@@ -15,6 +16,14 @@ export function useKeyboardEvents() {
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    document.addEventListener('paste', (e) => {
+      e.preventDefault()
+      app.paste(e)
+    })
+    document.addEventListener('copy', (e) => {
+      e.preventDefault()
+      app.copy()
+    })
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)

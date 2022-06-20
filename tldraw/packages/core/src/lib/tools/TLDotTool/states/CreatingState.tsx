@@ -20,13 +20,15 @@ export class CreatingState<
 
   onEnter = () => {
     const { Shape } = this.tool
-    this.offset = [Shape.defaultProps.size[0] / 2, Shape.defaultProps.size[1] / 2]
     const shape = new Shape({
       id: uniqueId(),
       parentId: this.app.currentPage.id,
       point: Vec.sub(this.app.inputs.originPoint, this.offset),
       size: Shape.defaultProps.size,
     } as any)
+    if (Shape.smart) {
+      shape.setDraft(true)
+    }
     this.creatingShape = shape
   }
 

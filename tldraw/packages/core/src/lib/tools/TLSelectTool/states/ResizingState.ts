@@ -66,28 +66,30 @@ export class ResizingState<
     this.initialCommonBounds = { ...selectionBounds }
     // @ts-expect-error maybe later
     this.snapshots = Object.fromEntries(
-      selectedShapesArray.filter(s => !s.draft).map(shape => {
-        const bounds = { ...shape.bounds }
-        const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
-        return [
-          shape.id,
-          {
-            props: shape.serialized,
-            bounds,
-            transformOrigin: [
-              (cx - this.initialCommonBounds.minX) / this.initialCommonBounds.width,
-              (cy - this.initialCommonBounds.minY) / this.initialCommonBounds.height,
-            ],
-            innerTransformOrigin: [
-              (cx - initialInnerBounds.minX) / initialInnerBounds.width,
-              (cy - initialInnerBounds.minY) / initialInnerBounds.height,
-            ],
-            isAspectRatioLocked:
-              shape.props.isAspectRatioLocked ||
-              Boolean(!shape.canChangeAspectRatio || shape.props.rotation),
-          },
-        ]
-      })
+      selectedShapesArray
+        .filter(s => !s.draft)
+        .map(shape => {
+          const bounds = { ...shape.bounds }
+          const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
+          return [
+            shape.id,
+            {
+              props: shape.serialized,
+              bounds,
+              transformOrigin: [
+                (cx - this.initialCommonBounds.minX) / this.initialCommonBounds.width,
+                (cy - this.initialCommonBounds.minY) / this.initialCommonBounds.height,
+              ],
+              innerTransformOrigin: [
+                (cx - initialInnerBounds.minX) / initialInnerBounds.width,
+                (cy - initialInnerBounds.minY) / initialInnerBounds.height,
+              ],
+              isAspectRatioLocked:
+                shape.props.isAspectRatioLocked ||
+                Boolean(!shape.canChangeAspectRatio || shape.props.rotation),
+            },
+          ]
+        })
     )
     selectedShapesArray.forEach(shape => shape.onResizeStart?.({ isSingle: this.isSingle }))
   }
@@ -163,8 +165,9 @@ export class ResizingState<
         scaleX < 0,
         scaleY < 0
       )
+      const canResizeAny = shape.canResize.some(r => r)
       // If the shape can't resize and it's the only shape selected, bail
-      if (!(shape.canResize || shape.props.isSizeLocked) && this.isSingle) {
+      if (!(canResizeAny || shape.props.isSizeLocked) && this.isSingle) {
         return
       }
       let scale = [scaleX, scaleY]
@@ -183,7 +186,7 @@ export class ResizingState<
         rotation *= -1
       }
       // If the shape is aspect ratio locked or size locked...
-      if (isAspectRatioLocked || !shape.canResize || shape.props.isSizeLocked) {
+      if (isAspectRatioLocked || !canResizeAny || shape.props.isSizeLocked) {
         relativeBounds.width = initialShapeBounds.width
         relativeBounds.height = initialShapeBounds.height
         if (isAspectRatioLocked) {

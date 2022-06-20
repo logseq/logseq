@@ -17,7 +17,7 @@ export const StatusBar = observer(function StatusBar() {
     <div className="statusbar">
       {app.selectedTool.id} | {app.selectedTool.currentState.id}
       <div style={{ flex: 1 }} />
-      <div id="tl-statusbar-anchor" />
+      <div id="tl-statusbar-anchor" style={{ display: 'flex' }} />
     </div>
   )
 })

@@ -18,6 +18,7 @@ interface EdgeHandleProps {
   targetSize: number
   edge: TLResizeEdge
   isHidden?: boolean
+  disabled?: boolean
 }
 
 export const EdgeHandle = observer<EdgeHandleProps>(function EdgeHandle({
@@ -27,13 +28,14 @@ export const EdgeHandle = observer<EdgeHandleProps>(function EdgeHandle({
   height,
   targetSize,
   edge,
+  disabled,
   isHidden,
 }: EdgeHandleProps): JSX.Element {
   const events = useBoundsEvents(edge)
 
   return (
     <rect
-      pointerEvents={isHidden ? 'none' : 'all'}
+      pointerEvents={(isHidden || disabled) ? 'none' : 'all'}
       className={'tl-transparent tl-edge-handle ' + (isHidden ? '' : edgeClassnames[edge])}
       aria-label={`${edge} target`}
       opacity={isHidden ? 0 : 1}

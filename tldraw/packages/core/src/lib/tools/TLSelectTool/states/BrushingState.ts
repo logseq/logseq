@@ -48,6 +48,7 @@ export class BrushingState<
           ? BoundsUtils.boundsContain(brushBounds, shape.rotatedBounds)
           : shape.hitTestBounds(brushBounds)
       )
+      .filter(s => !s.draft)
 
     if (shiftKey) {
       if (hits.every(hit => this.initialSelectedShapes.includes(hit))) {

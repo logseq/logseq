@@ -1,7 +1,6 @@
+import '../../../tailwind.all.css'
 import React from 'react'
 import ReactDOM from 'react-dom'
-import 'tldraw-logseq/styles.css'
-import '../../../public/static/css/common.css'
 
 import App from './App'
 

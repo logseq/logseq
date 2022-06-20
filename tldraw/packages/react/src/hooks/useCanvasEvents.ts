@@ -74,23 +74,3 @@ export function useCanvasEvents() {
 
   return events
 }
-
-function fileToBase64(file: Blob): Promise<string | ArrayBuffer | null> {
-  return new Promise((resolve, reject) => {
-    if (file) {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = error => reject(error)
-      reader.onabort = error => reject(error)
-    }
-  })
-}
-
-function getSizeFromSrc(dataURL: string): Promise<number[]> {
-  return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => resolve([img.width, img.height])
-    img.src = dataURL
-  })
-}

@@ -30,7 +30,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
       start: { id: 'start', canBind: true, point: [0, 0] },
       end: { id: 'end', canBind: true, point: [1, 1] },
     },
-    stroke: '#000000',
+    stroke: 'var(--tl-foreground)',
     fill: '#ffffff',
     strokeWidth: 1,
     opacity: 1,

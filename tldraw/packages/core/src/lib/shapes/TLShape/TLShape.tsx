@@ -29,6 +29,7 @@ export interface TLShapeProps {
   parentId: string
   name?: string
   point: number[]
+  size?: number[]
   scale?: number[]
   rotation?: number
   handles?: Record<string, TLHandle>
@@ -97,7 +98,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   // Behavior options
   canChangeAspectRatio: TLFlag = true
   canUnmount: TLFlag = true
-  canResize: TLFlag = true
+  canResize: [TLFlag, TLFlag] = [true, true]
   canScale: TLFlag = true
   canFlip: TLFlag = true
   canEdit: TLFlag = false
@@ -108,7 +109,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   bindingDistance = BINDING_DISTANCE
 
   // For smart shape
-  @observable draft = false
+  @observable private _draft = false
   @observable private isDirty = false
   @observable private lastSerialized: TLShapeModel<P> | undefined
 
@@ -118,8 +119,13 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this.props.id
   }
 
+  @computed
+  get draft() {
+    return this._draft
+  }
+
   @action setDraft(draft: boolean) {
-    this.draft = draft
+    this._draft = draft
   }
 
   @action setIsDirty(isDirty: boolean) {

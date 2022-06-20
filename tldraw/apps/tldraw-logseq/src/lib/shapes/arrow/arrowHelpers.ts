@@ -46,7 +46,7 @@ export function getArrowPath(
 ) {
   const strokeWidth = style.strokeWidth
   const arrowDist = Vec.dist(start, end)
-  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 8)
+  const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * 16)
   const path: (string | number)[] = []
   path.push(`M ${start} L ${end}`)
   if (decorationStart) {

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable } from 'mobx'
+import { action, computed, makeObservable, observable, toJS } from 'mobx'
 import { BoundsUtils, KeyUtils } from '~utils'
 import {
   TLSelectTool,
@@ -217,6 +217,7 @@ export class TLApp<
       currentPageId: this.currentPageId,
       selectedIds: Array.from(this.selectedIds.values()),
       pages: Array.from(this.pages.values()).map(page => page.serialized),
+      assets: Object.values(this.assets),
     }
   }
 
@@ -345,6 +346,28 @@ export class TLApp<
     return this
   }
 
+  copy = () => {
+    if (this.selectedShapesArray.length > 0) {
+      const tldrawString = JSON.stringify({
+        type: 'logseq/whiteboard-shapes',
+        shapes: this.selectedShapesArray.map(shape => shape.serialized),
+      })
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([tldrawString], { type: 'text/plain' }),
+        }),
+      ])
+    }
+  }
+
+  paste = (e?: ClipboardEvent) => {
+    this.notify('paste', {
+      point: this.inputs.currentPoint,
+    })
+    // This callback may be over-written manually, see useSetup.ts in React.
+    return void null
+  }
+
   dropFiles = (files: FileList, point?: number[]) => {
     this.notify('drop-files', {
       files: Array.from(files),
@@ -446,6 +469,12 @@ export class TLApp<
       this.selectionRotation = newSelectedShapes[0].props.rotation ?? 0
     } else {
       this.selectionRotation = 0
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        'setSelectedShapes',
+        newSelectedShapes.map(s => toJS(s.serialized))
+      )
     }
     return this
   }
@@ -598,6 +627,7 @@ export class TLApp<
     const { selectedShapesArray } = this
     return (
       this.isIn('select') &&
+      !this.isInAny('select.translating', 'select.pinching') &&
       ((selectedShapesArray.length === 1 && !selectedShapesArray[0]?.hideSelection) ||
         selectedShapesArray.length > 1)
     )
@@ -606,6 +636,7 @@ export class TLApp<
   @computed get showSelectionDetail() {
     return (
       this.isIn('select') &&
+      !this.isInAny('select.translating', 'select.pinching') &&
       this.selectedShapes.size > 0 &&
       !this.selectedShapesArray.every(shape => shape.hideSelectionDetail)
     )
@@ -655,7 +686,7 @@ export class TLApp<
         'select.pointingRotateHandle',
         'select.pointingResizeHandle'
       ) &&
-      selectedShapesArray.length > 0 &&
+      selectedShapesArray.length === 1 &&
       !selectedShapesArray.every(shape => shape.hideResizeHandles)
     )
   }

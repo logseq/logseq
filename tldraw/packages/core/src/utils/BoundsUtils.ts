@@ -323,7 +323,8 @@ export class BoundsUtils {
     handle: TLResizeCorner | TLResizeEdge | 'center',
     delta: number[],
     rotation = 0,
-    isAspectRatioLocked = false
+    isAspectRatioLocked = false,
+    [canResizeX, canResizeY] = [true, true]
   ): TLBounds & { scaleX: number; scaleY: number } {
     // Create top left and bottom right corners.
     const [ax0, ay0] = [bounds.minX, bounds.minY]

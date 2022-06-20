@@ -83,8 +83,11 @@ export class IdleState<
           const { selectionBounds, inputs } = this.app
           if (selectionBounds && PointUtils.pointInBounds(inputs.currentPoint, selectionBounds)) {
             this.tool.transition('pointingShapeBehindBounds', info)
-          } else {
+          } else if (!info.shape.draft) {
             this.tool.transition('pointingShape', info)
+          } else {
+            // as if clicking the canvas
+            this.tool.transition('pointingCanvas')
           }
         }
         break
