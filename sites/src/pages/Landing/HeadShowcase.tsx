@@ -1,5 +1,12 @@
-import { AppleLogo, ArrowSquareOut, CaretDown, CircleWavyQuestion, PlayCircle } from 'phosphor-react'
+import {
+  AppleLogo,
+  ArrowSquareOut,
+  CaretDown,
+  CircleWavyQuestion,
+  Play,
+} from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
+import { GlassCard } from '../../components/Cards'
 
 export function HeadShowcase () {
   return (
@@ -7,12 +14,14 @@ export function HeadShowcase () {
       <div className="inner flex h-full">
         <div className="item-wrap relative flex-1">
           {/* text layer*/}
-          <div className="text-1 z-0 w-full flex flex-col items-center tracking-wide">
+          <div
+            className="text-1 z-0 w-full flex flex-col items-center tracking-wide">
             <span className="text-6xl opacity-70">Connect your notes, </span>
             <strong className="flex text-6xl">
               increase understanding.
-              <sup className="translate-y-4 opacity-80">
-                <CircleWavyQuestion size={'18'}/>
+              <sup
+                className="translate-y-8 opacity-80 text-logseq-100 hover:opacity-60">
+                <CircleWavyQuestion size={28}/>
               </sup>
             </strong>
           </div>
@@ -23,7 +32,67 @@ export function HeadShowcase () {
 
           {/* cards layer */}
           <div className="cards-3 z-20">
+            <div className="r1 mb-3">
+              <GlassCard className={'a'}>
+                <div className="outliner-list-demo">
+                  <div className="outliner-list-item">
+                    <div className="content is-todo">
+                      <marker>NOW</marker>
+                      <span>
+                        Meeting with <a className={'ref'}>👥 Jessica</a>
+                      </span>
+                    </div>
 
+                    {/* children */}
+                    <div className="subs">
+                      <div className="outliner-list-item">
+                        <div className="content is-todo">
+                          <span>
+                            She mentioned her current read: <a
+                            className={'ref'}>📖 Book/Intertwingled</a>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
+            <div className="r2 flex space-x-3">
+              <GlassCard className={'b flex'}>
+                <div className="avatar flex items-center">
+                  <span className="avatar-img">Image</span>
+                </div>
+                <div className="info flex flex-col px-3 text-logseq-100">
+                  <strong className="text-2xl font-semibold text-logseq-50">Jessica</strong>
+                  <p className="py-0.5 opacity-80">👥 Person</p>
+                  <p className="py-0.5 opacity-80">👤 Jessica Albert</p>
+                </div>
+              </GlassCard>
+              <GlassCard className={'c'}>
+                <div className="avatar flex items-center">
+                  <span className="avatar-img">Image</span>
+                </div>
+                <div className="info flex flex-col px-3 text-logseq-100">
+                  <strong className="text-2xl font-semibold text-logseq-50">Intertwingled</strong>
+                  <p className="py-0.5 opacity-80">📖 Book</p>
+                  <p className="py-0.5 opacity-80">👤 Peter Morville</p>
+                </div>
+              </GlassCard>
+            </div>
+            <div className="r3 pt-3 px-24">
+              <GlassCard className={'d'}>
+                <div className="outliner-list-demo">
+                  <div className="outliner-list-item">
+                    <div className="content">
+                      <span>
+                        My notes on <a className="ref">📖Book / Intertwingled</a>:
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
           </div>
 
           {/*  action buttons */}
@@ -36,8 +105,8 @@ export function HeadShowcase () {
             </LSButton>
 
             <LSButton
-              leftIcon={<PlayCircle size={18} weight={'bold'}/>}
-              rightIcon={<ArrowSquareOut className={'opacity-70'}/>}
+              leftIcon={<Play size={18} weight={'bold'}/>}
+              rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
               className={'bg-logseq-600'}
             >
               Live Demo

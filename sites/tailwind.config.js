@@ -14,10 +14,12 @@ module.exports = {
           500: '#094b5a',
           600: '#023643',
           700: '#002B36',
-          800: '#01222A'
-        }
-      }
+          800: '#01222a',
+        },
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    require('tailwindcss-animate'),
+  ],
 }

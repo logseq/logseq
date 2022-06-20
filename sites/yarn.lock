@@ -1796,6 +1796,11 @@ svgo@^2.4.0:
     picocolors "^1.0.0"
     stable "^0.1.8"
 
+tailwindcss-animate@^1.0.5:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/tailwindcss-animate/-/tailwindcss-animate-1.0.5.tgz#a6720e3b0616e1ff922b32846729881c626a069d"
+  integrity sha512-UU3qrOJ4lFQABY+MVADmBm+0KW3xZyhMdRvejwtXqYOL7YjHYxmuREFAZdmVG5LPe5E9CAst846SLC4j5I3dcw==
+
 tailwindcss@^3.0.24:
   version "3.0.24"
   resolved "https://registry.yarnpkg.com/tailwindcss/-/tailwindcss-3.0.24.tgz#22e31e801a44a78a1d9a81ecc52e13b69d85704d"
