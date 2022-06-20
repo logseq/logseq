@@ -280,6 +280,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
     if (!deepEqual(updated, curr) || shapesToDelete.length) {
       transaction(() => {
+        this.app.history.resume()
         this.update({
           bindings: updated.bindings,
         })
