@@ -1,4 +1,5 @@
-const imageS1: any = new URL('./assets/tutorials-1.png', import.meta.url)
+import { FrameCorners } from 'phosphor-react'
+import { FloatGlassButton, imageS1 } from './common'
 
 export function TutorialFeaturesSlide () {
   return (
@@ -6,7 +7,8 @@ export function TutorialFeaturesSlide () {
       <div className="inner px-14">
         {/*  Tabs */}
         <ul className="tabs flex flex space-x-8 justify-around">
-          <li className="active"><span>🧑‍🎓</span><strong>Students</strong></li>
+          <li className="active"><span>🧑‍🎓</span><strong>Students</strong>
+          </li>
           <li><span>🖋</span><strong>Writers</strong></li>
           <li><span>🎓</span><strong>Academics</strong></li>
           <li><span>📆</span><strong>Project Managers</strong></li>
@@ -14,14 +16,14 @@ export function TutorialFeaturesSlide () {
         </ul>
 
         {/* Panel */}
-        <article className="panels">
+        <article className="panels relative">
           <div className="hd">
             <strong>
               <i>1</i>
               <i>2</i>
             </strong>
 
-            <h1 className='flex text-3xl justify-center'>
+            <h1 className="flex text-3xl justify-center">
               Capturing and structuring class notes
             </h1>
           </div>
@@ -29,6 +31,12 @@ export function TutorialFeaturesSlide () {
             <div className="wrap flex">
               <img src={imageS1} alt="images"/>
             </div>
+          </div>
+          <div className="ft absolute bottom-6 right-6">
+            <FloatGlassButton>
+              <FrameCorners className={'opacity-80 font-bold cursor-pointer'}
+                            size={28}/>
+            </FloatGlassButton>
           </div>
         </article>
       </div>

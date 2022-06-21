@@ -244,10 +244,10 @@
 
     > .hd {
       > strong {
-        @apply flex space-x-2 px-3 py-1;
+        @apply flex space-x-2 px-3 py-2;
 
         > i {
-          @apply flex-1 bg-logseq-100/10 rounded-md h-[5px] overflow-hidden;
+          @apply flex-1 bg-logseq-100/10 rounded-md h-[6px] overflow-hidden;
         }
       }
 
@@ -258,4 +258,70 @@
       @apply flex flex-col px-2 py-4;
     }
   }
+}
+
+.app-tutorial-tips {
+  @apply mx-16 my-8;
+
+  > .hd {
+    h1, h2 {
+      font-size: 60px;
+      line-height: 1.2em;
+    }
+
+    h1, h3 {
+      @apply opacity-60;
+    }
+
+    h2 {
+      @apply font-bold mb-6;
+    }
+
+    h3, h4 {
+      font-size: 38px;
+      line-height: 1.2em;
+    }
+  }
+
+  > .bd {
+    @apply my-16 -mx-10;
+
+    > .bd-slides {
+      @apply flex flex-col items-center justify-center px-6;
+
+      flex-basis: 486px;
+      width: 0;
+
+      .items {
+        @apply border bg-logseq-500 w-full border-gray-400/50 rounded-3xl;
+
+        height: 240px;
+
+        > .item {
+          @apply flex flex-col w-full py-4 px-6;
+
+          > h1 {
+            @apply flex items-center py-2;
+
+            button {
+              @apply py-2 px-5 font-bold opacity-80 text-gray-300/60 uppercase;
+            }
+          }
+        }
+      }
+
+      .actions {
+        @apply w-full justify-between px-2 py-2 mt-3;
+      }
+    }
+
+    > .bd-info {
+      @apply border flex-1 border-logseq-400 rounded-2xl overflow-hidden ml-4 relative;
+    }
+  }
+}
+
+.glass-btn {
+  @apply backdrop-blur-sm bg-logseq-500/20 px-3 py-2 rounded-md border border-gray-500/20
+  select-none active:opacity-70 cursor-pointer hover:border-gray-500/50;
 }

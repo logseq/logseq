@@ -1,11 +1,19 @@
-import { HeadShowcase, TutorialShowcase } from './Landing'
+import {
+  HeadShowcase,
+  LandingFooter,
+  TutorialShowcase,
+  TutorialTips,
+} from './Landing'
 
 export function HomePage () {
   return (
-    <div className={'page-home min-h-screen'}>
+    <main className={'page-home min-h-screen'}>
       <HeadShowcase/>
 
-      <TutorialShowcase />
-    </div>
+      <TutorialShowcase/>
+      <TutorialTips/>
+
+      <LandingFooter/>
+    </main>
   )
 }
