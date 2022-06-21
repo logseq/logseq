@@ -23,6 +23,7 @@
                          [:span.mr-1 (t :help/shortcuts)]
                          (ui/icon "command" {:style {:font-size 20}})]]]
                       [(t :help/docs) "https://docs.logseq.com/"]
+                      [(t :help/start) "https://docs.logseq.com/#/page/tutorial?anchor=ls-block-62b17063-135d-4176-b755-fb5841556044"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
           
           {:title "Community"
@@ -37,8 +38,7 @@
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
           
           {:title "About"
-           :children [[(t :help/start) "https://docs.logseq.com/#/page/getting%20started"]
-                      [(t :help/about) "https://logseq.com/blog/about"]]}
+           :children [[(t :help/about) "https://logseq.com/blog/about"]]}
 
           {:title "Terms"
            :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
