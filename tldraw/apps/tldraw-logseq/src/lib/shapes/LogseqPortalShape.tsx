@@ -18,8 +18,9 @@ const HEADER_HEIGHT = 40
 export interface LogseqPortalShapeProps extends TLBoxShapeProps, CustomStyleProps {
   type: 'logseq-portal'
   pageId: string // page name or UUID
-  collapsed: boolean
-  collapsedHeight: number
+  blockType?: 'P' | 'B'
+  collapsed?: boolean
+  collapsedHeight?: number
 }
 
 interface LogseqQuickSearchProps {
@@ -125,6 +126,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }
   }
 
+  static isPageOrBlock(id: string): 'P' | 'B' | false {
+    const blockRefEg = '((62af02d0-0443-42e8-a284-946c162b0f89))'
+    if (id) {
+      return /^\(\(.*\)\)$/.test(id) && id.length === blockRefEg.length ? 'B' : 'P'
+    }
+    return false
+  }
+
   ReactContextBar = observer(() => {
     return (
       <>
@@ -203,9 +212,11 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const onPageNameChanged = React.useCallback((id: string) => {
       transaction(() => {
+        app.history.resume()
         this.update({
           pageId: id,
           size: [600, 320],
+          blockType: 'page',
         })
         this.setDraft(false)
         app.setActivatedShapes([])
@@ -254,7 +265,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 '--ls-title-text-color': stroke,
               }}
             >
-              <LogseqPortalShapeHeader type="P" pageId={pageId} />
+              <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} pageId={pageId} />
               {(!this.props.collapsed || isActivated) && (
                 <div
                   style={{

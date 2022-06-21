@@ -1,5 +1,6 @@
 import { TLApp, TLPage, TLDocumentModel, TLShape } from '~lib'
 import type { TLEventMap } from '~types'
+import { deepEqual } from '~utils'
 
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {
@@ -12,7 +13,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   isPaused = true
 
   get creating() {
-    return this.app.selectedTool.currentState.id === 'creating';
+    return this.app.selectedTool.currentState.id === 'creating'
   }
 
   pause = () => {
@@ -37,6 +38,9 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     if (this.isPaused || this.creating) return
 
     const { serialized } = this.app
+
+    // Do not persist if the serialized state is the same as the last one
+    if (deepEqual(this.stack[this.pointer], serialized)) return
 
     if (this.pointer < this.stack.length) {
       this.stack = this.stack.slice(0, this.pointer + 1)

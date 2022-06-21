@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { TLViewport, TLBounds, debounce } from '@tldraw/core'
+import { useApp } from './useApp'
 
 const getNearestScrollableContainer = (element: HTMLElement): HTMLElement | Document => {
   let parent = element.parentElement
@@ -25,6 +26,7 @@ export function useResizeObserver<T extends HTMLElement>(
   viewport: TLViewport,
   onBoundsChange?: (bounds: TLBounds) => void
 ) {
+  const app = useApp()
   const rIsMounted = React.useRef(false)
 
   // When the element resizes, update the bounds (stored in inputs)
@@ -81,5 +83,8 @@ export function useResizeObserver<T extends HTMLElement>(
 
   React.useLayoutEffect(() => {
     updateBounds()
+    setTimeout(() => {
+      app.api.cameraToCenter()
+    })
   }, [ref])
 }

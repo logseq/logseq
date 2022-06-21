@@ -336,7 +336,9 @@
                         (db-persist/delete-graph! url)
                         (search/remove-db! url)
                         (state/delete-repo! repo)
-                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))))]
+                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))
+                        (when (= (state/get-current-repo) url)
+                          (state/set-current-repo! (:url (first (state/get-repos)))))))]
     (when (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f)))))
