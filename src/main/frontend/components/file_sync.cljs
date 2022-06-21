@@ -86,8 +86,24 @@
         (cond-> []
           synced-file-graph?
           (concat
-           (when no-active-files?
-             [{:title [:p.flex.justify-center "Everything is synced!"]}])
+           (cond
+             need-password?
+             [{:title   [:strong "Input current graph's password"]
+               :icon    (ui/icon "lock-off")
+               :options {:on-click #(let [current-graph (repo-handler/get-detail-graph-info current-repo)
+                                          graph-uuid (:GraphUUID current-graph)
+                                          encrypted? (get-in @fs-sync/pwd-map [graph-uuid :public-key])]
+                                      (state/pub-event!
+                                       [:modal/remote-encryption-input-pw-dialog current-repo current-graph
+                                        :input-pwd-remote
+                                        (fn [] (fs-sync/restore-pwd! graph-uuid))
+                                        {:graph-encrypted? encrypted?}]))}}]
+
+             no-active-files?
+             [{:title [:p.flex.justify-center "Everything is synced!"]}]
+
+             :else
+             nil)
 
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)

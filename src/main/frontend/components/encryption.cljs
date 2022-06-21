@@ -1,7 +1,7 @@
 (ns frontend.components.encryption
   (:require [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
-            [frontend.encrypt :as e]
+            [frontend.encrypt :as encrypt]
             [frontend.handler.metadata :as metadata-handler]
             [frontend.handler.notification :as notification]
             [frontend.fs.sync :as sync]
@@ -9,15 +9,15 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
-            [cljs.core.async :as a]
+            [cljs.core.async :as async]
             [rum.core :as rum]))
 
 (rum/defcs encryption-dialog-inner <
   (rum/local false ::reveal-secret-phrase?)
   [state repo-url close-fn]
   (let [reveal-secret-phrase? (get state ::reveal-secret-phrase?)
-        public-key (e/get-public-key repo-url)
-        private-key (e/get-secret-key repo-url)]
+        public-key (encrypt/get-public-key repo-url)
+        private-key (encrypt/get-secret-key repo-url)]
     [:div
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -53,7 +53,7 @@
 (rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  [state repo-url close-fn {:keys [type graph-encrypted? GraphName GraphUUID]}]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID graph-encrypted? verify-password]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
@@ -102,27 +102,28 @@
                          :else
                          (case type
                            :local
-                           (p/let [keys (e/generate-key-pair-and-save! repo-url)
-                                   db-encrypted-secret (e/encrypt-with-passphrase value keys)]
+                           (p/let [keys (encrypt/generate-key-pair-and-save! repo-url)
+                                   db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
                                   (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
                                   (close-fn true))
 
                            (:create-pwd-remote :input-pwd-remote)
                            (do
                              (state/set-state! [:ui/loading? :set-graph-password] true)
-                             (a/go
-                              (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
-                                (if (instance? ExceptionInfo persist-r)
-                                  (js/console.error persist-r)
-                                  (notification/show!
-                                   (if graph-encrypted?
-                                     "Password successfully matched"
-                                     "Successfully set the password")
-                                   :success)))
-                              (state/set-state! [:ui/loading? :set-graph-password] false)
-                              (close-fn true)))))))}
+                             (async/go
+                               (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
+                                 (if (instance? ExceptionInfo persist-r)
+                                   (js/console.error persist-r)
+                                   (do
+                                     (sync/set-graph-pwd! GraphUUID @password)
+                                     (if (and graph-encrypted? (fn? verify-password))
+                                       (verify-password @password)
+                                       (do
+                                         (sync/mark-graph-pwd-changed! GraphUUID)
+                                         (notification/show! "Successfully set the password" :success)
+                                         (close-fn true))))))))))))}
         [:span.inline-flex
-         [:span "Submit"]
+         [:span (t :submit)]
          (when loading?
            [:span.ml-2 (ui/loading "")])]]]]]))
 
@@ -177,9 +178,9 @@
                         (when-not (string/blank? value) ; TODO: length or other checks
                           (let [repo (state/get-current-repo)]
                             (p/do!
-                             (-> (e/decrypt-with-passphrase value db-encrypted-secret)
+                             (-> (encrypt/decrypt-with-passphrase value db-encrypted-secret)
                                  (p/then (fn [keys]
-                                           (e/save-key-pair! repo keys)
+                                           (encrypt/save-key-pair! repo keys)
                                            (close-fn true)
                                            (state/set-state! :encryption/graph-parsing? false)))
                                  (p/catch #(notification/show! "The password is not matched." :warning true))
