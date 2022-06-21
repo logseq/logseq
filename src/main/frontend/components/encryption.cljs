@@ -53,27 +53,25 @@
 (rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  [state repo-url close-fn {:keys [type GraphName GraphUUID]}]
+  [state repo-url close-fn {:keys [type graph-encrypted? GraphName GraphUUID]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
-        verify-pw? (= type :input-pwd-remote)
+        input-remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])]
     [:div.encrytion-password.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
-        (if verify-pw? "What's the password for this graph?" "Enter a password")]]]
+       [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold.mb-4
+        (if graph-encrypted?
+          "Decrypt this graph"
+          "Encrypt this graph")]]]
 
-     (ui/admonition
-      :warning
-      [:div.opacity-70
-       "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
-
-     (when-not local-pw?
-       [:p.px-2.pb-2
-        [:strong "Name: " GraphName] [:br]
-        [:small.italic "UUID: " GraphUUID]])
+     (when (and input-remote-pw? (not graph-encrypted?))
+       (ui/admonition
+        :warning
+        [:div.opacity-70
+         "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."]))
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
       {:type "password"
@@ -82,12 +80,11 @@
        :on-change (fn [e]
                     (reset! password (util/evalue e)))}]
 
-     (when-not verify-pw?
-       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-        {:type        "password"
-         :placeholder "Re-enter the password"
-         :on-change   (fn [e]
-                        (reset! password-confirm (util/evalue e)))}])
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+      {:type        "password"
+       :placeholder "Re-enter the password"
+       :on-change   (fn [e]
+                      (reset! password-confirm (util/evalue e)))}]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -99,8 +96,7 @@
                          (string/blank? value)
                          nil
 
-                         (and (not verify-pw?)
-                              (not= @password @password-confirm))
+                         (not= @password @password-confirm)
                          (notification/show! "The passwords are not matched." :error)
 
                          :else
@@ -118,7 +114,11 @@
                               (let [persist-r (a/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
                                 (if (instance? ExceptionInfo persist-r)
                                   (js/console.error persist-r)
-                                  (notification/show! (str "Successfully set the password") :success)))
+                                  (notification/show!
+                                   (if graph-encrypted?
+                                     "Password successfully matched"
+                                     "Successfully set the password")
+                                   :success)))
                               (state/set-state! [:ui/loading? :set-graph-password] false)
                               (close-fn true)))))))}
         [:span.inline-flex

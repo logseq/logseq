@@ -84,18 +84,10 @@
              (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]))
 
         (cond-> []
-          need-password?
-          (conj {:title   [:strong "Set a password to start"]
-                 :icon    (ui/icon "lock-off")
-                 :options {:on-click #(let [current-graph (repo-handler/get-detail-graph-info current-repo)]
-                                        (state/pub-event!
-                                         [:modal/remote-encryption-input-pw-dialog current-repo current-graph
-                                          :input-pwd-remote (fn [] (fs-sync/restore-pwd! (:GraphUUID current-graph)))]))}})
-
           synced-file-graph?
           (concat
            (when no-active-files?
-             [{:title [:p.flex.justify-center "No active files"]}])
+             [{:title [:p.flex.justify-center "Everything is synced!"]}])
 
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)
