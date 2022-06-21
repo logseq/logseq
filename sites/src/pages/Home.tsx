@@ -1,5 +1,4 @@
-import { HeadShowcase } from './Landing/HeadShowcase'
-import { TutorialShowcase } from './Landing/TutorialShowcase'
+import { HeadShowcase, TutorialShowcase } from './Landing'
 
 export function HomePage () {
   return (

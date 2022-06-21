@@ -1,0 +1,261 @@
+.app-head-showcase {
+  @apply overflow-hidden;
+
+  height: 790px;
+  -webkit-font-smoothing: antialiased;
+
+  > .inner {
+    padding-top: 60px;
+  }
+
+  .item-wrap {
+  }
+
+  .text-1 {
+    padding-top: 75px;
+    line-height: 4.25rem;
+  }
+
+  .image-2 {
+    background-image: url("./assets/header_bg.png");
+    background-size: contain;
+    top: 170px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 570px;
+    background-position-y: -110px;
+    background-position-x: -12px;
+  }
+
+  .cards-3 {
+    @apply absolute;
+
+    width: 500px;
+    top: 300px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    .glass-card {
+      &.a {
+      }
+
+      &.b, &.c {
+        flex-basis: 220px;
+
+        .glass-card-inner {
+          @apply flex text-sm;
+          min-height: 110px;
+        }
+
+        .avatar {
+          &-img {
+            width: 60px;
+            height: 60px;
+            border-radius: 100%;
+            overflow: hidden;
+            background-image: url("./assets/avatar.png");
+            background-size: contain;
+            text-indent: -999px;
+          }
+        }
+
+        .info {
+
+        }
+      }
+
+      &.c {
+        flex: 1;
+
+        .glass-card-inner {
+          min-height: 110px;
+        }
+
+        .avatar {
+          &-img {
+            width: 60px;
+            height: 84px;
+            border-radius: unset;
+            overflow: hidden;
+            background-image: url("./assets/cover.png");
+            background-size: contain;
+            text-indent: -999px;
+          }
+        }
+
+      }
+    }
+  }
+
+  .actions-4 {
+    @apply absolute w-full flex justify-center pt-20 pb-5;
+
+    bottom: 0;
+
+    &:before {
+      @apply absolute top-0 left-0 w-full bg-gradient-to-t h-16 from-logseq-800 via-logseq-800;
+
+      content: " ";
+    }
+
+    > button {
+      position: relative;
+      top: -10px;
+    }
+  }
+}
+
+.outliner-list {
+  &-demo {
+
+  }
+
+  &-item {
+    @apply relative text-sm;
+
+    padding-left: 18px;
+
+    &:before {
+      content: "•";
+      position: absolute;
+      font-size: 26px;
+      font-weight: bold;
+      left: 0;
+      top: 0;
+      opacity: .4;
+    }
+
+    > .content {
+      @apply flex items-center text-logseq-50/90 py-0.5;
+
+      marker {
+        @apply font-bold text-gray-500 text-xs inline-block pr-1 opacity-80;
+      }
+
+      &.is-todo {
+        &:before {
+          @apply border border-logseq-100/50 inline-block mr-1 rounded;
+
+          content: " ";
+          width: 14px;
+          height: 14px;
+        }
+      }
+    }
+
+    > .subs {
+      @apply relative pl-0.5 mt-0.5;
+
+      &:before {
+        @apply bg-logseq-50 absolute -top-0.5 -bottom-1 rounded opacity-20;
+
+        content: " ";
+        width: 4px;
+        left: -14px;
+      }
+    }
+
+    .ref {
+      &:before {
+        @apply text-gray-200 opacity-20 inline-block pr-0.5;
+        content: "[[";
+      }
+
+      &:after {
+        @apply text-gray-200 opacity-20 inline-block pl-0.5;
+        content: "]]";
+      }
+    }
+  }
+}
+
+.app-tutorial-showcase {
+  min-height: 100vh;
+
+  > .hd {
+    letter-spacing: 1px;
+
+    h1, h2 {
+      line-height: 3.8rem;
+    }
+
+    h3, h4 {
+      line-height: 2rem;
+    }
+  }
+
+  > .sub-hd {
+    @apply -mt-8 px-80;
+
+    > li {
+      @apply flex flex-col text-xl items-center flex-1 tracking-wide text-center;
+
+      &:before {
+        content: " ";
+        width: 80px;
+        height: 80px;
+        background-color: beige;
+        margin-bottom: 8px;
+        background-image: url("./assets/features_sp.png");
+        background-size: 560px;
+        background-repeat: no-repeat;
+        background-position-x: -32px;
+      }
+
+      &:nth-child(2):before {
+        background-position-x: -255px;
+      }
+
+      &:nth-child(3):before {
+        background-position-x: -464px;
+      }
+    }
+  }
+}
+
+.app-tutorial-features-slide {
+  @apply py-14 px-10;
+
+  ul.tabs {
+    li {
+      @apply flex flex-col items-center bg-logseq-600/90 rounded-xl
+      flex-1 py-3 px-2 justify-center select-none cursor-pointer
+      active:opacity-80 border-2 border-transparent transition-all;
+
+      &:hover, &.active {
+        @apply border-gradient-br-yellow-purple-red-logseq-900;
+      }
+
+      > span {
+        font-size: 36px;
+      }
+
+      > strong {
+        @apply text-lg font-normal opacity-70 text-center;
+      }
+    }
+  }
+
+  article.panels {
+    @apply border mt-8 rounded-2xl border-logseq-500 bg-logseq-700/90 overflow-hidden;
+
+    min-height: 300px;
+
+    > .hd {
+      > strong {
+        @apply flex space-x-2 px-3 py-1;
+
+        > i {
+          @apply flex-1 bg-logseq-100/10 rounded-md h-[5px] overflow-hidden;
+        }
+      }
+
+      > h1 {
+        @apply mt-4 my-2;
+      }
+
+      @apply flex flex-col px-2 py-4;
+    }
+  }
+}
