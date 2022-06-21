@@ -76,11 +76,13 @@
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
-(defn- clear-tokens []
+(defn- clear-tokens
+  []
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
   (state/set-auth-refresh-token nil)
   (set-token-to-localstorage! "" "" ""))
+
 
 (defn- set-tokens!
   ([id-token access-token]

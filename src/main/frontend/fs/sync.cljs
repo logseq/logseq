@@ -743,7 +743,7 @@
              :else
              nil))
 
-;;; remote api exceptions
+;;; ### remote api exceptions
 (defn storage-exceed-limit?
   [exp]
   (->> (ex-data exp)
@@ -1160,7 +1160,7 @@
 
 (add-watch pwd-map :pwd-map-changed #(offer! pwd-map-changed-chan true))
 
-(defn- encrypt-content
+(defn- <encrypt-content
   [content key*]
   (p->c (encrypt/encrypt-with-passphrase key* content)))
 
@@ -1182,6 +1182,12 @@
   [graph-uuid]
   (js/localStorage.removeItem (local-storage-pwd-path graph-uuid)))
 
+(defn remove-all-pwd!
+  []
+  (doseq [k (filter #(string/starts-with? % "encrypted-pwd/") (js->clj (js-keys js/localStorage)))]
+    (js/localStorage.removeItem k)))
+
+
 (defn encrypt+persist-pwd!
   "- store pwd in `pwd-map`
   - persist encrypted pwd at local-storage"
@@ -1194,7 +1200,7 @@
           (if gone?
             ((juxt :value :expired-at) (<! (<create-graph-salt remoteapi graph-uuid)))
             [value expired-at])
-          encrypted-pwd (<! (encrypt-content pwd salt-value))]
+          encrypted-pwd (<! (<encrypt-content pwd salt-value))]
       (persist-pwd! encrypted-pwd graph-uuid))))
 
 (defn restore-pwd!
@@ -1255,7 +1261,7 @@
           ;; generate a new key pair and upload them
           (let [{public-key :publicKey private-key :secretKey}
                 (<! (<key-gen rsapi))
-                encrypted-private-key (<! (encrypt-content private-key pwd))
+                encrypted-private-key (<! (<encrypt-content private-key pwd))
                 upload-r (<! (<upload-graph-encrypt-keys remoteapi graph-uuid public-key encrypted-private-key))]
             (if (instance? ExceptionInfo upload-r)
               (do (js/console.log "upload-graph-encrypt-keys err" upload-r)
