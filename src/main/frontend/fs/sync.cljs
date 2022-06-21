@@ -215,6 +215,8 @@
   "requests not finished"
   (atom #{}))
 
+(def stoppable-apis #{"get_all_files"})
+
 (defn- <request*
   "max retry count is 5.
   *stop: volatile var, stop retry-request when it's true,
@@ -222,7 +224,7 @@
   ([api-name body token refresh-token-fn *stop] (<request* api-name body token refresh-token-fn 0 *stop))
   ([api-name body token refresh-token-fn retry-count *stop]
    (go
-     (if (and *stop @*stop)
+     (if (and *stop @*stop (contains? stoppable-apis api-name))
        :stop
        (let [resp (<! (<request-once api-name body token))]
          (if (and
@@ -744,20 +746,25 @@
              nil))
 
 ;;; ### remote api exceptions
+(defn sync-stop-when-api-flying?
+  [exp]
+  (some-> (ex-data exp) :err (= :stop)))
+
 (defn storage-exceed-limit?
   [exp]
-  (->> (ex-data exp)
-       :err
-       ((juxt :status (comp set :events :body)))
-       ((fn [[status events]] (and (= 403 status) (contains? events "storage-limit"))))))
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp set :events :body)))
+           ((fn [[status events]] (and (= 403 status) (contains? events "storage-limit"))))))
 
 (defn graph-count-exceed-limit?
   [exp]
-  (->> (ex-data exp)
-       :err
-       ((juxt :status (comp set :events :body)))
-       ((fn [[status events]]
-          (and (= 403 status) (contains? events "graph-count-exceed-limit"))))))
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp set :events :body)))
+           ((fn [[status events]]
+              (and (= 403 status) (contains? events "graph-count-exceed-limit"))))))
+;;; remote api exceptions ends
 
 (defn- fire-file-sync-storage-exceed-limit-event!
   [exp]
@@ -799,6 +806,7 @@
     (go
       (or (state/get-auth-id-token)
           (<! (<refresh-token this)))))
+
   (<refresh-token [_]
     (go
       (<! (user/<refresh-id-token&access-token))
@@ -1465,8 +1473,8 @@
       (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
-        (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
-                 (storage-exceed-limit? remote-all-files-meta-or-exp))
+        (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
+                (sync-stop-when-api-flying? remote-all-files-meta-or-exp))
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
@@ -1619,8 +1627,8 @@
       (let [remote-all-files-meta-c (<get-remote-all-files-meta remoteapi graph-uuid)
             local-all-files-meta-c (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
-        (if (and (instance? ExceptionInfo remote-all-files-meta-or-exp)
-                 (storage-exceed-limit? remote-all-files-meta-or-exp))
+        (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
+                (sync-stop-when-api-flying? remote-all-files-meta-or-exp))
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)

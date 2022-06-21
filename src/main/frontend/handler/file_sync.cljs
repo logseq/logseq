@@ -164,44 +164,6 @@
                                                  >))]
             all-version-list))))))
 
-(defn list-file-versions [graph-uuid page]
-  (let [file-id (:db/id (:block/file page))]
-    (when-let [path (:file/path (db/entity file-id))]
-      (let [base-path (config/get-repo-dir (state/get-current-repo))
-            path*     (string/replace-first path base-path "")]
-        (go
-          (let [version-list       (:VersionList
-                                    (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
-                local-version-list (<! (list-file-local-versions page))
-                all-version-list   (->> (concat version-list local-version-list)
-                                        (sort-by #(or (tc/from-string (:CreateTime %))
-                                                      (:create-time %))
-                                                 >))]
-            (notification/show! [:div
-                                 [:div.font-bold "File history - " path*]
-                                 [:hr.my-2]
-                                 (for [version all-version-list]
-                                   (let [version-uuid (or (:VersionUUID version) (:relative-path version))
-                                         local?       (some? (:relative-path version))]
-                                     [:div.my-4 {:key version-uuid}
-                                      [:div
-                                       [:a.text-xs.inline
-                                        {:on-click #(if local?
-                                                      (js/window.apis.openPath (:path version))
-                                                      (go
-                                                        (when-let [relative-path
-                                                                   (<! (download-version-file graph-uuid
-                                                                                              (:FileUUID version)
-                                                                                              (:VersionUUID version)))]
-                                                          (js/window.apis.openPath (path/join base-path relative-path)))))}
-                                        version-uuid]
-                                       (when-not local?
-                                         [:div.opacity-70 (str "Size: " (:Size version))])]
-                                      [:div.opacity-50
-                                       (util/time-ago (or (tc/from-string (:CreateTime version))
-                                                          (:create-time version)))]]))]
-                                :success false)))))))
-
 (defn get-current-graph-uuid [] (second @sync/graphs-txid))
 
 (def *wait-syncing-graph (atom nil))
