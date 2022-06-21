@@ -24,24 +24,27 @@
                          (ui/icon "command" {:style {:font-size 20}})]]]
                       [(t :help/docs) "https://docs.logseq.com/"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
-
-          {:title "About"
-           :children [[(t :help/start) "https://docs.logseq.com/#/page/getting%20started"]
-                      [(t :help/about) "https://logseq.com/blog/about"]]}
+          
+          {:title "Community"
+           :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
+                      [(t :help/blog) "https://blog.logseq.com"]
+                      [discord-with-icon "https://discord.gg/KpN4eHY"]]}
 
           {:title "Development"
            :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
                       [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
                       [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
+          
+          {:title "About"
+           :children [[(t :help/start) "https://docs.logseq.com/#/page/getting%20started"]
+                      [(t :help/about) "https://logseq.com/blog/about"]]}
 
           {:title "Terms"
            :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
-                      [(t :help/terms) "https://logseq.com/blog/terms"]]}
+                      [(t :help/terms) "https://logseq.com/blog/terms"]]}]]
 
-          {:title "Community"
-           :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
-                      [discord-with-icon "https://discord.gg/KpN4eHY"]]}]]
+          
 
      (map (fn [sublist]
             [[:p.mt-4.mb-1 [:b (:title sublist)]]
