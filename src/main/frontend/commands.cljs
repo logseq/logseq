@@ -274,7 +274,7 @@
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      
-     ["Draw" (draw-handler/initialize-excalidarw-file) "Draw a graph with Excalidraw"]
+     ["Draw" draw-handler/initialize-excalidarw-file "Draw a graph with Excalidraw"]
      
      ["Embed HTML " (->inline "html")]
 
