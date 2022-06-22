@@ -204,8 +204,8 @@
               (let [{:keys [x0 y0]} @*swipe
                     dx (- tx x0)
                     dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 20)
-                           (> (. js/Math abs dx) 10))
+                (when (and (< (. js/Math abs dy) 30)
+                           (> (. js/Math abs dx) 30))
                   (let [left (gdom/getElement (str "block-left-menu-" uuid))
                         right (gdom/getElement (str "block-right-menu-" uuid))]
 
