@@ -40,3 +40,12 @@ body {
   }
 }
 
+.app-logo {
+  @apply w-16 h-16 flex items-center justify-center
+  bg-logseq-700 overflow-hidden border-logseq-800
+  shadow-2xl shadow-logseq-300 p-3 rounded-3xl;
+
+  img {
+    @apply translate-y-0.5;
+  }
+}

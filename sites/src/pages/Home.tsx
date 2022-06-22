@@ -1,7 +1,7 @@
 import {
   fullBgImageB,
-  HeadShowcase,
-  LandingFooter,
+  HeadShowcase, LandingFooterDesc,
+  LandingFooterNav,
   TutorialShowcase,
   TutorialTips,
 } from './Landing'
@@ -21,8 +21,14 @@ export function HomePage () {
         </div>
       </div>
 
+      <div className="page-inner-full-wrap b">
+        <div className="page-inner">
+          <LandingFooterDesc/>
+        </div>
+      </div>
+
       <div className="page-inner">
-        <LandingFooter/>
+        <LandingFooterNav/>
       </div>
     </main>
   )
