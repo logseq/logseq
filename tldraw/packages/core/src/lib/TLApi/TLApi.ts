@@ -178,12 +178,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   undo = () => {
     this.app.undo()
-    this.app.undo()
     return this
   }
 
   redo = () => {
-    this.app.redo()
     this.app.redo()
     return this
   }
