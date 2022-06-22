@@ -211,16 +211,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [isActivated])
 
     const onPageNameChanged = React.useCallback((id: string) => {
-      transaction(() => {
-        app.history.resume()
+      app.wrapUpdate(() => {
         this.update({
           pageId: id,
           size: [600, 320],
-          blockType: 'page',
+          blockType: 'P',
         })
         this.setDraft(false)
         app.setActivatedShapes([])
-        app.persist()
       })
     }, [])
 

@@ -47,7 +47,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       () => ({
         id: this.id,
         name: this.name,
-        shapes: this.shapes.map(shape => toJS(shape.props)),
+        shapes: toJS(this.shapes.map(shape => toJS(shape.props))),
         bindings: toJS(this.bindings),
         nonce: this.nonce,
         activatedShape: toJS(this.app.activatedIds),
@@ -104,10 +104,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
             const ShapeClass = this.app.getShapeClass(shape.type)
             return new ShapeClass(shape)
           })
-    shapeInstances.forEach(instance => observe(instance, this.app.saveState))
     this.shapes.push(...shapeInstances)
     this.bump()
-    this.app.saveState()
     return shapeInstances
   }
 
@@ -213,7 +211,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   }
 
   /**
-   * Recalculate binding positions
+   * Recalculate binding positions etc. Will also persist state when needed.
    *
    * @param curr
    * @param prev
@@ -279,18 +277,17 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     const shapesToDelete = this.shapes.filter(s => s.draft && !this.app.activatedShapes.includes(s))
 
     if (!deepEqual(updated, curr) || shapesToDelete.length) {
-      transaction(() => {
-        this.app.history.resume()
-        this.update({
-          bindings: updated.bindings,
-        })
-
-        this.removeShapes(...shapesToDelete)
-
-        updated.shapes.forEach(shape => {
-          this.getShapeById(shape.id)?.update(shape)
-        })
+      this.update({
+        bindings: updated.bindings,
       })
+
+      this.removeShapes(...shapesToDelete)
+
+      updated.shapes.forEach(shape => {
+        this.getShapeById(shape.id)?.update(shape)
+      })
+
+      this.app.persist(true)
     }
   }
 

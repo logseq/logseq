@@ -135,6 +135,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   cameraToCenter = (): this => {
     const { shapes } = this.app.currentPage
+    if (shapes.length === 0) return this
     // Viewport should be focused to existing shapes
     const commonBounds = BoundsUtils.getCommonBounds(shapes.map(shape => shape.bounds))
     this.app.viewport.update({
@@ -178,12 +179,10 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
 
   undo = () => {
     this.app.undo()
-    this.app.undo()
     return this
   }
 
   redo = () => {
-    this.app.redo()
     this.app.redo()
     return this
   }

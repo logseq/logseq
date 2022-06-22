@@ -152,7 +152,7 @@ export function usePaste() {
       ...shapesToCreate,
     ]
 
-    app.transaction(() => {
+    app.wrapUpdate(() => {
       if (assetsToCreate.length > 0) {
         app.createAssets(assetsToCreate)
       }

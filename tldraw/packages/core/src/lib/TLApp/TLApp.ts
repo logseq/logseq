@@ -471,12 +471,6 @@ export class TLApp<
     } else {
       this.selectionRotation = 0
     }
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        'setSelectedShapes',
-        newSelectedShapes.map(s => toJS(s.serialized))
-      )
-    }
     return this
   }
 
@@ -720,12 +714,17 @@ export class TLApp<
     return Shape
   }
 
-  transaction = (fn: () => void) => {
+  wrapUpdate = (fn: () => void) => {
     transaction(() => {
-      this.history.pause()
+      const shouldSave = !this.history.isPaused
+      if (shouldSave) {
+        this.history.pause()
+      }
       fn()
-      this.history.resume()
-      this.persist()
+      if (shouldSave) {
+        this.history.resume()
+        this.persist()
+      }
     })
   }
 

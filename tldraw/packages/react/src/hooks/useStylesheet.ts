@@ -67,8 +67,8 @@ const css = (strings: TemplateStringsArray, ...args: unknown[]) =>
 
 const defaultTheme: TLTheme = {
   accent: 'rgb(255, 0, 0)',
-  brushFill: 'rgba(0,0,0,.05)',
-  brushStroke: 'rgba(0,0,0,.25)',
+  brushFill: 'var(--ls-scrollbar-background-color, rgba(0, 0, 0, .05))',
+  brushStroke: 'var(--ls-scrollbar-thumb-hover-color, rgba(0, 0, 0, .05))',
   selectStroke: 'rgb(66, 133, 244)',
   selectFill: 'rgba(65, 132, 244, 0.05)',
   binding: 'rgba(65, 132, 244, 0.5)',
@@ -78,39 +78,6 @@ const defaultTheme: TLTheme = {
 }
 
 const tlcss = css`
-  @font-face {
-    font-family: 'Recursive';
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url(https://fonts.gstatic.com/s/recursive/v23/8vI-7wMr0mhh-RQChyHEH06TlXhq_gukbYrFMk1QuAIcyEwG_X-dpEfaE5YaERmK-CImKsvxvU-MXGX2fSqasNfUlTGZnI14ZeY.woff2)
-      format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-      U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-
-  @font-face {
-    font-family: 'Recursive';
-    font-style: normal;
-    font-weight: 700;
-    font-display: swap;
-    src: url(https://fonts.gstatic.com/s/recursive/v23/8vI-7wMr0mhh-RQChyHEH06TlXhq_gukbYrFMk1QuAIcyEwG_X-dpEfaE5YaERmK-CImKsvxvU-MXGX2fSqasNfUlTGZnI14ZeY.woff2)
-      format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-      U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-
-  @font-face {
-    font-family: 'Recursive Mono';
-    font-style: normal;
-    font-weight: 420;
-    font-display: swap;
-    src: url(https://fonts.gstatic.com/s/recursive/v23/8vI-7wMr0mhh-RQChyHEH06TlXhq_gukbYrFMk1QuAIcyEwG_X-dpEfaE5YaERmK-CImqvTxvU-MXGX2fSqasNfUlTGZnI14ZeY.woff2)
-      format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-      U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-
   .tl-container {
     --tl-cursor: inherit;
     --tl-zoom: 1;

@@ -104,7 +104,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canEdit: TLFlag = false
   canBind: TLFlag = false
   canActivate: TLFlag = false
-  nonce = 0
+  
+  @observable nonce = 0
 
   bindingDistance = BINDING_DISTANCE
 
@@ -282,7 +283,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   protected getCachedSerialized = (): TLShapeModel<P> => {
     if (this.isDirty || !this.lastSerialized) {
-      this.nonce++
+      this.nonce = Date.now()
       this.setIsDirty(false)
       this.setLastSerialized(this.getSerialized())
     }

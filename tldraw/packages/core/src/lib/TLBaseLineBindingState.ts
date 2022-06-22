@@ -219,6 +219,7 @@ export class TLBaseLineBindingState<
   onExit: TLStateEvents<S, K>['onExit'] = () => {
     this.app.clearBindingShape()
     this.app.history.resume()
+    this.app.persist()
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {
