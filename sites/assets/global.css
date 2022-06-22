@@ -6,6 +6,9 @@ body {
   @apply text-gray-100 bg-logseq-800;
 }
 
+.app-container {
+  @apply flex-1;
+}
 
 .glass-card {
   @apply bg-gradient-to-b from-white/40 to-logseq-800/5 rounded-md animate-in fade-in-0 duration-1000 slide-in-from-bottom-14;
@@ -25,11 +28,15 @@ body {
   background-size: cover;
 }
 
-.app-headbar .links-group {
-  @apply flex space-x-8;
+.app-headbar {
+  @apply w-full px-6;
 
-  a {
-    @apply text-gray-300 text-lg hover:text-gray-50;
+  .links-group {
+    @apply flex space-x-8;
+
+    a {
+      @apply text-gray-300 text-lg hover:text-gray-50;
+    }
   }
 }
 

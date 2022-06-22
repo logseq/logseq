@@ -1,3 +1,11 @@
+.page-inner {
+  @apply w-full md:max-w-screen-xl;
+
+  &-full-wrap {
+    @apply w-full;
+  }
+}
+
 .app-head-showcase {
   @apply overflow-hidden;
 
@@ -307,16 +315,63 @@
               @apply py-2 px-5 font-bold opacity-80 text-gray-300/60 uppercase;
             }
           }
+
+          .progress {
+            @apply flex space-x-2 my-4;
+
+            > i {
+              @apply flex-1 h-[4px] bg-gray-500/30 rounded-md overflow-hidden;
+
+              &:first-child:before {
+                @apply flex h-[4px] w-1/6 bg-logseq-200/80;
+
+                content: " ";
+              }
+            }
+          }
         }
       }
 
       .actions {
         @apply w-full justify-between px-2 py-2 mt-3;
+
+        .prev, .next {
+          @apply opacity-80 cursor-pointer select-none hover:opacity-90;
+        }
       }
     }
 
     > .bd-info {
       @apply border flex-1 border-logseq-400 rounded-2xl overflow-hidden ml-4 relative;
+    }
+  }
+}
+
+.page-home {
+  @apply flex flex-col items-center;
+
+  .page-inner-full-wrap {
+    @apply bg-[#001419] flex items-center justify-center;
+
+    &.a {
+      position: relative;
+      min-height: 220px;
+      background-image: url("./assets/full-bg-a.png");
+      background-size: contain;
+      background-position-y: -60px;
+      background-repeat: no-repeat;
+      padding-top: 160px;
+      z-index: 2;
+
+      &:before {
+        @apply absolute bottom-0 left-0 w-full;
+        content: " ";
+        height: 200px;
+        background-image: url("./assets/full-bg-c-gradient.png");
+        background-repeat: repeat-x;
+        z-index: 1;
+        background-position: bottom;
+      }
     }
   }
 }

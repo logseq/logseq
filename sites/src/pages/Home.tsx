@@ -1,4 +1,5 @@
 import {
+  fullBgImageB,
   HeadShowcase,
   LandingFooter,
   TutorialShowcase,
@@ -8,12 +9,21 @@ import {
 export function HomePage () {
   return (
     <main className={'page-home min-h-screen'}>
-      <HeadShowcase/>
+      <div className="page-inner">
+        <HeadShowcase/>
+        <TutorialShowcase/>
+        <TutorialTips/>
+      </div>
 
-      <TutorialShowcase/>
-      <TutorialTips/>
+      <div className="page-inner-full-wrap a">
+        <div className="page-inner">
+          <img src={fullBgImageB} alt="image"/>
+        </div>
+      </div>
 
-      <LandingFooter/>
+      <div className="page-inner">
+        <LandingFooter/>
+      </div>
     </main>
   )
 }

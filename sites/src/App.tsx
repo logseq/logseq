@@ -6,8 +6,9 @@ import { Headbar } from './components/Headbar'
 export function App () {
   return (
     <div id="app" className={'flex justify-center'}>
-      <div className="app-container w-full md:w-10/12">
+      <div className="app-container">
         <Headbar/>
+
         <Routes>
           <Route path={'/'} element={<HomePage/>}/>
           <Route path={'/downloads'} element={<DownloadsPage/>}/>
