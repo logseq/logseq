@@ -17,22 +17,10 @@
 (defn- export-hiccup
   [hiccup]
   (util/format "#+BEGIN_EXPORT hiccup\n%s\n#+END_EXPORT"
-
                (str (hiccup-without-style hiccup))))
 
-(def allowed-tags
-  #{:address, :article, :aside, :footer, :header,
-    :h1, :h2, :h3, :h4, :h5, :h6, :hgroup,
-    :main, :nav, :section,
-    :blockquote, :dd, :div, :dl, :dt, :figcaption, :figure,
-    :hr, :li, :ol, :p, :pre, :ul,
-    :a, :abbr, :b, :bdi, :bdo, :br, :cite, :code, :data, :dfn,
-    :em, :i, :kbd, :mark, :q,
-    :rb, :rp, :rt, :rtc, :ruby,
-    :s, :samp, :small, :span, :strong, :sub, :sup, :time, :u, :var, :wbr,
-    :caption, :col, :colgroup, :table, :tbody, :td, :tfoot, :th,
-    :thead, :tr
-    :body :html})
+(def denied-tags
+  #{:script :base :head :link :meta :style :title :comment :xml :svg :frame :frameset :embed :object :canvas :applet})
 
 (defn ^:large-vars/cleanup-todo hiccup->doc-inner
   [format hiccup opts]
@@ -91,10 +79,7 @@
                                       (if (string? pattern) pattern (apply str (reverse pattern)))))))
         wrapper (fn [tag content]
                   (let [content (cond
-                                  (not (contains? allowed-tags tag))
-                                  nil
-
-                                  (contains? #{:comment :head :style :xml} tag)
+                                  (contains? denied-tags tag)
                                   nil
 
                                   (and (= tag :p) (:in-table? opts))
@@ -233,7 +218,7 @@
                  (for [x hiccup]
                    (single-hiccup-transform x))
                  (single-hiccup-transform hiccup))]
-    (apply str result)))
+    (string/replace (apply str result) #"\n\n+" "\n\n")))
 
 (defn hiccup->doc
   [format hiccup]
