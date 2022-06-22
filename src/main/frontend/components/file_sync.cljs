@@ -43,8 +43,7 @@
         idle?              (contains? #{:idle} status)
         need-password?     (contains? #{:need-password} status)
         queuing?           (and idle? (boolean (seq queuing-files)))
-        no-active-files?        (every? #(nil? (seq %)) [downloading-files queuing-files uploading-files])
-
+        no-active-files?   (empty? (concat downloading-files queuing-files uploading-files))
         turn-on            #(if-not synced-file-graph?
                               (let [repo       (state/get-current-repo)
                                     graph-name (util/node-path.basename repo)]
@@ -86,24 +85,8 @@
         (cond-> []
           synced-file-graph?
           (concat
-           (cond
-             need-password?
-             [{:title   [:strong "Input current graph's password"]
-               :icon    (ui/icon "lock-off")
-               :options {:on-click #(let [current-graph (repo-handler/get-detail-graph-info current-repo)
-                                          graph-uuid (:GraphUUID current-graph)
-                                          encrypted? (get-in @fs-sync/pwd-map [graph-uuid :public-key])]
-                                      (state/pub-event!
-                                       [:modal/remote-encryption-input-pw-dialog current-repo current-graph
-                                        :input-pwd-remote
-                                        (fn [] (fs-sync/restore-pwd! graph-uuid))
-                                        {:graph-encrypted? encrypted?}]))}}]
-
-             no-active-files?
-             [{:title [:p.flex.justify-center "Everything is synced!"]}]
-
-             :else
-             nil)
+           (when no-active-files?
+             [{:title [:p.flex.justify-center "Everything is synced!"]}])
 
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)

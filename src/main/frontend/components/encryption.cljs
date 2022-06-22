@@ -71,7 +71,7 @@
        (ui/admonition
         :warning
         [:div.opacity-70
-         "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."]))
+         "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, and we recommend you keep a secure backup of the password."]))
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
       {:type "password"
@@ -80,11 +80,12 @@
        :on-change (fn [e]
                     (reset! password (util/evalue e)))}]
 
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:type        "password"
-       :placeholder "Re-enter the password"
-       :on-change   (fn [e]
-                      (reset! password-confirm (util/evalue e)))}]
+     (when-not graph-encrypted?
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:type        "password"
+         :placeholder "Re-enter the password"
+         :on-change   (fn [e]
+                        (reset! password-confirm (util/evalue e)))}])
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -96,7 +97,7 @@
                          (string/blank? value)
                          nil
 
-                         (not= @password @password-confirm)
+                         (and (not graph-encrypted?) (not= @password @password-confirm))
                          (notification/show! "The passwords are not matched." :error)
 
                          :else
