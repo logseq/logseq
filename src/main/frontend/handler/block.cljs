@@ -150,22 +150,29 @@
 (def *swipe (atom nil))
 (def *touch-start (atom nil))
 
+(defn- target-disable-swipe?
+  [target]
+  (or (.closest target ".dsl-query")
+      (.closest target ".drawer")))
+
 (defn on-touch-start
   [event uuid]
-  (let [input (state/get-input)
+  (let [target (.-target event)
+        input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when (not= selection-type "Range")
-      (when-let [touches (.-targetTouches event)]
-        (when (= (.-length touches) 1)
-          (let [touch (aget touches 0)
-                x (.-clientX touch)
-                y (.-clientY touch)]
-            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
+    (when-not (target-disable-swipe? target)
+      (when (not= selection-type "Range")
+        (when-let [touches (.-targetTouches event)]
+          (when (= (.-length touches) 1)
+            (let [touch (aget touches 0)
+                  x (.-clientX touch)
+                  y (.-clientY touch)]
+              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
 
 (defn on-touch-move
   [event block uuid edit? *show-left-menu? *show-right-menu?]
