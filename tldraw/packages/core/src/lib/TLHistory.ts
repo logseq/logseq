@@ -72,8 +72,9 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
       const snapshot = this.stack[this.pointer]
       this.deserialize(snapshot)
     }
-
-    this.app.notify('persist', null)
+    else{
+      this.app.notify('persist', null)
+    }
   }
 
   deserialize = (snapshot: TLDocumentModel) => {

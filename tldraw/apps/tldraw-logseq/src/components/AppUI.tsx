@@ -5,6 +5,7 @@ import { StatusBar } from './StatusBar'
 import { PrimaryTools } from './PrimaryTools'
 import { DevTools } from './Devtools'
 import { Minimap } from './Minimap'
+import { ActionBar } from './ActionBar'
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -12,10 +13,11 @@ export const AppUI = observer(function AppUI() {
   return (
     <>
       {/* <ToolBar /> */}
-      {/* <Minimap /> */}
+      <Minimap />
       {isDev && <StatusBar />}
       {isDev && <DevTools />}
       <PrimaryTools />
+      <ActionBar></ActionBar>
     </>
   )
 })
