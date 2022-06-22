@@ -23,7 +23,7 @@
                          [:span.mr-1 (t :help/shortcuts)]
                          (ui/icon "command" {:style {:font-size 20}})]]]
                       [(t :help/docs) "https://docs.logseq.com/"]
-                      [(t :help/start) "https://docs.logseq.com/#/page/tutorial?anchor=ls-block-62b17063-135d-4176-b755-fb5841556044"]
+                      [(t :help/start) "https://docs.logseq.com/#/page/tutorial"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
           
           {:title "Community"
