@@ -53,6 +53,10 @@
 (rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
+  {:will-unmount (fn [state]
+                   (when-let [graph-uuid (:GraphUUID (last (:rum/args state)))]
+                     (js/setTimeout #(sync/trigger-input-password! graph-uuid) 5000))
+                   state)}
   [state repo-url close-fn {:keys [type GraphName GraphUUID graph-encrypted? verify-password]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)

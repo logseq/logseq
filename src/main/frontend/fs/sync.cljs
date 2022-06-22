@@ -1257,7 +1257,7 @@
            (offer! c true))
          (offer! c true))))))
 
-(defn- ensure-pwd-exists!
+(defn- <ensure-pwd-exists!
   [repo graph-uuid *stopped? graph-encrypted? public-key encrypted-private-key]
   (let [c (get-graph-pwd-changed-chan graph-uuid)]
     (go
@@ -1296,7 +1296,7 @@
             r (get @pwd-map graph-uuid)]
 
         (when-not (and (:public-key r) (:private-key r)) ; skip password validation
-          (<! (ensure-pwd-exists! repo graph-uuid *stopped? graph-encrypted? public-key encrypted-private-key)))
+          (<! (<ensure-pwd-exists! repo graph-uuid *stopped? graph-encrypted? public-key encrypted-private-key)))
 
         (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
           (if-not graph-encrypted?
@@ -1326,7 +1326,7 @@
               ;; bad pwd
               (do
                 (when (state/modal-opened?)
-                  (notification/show! "Wrong password" :error false)
+                  (notification/show! "It seems to be a wrong password, please give it another try" :warning false)
                   (state/set-state! [:ui/loading? :set-graph-password] false))
                 (clear-pwd! graph-uuid)
                 ::need-password))))))))
@@ -2016,6 +2016,12 @@
                             (when (nil? n)
                               (sync-stop))))))))))))
 
+
+(defn trigger-input-password!
+  [graph-uuid]
+  (when-let [sm ^js (state/get-file-sync-manager)]
+    (when-not (get-in @pwd-map [graph-uuid :pwd])
+      (.need-password sm))))
 
 ;;; debug funcs
 (comment
