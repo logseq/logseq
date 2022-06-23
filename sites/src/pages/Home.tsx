@@ -5,8 +5,17 @@ import {
   TutorialShowcase,
   TutorialTips,
 } from './Landing'
+import { useEffect } from 'react'
 
 export function HomePage () {
+  useEffect(() => {
+    setTimeout(() => {
+      // @ts-ignore
+      particlesJS.load('particles-bg', './particlesjs-config.json', () => {
+      })
+    }, 1000)
+  }, [])
+
   return (
     <main className={'page-home min-h-screen'}>
       <div className="page-inner">
@@ -24,10 +33,12 @@ export function HomePage () {
             <h1
               className="text-[60px] flex flex-col justify-center text-center pb-6">
               <span className="opacity-60">Overwhelmed and constantly </span>
-              <strong className="opacity-90">afraid of losing your thoughts?</strong>
+              <strong className="opacity-90">afraid of losing your
+                thoughts?</strong>
             </h1>
 
-            <h2 className="flex flex-col justify-center text-center text-2xl tracking-wide">
+            <h2
+              className="flex flex-col justify-center text-center text-2xl tracking-wide">
               <span className="opacity-60">Everyday you’re bombarded with information.</span>
               <span className="opacity-60">Your non-connected notes lead to missing context when</span>
               <strong className="font-normal">
@@ -39,7 +50,10 @@ export function HomePage () {
         </div>
       </div>
 
-      <div className="page-inner-full-wrap b">
+      <div className="page-inner-full-wrap b relative">
+        {/* particles background */}
+        <div id="particles-bg" className="particles-bg"></div>
+
         <div className="page-inner">
           <LandingFooterDesc/>
         </div>

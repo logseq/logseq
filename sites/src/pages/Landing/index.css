@@ -358,7 +358,7 @@
         @apply basis-1/4;
 
         > .inner {
-          @apply bg-logseq-500/30 p-4 rounded-lg;
+          @apply bg-logseq-600/90 p-4 rounded-lg;
         }
       }
     }
@@ -421,4 +421,8 @@
 .glass-btn {
   @apply backdrop-blur-sm bg-logseq-500/20 px-3 py-2 rounded-md border border-gray-700/20
   select-none active:opacity-70 cursor-pointer hover:border-gray-500/50;
+}
+
+.particles-bg {
+  @apply absolute top-8 left-0 bottom-0 right-0 opacity-50;
 }
