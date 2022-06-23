@@ -159,7 +159,7 @@
                                     (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))
                 local-version-list (<! (list-file-local-versions page))
                 all-version-list   (->> (concat version-list local-version-list)
-                                        (sort-by #(or (tc/from-string (:CreateTime %))
+                                        (sort-by #(or (:CreateTime %)
                                                       (:create-time %))
                                                  >))]
             all-version-list))))))

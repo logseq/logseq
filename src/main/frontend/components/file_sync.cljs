@@ -222,7 +222,7 @@
               :on-click #(set-page-fn version)}
 
              [:div.text-sm.pt-1
-              (util/time-ago (or (tc/from-string (:CreateTime version))
+              (util/time-ago (or (:CreateTime version)
                                  (:create-time version)))]]])))]))
 
 (rum/defc pick-page-histories-for-sync
