@@ -14,30 +14,22 @@
  
 ## Set up development environment
 ### Build the development app
-- Replace `server url` in **capacitor.config.ts** with your local-ip-address:3001 (run `ifconfig` to check)
+- comment in `server` section in **capacitor.config.ts**, and replace `process.env.LOGSEQ_APP_ASERVER_URL` with your `http://your-local-ip-address:3001` (run `ifconfig` to check).
     ```typescript
     server: {
-        url: "http://your-own-id-address:3001",
+        url: "process.env.LOGSEQ_APP_ASERVER_URL",
         cleartext: true
         } 
     ```
 - Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
 - Run `npx cap sync ios` in another termimal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
-
-or, you can run `bb dev:ios-app` to do those steps with one command. To download bb, see https://github.com/babashka/babashka#installation.
-
-Then,
 - Connect your iOS device to MacBook.
 - Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
 
+or, you can run `bb dev:ios-app` to do those steps with one command. To download bb, see https://github.com/babashka/babashka#installation.
+
 ### Build the release app
-- Comment out `server` section in **capacitor.config.ts**.
-    ```typescript
-    server: {
-        url: "http://your-own-id-address:3001",
-        cleartext: true
-        } 
-    ```
+- Comment out `server` section above in **capacitor.config.ts**.
 - Connect your iOS device to MacBook.
 - Run `yarn run-ios-release` to install the release app to your iOS device.
 
@@ -66,9 +58,16 @@ or, you can run `bb release:ios-app` to do those steps with one command.
 
 ## Set up development environment
 ### Build the development app
-- Replace `server url` with your local-ip-address:3001 (run ifconfig to check) in *capacitor.config.ts*.
+- comment in `server` section in **capacitor.config.ts**, and replace `process.env.LOGSEQ_APP_ASERVER_URL` with your `http://your-local-ip-address:3001` (run `ifconfig` to check).
+    ```typescript
+    server: {
+        url: "process.env.LOGSEQ_APP_ASERVER_URL",
+        cleartext: true
+        } 
+    ```
 - Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync android` in another termimal (all-in-one cmd).
+- Run `npx cap sync android` in another termimal.
+- Run `npx cap run android` to install app into your device.
 
 or, you can run `bb dev:android-app` to do those steps with one command.
 
@@ -80,14 +79,18 @@ Then,
 
 
 ### Build a release and install it to your android device 
-- Comment out `server url` in *capacitor.config.ts*.
+- Comment out `server` section above in **capacitor.config.ts**.
 - Connect your device to PC.
 - Run `yarn run-android-release`.
 
 or, you can run `bb release:android-app` to do those steps with one command.
 
 ### Build an apk
-- Comment out `server url` in *capacitor.config.ts*.
-- Run `yarn clean && yarn release-app && rm -rf ./public/static && rm -rf ./static/js/*.map && mv static ./public && npx cap sync android`.
+- Comment out `server` section above in **capacitor.config.ts**.
+- Run `yarn run-android-release`
+
+or, you can run `bb release:android-app` to do those steps with one command.
+
+Then,
 - In Android Studio, open **Build** -> **Build Bundles / APKs** -> **Build APKs**.
 - Get your apk in `android/app/build/apk/debug`.
