@@ -154,8 +154,6 @@
   [target]
   (let [user-defined-tags (get-in (state/get-config)
                                   [:mobile :gestures/disabled-in-block-with-tags])]
-    (prn (some #(.closest target (util/format "[data-refs-self*=%s]" %))
-           user-defined-tags))
     (or (.closest target ".dsl-query")
         (.closest target ".drawer")
         (some #(.closest target (util/format "[data-refs-self*=%s]" %))
