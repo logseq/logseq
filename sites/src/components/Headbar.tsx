@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { AppleLogo, ArrowSquareOut, CaretDown } from 'phosphor-react'
 import { ReactElement } from 'react'
+import { AppLogo } from '../pages/Landing/common'
 
 export function LinksGroup (
   props: { items: Array<{ link: string, label: string | ReactElement, icon?: ReactElement }> }

@@ -388,12 +388,27 @@
       background-position-y: -60px;
       background-repeat: no-repeat;
       padding-top: 160px;
-      z-index: 2;
+
+      .page-inner {
+        z-index: 2;
+
+        @screen lg {
+          max-width: 1440px;
+        }
+      }
+
+      .text-slogan {
+        @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-10 tracking-wide;
+
+        > h1 {
+          line-height: 1.2em;
+        }
+      }
 
       &:before {
         @apply absolute bottom-0 left-0 w-full;
         content: " ";
-        height: 200px;
+        height: 525px;
         background-image: url("./assets/full-bg-c-gradient.png");
         background-repeat: repeat-x;
         z-index: 1;

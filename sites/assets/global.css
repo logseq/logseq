@@ -17,14 +17,15 @@ body {
     @apply backdrop-blur-md bg-logseq-700/50 rounded-md p-3 w-full;
 
     margin: .5px;
+    padding-top: 15px;
   }
 }
 
 .app-logo-link {
   display: inline-block;
-  width: 32px;
-  height: 32px;
-  background-image: url("./logo.png");
+  width: 26px;
+  height: 26px;
+  background-image: url("./logo2.png");
   background-size: cover;
 }
 
