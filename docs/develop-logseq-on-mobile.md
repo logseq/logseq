@@ -26,7 +26,7 @@
 - Connect your iOS device to MacBook.
 - Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
 
-or, you can run `bb dev:ios-app` to do those steps with one command. To download bb, see https://github.com/babashka/babashka#installation.
+or, you can run `bb dev:ios-app` to do those steps with one command. To download bb, see https://github.com/babashka/babashka#installation. Also, in order to use mobile bb tasks on macOS, `gsed` needs to be installed in your system (run `brew install gnu-sed` to install).
 
 ### Build the release app
 - Comment out `server` section above in **capacitor.config.ts**.
