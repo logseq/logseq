@@ -120,7 +120,8 @@ test('template', async ({ page, block }) => {
 
   await createRandomPage(page)
 
-  await block.mustFill('template test\ntemplate:: ' + randomTemplate)
+  await block.mustFill('template test\ntemplate:: ')
+  await page.keyboard.type(randomTemplate, {delay: 100})
   await page.keyboard.press('Enter')
   await block.clickNext()
 
