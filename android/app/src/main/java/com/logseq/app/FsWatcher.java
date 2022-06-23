@@ -7,6 +7,7 @@ import android.system.Os;
 import android.system.StructStat;
 import android.util.Log;
 import android.os.FileObserver;
+
 import android.net.Uri;
 
 import java.io.*;
@@ -133,7 +134,6 @@ public class FsWatcher extends Plugin {
         File f = new File(path);
         obj.put("path", Uri.fromFile(f));
         obj.put("dir", mPath);
-        Log.i("FsWatcher", "prepare event " + obj);
 
         switch (event) {
             case FileObserver.CLOSE_WRITE:
@@ -144,6 +144,7 @@ public class FsWatcher extends Plugin {
                 } catch (IOException | ErrnoException e) {
                     e.printStackTrace();
                 }
+                Log.i("FsWatcher", "prepare event " + obj);
                 obj.put("content", content);
                 break;
             case FileObserver.MOVED_TO:
@@ -155,13 +156,20 @@ public class FsWatcher extends Plugin {
                 } catch (IOException | ErrnoException e) {
                     e.printStackTrace();
                 }
+                Log.i("FsWatcher", "prepare event " + obj);
                 obj.put("content", content);
                 break;
             case FileObserver.MOVE_SELF:
             case FileObserver.MOVED_FROM:
             case FileObserver.DELETE:
             case FileObserver.DELETE_SELF:
-                obj.put("event", "unlink");
+                if (f.exists()) {
+                    Log.i("FsWatcher", "abandon notification due to file exists");
+                    return;
+                } else {
+                    obj.put("event", "unlink");
+                }
+                Log.i("FsWatcher", "prepare event " + obj);
                 break;
             default:
                 // unreachable?
@@ -218,7 +226,25 @@ public class FsWatcher extends Plugin {
                 Log.d("FsWatcher", "got path=" + path + " event=" + event);
                 if (Pattern.matches("(?i)[^.].*?\\.(md|org|css|edn|js|markdown)$", path)) {
                     String fullPath = mPath + "/" + path;
-                    FsWatcher.this.onObserverEvent(event, fullPath);
+                    if (event == FileObserver.MOVE_SELF || event == FileObserver.MOVED_FROM ||
+                        event == FileObserver.DELETE || event == FileObserver.DELETE_SELF) {
+                        Log.d("FsWatcher", "defer delete notification for " + path);
+                        Thread timer = new Thread() {
+                            @Override
+                            public void run() {
+                                try {
+                                    // delay 500ms then send, enough for most syncing net disks
+                                    Thread.sleep(500);
+                                    FsWatcher.this.onObserverEvent(event, fullPath);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        };
+                        timer.start();
+                    } else {
+                        FsWatcher.this.onObserverEvent(event, fullPath);
+                    }
                 }
             }
         }
