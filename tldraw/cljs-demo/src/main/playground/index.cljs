@@ -2,19 +2,6 @@
   (:require [rum.core :as rum]
             [playground.tldraw :refer [Tldraw]]))
 
-(def persist-key "playground.index")
-
-;; Debounce it?
-(defn on-persist [e]
-  (let [document (.-document e)]
-    ;; persit to localstorage
-    (.setItem js/localStorage persist-key (js/JSON.stringify document))))
-
-(defn on-load []
-  (js/JSON.parse (.getItem js/localStorage persist-key)))
-
-(def doc (on-load))
-
 (rum/defc root []
   [:div.h-screen.w-screen (Tldraw)])
 

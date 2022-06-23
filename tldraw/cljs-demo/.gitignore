@@ -1,5 +1,6 @@
 node_modules/
 public/js
+public/styles.css
 
 /target
 /checkouts
