@@ -3,7 +3,7 @@
   "name": "tldraw-logseq-demo",
   "license": "MIT",
   "scripts": {
-    "postinstall": "ln -f ../apps/tldraw-logseq/src/styles.css public/styles.css",
+    "postinstall": "ln -fs `pwd`/../apps/tldraw-logseq/src/styles.css public/styles.css; ln -fs `pwd`/../apps/tldraw-logseq/dist src/js/tldraw-logseq",
     "dev": "shadow-cljs watch frontend"
   },
   "devDependencies": {

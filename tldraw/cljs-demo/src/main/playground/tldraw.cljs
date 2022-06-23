@@ -1,6 +1,6 @@
 (ns playground.tldraw
   (:require [rum.core :as rum]
-            ["tldraw-logseq" :as tldraw]))
+            ["/tldraw-logseq/index" :as tldraw]))
 
 (def persist-key "playground.index")
 
