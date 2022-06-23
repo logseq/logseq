@@ -1,13 +1,16 @@
 (ns frontend.fs.capacitor-fs
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+            ["diff" :as diff]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.encrypt :as encrypt]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -107,6 +110,39 @@
         (= (string/trim decrypted-content) (string/trim db-content)))
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
+(def backup-dir "logseq/bak")
+(defn- get-backup-dir
+  [repo-dir path ext]
+  (let [relative-path (-> (string/replace path repo-dir "")
+                          (string/replace (str "." ext) ""))]
+    (str repo-dir backup-dir "/" relative-path)))
+
+(defn- truncate-old-versioned-files!
+  "reserve the latest 3 version files"
+  [dir]
+  (p/let [files (readdir dir)
+          files (js->clj files :keywordize-keys true)
+          old-versioned-files (drop 3 (reverse (sort-by :mtime files)))]
+    (mapv (fn [file]
+            (.deleteFile Filesystem (clj->js {:path (js/encodeURI (:uri file))})))
+          old-versioned-files)))
+
+(defn backup-file
+  [repo-dir path content ext]
+  (let [backup-dir (get-backup-dir repo-dir path ext)
+        new-path (str backup-dir "/" (string/replace (.toISOString (js/Date.)) ":" "_") "." ext)]
+    (.writeFile Filesystem (clj->js {:data content
+                                     :path new-path
+                                     :encoding (.-UTF8 Encoding)
+                                     :recursive true}))
+    (truncate-old-versioned-files! backup-dir)))
+
+(defn string-some-changed?
+  [old new]
+  (let [result (-> ((gobj/get diff "diffChars") old new)
+                   bean/->clj)]
+    (> (count result) 10)))
+
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
@@ -129,6 +165,7 @@
                                         (js/console.error error)
                                         nil)))
             disk-content (or disk-content "")
+            repo-dir (config/get-local-dir repo)
             ext (string/lower-case (util/get-file-ext path))
             db-content (or old-content (db/get-file repo (js/decodeURI path)) "")
             contents-matched? (contents-matched? disk-content db-content)
@@ -148,7 +185,15 @@
          (p/let [result (.writeFile Filesystem (clj->js {:path path
                                                          :data content
                                                          :encoding (.-UTF8 Encoding)
-                                                         :recursive true}))]
+                                                         :recursive true}))
+                 mtime (-> (js->clj stat :keywordize-keys true)
+                           :mtime)]
+           (when-not contents-matched?
+             (when (and (string? disk-content)
+                        (string? content)
+                        (string-some-changed? disk-content content))
+               (backup-file repo-dir path disk-content ext)))
+           (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
                              content)]
