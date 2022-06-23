@@ -196,7 +196,7 @@ test('auto completion and auto pair', async ({ page, block }) => {
 
   // {{
   await block.mustType('type {{', { toBe: 'type {{}}' })
-
+  await page.waitForTimeout(100);
   // ((
   await block.clickNext()
 
