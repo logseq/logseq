@@ -165,10 +165,13 @@
   (let [[dir path] (map #(some-> %
                                  js/decodeURI)
                         [dir path])
-        dir (string/replace dir #"/+$" "")
+        dir (some-> dir (string/replace #"/+$" ""))
         path (some-> path (string/replace #"^/+" ""))
         path (cond (nil? path)
                    dir
+
+                   (nil? dir)
+                   path
 
                    (string/starts-with? path dir)
                    path
@@ -204,13 +207,12 @@
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [_this dir]
-    (p/let [result (.mkdir Filesystem
-                           (clj->js
-                            {:path dir
-                             ;; :directory (.-ExternalStorage Directory)
-                             }))]
-      (js/console.log result)
-      result))
+    (-> (.mkdir Filesystem
+                (clj->js
+                 {:path dir}))
+        (p/catch (fn [error]
+                   (log/error :mkdir! {:path dir
+                                       :error error})))))
   (mkdir-recur! [_this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
@@ -221,8 +223,16 @@
       result))
   (readdir [_this dir]                  ; recursive
     (readdir dir))
-  (unlink! [_this _repo _path _opts]
-    nil)
+  (unlink! [this repo path _opts]
+    (p/let [path (get-file-path nil path)
+            repo-dir (config/get-local-dir repo)
+            recycle-dir (str repo-dir config/app-name "/recycle")
+            file-name (-> (string/replace path repo-dir "")
+                          (string/replace "/" "_")
+                          (string/replace "\\" "_"))
+            new-path (str recycle-dir "/" file-name)]
+      (protocol/mkdir! this recycle-dir)
+      (protocol/rename! this repo path new-path)))
   (rmdir! [_this _dir]
     ;; Too dangerious!!! We'll never implement this.
     nil)
@@ -236,18 +246,8 @@
          content)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (delete-file! [_this repo dir path {:keys [ok-handler error-handler]}]
-    (let [path (get-file-path dir path)]
-      (p/catch
-       (p/let [result (.deleteFile Filesystem
-                                   (clj->js
-                                    {:path path}))]
-         (when ok-handler
-           (ok-handler repo path result)))
-       (fn [error]
-         (if error-handler
-           (error-handler error)
-           (log/error :delete-file-failed error))))))
+  (delete-file! [_this _repo _dir _path _opts]
+    nil)
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
