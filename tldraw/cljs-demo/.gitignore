@@ -2,7 +2,7 @@ node_modules/
 public/js
 public/styles.css
 
-src/js
+src/js/tldraw-logseq
 
 /target
 /checkouts

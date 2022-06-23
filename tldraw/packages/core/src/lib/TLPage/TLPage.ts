@@ -231,10 +231,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     })
 
     // Get bindings related to the changed shapes
-    const bindingsToUpdate =
-      Object.values(curr.bindings) ||
-      // fixme:
-      getRelatedBindings(curr, Object.keys(changedShapes))
+    const bindingsToUpdate = getRelatedBindings(curr, Object.keys(changedShapes))
 
     const visitedShapes = new Set<TLShapeModel>()
 
