@@ -533,6 +533,7 @@
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
   (<update-local-files [this graph-uuid base-path filepaths] "remote -> local")
+  (<download-version-files [this graph-uuid base-path filepaths])
   (<delete-local-files [this graph-uuid base-path filepaths])
   (<update-remote-file [this graph-uuid base-path filepath local-txid] "local -> remote, return err or txid")
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
@@ -613,6 +614,12 @@
       (let [token (<! (<get-token this))
             r (<! (<retry-rsapi
                    #(p->c (ipc/ipc "update-local-files" graph-uuid base-path filepaths token))))]
+        r)))
+  (<download-version-files [this graph-uuid base-path filepaths]
+    (go
+      (let [token (<! (<get-token this))
+            r (<! (<retry-rsapi
+                   #(p->c (ipc/ipc "download-version-files" graph-uuid base-path filepaths token))))]
         r)))
 
   (<delete-local-files [_ graph-uuid base-path filepaths]
@@ -700,11 +707,14 @@
                                                                              :token token})))))]
         r)))
 
+  (<download-version-files [_this _graph-uuid _base-path _filepaths]
+    (println :TODO :<download-version-files))
+
   (<delete-local-files [_ _graph-uuid base-path filepaths]
     (go
       (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
-                                                         (clj->js {:basePath base-path
-                                                                   :filePaths filepaths})))))]
+                                                          (clj->js {:basePath base-path
+                                                                    :filePaths filepaths})))))]
         r)))
 
   (<update-remote-file [this graph-uuid base-path filepath local-txid]

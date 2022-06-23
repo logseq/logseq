@@ -528,6 +528,9 @@
 (defmethod handle :update-local-files [_ args]
   (apply rsapi/update-local-files (rest args)))
 
+(defmethod handle :download-version-files [_ args]
+  (apply rsapi/download-version-files (rest args)))
+
 (defmethod handle :delete-remote-files [_ args]
   (apply rsapi/delete-remote-files (rest args)))
 

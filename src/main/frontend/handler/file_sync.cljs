@@ -104,8 +104,8 @@
    (download-version-file graph-uuid file-uuid version-uuid false))
   ([graph-uuid file-uuid version-uuid silent-download?]
    (go
-     (let [key (path/join "version-files" file-uuid version-uuid)
-           r   (<! (sync/<update-local-files
+     (let [key (path/join file-uuid version-uuid)
+           r   (<! (sync/<download-version-files
                     sync/rsapi graph-uuid (config/get-repo-dir (state/get-current-repo)) [key]))]
        (if (instance? ExceptionInfo r)
          (notification/show! (ex-cause r) :error)
@@ -114,7 +114,7 @@
                                 [:div "Downloaded version file at: "]
                                 [:div key]] :success false)))
        (when-not (instance? ExceptionInfo r)
-         (path/join "logseq" key))))))
+         (path/join "logseq" "version-files" key))))))
 
 (defn- list-file-local-versions
   [page]
