@@ -1685,6 +1685,11 @@ react-error-overlay@6.0.9:
   resolved "https://registry.yarnpkg.com/react-error-overlay/-/react-error-overlay-6.0.9.tgz#3c743010c9359608c375ecd6bc76f35d93995b0a"
   integrity sha512-nQTTcUu+ATDbrSD1BZHr5kgSD4oF8OFjxun8uAaL8RwPBacGBNPf/yAuVVdx17N8XNzRDMrZ9XcKZHCjPW+9ew==
 
+react-intersection-observer@^9.3.4:
+  version "9.3.4"
+  resolved "https://registry.yarnpkg.com/react-intersection-observer/-/react-intersection-observer-9.3.4.tgz#b38a346887f938a2e44bbf4c82a907fb4add675d"
+  integrity sha512-8L0NpqldlILWE9qurRvPJDx3fgwj5gPUJbtZq860wDdHyR1IU52DhhAVN6rmo3TqHF0CgCA50mIT4SHtBSbKLw==
+
 react-refresh@^0.9.0:
   version "0.9.0"
   resolved "https://registry.yarnpkg.com/react-refresh/-/react-refresh-0.9.0.tgz#71863337adc3e5c2f8a6bfddd12ae3bfe32aafbf"

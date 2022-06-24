@@ -6,28 +6,35 @@ import {
   StarFour,
 } from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
+import { AnimateInTurnBox } from '../../components/Animations'
+import cx from 'classnames'
 
 export function TutorialTips () {
   return (
     <div className="app-tutorial-tips">
-      <div className="hd flex flex-col justify-center items-center">
-        <h1>
-          Braindump everything into Logseq
-        </h1>
-        <h2>
-          New ideas will pop up with time.
-        </h2>
-        <h3>
-          Using Logseq helps you organize your thoughts and ideas
-        </h3>
-        <h4>
-          <span className="opacity-60">so that you can</span>
-          <span className="opacity-100 pl-1">
-            come up with new outputs more easily.
-          </span>
-        </h4>
-      </div>
+      <AnimateInTurnBox
+        ticks={[100, 1, 300, 1]}
+        className="hd flex flex-col justify-center items-center">
+        {(t: Array<any>) => (<>
+          <h1 className={cx('invisible', t[0] && 'ani-slide-in-from-bottom')}>
+            Braindump everything into Logseq
+          </h1>
+          <h2 className={cx('invisible', t[1] && 'ani-slide-in-from-bottom')}>
+            New ideas will pop up with time.
+          </h2>
 
+          <h3 className={cx('invisible', t[2] && 'ani-fade-in')}>
+            Using Logseq helps you organize your thoughts and ideas
+          </h3>
+          <h4 className={cx('invisible', t[3] && 'ani-fade-in')}>
+            <span className="opacity-60">so that you can</span>
+            <span className="opacity-100 pl-1">
+          come up with new outputs more easily.
+          </span>
+          </h4>
+        </>)
+        }
+      </AnimateInTurnBox>
       <div className="bd flex">
         <div className="bd-slides">
           <div className="items flex">

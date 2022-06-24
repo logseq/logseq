@@ -33,11 +33,11 @@ export function HeadShowcase () {
           {/* cards layer */}
           <div className="cards-3 z-20">
             <div className="r1 mb-3">
-              <GlassCard className={'a'}>
+              <GlassCard delay={500} className={'a'}>
                 <div className="outliner-list-demo">
                   <div className="outliner-list-item">
                     <div className="content is-todo">
-                      <marker>NOW</marker>
+                      <span className="marker">NOW</span>
                       <span>
                         Meeting with <a className={'ref'}>👥 Jessica</a>
                       </span>
@@ -59,7 +59,7 @@ export function HeadShowcase () {
               </GlassCard>
             </div>
             <div className="r2 flex space-x-3">
-              <GlassCard className={'b flex'}>
+              <GlassCard delay={1300} className={'b flex'}>
                 <div className="avatar flex items-center">
                   <span className="avatar-img">Image</span>
                 </div>
@@ -69,7 +69,7 @@ export function HeadShowcase () {
                   <p className="py-0.5 opacity-80">👤 Jessica Albert</p>
                 </div>
               </GlassCard>
-              <GlassCard className={'c'}>
+              <GlassCard delay={1300} className={'c'}>
                 <div className="avatar flex items-center">
                   <span className="avatar-img">Image</span>
                 </div>
@@ -81,7 +81,7 @@ export function HeadShowcase () {
               </GlassCard>
             </div>
             <div className="r3 pt-3 px-24">
-              <GlassCard className={'d'}>
+              <GlassCard delay={2000} className={'d'}>
                 <div className="outliner-list-demo">
                   <div className="outliner-list-item">
                     <div className="content">

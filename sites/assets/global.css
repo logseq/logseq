@@ -10,8 +10,35 @@ body {
   @apply flex-1;
 }
 
+.ani-slide-in-from-bottom {
+  @apply animate-in fade-in-0 duration-1000 slide-in-from-bottom-14;
+
+  visibility: visible !important;
+}
+
+.ani-slide-in-from-top {
+  @apply animate-in fade-in-0 duration-1000 slide-in-from-top-14;
+
+  visibility: visible !important;
+}
+
+
+.ani-zoom-in {
+  @apply animate-in zoom-in duration-1000 fade-in-0;
+
+  visibility: visible !important;
+}
+
+.ani-fade-in {
+  @apply animate-in fade-in duration-1000;
+
+  visibility: visible !important;
+}
+
 .glass-card {
-  @apply bg-gradient-to-b from-white/40 to-logseq-800/5 rounded-md animate-in fade-in-0 duration-1000 slide-in-from-bottom-14;
+  @apply bg-gradient-to-b from-white/40 to-logseq-800/5 rounded-md;
+
+  visibility: hidden;
 
   &-inner {
     @apply backdrop-blur-md bg-logseq-700/50 rounded-md p-3 w-full;
@@ -19,6 +46,11 @@ body {
     margin: .5px;
     padding-top: 15px;
   }
+}
+
+.glass-btn {
+  @apply backdrop-blur-sm bg-logseq-500/20 px-3 py-2 rounded-md border border-gray-700/20
+  select-none active:opacity-70 cursor-pointer hover:border-gray-500/50;
 }
 
 .app-logo-link {

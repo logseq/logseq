@@ -1,5 +1,7 @@
 import { FrameCorners } from 'phosphor-react'
 import { FloatGlassButton, imageS1 } from './common'
+import { AnimateInTurnBox } from '../../components/Animations'
+import cx from 'classnames'
 
 export function TutorialFeaturesSlide () {
   return (
@@ -51,18 +53,30 @@ export function TutorialShowcase (
   return (
     <div className="app-tutorial-showcase">
       {/* Head Slogan */}
-      <div className="flex flex-col justify-center items-center py-20 hd">
-        <h1 className="text-6xl opacity-70">Today, everyone is a</h1>
-        <h2 className="text-6xl font-semibold pt-1 opacity-94">knowledge
-          worker.</h2>
+      <AnimateInTurnBox
+        ticks={[100, 500, 1200]}
+        className="flex flex-col justify-center items-center py-20 hd">
+        {(t: Array<string>) => {
+          return (
+            <>
+              <h1 className={cx('text-6xl opacity-70 invisible', t[0] && 'ani-slide-in-from-bottom')}>Today, everyone is
+                a</h1>
+              <h2
+                className={cx('text-6xl font-semibold pt-1 opacity-94 invisible', t[1] && 'ani-slide-in-from-bottom')}>knowledge
+                worker.</h2>
 
-        <h3 className="text-4xl font-normal pt-8 opacity-60">Logseq is the
-          all-in-one tool
-          for </h3>
-        <h4 className="text-4xl pt-2 opacity-94">
-          workflows that deal with lots of information:
-        </h4>
-      </div>
+              <div className={cx('flex justify-center flex-col items-center invisible', t[2] && 'ani-fade-in')}>
+                <h3 className="text-4xl font-normal pt-8 opacity-60">Logseq is the
+                  all-in-one tool
+                  for </h3>
+                <h4 className="text-4xl pt-2 opacity-94">
+                  workflows that deal with lots of information:
+                </h4>
+              </div>
+            </>
+          )
+        }}
+      </AnimateInTurnBox>
 
       {/* Head icons */}
       <ul className="sub-hd flex justify-center space-x-10">

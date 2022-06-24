@@ -6,6 +6,8 @@ import {
   TutorialTips,
 } from './Landing'
 import { useEffect } from 'react'
+import { AnimateInTurnBox } from '../components/Animations'
+import cx from 'classnames'
 
 export function HomePage () {
   useEffect(() => {
@@ -29,24 +31,37 @@ export function HomePage () {
           <img src={fullBgImageB} className="w-full" alt="image"/>
 
           {/* text slogan  */}
-          <div className="text-slogan">
-            <h1
-              className="text-[60px] flex flex-col justify-center text-center pb-6">
-              <span className="opacity-60">Overwhelmed and constantly </span>
-              <strong className="opacity-90">afraid of losing your
-                thoughts?</strong>
-            </h1>
+          <AnimateInTurnBox
+            ticks={[100, 600]}
+            className="text-slogan">
+            {(t: Array<any>) => {
+              return (
+                <>
+                  <h1
+                    className={cx('text-[60px] flex flex-col justify-center text-center pb-6 invisible',
+                      t[0] && 'ani-slide-in-from-bottom')}
+                  >
+                    <span className="opacity-60">Overwhelmed and constantly </span>
+                    <strong className="opacity-90">afraid of losing your
+                      thoughts?</strong>
+                  </h1>
 
-            <h2
-              className="flex flex-col justify-center text-center text-2xl tracking-wide">
-              <span className="opacity-60">Everyday you’re bombarded with information.</span>
-              <span className="opacity-60">Your non-connected notes lead to missing context when</span>
-              <strong className="font-normal">
-                <span className="opacity-60">you need it. </span>
-                That gets future-you into trouble.
-              </strong>
-            </h2>
-          </div>
+                  <h2
+                    className={
+                      cx('flex flex-col justify-center text-center text-2xl tracking-wide invisible',
+                        t[1] && 'ani-fade-in')}>
+                    <span className="opacity-60">Everyday you’re bombarded with information.</span>
+                    <span className="opacity-60">Your non-connected notes lead to missing context when</span>
+                    <strong className="font-normal">
+                      <span className="opacity-60">you need it. </span>
+                      That gets future-you into trouble.
+                    </strong>
+                  </h2>
+                </>
+              )
+            }}
+
+          </AnimateInTurnBox>
         </div>
       </div>
 
