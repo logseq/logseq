@@ -15,3 +15,5 @@ Object.assign(glob, {
 })
 
 fs.writeFileSync('dist/package.json', JSON.stringify(glob, null, 2))
+
+await $`ln -f ${__dirname}/dist/index.js ${__dirname}/../../../src/js/tldraw-logseq.js`
