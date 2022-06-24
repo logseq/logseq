@@ -686,8 +686,7 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/direction :down
-         :selection/start-block nil))
+         :selection/direction :down))
 
 (defn get-selection-blocks
   []

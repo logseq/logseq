@@ -1928,7 +1928,10 @@
         (when-not (target-forbidden-edit? target)
           (cond
             (and shift? (state/get-selection-start-block-or-first))
-            (editor-handler/highlight-selection-area! block-id)
+            (do
+              (util/stop e)
+              (util/clear-selection!)
+              (editor-handler/highlight-selection-area! block-id))
 
             shift?
             (util/clear-selection!)
