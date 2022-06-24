@@ -68,7 +68,8 @@
             [rum.core :as rum]
             [frontend.fs :as fs]
             [frontend.handler.file-sync :as file-sync]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [clojure.string :as str]))
 
 (defn safe-read-string
   ([s]
@@ -178,57 +179,64 @@
 
 (rum/defcs asset-loader
   < rum/reactive
-    (rum/local nil ::exist?)
-    (rum/local false ::loading?)
-    {:will-mount  (fn [state]
-                    (let [src (first (:rum/args state))]
-                      (if (and (gp-config/local-protocol-asset? src)
-                               (file-sync/current-graph-sync-on?))
-                        (let [*exist? (::exist? state)
-                              asset-path (gp-config/remove-asset-protocol src)]
-                          (if (string/blank? asset-path)
-                            (reset! *exist? false)
-                            (-> (fs/file-exists? "" asset-path)
-                                (p/then
-                                  (fn [exist?]
-                                    (reset! *exist? (boolean exist?))))))
-                          (assoc state ::asset-path asset-path ::asset-file? true))
-                        state)))
-     :will-update (fn [state]
-                    (let [src (first (:rum/args state))
-                          asset-file? (boolean (::asset-file? state))
-                          sync-on? (file-sync/current-graph-sync-on?)
-                          *loading? (::loading? state)
-                          *exist? (::exist? state)]
-                      (when (and sync-on? asset-file? (false? @*exist?))
-                        (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
-                              _downloading-files (:current-remote->local-files sync-state)
-                              contain-url? (and (seq _downloading-files)
-                                                (some #(string/ends-with? src %) _downloading-files))]
-                          (cond
-                            (and (not @*loading?) contain-url?)
-                            (reset! *loading? true)
+  (rum/local nil ::exist?)
+  (rum/local false ::loading?)
+  {:will-mount  (fn [state]
+                  (let [src (first (:rum/args state))]
+                    (if (and (gp-config/local-protocol-asset? src)
+                             (file-sync/current-graph-sync-on?))
+                      (let [*exist? (::exist? state)
+                            asset-path (gp-config/remove-asset-protocol src)]
+                        (if (string/blank? asset-path)
+                          (reset! *exist? false)
+                          (-> (fs/file-exists? "" asset-path)
+                              (p/then
+                               (fn [exist?]
+                                 (reset! *exist? (boolean exist?))))))
+                        (assoc state ::asset-path asset-path ::asset-file? true))
+                      state)))
+   :will-update (fn [state]
+                  (let [src (first (:rum/args state))
+                        asset-file? (boolean (::asset-file? state))
+                        sync-on? (file-sync/current-graph-sync-on?)
+                        *loading? (::loading? state)
+                        *exist? (::exist? state)]
+                    (when (and sync-on? asset-file? (false? @*exist?))
+                      (let [sync-state (state/sub [:file-sync/sync-state (state/get-current-repo)])
+                            _downloading-files (:current-remote->local-files sync-state)
+                            contain-url? (and (seq _downloading-files)
+                                              (some #(string/ends-with? src %) _downloading-files))]
+                        (cond
+                          (and (not @*loading?) contain-url?)
+                          (reset! *loading? true)
 
-                            (and @*loading? (not contain-url?))
-                            (do
-                              (reset! *exist? true)
-                              (reset! *loading? false))))))
-                    state)}
-  [state _src content-fn]
+                          (and @*loading? (not contain-url?))
+                          (do
+                            (reset! *exist? true)
+                            (reset! *loading? false))))))
+                  state)}
+  [state src content-fn]
   (let [_ (state/sub [:file-sync/sync-state (state/get-current-repo)])
         exist? @(::exist? state)
         loading? @(::loading? state)
         asset-file? (::asset-file? state)
-        sync-enabled? (boolean (file-sync/current-graph-sync-on?))]
+        sync-enabled? (boolean (file-sync/current-graph-sync-on?))
+        ext (keyword (util/get-file-ext src))
+        img? (contains? (gp-config/img-formats) ext)
+        audio? (contains? config/audio-formats ext)
+        type (cond img? "image"
+                   audio? "audio"
+                   :else "asset")]
 
     (if (not sync-enabled?)
       (content-fn)
       (if (and asset-file? (or loading? (nil? exist?)))
-        [:p.text-sm.opacity-50 (ui/loading "Loading image ...")]
+        [:p.text-sm.opacity-50 (ui/loading (util/format "Syncing %s ..." type))]
         (if (or (not asset-file?)
                 (and exist? (not loading?)))
           (content-fn)
-          [:p.text-red-500.text-xs [:small.opacity-80 "Image not found!"]])))))
+          [:p.text-red-500.text-xs [:small.opacity-80
+                                    (util/format "%s not found!" (str/capitalize type))]])))))
 
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
@@ -335,11 +343,12 @@
                                               :title "Open file with your favorite app"}))))]
         (cond
           (contains? config/audio-formats ext)
-          (audio-cp @src)
+          (asset-loader @src
+                        #(audio-cp @src))
 
           (contains? (gp-config/img-formats) ext)
           (asset-loader @src
-            #(resizable-image config title @src metadata full_text true))
+                        #(resizable-image config title @src metadata full_text true))
 
           (= ext :pdf)
           [:a.asset-ref.is-pdf {:href @src
