@@ -292,16 +292,18 @@
   }
 
   > .bd {
-    @apply my-16 -mx-10;
+    @apply my-16 -mx-10 relative;
 
     > .bd-slides {
-      @apply flex flex-col items-center justify-center px-6;
+      @apply flex flex-col items-center justify-center px-6
+      border bg-logseq-500 border-gray-400/50 rounded-3xl relative;
 
       flex-basis: 486px;
       width: 0;
+      height: 240px;
 
       .items {
-        @apply border bg-logseq-500 w-full border-gray-400/50 rounded-3xl;
+        @apply w-full;
 
         height: 240px;
 
@@ -331,13 +333,16 @@
           }
         }
       }
+    }
 
-      .actions {
-        @apply w-full justify-between px-2 py-2 mt-3;
+    > .bd-actions {
+      @apply justify-between px-2 py-2 mt-3 absolute;
 
-        .prev, .next {
-          @apply opacity-80 cursor-pointer select-none hover:opacity-90;
-        }
+      width: 482px;
+      top: 240px;
+
+      .prev, .next {
+        @apply opacity-80 cursor-pointer select-none hover:opacity-90;
       }
     }
 

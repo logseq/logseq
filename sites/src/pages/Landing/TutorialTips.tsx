@@ -1,15 +1,37 @@
 import { FloatGlassButton, imageS1 } from './common'
 import {
   ArrowCircleLeft,
-  ArrowCircleRight, DiscordLogo,
-  FrameCorners, MonitorPlay, Notebook, SignOut,
+  ArrowCircleRight, Brain, DiscordLogo,
+  FrameCorners, MonitorPlay, Notebook, SignOut, Sparkle,
   StarFour,
 } from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
 import { AnimateInTurnBox } from '../../components/Animations'
 import cx from 'classnames'
+import Swiper from 'swiper'
+import 'swiper/swiper-bundle.css'
+import { useEffect, useRef, useState } from 'react'
 
 export function TutorialTips () {
+  const swiperElRef = useRef<HTMLDivElement>(null)
+  const swiperRef = useRef<Swiper>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    if (swiperRef.current) return
+
+    // @ts-ignore
+    const sw = swiperRef.current = new Swiper(
+      swiperElRef.current!, {
+        loop: true
+      }
+    )
+
+    sw.on('activeIndexChange', (e) => {
+      setActiveIndex(e.activeIndex - 1)
+    })
+  }, [])
+
   return (
     <div className="app-tutorial-tips">
       <AnimateInTurnBox
@@ -36,9 +58,10 @@ export function TutorialTips () {
         }
       </AnimateInTurnBox>
       <div className="bd flex">
-        <div className="bd-slides">
-          <div className="items flex">
-            <div className="item a">
+        <div ref={swiperElRef} className="bd-slides swiper">
+          <div className="items swiper-wrapper">
+            {/* 1 */}
+            <div className="item swiper-slide a">
               {/*  Beginner */}
               <h1 className="flex">
                 <strong className="text-3xl pr-4">✍️</strong>
@@ -65,17 +88,82 @@ export function TutorialTips () {
                 <span className="text-gray-300/70">Think in sections, use indentation.</span>
               </h3>
             </div>
+
+            {/* 2 */}
+            <div className="item swiper-slide a">
+              <h1 className="flex">
+                <strong className="text-3xl pr-4">🔍️</strong>
+                <LSButton
+                  className={'text-sm cursor-text'}
+                  leftIcon={<Sparkle size={16}/>}
+                >
+                  Intermediate
+                </LSButton>
+              </h1>
+
+              <h2 className="pt-2 text-3xl text-gray-300">
+                Always find what you’re <br/>
+                looking for.
+              </h2>
+
+              <strong className="progress">
+                <i>1</i>
+                <i>2</i>
+              </strong>
+
+              <h3 className="flex text-lg space-x-2 px-1 py-2 tracking-wide">
+                <strong>Tip1:</strong>
+                <span className="text-gray-300/70">
+                  Use CMD-K to search with ease.
+                </span>
+              </h3>
+            </div>
+
+            {/*  3 */}
+            <div className="item swiper-slide a">
+              <h1 className="flex">
+                <strong className="text-3xl pr-4">💼️</strong>
+                <LSButton
+                  className={'text-sm cursor-text'}
+                  leftIcon={<Brain size={16}/>}
+                >
+                  Expert
+                </LSButton>
+              </h1>
+
+              <h2 className="pt-2 text-3xl text-gray-300">
+                Create your own processes.
+              </h2>
+
+              <strong className="progress">
+                <i>1</i>
+                <i>2</i>
+              </strong>
+
+              <h3 className="text-lg space-x-2 px-1 py-2 tracking-wide">
+                <strong>Tip1:</strong>
+                <span className="text-gray-300/70">
+                  Use queries to generate tables of <br/> relevant information.
+                </span>
+              </h3>
+            </div>
           </div>
+        </div>
 
-          <div className="actions flex">
-            <span className="prev" title={'Previous'}>
-              <ArrowCircleLeft size={26}/>
-            </span>
+        <div className="bd-actions flex">
+          <span className="prev" title={'Previous'}
+                onClick={() => swiperRef.current?.slidePrev()}
+          >
+           <ArrowCircleLeft size={26}/>
+          </span>
 
-            <span className="next" title={'Next'}>
+          <strong>{activeIndex}</strong>
+
+          <span className="next" title={'Next'}
+                onClick={() => swiperRef.current?.slideNext()}
+          >
               <ArrowCircleRight size={26}/>
             </span>
-          </div>
         </div>
 
         <div className="bd-info">
