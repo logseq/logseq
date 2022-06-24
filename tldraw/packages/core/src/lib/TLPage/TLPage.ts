@@ -1,20 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { intersectRayBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import {
-  action,
-  autorun,
-  computed,
-  makeObservable,
-  observable,
-  observe,
-  reaction,
-  toJS,
-  transaction,
-} from 'mobx'
+import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLApp, TLShape, TLShapeModel } from '~lib'
-import type { TLLineShape, TLShapeProps } from '~lib/shapes'
+import type { TLLineShape } from '~lib/shapes'
 import { TLBinding, TLBounds, TLEventMap, TLHandle, TLResizeCorner } from '~types'
 import { BoundsUtils, deepCopy, deepEqual, PointUtils } from '~utils'
 
@@ -38,7 +28,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     const { id, name, shapes = [], bindings = {} } = props
     this.id = id
     this.name = name
-    this.bindings = bindings
+    this.bindings = Object.assign({}, bindings) // make sure it is type of object
     this.app = app
     this.addShapes(...shapes)
     makeObservable(this)
@@ -66,7 +56,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @observable shapes: S[] = []
 
-  @observable bindings: Record<string, TLBinding>
+  @observable bindings: Record<string, TLBinding> = {}
 
   @computed get serialized(): TLPageModel<S> {
     return {

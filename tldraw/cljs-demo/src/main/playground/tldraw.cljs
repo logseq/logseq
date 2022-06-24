@@ -41,7 +41,7 @@
        "size" [600 320],
        "opacity" 1,
        "point" [876.7157262252258 195.59449311640805]}],
-     "bindings" [],
+     "bindings" {},
      "nonce" 1}],
    "assets" []})
 

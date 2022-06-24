@@ -20,6 +20,7 @@ export class TLBaseLineBindingState<
   bindableShapeIds: string[] = []
   startBindingShapeId?: string
   newStartBindingId = ''
+  // Seems this value is never assigned to other than the default?
   draggedBindingId = ''
 
   onPointerMove: TLStateEvents<S, K>['onPointerMove'] = () => {
