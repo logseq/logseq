@@ -156,7 +156,8 @@
 (defn- lsq-import-handler
   [e]
   (let [file      (first (array-seq (.-files (.-target e))))
-        file-name (gobj/get file "name")]
+        file-name (some-> (gobj/get file "name")
+                          (string/lower-case))]
     (cond (string/ends-with? file-name ".edn")
           (do
             (reset! *lsq-importing? true)
