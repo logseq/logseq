@@ -1139,7 +1139,7 @@
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
-              height (int (* width (/ 315 560)))]
+              height (int (* width (/ 360 560)))]
           [:iframe
            {:allowfullscreen true
             :framespacing "0"
