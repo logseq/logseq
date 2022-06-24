@@ -1056,7 +1056,8 @@
                        recent-remote->local-file-items)
               _ (swap! *sync-state sync-state--add-current-remote->local-files paths)
               r (<! (apply-filetxns graph-uuid base-path filetxns))
-              _ (swap! *sync-state sync-state--remove-current-remote->local-files paths)]
+              _ (swap! *sync-state sync-state--remove-current-remote->local-files paths
+                       (instance? ExceptionInfo r))]
           ;; remove these recent-remote->local-file-items 5s later
           (go (<! (timeout 5000))
               (swap! *sync-state sync-state--remove-recent-remote->local-files
@@ -1412,24 +1413,24 @@
     (dedupe-by :path)
     ;; reserve the latest 20 history items
     (take 20))
-   (into history
+   (into (filter (fn [o] (not (contains? (set paths) (:path o)))) history)
          (map (fn [path] {:path path :time now}) paths))))
 
 (defn sync-state--remove-current-remote->local-files
-  [sync-state paths]
+  [sync-state paths add-history?]
   {:post [(s/valid? ::sync-state %)]}
   (let [now (t/now)]
-    (-> sync-state
-        (update :current-remote->local-files set/difference paths)
-        (update :history add-history-items paths now))))
+    (cond-> sync-state
+      true         (update :current-remote->local-files set/difference paths)
+      add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--remove-current-local->remote-files
-  [sync-state paths]
+  [sync-state paths add-history?]
   {:post [(s/valid? ::sync-state %)]}
   (let [now (t/now)]
-    (-> sync-state
-        (update :current-local->remote-files set/difference paths)
-        (update :history add-history-items paths now))))
+    (cond-> sync-state
+      true         (update :current-local->remote-files set/difference paths)
+      add-history? (update :history add-history-items paths now))))
 
 (defn sync-state--stopped?
   [sync-state]
@@ -1648,7 +1649,8 @@
           (go
             (let [_ (swap! *sync-state sync-state--add-current-local->remote-files paths)
                   r* (<! r)
-                  _ (swap! *sync-state sync-state--remove-current-local->remote-files paths)]
+                  succ? (number? r*)
+                  _ (swap! *sync-state sync-state--remove-current-local->remote-files paths succ?)]
               (cond
                 (need-sync-remote? r*)
                 (do (println :need-sync-remote r*)
@@ -1661,7 +1663,7 @@
                   (reset! *txid remote-txid)
                   {:succ true})
 
-                (number? r*)          ; succ
+                succ?          ; succ
                 (do
                   (println "sync-local->remote! update txid" r*)
                     ;; persist txid
