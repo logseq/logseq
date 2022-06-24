@@ -278,7 +278,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     }
   }
 
-  updateArrowBindings = (lineShape: TLLineShape) => {
+  private updateArrowBindings = (lineShape: TLLineShape) => {
     const result = {
       start: deepCopy(lineShape.props.handles.start),
       end: deepCopy(lineShape.props.handles.end),

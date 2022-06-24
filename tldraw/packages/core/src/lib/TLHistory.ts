@@ -126,6 +126,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
           if (shapesToAdd.length > 0) page.addShapes(...shapesToAdd)
           // Remove the page from the map
           pagesMap.delete(serializedPage.id)
+          page.updateBindings(serializedPage.bindings)
         } else {
           // Create the page
           const { id, name, shapes, bindings } = serializedPage
