@@ -109,7 +109,7 @@ export function LandingFooterNav () {
   return (
     <div className="app-landing-footer-navs">
       <div className="flex space-x-4">
-        <AppLogo/>
+        <AppLogo className="w-16 h-16"/>
 
         <div className="flex flex-col justify-center">
           <p className="flex space-x-4 text-xs text-gray-300/90">

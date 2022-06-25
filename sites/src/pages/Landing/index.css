@@ -277,7 +277,7 @@
       line-height: 1.2em;
     }
 
-    h1, h3 {
+    h3 {
       @apply opacity-60;
     }
 

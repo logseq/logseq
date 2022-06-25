@@ -1,4 +1,4 @@
-import { FloatGlassButton, imageS1 } from './common'
+import { AppLogo, FloatGlassButton, imageS1 } from './common'
 import {
   ArrowCircleLeft,
   ArrowCircleRight, Brain, DiscordLogo,
@@ -35,11 +35,15 @@ export function TutorialTips () {
   return (
     <div className="app-tutorial-tips">
       <AnimateInTurnBox
-        ticks={[100, 1, 300, 1]}
+        ticks={[500, 1, 300, 1]}
         className="hd flex flex-col justify-center items-center">
         {(t: Array<any>) => (<>
-          <h1 className={cx('invisible', t[0] && 'ani-slide-in-from-bottom')}>
-            Braindump everything into Logseq
+          <h1 className={cx('invisible flex items-center', t[0] && 'ani-slide-in-from-bottom')}>
+            <span className="pr-5 opacity-60">
+              Braindump everything into
+            </span>
+            <AppLogo className="w-16 h-16"/>
+            <span className="pl-2 opacity-60">.</span>
           </h1>
           <h2 className={cx('invisible', t[1] && 'ani-slide-in-from-bottom')}>
             New ideas will pop up with time.

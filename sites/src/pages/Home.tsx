@@ -32,7 +32,7 @@ export function HomePage () {
 
           {/* text slogan  */}
           <AnimateInTurnBox
-            ticks={[100, 600]}
+            ticks={[500, 600]}
             className="text-slogan">
             {(t: Array<any>) => {
               return (
