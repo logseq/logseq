@@ -880,7 +880,7 @@
           r
           (into #{}
                 (map #(->FileMetadata (:Size %)
-                                      (:ETag %)
+                                      (:Checksum %)
                                       (get encrypted-path->path-map (:FilePath %))
                                       (:FilePath %)
                                       (:LastModified %)
