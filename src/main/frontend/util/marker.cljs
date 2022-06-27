@@ -17,10 +17,10 @@
           :org
           [#"^\*+\s" #"\n\*+\s"]
 
-          :markdown
+          (:markdown :md)
           [#"^#+\s" #"\n#+\s"]
 
-          ;; failback to makrdown
+          ;; failback to markdown
           [#"^#+\s" #"\n#+\s"])
 
         pos
