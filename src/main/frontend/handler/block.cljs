@@ -156,6 +156,7 @@
                                   [:mobile :gestures/disabled-in-block-with-tags])]
     (or (.closest target ".dsl-query")
         (.closest target ".drawer")
+        (.closest target ".draw-wrap")
         (some #(.closest target (util/format "[data-refs-self*=%s]" %))
               user-defined-tags))))
 
