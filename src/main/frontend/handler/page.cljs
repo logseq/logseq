@@ -116,27 +116,35 @@
         [page]))))
 
 (defn create!
+  "Create page.
+   :redirect?           - when true, redirect to the created page, otherwise return sanitized page name.
+   :split-namespace?    - when true, split hierarchical namespace into levels.
+   :create-first-block? - when true, create an empty block if the page is empty.
+   :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
                   properties          nil
-                  split-namespace?    true}}]
-   (let [title (string/trim title)
-         title (gp-util/remove-boundary-slashes title)
-         page-name (util/page-name-sanity-lc title)
-         repo (state/get-current-repo)]
+                  split-namespace?    true
+                  uuid                nil}}]
+   (let [title      (string/trim title)
+         title      (gp-util/remove-boundary-slashes title)
+         page-name  (util/page-name-sanity-lc title)
+         repo       (state/get-current-repo)
+         with-uuid? (if (uuid? uuid) uuid true)] ;; FIXME: prettier validation
      (when (db/page-empty? repo page-name)
        (let [pages    (if split-namespace?
                         (gp-util/split-namespace-pages title)
                         [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
-                             (-> (block/page-name->map page true)
+                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
+                             (-> (block/page-name->map page (if (= page title) with-uuid? true))
                                  (assoc :block/format format)))
-                        pages)
+                           pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last

@@ -71,6 +71,11 @@
        react
        first))))
 
+(defn get-original-name
+  [page-entity]
+  (or (:block/original-name page-entity)
+      (:block/name page-entity)))
+
 (defn get-tag-pages
   [repo tag-name]
   (when tag-name
@@ -1363,6 +1368,16 @@
        (let [n (count (d/datoms db :avet :block/uuid))]
          (reset! blocks-count-cache n)
          n)))))
+
+(defn get-all-referenced-blocks-uuid
+  "Get all uuids of blocks with any back link exists."
+  []
+  (when-let [db (conn/get-db)]
+    (d/q '[:find [?refed-uuid ...]
+           :where
+           ;; ?referee-b is block with ref towards ?refed-b
+           [?refed-b   :block/uuid ?refed-uuid]
+           [?referee-b :block/refs ?refed-b]] db)))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents
