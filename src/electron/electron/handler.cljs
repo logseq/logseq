@@ -540,6 +540,12 @@
 (defmethod handle :update-remote-files [_ args]
   (apply rsapi/update-remote-files (rest args)))
 
+(defmethod handle :decrypt-fnames [_ args]
+  (apply rsapi/decrypt-fnames (rest args)))
+
+(defmethod handle :encrypt-fnames [_ args]
+  (apply rsapi/encrypt-fnames (rest args)))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 

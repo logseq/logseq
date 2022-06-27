@@ -92,9 +92,7 @@
   (let [repo (state/get-current-repo)
         user-uuid (user/user-uuid)]
     ;; FIXME: when switching graph, sync-start is not called. set-env is not called as well.
-    (sync/<set-env sync/rsapi config/FILE-SYNC-PROD?
-                  "AGE-SECRET-KEY-1RRP2D43M00FTPARY5MJNN0Z4D6K8NDWC9ME5P60ZE59EDKMXP9PQK0P6YA"
-                  "age1sk2zx4lxcy47tjcgmfdz65sxcpw92k8fjpdencmcgyncxtexfupsz38tcg")
+    (sync/<set-env sync/rsapi config/FILE-SYNC-PROD? nil nil)
     (sync/update-graphs-txid! 0 graph-uuid user-uuid repo)
     (swap! refresh-file-sync-component not)
     (state/pub-event! [:graph/switch repo {:persist? false}])))
@@ -153,7 +151,7 @@
   (let [file-id (:db/id (:block/file page))]
     (when-let [path (:file/path (db/entity file-id))]
       (let [base-path (config/get-repo-dir (state/get-current-repo))
-            path*     (string/replace-first path base-path "")]
+            path*     (string/replace-first (string/replace-first path base-path "") #"^/" "")]
         (go
           (let [version-list       (:VersionList
                                     (<! (sync/<get-remote-file-versions sync/remoteapi graph-uuid path*)))

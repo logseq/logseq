@@ -31,4 +31,10 @@
   (rsapi/updateRemoteFile graph-uuid base-path file-path txid token))
 
 (defn update-remote-files [graph-uuid base-path file-paths txid token]
-  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token))
+  (rsapi/updateRemoteFiles graph-uuid base-path (clj->js file-paths) txid token true))
+
+(defn encrypt-fnames [fnames]
+  (mapv rsapi/encryptFname fnames))
+
+(defn decrypt-fnames [fnames]
+  (mapv rsapi/decryptFname fnames))

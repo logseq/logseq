@@ -432,7 +432,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(deftype FileMetadata [size etag path last-modified remote? ^:mutable normalized-path]
+(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (when-not normalized-path
@@ -450,8 +450,9 @@
   IEquiv
   (-equiv [o ^FileMetadata other]
     (and ;; (= size (.-size other))
-         (= (.get-normalized-path o) (.get-normalized-path other))
-         (= etag (.-etag other))))
+     (= (.get-normalized-path o) (.get-normalized-path other))
+     (= encrypted-path (.-encrypted-path other))
+     (= etag (.-etag other))))
 
   IHash
   (-hash [_] (hash {;; :size size
@@ -459,7 +460,7 @@
 
   IPrintWithWriter
   (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :remote? remote?}))))
+    (write-all w (str {:size size :etag etag :path path :encrypted-path encrypted-path :remote? remote?}))))
 
 (extend-protocol IChecksum
   FileMetadata
@@ -535,9 +536,10 @@
   (<update-local-files [this graph-uuid base-path filepaths] "remote -> local")
   (<download-version-files [this graph-uuid base-path filepaths])
   (<delete-local-files [this graph-uuid base-path filepaths])
-  (<update-remote-file [this graph-uuid base-path filepath local-txid] "local -> remote, return err or txid")
   (<update-remote-files [this graph-uuid base-path filepaths local-txid] "local -> remote, return err or txid")
-  (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid"))
+  (<delete-remote-files [this graph-uuid base-path filepaths local-txid] "return err or txid")
+  (<encrypt-fnames [this fnames])
+  (<decrypt-fnames [this fnames]))
 
 (defprotocol IRemoteAPI
   (<get-remote-all-files-meta [this graph-uuid] "get all remote files' metadata")
@@ -595,7 +597,8 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                      (get metadata "encryptedFname") nil false nil)))
                set)))))
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
     (go
@@ -605,7 +608,8 @@
           (->> r
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil))))))))
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                      (get metadata "encryptedFname") nil false nil))))))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path from to))))
   (<update-local-files [this graph-uuid base-path filepaths]
@@ -627,12 +631,6 @@
       (let [r (<! (<retry-rsapi #(p->c (ipc/ipc "delete-local-files" graph-uuid base-path filepaths))))]
         r)))
 
-  (<update-remote-file [this graph-uuid base-path filepath local-txid]
-    (go
-      (let [token (<! (<get-token this))]
-        (<! (<retry-rsapi
-             #(p->c (ipc/ipc "update-remote-file" graph-uuid base-path filepath local-txid token)))))))
-
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
       (let [token (<! (<get-token this))]
@@ -644,7 +642,10 @@
       (let [token (<! (<get-token this))]
         (<!
          (<retry-rsapi
-          #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token))))))))
+          #(p->c (ipc/ipc "delete-remote-files" graph-uuid base-path filepaths local-txid token)))))))
+  (<encrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "encrypt-fnames" fnames))))))
+  (<decrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))))))
+
 
 (deftype CapacitorAPI []
   IToken
@@ -675,7 +676,8 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                      (get metadata "encryptedFname") nil false nil)))
                set)))))
 
   (<get-local-files-meta [_ _graph-uuid base-path filepaths]
@@ -688,7 +690,8 @@
           (->> (.-result r)
                js->clj
                (map (fn [[path metadata]]
-                      (->FileMetadata (get metadata "size") (get metadata "md5") path nil false nil)))
+                      (->FileMetadata (get metadata "size") (get metadata "md5") path
+                                      (get metadata "encryptedFname") nil false nil)))
                set)))))
 
   (<rename-local-file [_ _graph-uuid base-path from to]
@@ -717,9 +720,6 @@
                                                                     :filePaths filepaths})))))]
         r)))
 
-  (<update-remote-file [this graph-uuid base-path filepath local-txid]
-    (<update-remote-files this graph-uuid base-path [filepath] local-txid))
-
   (<update-remote-files [this graph-uuid base-path filepaths local-txid]
     (go
       (let [token (<! (<get-token this))
@@ -743,7 +743,10 @@
                                                     :token token}))))]
       (if (instance? ExceptionInfo r)
         r
-        (get (js->clj r) "txid")))))
+        (get (js->clj r) "txid"))))
+
+  (<encrypt-fnames [_ _fname] (println :TODO :encrypt-fname))
+  (<decrypt-fnames [_ _fname] (println :TODO :decrypt-fname)))
 
 (def rsapi (cond
              (util/electron?)
@@ -825,42 +828,61 @@
 (extend-type RemoteAPI
   IRemoteAPI
   (<get-remote-all-files-meta [this graph-uuid]
-    (let [file-meta-list (transient #{})]
-      (go-loop [dir nil continuation-token nil]
-        (let [r (<! (.<request this "get_all_files"
-                              (into
-                               {}
-                               (remove (comp nil? second)
-                                       {:GraphUUID graph-uuid :Dir dir :ContinuationToken continuation-token}))))]
-          (if (instance? ExceptionInfo r)
-            r
-            (let [next-dir (:NextDir r)
-                  next-continuation-token (:NextContinuationToken r)
-                  objs (:Objects r)]
-              (apply conj! file-meta-list
-                     (map
-                      #(->FileMetadata (:Size %)
-                                       (:checksum %)
-                                       (some-> (:Key %) js/decodeURIComponent remove-user-graph-uuid-prefix)
-                                       (:LastModified %)
-                                       true nil)
-                      objs))
-              (if (and (empty? next-dir)
-                       (empty? next-continuation-token))
-                (persistent! file-meta-list) ; finish
-                (recur next-dir next-continuation-token))))))))
+    (let [file-meta-list      (transient #{})
+          encrypted-path-list (transient [])]
+      (go
+        (<!
+         (go-loop [continuation-token nil]
+           (let [r (<! (.<request this "get_all_files"
+                                  (into
+                                   {}
+                                   (remove (comp nil? second)
+                                           {:GraphUUID graph-uuid :ContinuationToken continuation-token}))))]
+             (if (instance? ExceptionInfo r)
+               r
+               (let [next-continuation-token (:NextContinuationToken r)
+                     objs                    (:Objects r)]
+                 (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
+                 (apply conj! file-meta-list
+                        (map
+                         #(hash-map :size (:Size %)
+                                    :checksum (:checksum %)
+                                    :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
+                                    :last-modified (:LastModified %))
+                         objs))
+                 (when-not (empty? next-continuation-token)
+                   (recur next-continuation-token)))))))
+        (let [file-meta-list*          (persistent! file-meta-list)
+              encrypted-path-list*     (persistent! encrypted-path-list)
+              _ (def xx encrypted-path-list*)
+              encrypted-path->path-map (zipmap encrypted-path-list*
+                                               (<! (<decrypt-fnames rsapi encrypted-path-list*)))]
+          (set
+           (mapv
+            #(->FileMetadata (:size %)
+                             (:checksum %)
+                             (get encrypted-path->path-map (:encrypted-path %))
+                             (:encrypted-path %)
+                             (:last-modified %)
+                             true nil)
+            file-meta-list*))))))
 
   (<get-remote-files-meta [this graph-uuid filepaths]
     {:pre [(coll? filepaths)]}
     (go
-      (let [encoded-filepaths (map encode-filepath filepaths)
-            r (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encoded-filepaths}))]
+      (let [encrypted-paths* (<! (<encrypt-fnames rsapi filepaths))
+            r (<! (.<request this "get_files_meta" {:GraphUUID graph-uuid :Files encrypted-paths*}))
+            encrypted-paths (mapv :FilePath r)
+            encrypted-path->path-map (zipmap
+                                      encrypted-paths
+                                      (<! (<decrypt-fnames rsapi encrypted-paths)))]
         (if (instance? ExceptionInfo r)
           r
           (into #{}
                 (map #(->FileMetadata (:Size %)
                                       (:ETag %)
-                                      (some-> (:FilePath %) (js/decodeURIComponent ))
+                                      (get encrypted-path->path-map (:FilePath %))
+                                      (:FilePath %)
                                       (:LastModified %)
                                       true nil))
                 r)))))
@@ -872,8 +894,12 @@
                                  (assoc :GraphName graph-name-opt)
                                  (seq graph-uuid-opt)
                                  (assoc :GraphUUID graph-uuid-opt))))
+
   (<get-remote-file-versions [this graph-uuid filepath]
-    (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File (encode-filepath filepath)}))
+    (go
+      (let [encrypted-path (first (<! (<encrypt-fnames rsapi [filepath])))]
+        (<! (.<request this "get_file_version_list" {:GraphUUID graph-uuid :File encrypted-path})))))
+
   (<list-remote-graphs [this]
     (.<request this "list_graphs"))
 
@@ -883,13 +909,46 @@
       (let [r (<! (.<request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))]
         (if (instance? ExceptionInfo r)
           r
-          (-> r
-              :Transactions
-              (as-> txns
-                  (sort-by :TXId txns)
-                [txns
-                 (:TXId (last txns))
-                 (:TXId (first txns))]))))))
+          (let [txns-with-encrypted-paths (sort-by :TXId (:Transactions r))
+                txns-with-encrypted-paths*
+                (mapv
+                 (fn [txn]
+                   (assoc txn :TXContent
+                          (mapv
+                           (fn [[to-path from-path checksum]]
+                             [(remove-user-graph-uuid-prefix to-path)
+                              (some-> from-path remove-user-graph-uuid-prefix)
+                              checksum])
+                           (:TXContent txn))))
+                 txns-with-encrypted-paths)
+                encrypted-paths
+                (mapcat
+                 (fn [txn]
+                   (remove
+                    #(or (nil? %) (not (string/starts-with? % "e.")))
+                    (mapcat
+                     (fn [[to-path from-path _checksum]] [to-path from-path])
+                     (:TXContent txn))))
+                 txns-with-encrypted-paths*)
+                encrypted-path->path-map
+                (zipmap
+                 encrypted-paths
+                 (<! (<decrypt-fnames rsapi encrypted-paths)))
+                txns
+                (mapv
+                 (fn [txn]
+                   (assoc
+                    txn :TXContent
+                    (mapv
+                     (fn [[to-path from-path checksum]]
+                       [(get encrypted-path->path-map to-path to-path)
+                        (some->> from-path (get encrypted-path->path-map))
+                        checksum])
+                     (:TXContent txn))))
+                 txns-with-encrypted-paths*)]
+            [txns
+             (:TXId (last txns))
+             (:TXId (first txns))])))))
 
   (<create-graph [this graph-name]
     (.<request this "create_graph" {:GraphName graph-name}))
