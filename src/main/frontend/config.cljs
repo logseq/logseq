@@ -17,8 +17,6 @@
 
 (reset! state/publishing? publishing?)
 
-(goog-define FILE_SYNC_ENABLED false)
-
 (def test? false)
 
 ;; prod env
@@ -34,6 +32,15 @@
              "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
+
+;; feature flags
+(goog-define ENABLE-FILE-SYNC false)
+(defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
+
+(goog-define ENABLE-PLUGINS true)
+(defonce enable-plugins? ENABLE-PLUGINS)
+
+(swap! state/state assoc :plugin/enabled enable-plugins?)
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
