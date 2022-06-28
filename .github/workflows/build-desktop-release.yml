@@ -6,12 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta"/"non-release")'
-        type: string
+        description: 'Build Target (Release Type)'
+        type: choice
         required: true
+        options:
+          - beta
+          - nightly
+          - non-release
         default: "beta"
       git-ref:
-        description: "Release Git Ref(master)"
+        description: "Release Git Ref (Which branch or tag to build?)"
         required: true
         default: "master"
       is-draft:
