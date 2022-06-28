@@ -33,6 +33,15 @@
 (goog-define API-DOMAIN "api.logseq.com")
 (goog-define WS-URL "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
+;; feature flags
+(goog-define ENABLE-FILE-SYNC false)
+(defonce enable-file-sync? (or ENABLE-FILE-SYNC dev?)) ;; always enable file-sync when dev
+
+(goog-define ENABLE-PLUGINS true)
+(defonce enable-plugins? ENABLE-PLUGINS)
+
+(swap! state/state assoc :plugin/enabled enable-plugins?)
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 
