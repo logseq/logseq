@@ -116,7 +116,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canChangeAspectRatio = true
   canFlip = true
   canActivate = true
-  canEdit = true
+  canEdit = false
 
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
     super(props)
@@ -208,7 +208,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return () => {
         // no-ops
       }
-    }, [isActivated])
+    }, [isActivated, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
       app.wrapUpdate(() => {
