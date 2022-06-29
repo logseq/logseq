@@ -1,3 +1,5 @@
+;; deprecated by the onboarding import panel frontend.components.onboarding.setups
+
 (ns frontend.components.external
   (:require [rum.core :as rum]
             [goog.object :as gobj]

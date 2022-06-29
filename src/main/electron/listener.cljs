@@ -1,9 +1,12 @@
 (ns electron.listener
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.config :as config]
+            [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.fs.sync :as sync]
@@ -34,7 +37,7 @@
    (fn [_req]
      (persist-dbs!))))
 
-(defn listen-to-electron!
+(defn ^:large-vars/cleanup-todo listen-to-electron!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on "file-watcher"
@@ -124,6 +127,28 @@
   (js/window.apis.on "loginCallback"
                      (fn [code]
                        (user/login-callback code)))
+
+  (js/window.apis.on "quickCapture"
+                     (fn [args]
+                       (let [{:keys [url title content]} (bean/->clj args)
+                             page (or (state/get-current-page)
+                                      (string/lower-case (date/journal-name)))
+                             format (db/get-page-format page)
+                             time (date/get-current-time)
+                             text (or (and content (not-empty (string/trim content))) "")
+                             link (if (not-empty title) (config/link-format format title url) url)
+                             template (get-in (state/get-config)
+                                              [:quick-capture-templates :text]
+                                              "**{time}** [[quick capture]]: {text} {url}")
+                             content (-> template
+                                         (string/replace "{time}" time)
+                                         (string/replace "{url}" link)
+                                         (string/replace "{text}" text))]
+                         (if (and (state/get-edit-block) (state/editing?))
+                           (editor-handler/insert content)
+                           (editor-handler/api-insert-new-block! content {:page page
+                                                                          :edit-block? false
+                                                                          :replace-empty-target? true})))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage

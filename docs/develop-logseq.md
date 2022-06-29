@@ -44,6 +44,7 @@ yarn install && cd static && yarn install && cd ..
 ```bash
 yarn watch
 # Wait until watch is finished building and then in a different shell
+# If you have opened desktop logseq, you should close it. Otherwise, the following command will fail.
 yarn dev-electron-app
 ```
 

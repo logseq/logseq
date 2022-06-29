@@ -150,22 +150,34 @@
 (def *swipe (atom nil))
 (def *touch-start (atom nil))
 
+(defn- target-disable-swipe?
+  [target]
+  (let [user-defined-tags (get-in (state/get-config)
+                                  [:mobile :gestures/disabled-in-block-with-tags])]
+    (or (.closest target ".dsl-query")
+        (.closest target ".drawer")
+        (.closest target ".draw-wrap")
+        (some #(.closest target (util/format "[data-refs-self*=%s]" %))
+              user-defined-tags))))
+
 (defn on-touch-start
   [event uuid]
-  (let [input (state/get-input)
+  (let [target (.-target event)
+        input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when (not= selection-type "Range")
-      (when-let [touches (.-targetTouches event)]
-        (when (= (.-length touches) 1)
-          (let [touch (aget touches 0)
-                x (.-clientX touch)
-                y (.-clientY touch)]
-            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
+    (when-not (target-disable-swipe? target)
+      (when (not= selection-type "Range")
+        (when-let [touches (.-targetTouches event)]
+          (when (= (.-length touches) 1)
+            (let [touch (aget touches 0)
+                  x (.-clientX touch)
+                  y (.-clientY touch)]
+              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
 
 (defn on-touch-move
   [event block uuid edit? *show-left-menu? *show-right-menu?]
@@ -197,8 +209,8 @@
               (let [{:keys [x0 y0]} @*swipe
                     dx (- tx x0)
                     dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 20)
-                           (> (. js/Math abs dx) 10))
+                (when (and (< (. js/Math abs dy) 30)
+                           (> (. js/Math abs dx) 30))
                   (let [left (gdom/getElement (str "block-left-menu-" uuid))
                         right (gdom/getElement (str "block-right-menu-" uuid))]
 

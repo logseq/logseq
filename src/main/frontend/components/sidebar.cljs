@@ -488,7 +488,8 @@
   [e]
   (state/hide-custom-context-menu!)
   (when-not (or (gobj/get e "shiftKey")
-                (util/meta-key? e))
+                (util/meta-key? e)
+                (state/get-edit-input-id))
     (editor-handler/clear-selection!)))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <

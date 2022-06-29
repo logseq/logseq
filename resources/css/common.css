@@ -878,7 +878,7 @@ h1.title {
 
 .block-highlight,
 .content .selected {
-  transition: background-color 0.15s;
+  transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color);
   padding: -1px;
 }
