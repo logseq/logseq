@@ -27,6 +27,35 @@
    ;; Parallel execution - https://book.babashka.org/#parallel
    :task (run '-dev:electron-start {:parallel true})}
 
+  dev:app-watch
+  logseq.tasks.dev/app-watch
+
+  dev:npx-cap-run-ios
+  logseq.tasks.dev/npx-cap-run-ios
+
+  -dev:ios-app
+  {:depends [dev:app-watch dev:npx-cap-run-ios]}
+  
+  dev:ios-app
+  {:doc "iOS development environment"
+   :task (run '-dev:ios-app {:parallel true})}
+
+  release:ios-app
+  logseq.tasks.dev/run-ios-release
+
+  dev:npx-cap-run-android
+  logseq.tasks.dev/npx-cap-run-android
+
+  -dev:android-app
+  {:depends [dev:app-watch dev:npx-cap-run-android]}
+  
+  dev:android-app
+  {:doc "Android development environment"
+   :task (run '-dev:android-app {:parallel true})}
+  
+  release:android-app
+  logseq.tasks.dev/run-android-release
+  
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
 

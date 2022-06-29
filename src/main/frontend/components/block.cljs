@@ -1139,7 +1139,7 @@
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
-              height (int (* width (/ 315 560)))]
+              height (int (* width (/ 360 560)))]
           [:iframe
            {:allowfullscreen true
             :framespacing "0"
@@ -1928,7 +1928,10 @@
         (when-not (target-forbidden-edit? target)
           (cond
             (and shift? (state/get-selection-start-block-or-first))
-            (editor-handler/highlight-selection-area! block-id)
+            (do
+              (util/stop e)
+              (util/clear-selection!)
+              (editor-handler/highlight-selection-area! block-id))
 
             shift?
             (util/clear-selection!)
