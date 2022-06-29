@@ -12,23 +12,22 @@ export const ActionBar = observer(function ToolBar(): JSX.Element {
   const app = useApp<Shape>()
 
   const testFunction = ()=> {
-    console.log()
+    console.log(app.viewport.camera.zoom)
     return app.viewport.camera.zoom //convert int to percentage
-
   }
   return (
     <div className="action-bar">
       <button onClick={app.api.undo}>
         <UndoIcon></UndoIcon>
       </button>
-
       <button onClick={app.api.redo}>
         <RedoIcon></RedoIcon>
       </button>
       <button onClick={app.api.zoomIn}>
         <ZoomInIcon></ZoomInIcon>
       </button>
-      <button onClick={testFunction}>{testFunction}</button>
+      <button onClick={testFunction}>{(app.viewport.camera.zoom*100).toFixed(0)+"%"} </button>
+
       <button onClick={app.api.zoomOut}>
         <ZoomOutIcon></ZoomOutIcon>
       </button>
