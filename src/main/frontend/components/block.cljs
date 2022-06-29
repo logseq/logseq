@@ -273,8 +273,8 @@
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
             repo (state/get-current-repo)
-            repo-dir (config/get-repo-dir (state/get-current-repo))
-            path (str (config/get-repo-dir repo) href)
+            repo-dir (config/get-repo-dir repo)
+            path (str repo-dir href)
             share-fn (fn [event]
                        (util/stop event)
                        (when (mobile-util/native-platform?)
