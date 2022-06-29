@@ -1195,3 +1195,7 @@ html[data-theme='dark'] .keyboard-shortcut > code {
     min-width: 1px;
     min-height: 1px;
 }
+
+.katex .tag {
+    overflow-x: clip;
+}
