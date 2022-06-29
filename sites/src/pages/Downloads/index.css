@@ -1,0 +1,36 @@
+.app-head-downloads {
+  .text-slogan {
+    h2 {
+      font-size: 38px;
+      line-height: 1.1em;
+    }
+  }
+
+  .dl-items {
+    @apply px-10;
+
+    ul.tabs {
+      li {
+        @apply flex flex-col items-center bg-logseq-600/90 rounded-xl
+        flex-1 py-5 px-2 justify-center select-none cursor-pointer
+        active:opacity-80 border-2 border-transparent transition-all;
+
+        &:hover, &.active {
+          @apply border-gradient-br-yellow-purple-red-logseq-900;
+        }
+
+        > span {
+          font-size: 38px;
+        }
+
+        > strong {
+          @apply text-lg font-normal opacity-70 text-center pt-4;
+        }
+      }
+    }
+
+    .panels {
+
+    }
+  }
+}

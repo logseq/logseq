@@ -378,7 +378,7 @@
   }
 }
 
-.page-home {
+.app-page {
   @apply flex flex-col items-center;
 
   .page-inner-full-wrap {

@@ -19,7 +19,7 @@ export function HomePage () {
   }, [])
 
   return (
-    <main className={'page-home min-h-screen'}>
+    <main className={'app-page min-h-screen'}>
       <div className="page-inner">
         <HeadShowcase/>
         <TutorialShowcase/>

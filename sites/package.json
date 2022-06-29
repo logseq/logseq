@@ -2,10 +2,10 @@
   "name": "sites",
   "version": "0.0.1",
   "description": "Logseq web site project.",
-  "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "dev": "parcel ./index.html"
+    "dev": "parcel ./index.html",
+    "build": "parcel build ./index.html"
   },
   "devDependencies": {
     "@types/react": "^18.0.12",
