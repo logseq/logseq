@@ -13,14 +13,14 @@
  {clj-kondo/clj-kondo {:version "2022.02.09"}
   org.babashka/fswatcher {:version "0.0.3"}}
  :tasks
- {dev:watch
-  logseq.tasks.dev/watch
+ {dev:desktop-watch
+  logseq.tasks.dev.desktop/watch
 
   dev:open-dev-electron-app
-  logseq.tasks.dev/open-dev-electron-app
+  logseq.tasks.dev.desktop/open-dev-electron-app
 
   -dev:electron-start
-  {:depends [dev:watch dev:open-dev-electron-app]}
+  {:depends [dev:desktop-watch dev:open-dev-electron-app]}
 
   dev:electron-start
   {:doc "Start electron dev by watching assets and opening dev app"
@@ -28,34 +28,34 @@
    :task (run '-dev:electron-start {:parallel true})}
 
   dev:app-watch
-  logseq.tasks.dev/app-watch
+  logseq.tasks.dev.mobile/app-watch
 
   dev:npx-cap-run-ios
-  logseq.tasks.dev/npx-cap-run-ios
+  logseq.tasks.dev.mobile/npx-cap-run-ios
 
   -dev:ios-app
   {:depends [dev:app-watch dev:npx-cap-run-ios]}
-  
+
   dev:ios-app
   {:doc "iOS development environment"
    :task (run '-dev:ios-app {:parallel true})}
 
   release:ios-app
-  logseq.tasks.dev/run-ios-release
+  logseq.tasks.dev.mobile/run-ios-release
 
   dev:npx-cap-run-android
-  logseq.tasks.dev/npx-cap-run-android
+  logseq.tasks.dev.mobile/npx-cap-run-android
 
   -dev:android-app
   {:depends [dev:app-watch dev:npx-cap-run-android]}
-  
+
   dev:android-app
   {:doc "Android development environment"
    :task (run '-dev:android-app {:parallel true})}
-  
+
   release:android-app
-  logseq.tasks.dev/run-android-release
-  
+  logseq.tasks.dev.mobile/run-android-release
+
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage
 
