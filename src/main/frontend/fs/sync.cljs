@@ -432,7 +432,7 @@
    (diffs->partitioned-filetxns n)))
 
 
-(deftype FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
+(defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
   Object
   (get-normalized-path [_]
     (when-not normalized-path
@@ -443,24 +443,47 @@
     normalized-path)
 
   IRelativePath
-  (-relative-path [_] path)
+  (-relative-path [_] path))
 
+(defn- diff-file-metadata-sets
+  "Find the `FileMetadata`s that exists in s1 and does not exist in s2,
+  compare by path+checksum+last-modified,
+  if s1.path = s2.path & s1.checksum <> s2.checksum & s1.last-modified > s2.last-modified,
+  keep this `FileMetadata` in result"
+  [s1 s2]
+  (reduce
+   (fn [result item]
+     (let [encrypted-path (:encrypted-path item)
+           checksum (:etag item)
+           last-modified (:last-modified item)]
+       (if (some
+            #(cond
+               (not= encrypted-path (:encrypted-path %))
+               false
+               (= checksum (:etag %))
+               true
+               (>= last-modified (:last-modified %))
+               false
+               (< last-modified (:last-modified %))
+               true)
+            s2)
+         result
+         (conj result item))))
+   #{} s1))
 
-  ;; ignore size, cause size value from remote is count of encrypted-data
-  IEquiv
-  (-equiv [o ^FileMetadata other]
-    (and ;; (= size (.-size other))
-     (= (.get-normalized-path o) (.get-normalized-path other))
-     (= encrypted-path (.-encrypted-path other))
-     (= etag (.-etag other))))
-
-  IHash
-  (-hash [_] (hash {;; :size size
-                    :etag etag :path path}))
-
-  IPrintWithWriter
-  (-pr-writer [_ w _opts]
-    (write-all w (str {:size size :etag etag :path path :encrypted-path encrypted-path :remote? remote?}))))
+(comment
+  (assert
+   (=
+    #{(map->FileMetadata {:size 1 :etag 2 :path 2 :encrypted-path 2 :last-modified 2})}
+    (diff-file-metadata-sets
+     (into #{}
+           (map map->FileMetadata)
+           [{:size 1 :etag 1 :path 1 :encrypted-path 1 :last-modified 1}
+            {:size 1 :etag 2 :path 2 :encrypted-path 2 :last-modified 2}])
+     (into #{}
+           (map map->FileMetadata)
+           [{:size 1 :etag 1 :path 1 :encrypted-path 1 :last-modified 1}
+            {:size 1 :etag 1 :path 2 :encrypted-path 2 :last-modified 1}])))))
 
 (extend-protocol IChecksum
   FileMetadata
@@ -598,7 +621,7 @@
                js->clj
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil)))
+                                      (get metadata "encryptedFname") (get metadata "mtime") false nil)))
                set)))))
   (<get-local-files-meta [_ graph-uuid base-path filepaths]
     (go
@@ -609,7 +632,7 @@
                js->clj
                (map (fn [[path metadata]]
                       (->FileMetadata (get metadata "size") (get metadata "md5") path
-                                      (get metadata "encryptedFname") nil false nil))))))))
+                                      (get metadata "encryptedFname") (get metadata "mtime") false nil))))))))
   (<rename-local-file [_ graph-uuid base-path from to]
     (<retry-rsapi #(p->c (ipc/ipc "rename-local-file" graph-uuid base-path from to))))
   (<update-local-files [this graph-uuid base-path filepaths]
@@ -845,8 +868,7 @@
                  (apply conj! encrypted-path-list (map (comp remove-user-graph-uuid-prefix :Key) objs))
                  (apply conj! file-meta-list
                         (map
-                         #(hash-map :size (:Size %)
-                                    :checksum (:checksum %)
+                         #(hash-map :checksum (:checksum %)
                                     :encrypted-path (remove-user-graph-uuid-prefix (:Key %))
                                     :last-modified (:LastModified %))
                          objs))
@@ -854,12 +876,11 @@
                    (recur next-continuation-token)))))))
         (let [file-meta-list*          (persistent! file-meta-list)
               encrypted-path-list*     (persistent! encrypted-path-list)
-              _ (def xx encrypted-path-list*)
               encrypted-path->path-map (zipmap encrypted-path-list*
                                                (<! (<decrypt-fnames rsapi encrypted-path-list*)))]
           (set
            (mapv
-            #(->FileMetadata (:size %)
+            #(->FileMetadata nil
                              (:checksum %)
                              (get encrypted-path->path-map (:encrypted-path %))
                              (:encrypted-path %)
@@ -1590,7 +1611,7 @@
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
-                diff-remote-files (set/difference remote-all-files-meta local-all-files-meta)
+                diff-remote-files (diff-file-metadata-sets remote-all-files-meta local-all-files-meta )
                 recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %))
                                       (t/today))
                 sorted-diff-remote-files
@@ -1745,7 +1766,7 @@
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
-                diff-local-files (set/difference local-all-files-meta remote-all-files-meta)
+                diff-local-files (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
                 change-events-partitions
                 (sequence
                  (comp
@@ -2099,4 +2120,5 @@
   (<get-remote-all-files-meta remoteapi graph-uuid)
   (<get-local-all-files-meta rsapi graph-uuid
                             (config/get-repo-dir (state/get-current-repo)))
+
   )
