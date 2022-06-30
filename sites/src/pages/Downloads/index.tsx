@@ -3,10 +3,11 @@ import {
   AppleLogo, AppStoreLogo, DownloadSimple, GooglePlayLogo,
   LinuxLogo, QrCode, WindowsLogo
 } from 'phosphor-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import cx from 'classnames'
 import { LSButton } from '../../components/Buttons'
 import { IconsIntel } from '../../components/Icons'
+import { LandingFooterDesc, LandingFooterNav } from '../Landing'
 
 const headImageBg: any = new URL('assets/dl_head_bg.jpg', import.meta.url)
 const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
@@ -140,6 +141,14 @@ export function HeadDownloadLinks () {
 }
 
 export function DownloadsPage () {
+  useEffect(() => {
+    setTimeout(() => {
+      // @ts-ignore
+      particlesJS.load('particles-bg', './particlesjs-config.json', () => {
+      })
+    }, 1000)
+  }, [])
+
   return (
     <div className="app-page">
       <div className="page-inner-full-wrap dl-a">
@@ -148,10 +157,17 @@ export function DownloadsPage () {
         </div>
       </div>
 
-      <div className="page-inner">
-        <h1 className="text-6xl text-center my-60">
-          Another modules
-        </h1>
+      <div className="page-inner-full-wrap b relative">
+        {/* particles background */}
+        <div id="particles-bg" className="particles-bg"></div>
+
+        <div className="page-inner pt-32">
+          <LandingFooterDesc/>
+        </div>
+      </div>
+
+      <div className="page-inner pt-0">
+        <LandingFooterNav/>
       </div>
     </div>
   )
