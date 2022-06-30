@@ -4,7 +4,7 @@ import { TLShape, TLResizeInfo, TLShapeProps } from '../TLShape'
 import { BoundsUtils } from '~utils'
 
 export interface TLDotShapeProps extends TLShapeProps {
-  radius: number
+  radius?: number
 }
 
 export class TLDotShape<P extends TLDotShapeProps = TLDotShapeProps, M = any> extends TLShape<
@@ -35,7 +35,7 @@ export class TLDotShape<P extends TLDotShapeProps = TLDotShapeProps, M = any> ex
     const {
       props: {
         point: [x, y],
-        radius,
+        radius = 0,
       },
     } = this
     return {
@@ -56,7 +56,7 @@ export class TLDotShape<P extends TLDotShapeProps = TLDotShapeProps, M = any> ex
 
   onResize = (initialProps: any, info: TLResizeInfo): this => {
     const {
-      props: { radius },
+      props: { radius = 0 },
     } = this
     return this.update({
       point: [

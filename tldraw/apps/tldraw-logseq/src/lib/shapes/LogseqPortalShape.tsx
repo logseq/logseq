@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -93,7 +93,6 @@ const LogseqPortalShapeHeader = observer(
 
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
-  static smart = true
 
   static defaultProps: LogseqPortalShapeProps = {
     id: 'logseq-portal',
@@ -133,6 +132,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   ReactContextBar = observer(() => {
+    const app = useApp<Shape>()
     return (
       <>
         <ColorInput
@@ -142,6 +142,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             this.update({
               fill: e.target.value,
             })
+            app.persist(true)
           }}
         />
         <ColorInput
@@ -151,6 +152,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             this.update({
               stroke: e.target.value,
             })
+            app.persist(true)
           }}
         />
         <SwitchInput
@@ -164,6 +166,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               size: [this.props.size[0], collapsing ? HEADER_HEIGHT : this.props.collapsedHeight],
               collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
             })
+            app.persist()
           }}
         />
       </>
@@ -180,7 +183,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
     const tlEventsEnabled =
-      isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select'
+      (isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select') && !this.draft
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
@@ -210,14 +213,15 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
+      app.history.resume()
       app.wrapUpdate(() => {
+        this.setDraft(false)
         this.update({
           pageId: id,
           size: [600, 320],
           blockType: 'P',
         })
-        this.setDraft(false)
-        app.clearEditingShape()
+        app.selectTool('select')
       })
     }, [])
 

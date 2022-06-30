@@ -673,15 +673,6 @@ export class TLApp<
 
   Shapes = new Map<string, TLShapeConstructor<S>>()
 
-  get SmartShape() {
-    for (const S of this.Shapes.values()) {
-      if (S.smart) {
-        return S
-      }
-    }
-    return null
-  }
-
   registerShapes = (Shapes: TLShapeConstructor<S>[]) => {
     Shapes.forEach(Shape => this.Shapes.set(Shape.id, Shape))
   }

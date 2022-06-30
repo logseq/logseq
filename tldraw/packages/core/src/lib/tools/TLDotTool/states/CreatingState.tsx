@@ -1,12 +1,12 @@
 import Vec from '@tldraw/vec'
-import { TLApp, TLShape, TLToolState, TLBoxShape } from '~lib'
+import { TLApp, TLShape, TLToolState, TLDotShape } from '~lib'
 import { uniqueId } from '~utils'
 import type { TLEventMap, TLStateEvents } from '~types'
 import type { TLDotTool } from '../TLDotTool'
 import { transaction } from 'mobx'
 
 export class CreatingState<
-  S extends TLBoxShape,
+  S extends TLDotShape,
   T extends S & TLShape,
   K extends TLEventMap,
   R extends TLApp<S, K>,
@@ -26,9 +26,6 @@ export class CreatingState<
       point: Vec.sub(this.app.inputs.originPoint, this.offset),
       size: Shape.defaultProps.size,
     } as any)
-    if (Shape.smart) {
-      shape.setDraft(true)
-    }
     this.creatingShape = shape
   }
 
@@ -46,11 +43,7 @@ export class CreatingState<
       const shape = this.creatingShape
       transaction(() => {
         this.app.currentPage.addShapes(shape)
-        if (this.tool.Shape.smart && shape.draft) {
-          this.app.setEditingShape(shape)
-        } else {
-          this.app.setSelectedShapes([shape])
-        }
+        this.app.setSelectedShapes([shape])
       })
     }
     if (!this.app.settings.isToolLocked) {

@@ -39,5 +39,6 @@ export interface TLReactCallbacks<
   onDeleteShapes: TLReactCallback<S, R, 'delete-shapes'>
   onDeleteAssets: TLReactCallback<S, R, 'delete-assets'>
   onFileDrop: TLReactCallback<S, R, 'drop-files'>
+  onCanvasDBClick: TLReactCallback<S, R, 'canvas-dbclick'>
   onPaste: TLReactCallback<S, R, 'paste'>
 }

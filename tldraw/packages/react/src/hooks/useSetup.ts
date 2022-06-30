@@ -19,7 +19,8 @@ export function useSetup<
     onDeleteAssets,
     onDeleteShapes,
     onFileDrop,
-    onPaste
+    onPaste,
+    onCanvasDBClick
   } = props
 
   React.useLayoutEffect(() => {
@@ -46,6 +47,7 @@ export function useSetup<
     if (onDeleteAssets) unsubs.push(app.subscribe('delete-assets', onDeleteAssets))
     if (onFileDrop) unsubs.push(app.subscribe('drop-files', onFileDrop))
     if (onPaste) unsubs.push(app.subscribe('paste', onPaste))
+    if (onCanvasDBClick) unsubs.push(app.subscribe('canvas-dbclick', onCanvasDBClick))
     // Kind of unusual, is this the right pattern?
 
     return () => unsubs.forEach(unsub => unsub())
