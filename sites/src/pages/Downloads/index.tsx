@@ -11,6 +11,7 @@ import { LandingFooterDesc, LandingFooterNav } from '../Landing'
 
 const headImageBg: any = new URL('assets/dl_head_bg.jpg', import.meta.url)
 const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
+const iosImageQr: any = new URL('assets/ios_app_qr.png', import.meta.url)
 
 const releases = [
   ['MacOS', <AppleLogo/>],
@@ -27,14 +28,19 @@ export function HeadDownloadLinks () {
     switch (label) {
       case 'iOS':
         return (
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center is-ios cursor-crosshair">
             <LSButton
               className={'bg-logseq-400 px-6 py-4'}
               leftIcon={icon}
+              disabled={true}
               rightIcon={<QrCode className="opacity-50"/>}
             >
               Download on the App Store
             </LSButton>
+
+            <span className="absolute top-16 z-10 flex justify-center translate-x-4 transition-opacity qr opacity-0">
+              <img src={iosImageQr} alt="qr" className="w-1/2"/>
+            </span>
           </div>
         )
       case 'MacOS':
@@ -69,13 +75,15 @@ export function HeadDownloadLinks () {
         )
       default:
         return (
-          <LSButton
-            leftIcon={icon}
-            rightIcon={<DownloadSimple className="opacity-50"/>}
-            className="bg-logseq-600 px-6 py-4"
-          >
-            Download {label} release
-          </LSButton>
+          <div>
+            <LSButton
+              leftIcon={icon}
+              rightIcon={<DownloadSimple className="opacity-50"/>}
+              className="bg-logseq-600 px-6 py-4"
+            >
+              Download {label} release
+            </LSButton>
+          </div>
         )
     }
   }
@@ -101,7 +109,7 @@ export function HeadDownloadLinks () {
         <ul className="tabs flex flex space-x-8 justify-around">
           {releases.map(([label, icon]) => {
             return (
-              <li className={cx({ active: activeRelease[0] === label })}
+              <li className={cx({ active: activeRelease[0] === label }, `is-${(label as string).toLowerCase()}`)}
                   onClick={() => {
                     setActiveRelease([label, icon])
                   }}
@@ -126,7 +134,7 @@ export function HeadDownloadLinks () {
         <div className="img-wrap mx-24 relative overflow-hidden">
           <img alt="Image"
                src={headImageBg}
-               className="opacity-80 translate-y-28 rounded-md overflow-hidden -mt-20 img-bg"
+               className="opacity-80 translate-y-28 rounded-md overflow-hidden -mt-24 img-bg"
           />
 
           <img alt="Image"

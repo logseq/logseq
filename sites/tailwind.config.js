@@ -31,6 +31,26 @@ module.exports = {
             colors.purple[500],
             colors.red[600]
           ],
+          'purple-white-red': [
+            colors.red[300],
+            colors.white,
+            colors.purple[400]
+          ],
+          'blue-white-green': [
+            colors.blue[400],
+            colors.white,
+            colors.green[200]
+          ],
+          'yellow-white-orange': [
+            colors.yellow[200],
+            colors.white,
+            colors.orange[400]
+          ],
+          'green-white-black': [
+            colors.green[500],
+            colors.white,
+            colors.yellow[100]
+          ],
         },
         background: theme('colors'),
       })

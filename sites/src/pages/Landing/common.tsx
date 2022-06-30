@@ -2,11 +2,20 @@ import cx from 'classnames'
 
 export const imageS1: any = new URL('./assets/tutorials-1.png', import.meta.url)
 export const imageLogo: any = new URL('./assets/logo2.png', import.meta.url)
+export const imageProductHuntLogo: any = new URL('./assets/product_hunt_logo.png', import.meta.url)
 
 export function FloatGlassButton (
   props: any,
 ) {
-  const { children, className, ...rest } = props
+  const { href, children, className, ...rest } = props
+
+  if (href) {
+    rest.onClick = () => {
+      window?.open(
+        href, '_blank'
+      )
+    }
+  }
 
   return (
     <div className={cx('glass-btn', className)} {...rest}>

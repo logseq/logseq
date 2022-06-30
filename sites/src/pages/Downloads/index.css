@@ -13,10 +13,34 @@
       li {
         @apply flex flex-col items-center bg-logseq-600/90 rounded-xl
         flex-1 py-5 px-2 justify-center select-none cursor-pointer
-        active:opacity-80 border-2 border-transparent transition-all;
+        active:opacity-80 border-2 border-transparent transition-all duration-300;
 
         &:hover, &.active {
           @apply border-gradient-br-yellow-purple-red-logseq-900;
+        }
+
+        &.is-macos, &.is-ios {
+          &:hover, &.active {
+            @apply border-gradient-br-purple-white-red-logseq-900;
+          }
+        }
+
+        &.is-windows {
+          &:hover, &.active {
+            @apply border-gradient-br-blue-white-green-logseq-900;
+          }
+        }
+
+        &.is-linux {
+          &:hover, &.active {
+            @apply border-gradient-br-yellow-white-orange-logseq-900;
+          }
+        }
+
+        &.is-android {
+          &:hover, &.active {
+            @apply border-gradient-br-green-white-black-logseq-900;
+          }
         }
 
         > span {
@@ -30,7 +54,17 @@
     }
 
     .panels {
+      height: 170px;
 
+      > .is-ios {
+        @apply relative;
+
+        &:hover {
+          .qr {
+            @apply opacity-100;
+          }
+        }
+      }
     }
   }
 

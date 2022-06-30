@@ -374,7 +374,7 @@
   }
 
   &-navs {
-    @apply flex justify-between mb-10 pl-5 pr-12 items-center;
+    @apply flex justify-between mt-6 mb-14 pl-5 pr-12 items-center;
   }
 }
 

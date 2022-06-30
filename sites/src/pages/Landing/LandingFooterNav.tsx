@@ -5,12 +5,12 @@ import {
   GithubLogo,
   Globe,
   HandWaving,
-  Keyhole, Play,
+  Keyhole, LinkSimple, Play,
   PuzzlePiece,
   Swatches, TwitterLogo
 } from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
-import { AppLogo, FloatGlassButton } from './common'
+import { AppLogo, FloatGlassButton, imageProductHuntLogo } from './common'
 
 export function FooterDescCard (props: any) {
   const { icon, title, desc } = props
@@ -123,14 +123,29 @@ export function LandingFooterNav () {
         </div>
       </div>
 
-      <div className="flex space-x-3">
-        <FloatGlassButton>
-          <GithubLogo/>
+      <div className="flex space-x-6">
+        <FloatGlassButton
+          href="https://github.com/logseq/logseq"
+        >
+          <GithubLogo size={20}/>
         </FloatGlassButton>
 
-        <FloatGlassButton>
-          <TwitterLogo />
+        <FloatGlassButton
+          href="https://twitter.com/logseq"
+        >
+          <TwitterLogo size={20}/>
         </FloatGlassButton>
+
+        <LSButton
+          leftIcon={<img className="w-10" src={imageProductHuntLogo} alt="image"/>}
+          rightIcon={<ArrowSquareOut className="opacity-50"/>}
+          className="py-1 px-2 bg-transparent border-2 border-logseq-400"
+          href="https://www.producthunt.com/products/logseq"
+        >
+          <span className="opacity-90">
+            Review us on ProductHunt
+          </span>
+        </LSButton>
       </div>
     </div>
   )
