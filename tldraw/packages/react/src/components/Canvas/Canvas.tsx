@@ -1,32 +1,32 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import * as React from 'react'
+import { TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
+import * as React from 'react'
 import {
-  Shape,
-  Indicator,
-  HTMLLayer,
   Container,
-  SelectionDetailContainer,
   ContextBarContainer,
+  HTMLLayer,
+  Indicator,
+  SelectionDetailContainer,
+  Shape,
   SVGContainer,
 } from '~components'
+import { DirectionIndicator } from '~components/ui/DirectionIndicator'
+import { EMPTY_OBJECT, NOOP } from '~constants'
 import {
+  useApp,
   useCanvasEvents,
+  useCursor,
   useGestureEvents,
+  usePreventNavigation,
+  useRendererContext,
   useResizeObserver,
   useStylesheet,
-  useRendererContext,
-  usePreventNavigation,
-  useCursor,
   useZoom,
-  useApp,
 } from '~hooks'
-import { TLAsset, TLBinding, TLBounds, TLCursor, TLTheme } from '@tldraw/core'
-import { EMPTY_OBJECT, NOOP } from '~constants'
-import type { TLReactShape } from '~lib'
-import { DirectionIndicator } from '~components/ui/DirectionIndicator'
 import { useKeyboardEvents } from '~hooks/useKeyboardEvents'
+import type { TLReactShape } from '~lib'
 
 export interface TLCanvasProps<S extends TLReactShape> {
   id: string
@@ -117,7 +117,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
         {showGrid && components.Grid && <components.Grid size={gridSize} />}
         <HTMLLayer>
           {components.SelectionBackground && selectedShapes && selectionBounds && showSelection && (
-            <Container bounds={selectionBounds} zIndex={2}>
+            <Container data-type="SelectionBackground" bounds={selectionBounds} zIndex={2}>
               <components.SelectionBackground
                 zoom={zoom}
                 shapes={selectedShapes}
@@ -161,7 +161,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
           {selectedShapes && selectionBounds && (
             <>
               {showSelection && components.SelectionForeground && (
-                <Container bounds={selectionBounds} zIndex={10002}>
+                <Container data-type="SelectionForeground" bounds={selectionBounds} zIndex={10002}>
                   <components.SelectionForeground
                     zoom={zoom}
                     shapes={selectedShapes}
@@ -172,7 +172,11 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 </Container>
               )}
               {showHandles && onlySelectedShapeWithHandles && components.Handle && (
-                <Container bounds={selectionBounds} zIndex={10003}>
+                <Container
+                  data-type="onlySelectedShapeWithHandles"
+                  bounds={selectionBounds}
+                  zIndex={10003}
+                >
                   <SVGContainer>
                     {Object.entries(onlySelectedShapeWithHandles.props.handles!).map(
                       ([id, handle]) =>

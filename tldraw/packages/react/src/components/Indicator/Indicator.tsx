@@ -31,7 +31,13 @@ export const Indicator = observer(function Shape({
   } = shape
 
   return (
-    <Container bounds={bounds} rotation={rotation} scale={scale} zIndex={10000}>
+    <Container
+      data-type="Indicator"
+      bounds={bounds}
+      rotation={rotation}
+      scale={scale}
+      zIndex={10000}
+    >
       <SVGContainer>
         <g
           className={`tl-indicator-container ${

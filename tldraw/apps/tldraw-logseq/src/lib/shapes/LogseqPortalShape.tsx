@@ -116,7 +116,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   canChangeAspectRatio = true
   canFlip = true
   canActivate = true
-  canEdit = false
+  canEdit = true
 
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
     super(props)
@@ -172,7 +172,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isErasing, isActivated, isBinding }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isEditing, isBinding }: TLComponentProps) => {
     const {
       props: { opacity, pageId, stroke, fill },
     } = this
@@ -194,7 +194,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     // It is a bit weird to update shapes here. Is there a better place?
     React.useEffect(() => {
-      if (this.props.collapsed && isActivated) {
+      if (this.props.collapsed && isEditing) {
         // Should temporarily disable collapsing
         this.update({
           size: [this.props.size[0], this.props.collapsedHeight],
@@ -208,7 +208,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return () => {
         // no-ops
       }
-    }, [isActivated, this.props.collapsed])
+    }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
       app.wrapUpdate(() => {
@@ -218,7 +218,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           blockType: 'P',
         })
         this.setDraft(false)
-        app.setActivatedShapes([])
+        app.clearEditingShape()
       })
     }, [])
 
@@ -241,7 +241,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           style={{
             width: '100%',
             height: '100%',
-            pointerEvents: isActivated ? 'all' : 'none',
+            pointerEvents: isEditing ? 'all' : 'none',
           }}
         >
           {this.draft ? (
@@ -252,7 +252,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               style={{
                 background: fill,
                 boxShadow:
-                  isActivated || isBinding
+                  isEditing || isBinding
                     ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
                     : 'var(--shadow-medium)',
                 opacity: isSelected ? 0.8 : 1,
@@ -264,7 +264,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               }}
             >
               <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} pageId={pageId} />
-              {(!this.props.collapsed || isActivated) && (
+              {(!this.props.collapsed || isEditing) && (
                 <div
                   style={{
                     width: '100%',
