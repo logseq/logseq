@@ -2058,7 +2058,7 @@
 
      [:<>
       [:div.flex.flex-row.justify-between.block-content-inner
-       [:div.flex-1
+       [:div.flex-1.w-full
         (cond
           (seq title)
           (build-block-title config block)
