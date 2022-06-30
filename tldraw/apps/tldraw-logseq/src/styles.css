@@ -57,18 +57,18 @@
 
 .logseq-tldraw .action-bar {
   position: absolute;
-  bottom: 50px;
+  bottom: 0px;
 
 
   /* width: 100%; */
   float:left;
-  left: 50px;
+  left: 0px;
   grid-row: 1;
   display: flex;
   align-items: center;
   padding: 8px;
   color: black;
-  border-radius: 15px;
+  border-top-right-radius: 15px;
   border: black solid 1px;
   z-index: 100000;
   user-select: none;
