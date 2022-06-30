@@ -1,6 +1,5 @@
 (ns frontend.fs.capacitor-fs
   (:require ["@capacitor/filesystem" :refer [Encoding Filesystem]]
-            ["diff" :as diff]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
@@ -10,7 +9,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -137,12 +135,6 @@
                                      :recursive true}))
     (truncate-old-versioned-files! backup-dir)))
 
-(defn string-some-changed?
-  [old new]
-  (let [result (-> ((gobj/get diff "diffChars") old new)
-                   bean/->clj)]
-    (> (count result) 10)))
-
 (defn- write-file-impl!
   [_this repo _dir path content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
   (if skip-compare?
@@ -189,10 +181,7 @@
                  mtime (-> (js->clj stat :keywordize-keys true)
                            :mtime)]
            (when-not contents-matched?
-             (when (and (string? disk-content)
-                        (string? content)
-                        (string-some-changed? disk-content content))
-               (backup-file repo-dir path disk-content ext)))
+             (backup-file repo-dir path disk-content ext))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
