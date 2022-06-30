@@ -33,4 +33,18 @@
 
     }
   }
+
+  .screen-shot {
+  }
+}
+
+.page-inner-full-wrap {
+  &.dl-a {
+    @apply relative overflow-hidden;
+
+    &:after {
+      @apply bottom-0 left-0 h-28 w-full absolute bg-gradient-to-t from-logseq-800;
+      content: " ";
+    }
+  }
 }
