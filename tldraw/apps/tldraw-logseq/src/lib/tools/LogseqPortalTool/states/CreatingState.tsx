@@ -56,8 +56,11 @@ export class CreatingState extends TLToolState<
   }
 
   onExit = () => {
+    if (!this.creatingShape) return
     if (this.creatingShape?.draft) {
       this.app.deleteShapes([this.creatingShape.id])
+    } else {
+      this.app.setSelectedShapes([this.creatingShape.id])
     }
     this.app.clearEditingShape()
     this.app.history.resume()
