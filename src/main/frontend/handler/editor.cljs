@@ -885,6 +885,7 @@
                   content (property/remove-empty-properties content)
                   block {:block/uuid block-id
                          :block/properties properties
+                         :block/properties-order (keys properties)
                          :block/content content}]
               (outliner-core/save-block! block))))))
 

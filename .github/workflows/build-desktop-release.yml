@@ -6,12 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta"/"non-release")'
-        type: string
+        description: 'Build Target (Release Type)'
+        type: choice
         required: true
+        options:
+          - beta
+          - nightly
+          - non-release
         default: "beta"
       git-ref:
-        description: "Release Git Ref(master)"
+        description: "Release Git Ref (Which branch or tag to build?)"
         required: true
         default: "master"
       is-draft:
@@ -21,6 +25,16 @@ on:
         default: true
       is-pre-release:
         description: 'Pre Release? (labeled as "PreRelease")'
+        type: boolean
+        required: true
+        default: true
+      enable-file-sync:
+        description: 'Build with file sync support'
+        type: boolean
+        required: true
+        default: false
+      enable-plugins:
+        description: 'Build with plugin system support'
         type: boolean
         required: true
         default: true
@@ -86,6 +100,12 @@ jobs:
         if: ${{ github.event.inputs.build-target == 'nightly' || github.event_name == 'schedule' }}
         run: |
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
+
+      - name: Set Build Environment Variables (only when workflow_dispath)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "ENABLE_FILE_SYNC=${{ github.event.inputs.enable-file-sync }}" >> $GITHUB_ENV
+          echo "ENABLE_PLUGINS=${{ github.event.inputs.enable-plugins }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron

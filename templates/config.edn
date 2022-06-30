@@ -223,6 +223,11 @@
  ;; :mobile/photo
  ;; {:allow-editing? true}
 
+ ;; Mobile features options
+ ;; Gestures
+ ;; :mobile
+ ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
+
  ;; Extra CodeMirror options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
 

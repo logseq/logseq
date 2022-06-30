@@ -619,7 +619,7 @@
      (when (and util/mac? (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
-     (when (util/electron?) (plugin-system-switcher-row))
+     (when (and (util/electron?) config/enable-plugins?) (plugin-system-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)

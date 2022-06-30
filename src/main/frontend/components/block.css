@@ -335,6 +335,7 @@
   min-height: 24px;
   padding: 2px 0;
   border-bottom: 1px solid transparent;
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   &.selected {
     border-bottom-color: var(--ls-primary-background-color);
