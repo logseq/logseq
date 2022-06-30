@@ -291,8 +291,6 @@
          content)
        (p/catch (fn [error]
                   (log/error :read-file-failed error))))))
-  (delete-file! [_this _repo _dir _path _opts]
-    nil)
   (write-file! [this repo dir path content opts]
     (let [path (get-file-path dir path)]
       (p/let [stat (p/catch
