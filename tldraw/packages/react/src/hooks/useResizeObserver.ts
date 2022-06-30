@@ -85,6 +85,6 @@ export function useResizeObserver<T extends HTMLElement>(
     updateBounds()
     setTimeout(() => {
       app.api.cameraToCenter()
-    })
+    }, 50)
   }, [ref])
 }

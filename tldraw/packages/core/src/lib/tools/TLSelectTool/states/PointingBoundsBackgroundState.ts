@@ -38,7 +38,7 @@ export class PointingBoundsBackgroundState<
 
   onPointerUp: TLEvents<S>['pointer'] = () => {
     if (this.pointedSelectedShape?.canActivate) {
-      this.app.setActivatedShapes([this.pointedSelectedShape.id])
+      this.app.setEditingShape(this.pointedSelectedShape.id)
     }
     this.app.setSelectedShapes([])
     this.tool.transition('idle')

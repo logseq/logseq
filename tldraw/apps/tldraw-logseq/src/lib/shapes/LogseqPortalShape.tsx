@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { TLBounds, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
-import { makeObservable, transaction } from 'mobx'
-import { useGesture } from '@use-gesture/react'
+import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ColorInput } from '~components/inputs/ColorInput'
@@ -172,7 +171,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isErasing, isActivated, isBinding }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isEditing, isBinding }: TLComponentProps) => {
     const {
       props: { opacity, pageId, stroke, fill },
     } = this
@@ -181,7 +180,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const isMoving = useCameraMovingRef()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
-    const tlEventsEnabled = isMoving || isSelected || app.selectedTool.id !== 'select'
+    const tlEventsEnabled =
+      isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select'
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
@@ -194,7 +194,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     // It is a bit weird to update shapes here. Is there a better place?
     React.useEffect(() => {
-      if (this.props.collapsed && isActivated) {
+      if (this.props.collapsed && isEditing) {
         // Should temporarily disable collapsing
         this.update({
           size: [this.props.size[0], this.props.collapsedHeight],
@@ -208,19 +208,17 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       return () => {
         // no-ops
       }
-    }, [isActivated])
+    }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
-      transaction(() => {
-        app.history.resume()
+      app.wrapUpdate(() => {
         this.update({
           pageId: id,
           size: [600, 320],
-          blockType: 'page',
+          blockType: 'P',
         })
         this.setDraft(false)
-        app.setActivatedShapes([])
-        app.persist()
+        app.clearEditingShape()
       })
     }, [])
 
@@ -243,7 +241,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           style={{
             width: '100%',
             height: '100%',
-            pointerEvents: isActivated ? 'all' : 'none',
+            pointerEvents: isEditing ? 'all' : 'none',
           }}
         >
           {this.draft ? (
@@ -253,11 +251,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               className="tl-logseq-portal-container"
               style={{
                 background: fill,
-                boxShadow:
-                  isActivated || isBinding
-                    ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                    : 'var(--shadow-medium)',
-                opacity: isSelected ? 0.8 : 1,
+                boxShadow: isBinding
+                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
+                  : 'var(--shadow-medium)',
                 color: stroke,
                 // @ts-expect-error ???
                 '--ls-primary-background-color': fill,
@@ -266,7 +262,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               }}
             >
               <LogseqPortalShapeHeader type={this.props.blockType ?? 'P'} pageId={pageId} />
-              {(!this.props.collapsed || isActivated) && (
+              {(!this.props.collapsed || isEditing) && (
                 <div
                   style={{
                     width: '100%',

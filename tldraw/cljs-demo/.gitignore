@@ -1,5 +1,8 @@
 node_modules/
 public/js
+public/styles.css
+
+src/js/tldraw-logseq.js
 
 /target
 /checkouts

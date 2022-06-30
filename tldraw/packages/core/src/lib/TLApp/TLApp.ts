@@ -422,24 +422,6 @@ export class TLApp<
     return this
   }
 
-  /* ----------------- Activated Shapes ---------------- */
-  @observable activatedIds: Set<string> = new Set()
-
-  @computed get activatedShapes(): S[] {
-    const { activatedIds, currentPage, selectedTool } = this
-    const stateId = selectedTool.id
-    if (stateId !== 'select') return []
-    return currentPage.shapes.filter(shape => activatedIds.has(shape.id))
-  }
-
-  @action readonly setActivatedShapes = (shapes: S[] | string[]): this => {
-    this.activatedIds.clear()
-    if (typeof shapes[0] === 'string')
-      (shapes as string[]).forEach(shape => this.activatedIds.add(shape))
-    else (shapes as S[]).forEach(shape => this.activatedIds.add(shape.id))
-    return this
-  }
-
   /* ----------------- Selected Shapes ---------------- */
 
   @observable selectedIds: Set<string> = new Set()
@@ -470,12 +452,6 @@ export class TLApp<
       this.selectionRotation = newSelectedShapes[0].props.rotation ?? 0
     } else {
       this.selectionRotation = 0
-    }
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        'setSelectedShapes',
-        newSelectedShapes.map(s => toJS(s.serialized))
-      )
     }
     return this
   }
@@ -639,7 +615,8 @@ export class TLApp<
       this.isIn('select') &&
       !this.isInAny('select.translating', 'select.pinching') &&
       this.selectedShapes.size > 0 &&
-      !this.selectedShapesArray.every(shape => shape.hideSelectionDetail)
+      !this.selectedShapesArray.every(shape => shape.hideSelectionDetail) &&
+      false // FIXME: should we shoult the selection detail?
     )
   }
 
@@ -720,12 +697,17 @@ export class TLApp<
     return Shape
   }
 
-  transaction = (fn: () => void) => {
+  wrapUpdate = (fn: () => void) => {
     transaction(() => {
-      this.history.pause()
+      const shouldSave = !this.history.isPaused
+      if (shouldSave) {
+        this.history.pause()
+      }
       fn()
-      this.history.resume()
-      this.persist()
+      if (shouldSave) {
+        this.history.resume()
+        this.persist()
+      }
     })
   }
 

@@ -47,7 +47,7 @@ export class CreatingState<
       transaction(() => {
         this.app.currentPage.addShapes(shape)
         if (this.tool.Shape.smart && shape.draft) {
-          this.app.setActivatedShapes([shape])
+          this.app.setEditingShape(shape)
         } else {
           this.app.setSelectedShapes([shape])
         }

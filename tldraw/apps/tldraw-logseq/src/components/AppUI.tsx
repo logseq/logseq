@@ -13,7 +13,7 @@ export const AppUI = observer(function AppUI() {
   return (
     <>
       {/* <ToolBar /> */}
-      <Minimap />
+      {/* <Minimap /> */}
       {isDev && <StatusBar />}
       {isDev && <DevTools />}
       <PrimaryTools />

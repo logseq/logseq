@@ -1,3 +1,4 @@
+import { computed, makeObservable, observable } from 'mobx'
 import { TLApp, TLPage, TLDocumentModel, TLShape } from '~lib'
 import type { TLEventMap } from '~types'
 import { deepEqual } from '~utils'
@@ -5,6 +6,7 @@ import { deepEqual } from '~utils'
 export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEventMap> {
   constructor(app: TLApp<S, K>) {
     this.app = app
+    makeObservable(this)
   }
 
   app: TLApp<S, K>
@@ -14,6 +16,16 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
 
   get creating() {
     return this.app.selectedTool.currentState.id === 'creating'
+  }
+
+  @computed
+  get canUndo() {
+    return this.pointer > 0
+  }
+
+  @computed
+  get canRedo() {
+    return this.pointer < this.stack.length - 1
   }
 
   pause = () => {
@@ -34,7 +46,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     this.app.notify('persist', null)
   }
 
-  persist = () => {
+  persist = (replace = false) => {
     if (this.isPaused || this.creating) return
 
     const { serialized } = this.app
@@ -42,12 +54,16 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     // Do not persist if the serialized state is the same as the last one
     if (deepEqual(this.stack[this.pointer], serialized)) return
 
-    if (this.pointer < this.stack.length) {
-      this.stack = this.stack.slice(0, this.pointer + 1)
-    }
+    if (replace) {
+      this.stack[this.pointer] = serialized
+    } else {
+      if (this.pointer < this.stack.length) {
+        this.stack = this.stack.slice(0, this.pointer + 1)
+      }
 
-    this.stack.push(serialized)
-    this.pointer = this.stack.length - 1
+      this.stack.push(serialized)
+      this.pointer = this.stack.length - 1
+    }
 
     this.app.notify('persist', null)
   }
@@ -55,24 +71,21 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
   undo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
-    if (this.pointer > 0) {
+    if (this.canUndo) {
       this.pointer--
       const snapshot = this.stack[this.pointer]
       this.deserialize(snapshot)
+      this.app.notify('persist', null)
     }
-
-    this.app.notify('persist', null)
   }
 
   redo = () => {
     if (this.isPaused) return
     if (this.app.selectedTool.currentState.id !== 'idle') return
-    if (this.pointer < this.stack.length - 1) {
+    if (this.canRedo) {
       this.pointer++
       const snapshot = this.stack[this.pointer]
       this.deserialize(snapshot)
-    }
-    else{
       this.app.notify('persist', null)
     }
   }
@@ -98,6 +111,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
               // Update the shape
               if (shape.nonce !== serializedShape.nonce) {
                 shape.update(serializedShape, true)
+                shape.nonce = serializedShape.nonce!
               }
               shapesMap.delete(serializedShape.id)
             } else {
@@ -112,6 +126,7 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
           if (shapesToAdd.length > 0) page.addShapes(...shapesToAdd)
           // Remove the page from the map
           pagesMap.delete(serializedPage.id)
+          page.updateBindings(serializedPage.bindings)
         } else {
           // Create the page
           const { id, name, shapes, bindings } = serializedPage

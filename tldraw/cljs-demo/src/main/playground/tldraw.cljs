@@ -1,31 +1,49 @@
 (ns playground.tldraw
   (:require [rum.core :as rum]
-            ["tldraw-logseq" :as tldraw]))
+            ["/tldraw-logseq" :as tldraw]))
 
 (def persist-key "playground.index")
 
 ;; from apps/logseq/src/documents/dev.ts
 (def dev-doc-model
-  {:currentPageId "page1",
-   :selectedIds ["yt1" "yt2"],
-   :pages
-   [{:name "Page",
-     :id "page1",
-     :shapes
-     [{:id "yt1",
-       :type "youtube",
-       :parentId "page1",
-       :point [100 100],
-       :size [160 90],
-       :embedId ""}
-      {:id "yt2",
-       :type "youtube",
-       :parentId "page1",
-       :point [300 300],
-       :size [160 90],
-       :embedId ""}],
-     :bindings []}],
-   :assets []})
+  {"currentPageId" "page1",
+   "selectedIds" ["0jy4JuM61pS9QQthBDme-"],
+   "pages"
+   [{"id" "page1",
+     "name" "Page",
+     "shapes"
+     [{"parentId" "page1",
+       "handles"
+       {"start" {"id" "start", "canBind" true, "point" [0 0]}, "end" {"id" "end", "canBind" true, "point" [392 272]}},
+       "scale" [1 1],
+       "label" "",
+       "id" "0jy4JuM61pS9QQthBDme-",
+       "stroke" "#fcb0b0",
+       "fill" "#ffffff",
+       "strokeWidth" 1,
+       "type" "line",
+       "decorations" {"end" "arrow"},
+       "nonce" 1655952872458,
+       "opacity" 1,
+       "point" [379.6805699752259 82.67652436640805 0.5]}
+      {"parentId" "page1",
+       "pageId" "car",
+       "collapsed" false,
+       "blockType" "P",
+       "collapsedHeight" 0,
+       "scale" [1 1],
+       "id" "hRp0fnc0i2BZIjEbZqO6_",
+       "stroke" "var(--ls-primary-text-color)",
+       "fill" "var(--ls-secondary-background-color)",
+       "strokeWidth" 2,
+       "type" "logseq-portal",
+       "nonce" 1655952865192,
+       "size" [600 320],
+       "opacity" 1,
+       "point" [876.7157262252258 195.59449311640805]}],
+     "bindings" {},
+     "nonce" 1}],
+   "assets" []})
 
 (set! *warn-on-infer* false)
 

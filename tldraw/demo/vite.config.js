@@ -22,6 +22,9 @@ export default defineConfig({
   ],
   server: {
     port: '3031',
+    fs: {
+      strict: false
+    }
   },
   resolve: {
     alias: [

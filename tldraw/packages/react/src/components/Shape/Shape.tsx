@@ -1,11 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as React from 'react'
+import type { TLAsset } from '@tldraw/core'
 import { observer } from 'mobx-react-lite'
 import { Container } from '~components'
-import type { TLReactShape } from '~lib'
 import { useShapeEvents } from '~hooks/useShapeEvents'
-import { useApp } from '~hooks'
-import type { TLAsset } from '@tldraw/core'
+import type { TLReactShape } from '~lib'
 
 interface ShapeProps {
   shape: TLReactShape
@@ -15,7 +13,6 @@ interface ShapeProps {
   isSelected?: boolean
   isBinding?: boolean
   isErasing?: boolean
-  isActivated?: boolean
   isEditing?: boolean
   onEditingEnd: () => void
   meta: any
@@ -28,10 +25,10 @@ export const Shape = observer(function Shape({
   isBinding = false,
   isErasing = false,
   isEditing = false,
-  isActivated = false,
   onEditingEnd,
   asset,
   meta,
+  zIndex,
 }: ShapeProps) {
   const {
     bounds,
@@ -39,14 +36,8 @@ export const Shape = observer(function Shape({
     ReactComponent,
   } = shape
   const events = useShapeEvents(shape)
-  // const app = useApp()
-  // let linkButton = null
-  // if (shape.serialized.logseqLink) {
-  //   const f = () => app.pubEvent('whiteboard-go-to-link', shape.serialized.logseqLink)
-  //   linkButton = <a onMouseDown={f}>Go to Link</a>
-  // }
   return (
-    <Container bounds={bounds} rotation={rotation} scale={scale}>
+    <Container zIndex={zIndex} data-type="Shape" bounds={bounds} rotation={rotation} scale={scale}>
       <ReactComponent
         meta={meta}
         isEditing={isEditing}
@@ -54,7 +45,6 @@ export const Shape = observer(function Shape({
         isHovered={isHovered}
         isSelected={isSelected}
         isErasing={isErasing}
-        isActivated={isActivated}
         events={events}
         asset={asset}
         onEditingEnd={onEditingEnd}

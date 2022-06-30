@@ -1,20 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { intersectRayBounds } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import {
-  action,
-  autorun,
-  computed,
-  makeObservable,
-  observable,
-  observe,
-  reaction,
-  toJS,
-  transaction,
-} from 'mobx'
+import { action, computed, makeObservable, observable, reaction, toJS } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLApp, TLShape, TLShapeModel } from '~lib'
-import type { TLLineShape, TLShapeProps } from '~lib/shapes'
+import type { TLLineShape } from '~lib/shapes'
 import { TLBinding, TLBounds, TLEventMap, TLHandle, TLResizeCorner } from '~types'
 import { BoundsUtils, deepCopy, deepEqual, PointUtils } from '~utils'
 
@@ -38,7 +28,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     const { id, name, shapes = [], bindings = {} } = props
     this.id = id
     this.name = name
-    this.bindings = bindings
+    this.bindings = Object.assign({}, bindings) // make sure it is type of object
     this.app = app
     this.addShapes(...shapes)
     makeObservable(this)
@@ -47,10 +37,10 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       () => ({
         id: this.id,
         name: this.name,
-        shapes: this.shapes.map(shape => toJS(shape.props)),
+        shapes: toJS(this.shapes.map(shape => toJS(shape.props))),
         bindings: toJS(this.bindings),
         nonce: this.nonce,
-        activatedShape: toJS(this.app.activatedIds),
+        editingShape: toJS(this.app.editingShape),
       }),
       (curr, prev) => {
         this.cleanup(curr, prev)
@@ -66,7 +56,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
 
   @observable shapes: S[] = []
 
-  @observable bindings: Record<string, TLBinding>
+  @observable bindings: Record<string, TLBinding> = {}
 
   @computed get serialized(): TLPageModel<S> {
     return {
@@ -104,10 +94,8 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
             const ShapeClass = this.app.getShapeClass(shape.type)
             return new ShapeClass(shape)
           })
-    shapeInstances.forEach(instance => observe(instance, this.app.saveState))
     this.shapes.push(...shapeInstances)
     this.bump()
-    this.app.saveState()
     return shapeInstances
   }
 
@@ -213,7 +201,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   }
 
   /**
-   * Recalculate binding positions
+   * Recalculate binding positions etc. Will also persist state when needed.
    *
    * @param curr
    * @param prev
@@ -233,10 +221,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     })
 
     // Get bindings related to the changed shapes
-    const bindingsToUpdate =
-      Object.values(curr.bindings) ||
-      // fixme:
-      getRelatedBindings(curr, Object.keys(changedShapes))
+    const bindingsToUpdate = getRelatedBindings(curr, Object.keys(changedShapes))
 
     const visitedShapes = new Set<TLShapeModel>()
 
@@ -276,25 +261,24 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     })
 
     // Cleanup inactive drafts
-    const shapesToDelete = this.shapes.filter(s => s.draft && !this.app.activatedShapes.includes(s))
+    const shapesToDelete = this.shapes.filter(s => s.draft && this.app.editingShape !== s)
 
     if (!deepEqual(updated, curr) || shapesToDelete.length) {
-      transaction(() => {
-        this.app.history.resume()
-        this.update({
-          bindings: updated.bindings,
-        })
-
-        this.removeShapes(...shapesToDelete)
-
-        updated.shapes.forEach(shape => {
-          this.getShapeById(shape.id)?.update(shape)
-        })
+      this.update({
+        bindings: updated.bindings,
       })
+
+      this.removeShapes(...shapesToDelete)
+
+      updated.shapes.forEach(shape => {
+        this.getShapeById(shape.id)?.update(shape)
+      })
+
+      this.app.persist(true)
     }
   }
 
-  updateArrowBindings = (lineShape: TLLineShape) => {
+  private updateArrowBindings = (lineShape: TLLineShape) => {
     const result = {
       start: deepCopy(lineShape.props.handles.start),
       end: deepCopy(lineShape.props.handles.end),

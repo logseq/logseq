@@ -27,15 +27,6 @@ export const DevTools = observer(() => {
     statusbarAnchorRef.current = statusbarAnchor
   }, [])
 
-  const originPoint = canvasAnchorRef.current
-    ? ReactDOM.createPortal(
-        <svg className="tl-renderer-dev-tools tl-grid">
-          <circle cx={point[0] * zoom} cy={point[1] * zoom} r="4" fill="red" />
-        </svg>,
-        canvasAnchorRef.current
-      )
-    : null
-
   const rendererStatusText = [
     ['Z', zoom.toFixed(2)],
     ['MP', printPoint(inputs.currentPoint)],
@@ -63,7 +54,6 @@ export const DevTools = observer(() => {
 
   return (
     <>
-      {originPoint}
       {rendererStatus}
     </>
   )

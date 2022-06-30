@@ -144,6 +144,7 @@ export function usePaste() {
         id: uniqueId(),
         type: 'image',
         parentId: app.currentPageId,
+        // TODO: Should be place near the last edited shape
         point: [point[0] - asset.size[0] / 2 + i * 16, point[1] - asset.size[1] / 2 + i * 16],
         size: asset.size,
         assetId: asset.id,
@@ -152,7 +153,7 @@ export function usePaste() {
       ...shapesToCreate,
     ]
 
-    app.transaction(() => {
+    app.wrapUpdate(() => {
       if (assetsToCreate.length > 0) {
         app.createAssets(assetsToCreate)
       }

@@ -49,6 +49,7 @@ const Page = props => {
   return (
     <textarea
       className="whitespace-pre w-full h-full font-mono"
+      style={{ minHeight: '64px' }}
       value={value}
       onChange={e => setValue(e.target.value)}
     />

@@ -240,4 +240,6 @@
 
   ;; TODO:
   (watch-dir! [_this _dir]
+    nil)
+  (unwatch-dir! [_this dir]
     nil))

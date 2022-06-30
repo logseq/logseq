@@ -1,4 +1,4 @@
-{:paths ["src/main" "src/gen"]
+{:paths ["src/main" "src/gen" "src/js"]
 
  :deps
  {rum/rum                             {:mvn/version "0.12.9"}

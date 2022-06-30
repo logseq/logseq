@@ -3,15 +3,16 @@
   "name": "tldraw-logseq-demo",
   "license": "MIT",
   "scripts": {
+    "postinstall": "ln -fs `pwd`/../apps/tldraw-logseq/src/styles.css public/styles.css; ln -f `pwd`/../apps/tldraw-logseq/dist/index.js src/js/tldraw-logseq.js",
     "dev": "shadow-cljs watch frontend"
   },
   "devDependencies": {
     "node-libs-browser": "^2.2.1",
-    "react": ">=16.8",
-    "react-dom": "^16.8 || ^17.0",
-    "shadow-cljs": "^2.18.0"
+    "react": "^17",
+    "react-dom": "^17",
+    "shadow-cljs": "^2.19.0"
   },
   "dependencies": {
-    "tldraw-logseq": "*"
+    "tldraw-logseq": "../apps/tldraw-logseq"
   }
 }

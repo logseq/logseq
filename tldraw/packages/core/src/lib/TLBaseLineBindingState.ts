@@ -1,4 +1,5 @@
 import Vec from '@tldraw/vec'
+import { transaction } from 'mobx'
 import { TLApp, TLLineShape, TLLineShapeProps, TLShape, TLTool, TLToolState } from '~lib'
 import type { TLBinding, TLEventMap, TLHandle, TLStateEvents } from '~types'
 import { deepMerge, GeomUtils } from '~utils'
@@ -19,6 +20,7 @@ export class TLBaseLineBindingState<
   bindableShapeIds: string[] = []
   startBindingShapeId?: string
   newStartBindingId = ''
+  // Seems this value is never assigned to other than the default?
   draggedBindingId = ''
 
   onPointerMove: TLStateEvents<S, K>['onPointerMove'] = () => {
@@ -190,15 +192,17 @@ export class TLBaseLineBindingState<
 
     updated = this.currentShape.getHandlesChange(next.shape, next.shape.handles)
 
-    if (updated) {
-      this.currentShape.update(updated)
-      this.app.currentPage.updateBindings(next.bindings)
-      this.app.setBindingShapes(
-        Object.values(updated.handles ?? {})
-          .map(h => next.bindings[h.bindingId!]?.toId)
-          .filter(Boolean)
-      )
-    }
+    transaction(() => {
+      if (updated) {
+        this.currentShape.update(updated)
+        this.app.currentPage.updateBindings(next.bindings)
+        this.app.setBindingShapes(
+          Object.values(updated.handles ?? {})
+            .map(h => next.bindings[h.bindingId!]?.toId)
+            .filter(Boolean)
+        )
+      }
+    })
   }
 
   onPointerUp: TLStateEvents<S, K>['onPointerUp'] = () => {
@@ -219,6 +223,7 @@ export class TLBaseLineBindingState<
   onExit: TLStateEvents<S, K>['onExit'] = () => {
     this.app.clearBindingShape()
     this.app.history.resume()
+    this.app.persist()
   }
 
   onKeyDown: TLStateEvents<S>['onKeyDown'] = (info, e) => {

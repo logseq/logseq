@@ -1,5 +1,5 @@
 (ns frontend.extensions.tldraw
-  (:require ["tldraw-logseq" :as TldrawLogseq]
+  (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.page :refer [page]]
             [frontend.extensions.draw :as draw-common]
             [frontend.handler.draw :as draw-handler]
