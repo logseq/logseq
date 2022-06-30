@@ -114,7 +114,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   hideRotateHandle = true
   canChangeAspectRatio = true
   canFlip = true
-  canActivate = true
   canEdit = true
 
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {

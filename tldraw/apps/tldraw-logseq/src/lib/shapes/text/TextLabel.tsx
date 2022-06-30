@@ -76,6 +76,7 @@ export const TextLabel = React.memo(function TextLabel({
 
   const handleBlur = React.useCallback(
     (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      if (!isEditing) return
       e.currentTarget.setSelectionRange(0, 0)
       onBlur?.()
     },

@@ -267,7 +267,7 @@
          {:class "whiteboard"
           :title "Whiteboards"
           :href  (rfe/href :whiteboards)
-          :icon  "files"})]]
+          :icon  "artboard"})]]
 
       (favorites t)
 

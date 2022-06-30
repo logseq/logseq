@@ -10,20 +10,7 @@ export class PointingBoundsBackgroundState<
 > extends TLToolState<S, K, R, P> {
   static id = 'pointingBoundsBackground'
 
-  private pointedSelectedShape?: S
-
   cursor = TLCursor.Move
-
-  onEnter = () => {
-    // If there is exactly a single shape
-    if (this.app.selectedShapes.size === 1) {
-      this.pointedSelectedShape = this.app.selectedShapesArray[0]
-    }
-  }
-
-  onExit = () => {
-    this.pointedSelectedShape = undefined
-  }
 
   onWheel: TLEvents<S>['wheel'] = (info, e) => {
     this.onPointerMove(info, e)
@@ -37,9 +24,6 @@ export class PointingBoundsBackgroundState<
   }
 
   onPointerUp: TLEvents<S>['pointer'] = () => {
-    if (this.pointedSelectedShape?.canActivate) {
-      this.app.setEditingShape(this.pointedSelectedShape.id)
-    }
     this.app.setSelectedShapes([])
     this.tool.transition('idle')
   }

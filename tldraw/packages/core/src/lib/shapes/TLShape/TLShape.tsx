@@ -103,7 +103,6 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canFlip: TLFlag = true
   canEdit: TLFlag = false
   canBind: TLFlag = false
-  canActivate: TLFlag = false
   
   @observable nonce = 0
 

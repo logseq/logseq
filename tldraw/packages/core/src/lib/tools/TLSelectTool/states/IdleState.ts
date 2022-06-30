@@ -1,4 +1,4 @@
-import { TLShape, TLApp, TLSelectTool, TLToolState } from '~lib'
+import { TLShape, TLApp, TLSelectTool, TLToolState, TLBoxShape } from '~lib'
 import { TLEventMap, TLEvents, TLShortcut, TLTargetType } from '~types'
 import { PointUtils } from '~utils'
 
@@ -47,22 +47,12 @@ export class IdleState<
   onPointerDown: TLEvents<S>['pointer'] = (info, event) => {
     const {
       selectedShapes,
-      selectedShapesArray,
       inputs: { ctrlKey },
     } = this.app
 
     // Holding ctrlKey should ignore shapes
     if (ctrlKey) {
       this.tool.transition('pointingCanvas')
-      return
-    }
-
-    if (selectedShapesArray.length === 1 && selectedShapesArray[0].canEdit) {
-      this.tool.transition('editingShape', {
-        type: TLTargetType.Shape,
-        shape: selectedShapesArray[0],
-        order: 0,
-      })
       return
     }
 
