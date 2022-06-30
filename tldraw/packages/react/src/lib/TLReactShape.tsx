@@ -8,7 +8,6 @@ export interface TLCommonShapeProps<M = unknown> {
   isHovered: boolean
   isSelected: boolean
   isErasing: boolean
-  isActivated: boolean
   asset?: TLAsset
 }
 

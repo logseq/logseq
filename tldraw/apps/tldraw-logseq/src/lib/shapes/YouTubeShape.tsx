@@ -63,7 +63,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
     )
   })
 
-  ReactComponent = observer(({ events, isErasing, isActivated }: TLComponentProps) => {
+  ReactComponent = observer(({ events, isErasing, isEditing }: TLComponentProps) => {
     const {
       props: { opacity, embedId },
     } = this
@@ -96,7 +96,7 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
           style={{
             width: '100%',
             height: embedId ? 'calc(100% - 32px)' : '100%',
-            pointerEvents: isActivated ? 'all' : 'none',
+            pointerEvents: isEditing ? 'all' : 'none',
             userSelect: 'none',
             position: 'relative',
           }}
@@ -108,7 +108,6 @@ export class YouTubeShape extends TLBoxShape<YouTubeShapeProps> {
                 paddingBottom: '56.25%',
                 position: 'relative',
                 height: 0,
-                opacity: isSelected ? 0.5 : 1,
               }}
             >
               <iframe

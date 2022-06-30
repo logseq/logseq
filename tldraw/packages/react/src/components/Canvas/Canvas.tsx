@@ -42,7 +42,6 @@ export interface TLCanvasProps<S extends TLReactShape> {
   selectionDirectionHint: number[]
   selectionBounds: TLBounds
   selectedShapes: S[]
-  activatedShapes: S[]
   erasingShapes: S[]
   gridSize: number
   cursor: TLCursor
@@ -71,7 +70,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   hoveredShape,
   selectionBounds,
   selectedShapes,
-  activatedShapes,
   erasingShapes,
   selectionDirectionHint,
   cursor = TLCursor.Default,
@@ -138,7 +136,6 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
                 isBinding={bindingShapes?.includes(shape)}
                 isSelected={selectedShapesSet.has(shape)}
                 isErasing={erasingShapesSet.has(shape)}
-                isActivated={activatedShapes?.includes(shape)}
                 meta={meta}
                 zIndex={1000 + i}
                 onEditingEnd={onEditingEnd}

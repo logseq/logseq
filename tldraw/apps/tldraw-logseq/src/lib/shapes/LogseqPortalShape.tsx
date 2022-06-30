@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
-import { TLBounds, TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
-import { makeObservable, transaction } from 'mobx'
-import { useGesture } from '@use-gesture/react'
+import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
+import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
 import { ColorInput } from '~components/inputs/ColorInput'
@@ -181,7 +180,8 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const isMoving = useCameraMovingRef()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
-    const tlEventsEnabled = isMoving || isSelected || app.selectedTool.id !== 'select'
+    const tlEventsEnabled =
+      isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select'
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
@@ -251,11 +251,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               className="tl-logseq-portal-container"
               style={{
                 background: fill,
-                boxShadow:
-                  isEditing || isBinding
-                    ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
-                    : 'var(--shadow-medium)',
-                opacity: isSelected ? 0.8 : 1,
+                boxShadow: isBinding
+                  ? '0px 0px 0 var(--tl-binding-distance) var(--tl-binding)'
+                  : 'var(--shadow-medium)',
                 color: stroke,
                 // @ts-expect-error ???
                 '--ls-primary-background-color': fill,

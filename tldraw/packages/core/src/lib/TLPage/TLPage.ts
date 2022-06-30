@@ -40,7 +40,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         shapes: toJS(this.shapes.map(shape => toJS(shape.props))),
         bindings: toJS(this.bindings),
         nonce: this.nonce,
-        activatedShape: toJS(this.app.activatedIds),
+        editingShape: toJS(this.app.editingShape),
       }),
       (curr, prev) => {
         this.cleanup(curr, prev)
@@ -261,7 +261,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     })
 
     // Cleanup inactive drafts
-    const shapesToDelete = this.shapes.filter(s => s.draft && !this.app.activatedShapes.includes(s))
+    const shapesToDelete = this.shapes.filter(s => s.draft && this.app.editingShape !== s)
 
     if (!deepEqual(updated, curr) || shapesToDelete.length) {
       this.update({

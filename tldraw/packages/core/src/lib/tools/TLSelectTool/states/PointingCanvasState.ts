@@ -16,7 +16,6 @@ export class PointingCanvasState<
     const { shiftKey } = this.app.inputs
     if (!shiftKey) {
       this.app.setSelectedShapes([])
-      this.app.setActivatedShapes([])
     }
   }
 
@@ -54,7 +53,7 @@ export class PointingCanvasState<
         })
         shape.setDraft(true)
         this.app.history.pause()
-        this.app.setActivatedShapes([shape.id])
+        this.app.setEditingShape(shape)
         this.app.currentPage.addShapes(shape)
       }
     })
