@@ -768,8 +768,19 @@
         r
         (get (js->clj r) "txid"))))
 
-  (<encrypt-fnames [_ _fname] (println :TODO :encrypt-fname))
-  (<decrypt-fnames [_ _fname] (println :TODO :decrypt-fname)))
+  (<encrypt-fnames [_ fnames]
+    (go
+      (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
+                                        (clj->js {:filePaths fnames}))))]
+        (if (instance? ExceptionInfo r)
+          (.-cause r)
+          (get (js->clj r) "value")))))
+  (<decrypt-fnames [_ fnames]
+    (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
+                                          (clj->js {:filePaths fnames}))))]
+          (if (instance? ExceptionInfo r)
+            (.-cause r)
+            (get (js->clj r) "value"))))))
 
 (def rsapi (cond
              (util/electron?)

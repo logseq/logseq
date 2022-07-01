@@ -181,40 +181,39 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         call.resolve(["ok": true])
     }
     
-    @objc func encryptFname(_ call: CAPPluginCall) {
+    @objc func encryptFnames(_ call: CAPPluginCall) {
         guard fnameEncryptionEnabled() else {
             call.reject("fname encryption key not set")
             return
         }
-        guard let fname = call.getString("filePath") else {
-            call.reject("required parameters: filePath")
+        guard var fnames = call.getArray("filePaths") as? [String] else {
+            call.reject("required parameters: filePaths")
             return
         }
-        if let encrypted = fname.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) {
-            call.resolve([
-                "value": encrypted as Any
-            ])
-        } else {
-            call.reject("cannot encrypt file name")
+        
+        let nFiles = fnames.count
+        fnames = fnames.compactMap { $0.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+        if fnames.count != nFiles {
+            call.reject("cannot encrypt \(nFiles - fnames.count) file names")
         }
+        call.resolve(["value": fnames])
     }
     
-    @objc func decryptFname(_ call: CAPPluginCall) {
+    @objc func decryptFnames(_ call: CAPPluginCall) {
         guard fnameEncryptionEnabled() else {
             call.reject("fname encryption key not set")
             return
         }
-        guard let fname = call.getString("filePath") else {
-            call.reject("required parameters: filePath")
+        guard var fnames = call.getArray("filePaths") as? [String] else {
+            call.reject("required parameters: filePaths")
             return
         }
-        if let decrypted = fname.fnameDecrypt(rawKey: FNAME_ENCRYPTION_KEY!) {
-            call.resolve([
-                "value": decrypted as Any
-            ])
-        } else {
-            call.reject("cannot decrypt file name")
+        let nFiles = fnames.count
+        fnames = fnames.compactMap { $0.fnameDecrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+        if fnames.count != nFiles {
+            call.reject("cannot decrypt \(nFiles - fnames.count) file names")
         }
+        call.resolve(["value": fnames])
     }
 
     @objc func getLocalFilesMeta(_ call: CAPPluginCall) {
