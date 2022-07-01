@@ -85,6 +85,47 @@ extension String {
         let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         return String((0..<length).map{ _ in letters.randomElement()! })
     }
+    
+    func fnameEncrypt(rawKey: Data) -> String? {
+        guard !self.isEmpty else {
+            return nil
+        }
+        guard let raw = self.data(using: .utf8) else {
+            return nil
+        }
+        
+        let key = SymmetricKey(data: rawKey)
+        let nonce = try! ChaChaPoly.Nonce(data: Data(repeating: 0, count: 12))
+        guard let sealed = try? ChaChaPoly.seal(raw, using: key, nonce: nonce) else { return nil }
+        
+        // strip nonce here, since it's all zero
+        return "e." + (sealed.ciphertext + sealed.tag).hexDescription
+
+    }
+    
+    func fnameDecrypt(rawKey: Data) -> String? {
+        // well-formated, non-empty encrypted string
+        guard self.hasPrefix("e.") && self.count > 36 else {
+            return nil
+        }
+        
+        let encryptedHex = self.suffix(from: self.index(self.startIndex, offsetBy: 2))
+        guard let encryptedRaw = Data(hexEncoded: String(encryptedHex)) else {
+            // invalid hex
+            return nil
+        }
+        
+        let key = SymmetricKey(data: rawKey)
+        let nonce = Data(repeating: 0, count: 12)
+
+        guard let sealed = try? ChaChaPoly.SealedBox(combined: nonce + encryptedRaw) else {
+            return nil
+        }
+        guard let outputRaw = try? ChaChaPoly.open(sealed, using: key) else {
+            return nil
+        }
+        return String(data: outputRaw, encoding: .utf8)
+    }
 }
 
 extension URL {
