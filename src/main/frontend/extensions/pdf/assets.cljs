@@ -250,7 +250,7 @@
     (when-let [page (db-utils/pull (:db/id (:block/page block)))]
       (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
         (when-let [hl-page (:hl-page props)]
-          (let [encoded-chars? (boolean (re-find #"%[0-9a-f]{2}" group-key))
+          (let [encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
                 group-key (if encoded-chars? (js/encodeURI group-key) group-key)
                 asset-path (editor-handler/make-asset-url
                              (str "/" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
