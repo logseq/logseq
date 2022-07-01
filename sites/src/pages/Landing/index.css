@@ -342,7 +342,7 @@
       top: 240px;
 
       .prev, .next {
-        @apply opacity-80 cursor-pointer select-none hover:opacity-90;
+        @apply opacity-80 cursor-pointer select-none hover:opacity-90 active:opacity-90;
       }
     }
 

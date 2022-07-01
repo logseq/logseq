@@ -16,6 +16,7 @@ export function TutorialTips () {
   const swiperElRef = useRef<HTMLDivElement>(null)
   const swiperRef = useRef<Swiper>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const sidesLen = 3
 
   useEffect(() => {
     if (swiperRef.current) return
@@ -27,8 +28,8 @@ export function TutorialTips () {
       }
     )
 
-    sw.on('activeIndexChange', (e) => {
-      setActiveIndex(e.activeIndex - 1)
+    sw.on('activeIndexChange', () => {
+      setActiveIndex(sw.realIndex)
     })
   }, [])
 
@@ -161,7 +162,18 @@ export function TutorialTips () {
            <ArrowCircleLeft size={26}/>
           </span>
 
-          <strong>{activeIndex}</strong>
+          <div className="dots flex space-x-3 rounded-2xl bg-gray-700/40 py-2 px-4 items-center">
+            {Array(sidesLen).fill(0).map((_, i) => {
+              return (
+                <i className={cx('w-2 h-2 bg-logseq-100/50 rounded-2xl cursor-pointer select-none hover:opacity-80',
+                  (i === activeIndex) && '!bg-white/90')}
+                   onClick={() => {
+                     swiperRef.current?.slideTo(i + 1)
+                   }}
+                ></i>
+              )
+            })}
+          </div>
 
           <span className="next" title={'Next'}
                 onClick={() => swiperRef.current?.slideNext()}
