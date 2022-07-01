@@ -105,7 +105,6 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   bindingDistance = BINDING_DISTANCE
 
-  @observable private _draft = false
   @observable private isDirty = false
   @observable private lastSerialized: TLShapeModel<P> | undefined
 
@@ -113,15 +112,6 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   @computed get id() {
     return this.props.id
-  }
-
-  @computed
-  get draft() {
-    return this._draft
-  }
-
-  @action setDraft(draft: boolean) {
-    this._draft = draft
   }
 
   @action setNonce(nonce: number) {
@@ -296,7 +286,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   @computed
   get serialized(): TLShapeModel<P> | null {
-    return this.draft ? null : this.getCachedSerialized()
+    return this.getCachedSerialized()
   }
 
   validateProps = (

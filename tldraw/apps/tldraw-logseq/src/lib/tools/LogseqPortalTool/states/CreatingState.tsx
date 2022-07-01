@@ -26,7 +26,6 @@ export class CreatingState extends TLToolState<
         point: Vec.sub(this.app.inputs.originPoint, this.offset),
         size: LogseqPortalShape.defaultProps.size,
       } as any)
-      shape.setDraft(true)
       this.creatingShape = shape
       this.app.currentPage.addShapes(shape)
       this.app.setEditingShape(shape)
@@ -57,12 +56,13 @@ export class CreatingState extends TLToolState<
 
   onExit = () => {
     if (!this.creatingShape) return
-    if (this.creatingShape?.draft) {
-      this.app.deleteShapes([this.creatingShape.id])
-    } else {
-      this.app.setSelectedShapes([this.creatingShape.id])
-    }
     this.app.clearEditingShape()
     this.app.history.resume()
+
+    if (this.creatingShape?.props.pageId) {
+      this.app.setSelectedShapes([this.creatingShape.id])
+    } else {
+      this.app.deleteShapes([this.creatingShape.id])
+    }
   }
 }

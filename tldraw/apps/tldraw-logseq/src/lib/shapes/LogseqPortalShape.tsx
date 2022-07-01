@@ -182,8 +182,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const isMoving = useCameraMovingRef()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
+    const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
-      (isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select') && !this.draft
+      (isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select') && !isCreating
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
@@ -213,16 +214,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
-      app.history.resume()
-      app.wrapUpdate(() => {
-        this.setDraft(false)
-        this.update({
-          pageId: id,
-          size: [600, 320],
-          blockType: 'P',
-        })
-        app.selectTool('select')
+      this.update({
+        pageId: id,
+        size: [600, 320],
+        blockType: 'P',
       })
+      app.selectTool('select')
+      app.history.resume()
+      app.history.persist()
     }, [])
 
     if (!Page) {
@@ -247,7 +246,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             pointerEvents: isEditing ? 'all' : 'none',
           }}
         >
-          {this.draft ? (
+          {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
           ) : (
             <div

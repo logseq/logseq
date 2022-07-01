@@ -151,7 +151,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
               isSelected={true}
             />
           ))}
-          {hoveredShape && !hoveredShape.draft && (
+          {hoveredShape && app.isInAny('creating') && (
             <Indicator key={'hovered_indicator_' + hoveredShape.id} shape={hoveredShape} />
           )}
           {brush && components.Brush && <components.Brush bounds={brush} />}

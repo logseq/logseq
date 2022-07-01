@@ -67,7 +67,6 @@ export class ResizingState<
     // @ts-expect-error maybe later
     this.snapshots = Object.fromEntries(
       selectedShapesArray
-        .filter(s => !s.draft)
         .map(shape => {
           const bounds = { ...shape.bounds }
           const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
