@@ -1838,7 +1838,11 @@
                 remote->local-sync-chan {:remote->local true}
                 full-sync-chan {:local->remote-full-sync true}
                 _remote-change-chan ([v] (println "remote change:" v) {:remote->local v})
-                ratelimit-local-changes-chan ([v] (println "local changes:" v) {:local->remote v})
+                ratelimit-local-changes-chan ([v]
+                                              (let [rest-v (util/drain-chan ratelimit-local-changes-chan)
+                                                    vs (cons v rest-v)]
+                                                (println "local changes:" vs)
+                                                {:local->remote vs}))
                 (timeout (* 20 60 1000)) {:local->remote-full-sync true}
                 :priority true)]
           (cond
@@ -1946,12 +1950,23 @@
               (do (prn "remote->local err" unknown)
                   (.schedule this ::idle nil)))))))
 
-    (local->remote [this {^FileChangeEvents local-change :local}]
-      (assert (some? local-change) local-change)
+    (local->remote [this {^FileChangeEvents local-changes :local}]
+      (assert (some? local-changes) local-changes)
       (go
-        (let [{:keys [succ need-sync-remote unknown] :as r}
-              (<! (<sync-local->remote! local->remote-syncer [local-change]))]
-          (s/assert ::sync-local->remote!-result r)
+        (let [change-events-partitions (sequence (partition-file-change-events 10) local-changes)
+              {:keys [succ need-sync-remote unknown stop] :as r}
+              (loop [es-partitions change-events-partitions]
+                (cond
+                  @*stopped?             {:stop true}
+                  (empty? es-partitions) {:succ true}
+                  :else
+                  (let [{:keys [succ need-sync-remote unknown] :as r}
+                        (<! (<sync-local->remote! local->remote-syncer (first es-partitions)))]
+                    (s/assert ::sync-local->remote!-result r)
+                    (cond
+                      succ
+                      (recur (next es-partitions))
+                      (or need-sync-remote unknown) r))))]
           (cond
             succ
             (.schedule this ::idle nil)
@@ -1959,8 +1974,11 @@
             need-sync-remote
             (do (util/drain-chan ops-chan)
                 (>! ops-chan {:remote->local true})
-                (>! ops-chan {:local->remote local-change})
+                (>! ops-chan {:local->remote local-changes})
                 (.schedule this ::idle nil))
+
+            stop
+            (.schedule this ::stop nil)
 
             unknown
             (do
