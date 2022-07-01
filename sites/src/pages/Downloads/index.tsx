@@ -8,6 +8,7 @@ import cx from 'classnames'
 import { LSButton } from '../../components/Buttons'
 import { IconsIntel } from '../../components/Icons'
 import { LandingFooterDesc, LandingFooterNav } from '../Landing'
+import { useAppState } from '../../state'
 
 const headImageBg: any = new URL('assets/dl_head_bg.jpg', import.meta.url)
 const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
@@ -22,7 +23,34 @@ const releases = [
 ]
 
 export function HeadDownloadLinks () {
-  const [activeRelease, setActiveRelease] = useState(releases[0])
+  const appState = useAppState()
+  const os = appState.get().os
+
+  let active = releases[0]
+
+  releases.some((it) => {
+    if (
+      os[it?.[0].toString().toLowerCase()]
+    ) {
+      active = it
+      return true
+    }
+  })
+
+  const [activeRelease, setActiveRelease] = useState(active)
+
+  const downloadHandler = (platform: string) => {
+    const rollback = `https://github.com/logseq/logseq/releases`
+    const downloads: any = appState.releases.downloads.get()
+    if (!downloads?.[platform]) {
+      return window?.open(rollback, '_blank')
+    }
+
+    window?.open(
+      downloads[platform]?.browser_download_url,
+      '_blank'
+    )
+  }
 
   const resolvePanel = function ([label, icon]: [string, any]) {
     switch (label) {
@@ -51,6 +79,7 @@ export function HeadDownloadLinks () {
                 className={'bg-logseq-400 px-6 py-4'}
                 leftIcon={<IconsIntel size={26} color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
+                onClick={() => downloadHandler('macos-x64')}
               >
                 Download for Intel chip
               </LSButton>
@@ -64,6 +93,7 @@ export function HeadDownloadLinks () {
                 className={'bg-logseq-600 px-6 py-4'}
                 leftIcon={<AppleLogo size={24} color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
+                onClick={() => downloadHandler('macos-arm64')}
               >
                 Download for Apple chip
               </LSButton>
@@ -80,6 +110,7 @@ export function HeadDownloadLinks () {
               leftIcon={icon}
               rightIcon={<DownloadSimple className="opacity-50"/>}
               className="bg-logseq-600 px-6 py-4"
+              onClick={() => downloadHandler(label.toString().toLowerCase())}
             >
               Download {label} release
             </LSButton>

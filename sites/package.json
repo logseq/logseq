@@ -19,12 +19,14 @@
     "typescript": "^4.7.3"
   },
   "dependencies": {
-    "classnames": "^2.3.1",
-    "phosphor-react": "^1.4.1",
+    "@hookstate/core": "^4.0.0-rc11",
+    "classnames": "2.3.1",
+    "phosphor-react": "1.4.1",
+    "platform-detect": "3.0.1",
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
-    "react-intersection-observer": "^9.3.4",
-    "react-router-dom": "^6.3.0",
-    "swiper": "^8.2.4"
+    "react-intersection-observer": "9.3.4",
+    "react-router-dom": "6.3.0",
+    "swiper": "8.2.4"
   }
 }
