@@ -80,6 +80,10 @@ const RightSlot = styled('div', {
 
 export const ZoomMenu = () => {
   const app = useApp();
+  const preventEvent = (e:Event) => {
+    e.preventDefault()
+    console.log("hi")
+  }
   return (
     <Box>
       <DropdownMenu>
@@ -88,19 +92,19 @@ export const ZoomMenu = () => {
         </DropdownMenuTrigger>
         <DropdownMenuContent sideOffset={12} >
         <DropdownMenuArrow></DropdownMenuArrow>
-          <DropdownMenuItem onClick={app.api.zoomToFit}>
+          <DropdownMenuItem onSelect={preventEvent} onClick={app.api.zoomToFit}>
             Zoom to Fit <RightSlot></RightSlot>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={app.api.zoomToSelection}>
+          <DropdownMenuItem onSelect={preventEvent} onClick={app.api.zoomToSelection}>
             Zoom to Selection <RightSlot>⌘+Minus</RightSlot>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={app.api.zoomIn}>
+          <DropdownMenuItem onSelect={preventEvent} onClick={app.api.zoomIn}>
             Zoom In <RightSlot>⌘+Plus</RightSlot>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={app.api.zoomOut}>
+          <DropdownMenuItem onSelect={preventEvent} onClick={app.api.zoomOut}>
             Zoom Out <RightSlot>⌘+Minus</RightSlot>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={app.api.resetZoom}>
+          <DropdownMenuItem onSelect={preventEvent} onClick={app.api.resetZoom}>
             Reset Zoom <RightSlot>⇧+0</RightSlot>
           </DropdownMenuItem>
         </DropdownMenuContent>
