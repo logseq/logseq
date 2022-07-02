@@ -36,18 +36,19 @@ export const Minimap = observer(function Minimap() {
 
   return (
     <>
-      {active && (
+    {active && (
         <div className="preview-minimap" {...events}>
           {preview}
         </div>
       )}
       <button
-        className="preview-minimap-toggle"
+        // className="preview-minimap-toggle"
         data-active={active}
         onClick={() => setActive(a => !a)}
       >
         <Crosshair2Icon />
       </button>
+      
     </>
   )
 })

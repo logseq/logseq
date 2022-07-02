@@ -5,47 +5,31 @@ import { observer } from 'mobx-react-lite'
 import type { Shape } from '~lib'
 import { App, useApp } from '@tldraw/react'
 import { Minimap } from '~components/Minimap'
-import { LogseqIcon, RedoIcon, UndoIcon } from '~components/icons'
-import { ZoomInIcon, ZoomOutIcon } from '@radix-ui/react-icons'
-import { ZoomContext } from '~components/ZoomContext'
-import { Container } from '@tldraw/react/src/components'
+import { RedoIcon, UndoIcon } from '~components/icons'
+import { ZoomMenu } from '~components/ZoomMenu'
 
 export const ActionBar = observer(function ToolBar(): JSX.Element {
   const app = useApp<Shape>()
-  const testFunction = () => {
-    <ZoomContext ></ZoomContext>
-  }
-  //use state for if teh context bar should be open
+  //Use state isOpen
   const [isOpen, setIsOpen] = React.useState(false)
+  const undo = React.useCallback(() => {
+    app.api.undo()
+  }, [app])
 
-
+  const redo = React.useCallback(() => {
+    app.api.redo()
+  }, [app])
 
   return (
     <div className="action-bar">
-      <button onClick={app.api.undo}>
+      {/* <button>minimap</button> */}
+      <Minimap></Minimap>
+      <button onClick={undo}>
         <UndoIcon></UndoIcon>
       </button>
-      <button onClick={app.api.redo}>
+        <ZoomMenu></ZoomMenu>
+      <button onClick={redo}>
         <RedoIcon></RedoIcon>
-      </button>
-      <button onClick={app.api.zoomOut}>
-        
-      </button>
-      <Container
-      bounds={{minX: 500,
-        maxX: 600,
-        minY: 500,
-        maxY: 600,
-        width: 100,
-        height: 100,}}>
-      {
-        isOpen && (
-          <ZoomContext></ZoomContext>)
-      }
-      </Container>
-      <button onClick={testFunction}>{(app.viewport.camera.zoom * 100).toFixed(0) + "%"} </button>
-      <button onClick={app.api.zoomIn}>
-        <ZoomInIcon></ZoomInIcon>
       </button>
     </div>
   )

@@ -58,8 +58,6 @@
 .logseq-tldraw .action-bar {
   position: absolute;
   bottom: 0px;
-
-
   /* width: 100%; */
   float:left;
   left: 0px;
@@ -423,7 +421,9 @@
 .logseq-tldraw .preview-minimap {
   height: 300px;
   width: 400px;
-  top: 16px;
+  /* Set top to be the viewport minus 10px */
+  bottom: calc(100vh - 320px);
+
   left: 16px;
   position: absolute;
   border: 1px solid black;
