@@ -18,10 +18,10 @@ This is a guide on creating Logseq development environment on Windows with `Powe
 * Install NVM for Windows, Node.js, and Yarn
   ```
   choco install nvm
-  nvm install 16.13 (or whatever version)
-  nvm use 16.13
+  nvm install 16.13.0 (or whatever version)
+  nvm use 16.13.0
   npm install -g yarn
-  nvm use 16.13
+  nvm use 16.13.0
   ```
 * Install [clj-on-windows](https://github.com/clojure/tools.deps.alpha/wiki/clj-on-Windows)
 
