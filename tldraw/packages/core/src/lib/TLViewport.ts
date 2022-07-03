@@ -10,7 +10,7 @@ export class TLViewport {
 
   static readonly minZoom = 0.25
   static readonly maxZoom = 4
-  static readonly zooms = [0.25, 0.5, 1, 2, 4]
+  static readonly zooms = [0.25, 0.5, 1, 1.5 , 2, 3, 4]
 
   /* ------------------- Properties ------------------- */
 

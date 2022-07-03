@@ -3,11 +3,12 @@
 import * as React from 'react'
 import { observer } from 'mobx-react-lite'
 import type { Shape } from '~lib'
-import { App, useApp } from '@tldraw/react'
+import { useApp } from '@tldraw/react'
 import { Minimap } from '~components/Minimap'
 import { RedoIcon, UndoIcon } from '~components/icons'
+import { ZoomMenu } from '~components/ZoomMenu'
 
-export const ActionBar = observer(function ToolBar(): JSX.Element {
+export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
   const undo = React.useCallback(() => {
     app.api.undo()
@@ -19,10 +20,11 @@ export const ActionBar = observer(function ToolBar(): JSX.Element {
 
   return (
     <div className="action-bar">
+      <Minimap></Minimap>
       <button onClick={undo}>
         <UndoIcon></UndoIcon>
       </button>
-
+      <ZoomMenu></ZoomMenu>
       <button onClick={redo}>
         <RedoIcon></RedoIcon>
       </button>
