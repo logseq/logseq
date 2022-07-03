@@ -1,8 +1,9 @@
 import React from 'react'
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { useApp } from '@tldraw/react'
+import { observer } from 'mobx-react-lite'
 
-export const ZoomMenu = () => {
+export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
   const app = useApp()
   const preventEvent = (e: Event) => {
     e.preventDefault()
@@ -58,6 +59,6 @@ export const ZoomMenu = () => {
       </DropdownMenuPrimitive.Root>
     </div>
   )
-}
+})
 
 export default ZoomMenu
