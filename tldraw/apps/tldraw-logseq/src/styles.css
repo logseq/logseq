@@ -57,9 +57,9 @@
 
 .logseq-tldraw .action-bar {
   position: absolute;
-  bottom: 0px;
+  bottom: 31px;
   /* width: 100%; */
-  float:left;
+  float: left;
   left: 0px;
   grid-row: 1;
   display: flex;
@@ -80,6 +80,43 @@
 
 .logseq-tldraw .action-bar button {
   border-radius: 4px;
+}
+
+.dropdown-menu-button {
+  opacity: 100%;
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 5px;
+  box-shadow: 0px 10px 38px -10px rgba(22, 23, 24, 0.35), 0px 10px 20px -15px rgba(22, 23, 24, 0.2); 
+}
+
+.dropdown-item {
+  min-width: 220px;
+  all: unset;
+  font-size: 13px;
+  line-height: 1;
+  color: black;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  height: 25px;
+  padding: 0px 5px;
+  position: relative;
+  user-select: none;
+}
+.dropdown-item:focus {
+  color: white;
+  background-color: black;
+}
+
+.right-slot {
+  margin-left: auto;
+  padding-left: 20px;
+  color: black;
+}
+
+.right-slot:focus{
+  color: whites;
 }
 
 .logseq-tldraw .contextbar {
@@ -221,7 +258,7 @@
   gap: 8px;
 }
 
-.logseq-tldraw .floating-panel > button {
+.logseq-tldraw .floating-panel>button {
   border-radius: 4px;
 }
 
@@ -249,7 +286,7 @@
   color: var(--color-selectedContrast);
 }
 
-.logseq-tldraw .floating-panel[data-tool-locked='true'] > .button[data-selected='true']::after {
+.logseq-tldraw .floating-panel[data-tool-locked='true']>.button[data-selected='true']::after {
   content: '';
   display: block;
   height: 6px;
