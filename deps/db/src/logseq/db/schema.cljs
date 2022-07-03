@@ -88,6 +88,9 @@
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
+   ;; whether page is a whiteboard
+   :block/whiteboard? {}
+
    ;; file
    :file/path {:db/unique :db.unique/identity}
    ;; only store the content of logseq's files

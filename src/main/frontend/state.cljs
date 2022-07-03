@@ -457,6 +457,13 @@
       (:journals-directory (get-config repo)))
     "journals"))
 
+(defn get-whiteboards-directory
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (:whiteboards-directory (get-config repo)))
+   "whiteboards"))
+
 (defn org-mode-file-link?
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))

@@ -113,20 +113,23 @@
 
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
+  (println page)
   (when-let [repo (state/get-current-repo)]
     (when (:block/name page)
       (let [format (name (get page :block/format
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
+            whiteboard-page? (:block/whiteboard? page)
             journal-page? (date/valid-journal-title? title)
             filename (if journal-page?
                        (date/date->file-name journal-page?)
                        (-> (or (:block/original-name page) (:block/name page))
                            (util/file-name-sanity)))
             path (str
-                  (if journal-page?
-                    (config/get-journals-directory)
-                    (config/get-pages-directory))
+                  (cond
+                    journal-page?    (config/get-journals-directory)
+                    whiteboard-page? (config/get-whiteboards-directory)
+                    :else            (config/get-pages-directory))
                   "/"
                   filename
                   "."

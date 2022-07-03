@@ -38,6 +38,7 @@
             [frontend.format.block :as block]
             [goog.functions :refer [debounce]]))
 
+;; FIXME: add whiteboard
 (defn- get-directory
   [journal?]
   (if journal?
@@ -98,7 +99,9 @@
                                                 (or
                                                  (:block/original-name page)
                                                  (:block/name page)))
-          page (if (seq properties) (assoc page :block/properties properties) page)
+          page (merge page
+                      (when (seq properties) {:block/properties properties})
+                      (when whiteboard? {:block/whiteboard? whiteboard?}))
           page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
         (not page-empty?)
@@ -123,7 +126,7 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? whiteboard? uuid]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
@@ -148,11 +151,11 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx format nil % journal?))
+                           (mapcat #(build-page-tx format nil % journal? whiteboard?))
                            (remove nil?)
                            (remove (fn [m]
                                      (some? (db/entity [:block/name (:block/name m)])))))
-             last-txs (build-page-tx format properties (last pages) journal?)
+             last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! txs)))
