@@ -67,8 +67,9 @@
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)
+        {whiteboards true non-whiteboards false} (group-by (fn [file] (string/includes? (:file/path file) "whiteboards/")) non-journals)
         {built-in true others false} (group-by (fn [file]
                                                  (or (string/includes? (:file/path file) "contents.")
                                                      (string/includes? (:file/path file) ".edn")
-                                                     (string/includes? (:file/path file) "custom.css"))) non-journals)]
-    (concat (reverse journals) built-in others)))
+                                                     (string/includes? (:file/path file) "custom.css"))) non-whiteboards)]
+    (concat (reverse journals) (reverse whiteboards) built-in others)))

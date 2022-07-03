@@ -71,20 +71,24 @@
       (assoc
        (gp-block/page-name->map page false db true date-formatter)
        :block/file {:file/path (gp-util/path-normalize file)}))
-     (seq properties)
-     (assoc :block/properties properties)
+      
+      (seq properties)
+      (assoc :block/properties properties)
 
-     (seq aliases)
-     (assoc :block/alias aliases)
+      (seq aliases)
+      (assoc :block/alias aliases)
 
-     (:tags properties)
-     (assoc :block/tags (let [tags (:tags properties)
-                              tags (if (string? tags) [tags] tags)
-                              tags (remove string/blank? tags)]
-                          (swap! ref-tags set/union (set tags))
-                          (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
-                                          :block/original-name tag})
-                               tags))))))
+      (gp-config/whiteboard? file)
+      (assoc :block/whiteboard? true)
+
+      (:tags properties)
+      (assoc :block/tags (let [tags (:tags properties)
+                               tags (if (string? tags) [tags] tags)
+                               tags (remove string/blank? tags)]
+                           (swap! ref-tags set/union (set tags))
+                           (map (fn [tag] {:block/name (gp-util/page-name-sanity-lc tag)
+                                           :block/original-name tag})
+                                tags))))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks

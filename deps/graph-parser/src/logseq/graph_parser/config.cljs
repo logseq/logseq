@@ -15,10 +15,16 @@
   (gp-util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defonce default-draw-directory "draws")
+;; TODO read configurable value?
+(defonce default-whiteboards-directory "whiteboards")
 
 (defn draw?
   [path]
   (string/starts-with? path default-draw-directory))
+
+(defn whiteboard?
+  [path]
+  (string/includes? path (str "/" default-whiteboards-directory "/")))
 
 ;; TODO: rename
 (defonce mldoc-support-formats
