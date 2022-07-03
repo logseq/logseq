@@ -616,13 +616,10 @@
         nested-link? (:nested-link? config)
         contents-page? (= "contents" (string/lower-case (str (:id config))))
         block-uuid (:block/uuid config)]
-    (cond
-      (string/ends-with? s ".excalidraw")
+    (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
-
-      :else
       [:span.page-reference
        {:data-ref s}
        (when (and (or show-brackets? nested-link?)
