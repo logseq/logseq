@@ -1,9 +1,10 @@
 (ns frontend.components.whiteboard
   (:require [frontend.handler.route :as route-handler]
-            [shadow.loader :as loader]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.util :as util]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [shadow.loader :as loader]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -32,6 +33,8 @@
          (route-handler/redirect-to-whiteboard! "test"))} "test"])
 
 (rum/defcs whiteboard < rum/reactive
+  ;; whiteboard has many custom shortcut. Disable default ones to make it simplier.
+  (shortcut/disable-all-shortcuts)
   [state]
   (let [name (get-whiteboard-name state)
         tldr-name (str "draws/" name ".tldr")]
