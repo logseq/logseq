@@ -106,8 +106,8 @@ export class PolygonUtils {
   }
 
   static getPolygonCentroid(points: number[][]): number[] {
-    const x = points.map((point) => point[0])
-    const y = points.map((point) => point[1])
+    const x = points.map(point => point[0])
+    const y = points.map(point => point[1])
     const cx = Math.min(...x) + Math.max(...x)
     const cy = Math.min(...y) + Math.max(...y)
     return [cx ? cx / 2 : 0, cy ? cy / 2 : 0]

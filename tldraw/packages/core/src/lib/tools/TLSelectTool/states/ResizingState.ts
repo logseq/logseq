@@ -66,29 +66,28 @@ export class ResizingState<
     this.initialCommonBounds = { ...selectionBounds }
     // @ts-expect-error maybe later
     this.snapshots = Object.fromEntries(
-      selectedShapesArray
-        .map(shape => {
-          const bounds = { ...shape.bounds }
-          const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
-          return [
-            shape.id,
-            {
-              props: shape.serialized,
-              bounds,
-              transformOrigin: [
-                (cx - this.initialCommonBounds.minX) / this.initialCommonBounds.width,
-                (cy - this.initialCommonBounds.minY) / this.initialCommonBounds.height,
-              ],
-              innerTransformOrigin: [
-                (cx - initialInnerBounds.minX) / initialInnerBounds.width,
-                (cy - initialInnerBounds.minY) / initialInnerBounds.height,
-              ],
-              isAspectRatioLocked:
-                shape.props.isAspectRatioLocked ||
-                Boolean(!shape.canChangeAspectRatio || shape.props.rotation),
-            },
-          ]
-        })
+      selectedShapesArray.map(shape => {
+        const bounds = { ...shape.bounds }
+        const [cx, cy] = BoundsUtils.getBoundsCenter(bounds)
+        return [
+          shape.id,
+          {
+            props: shape.serialized,
+            bounds,
+            transformOrigin: [
+              (cx - this.initialCommonBounds.minX) / this.initialCommonBounds.width,
+              (cy - this.initialCommonBounds.minY) / this.initialCommonBounds.height,
+            ],
+            innerTransformOrigin: [
+              (cx - initialInnerBounds.minX) / initialInnerBounds.width,
+              (cy - initialInnerBounds.minY) / initialInnerBounds.height,
+            ],
+            isAspectRatioLocked:
+              shape.props.isAspectRatioLocked ||
+              Boolean(!shape.canChangeAspectRatio || shape.props.rotation),
+          },
+        ]
+      })
     )
     selectedShapesArray.forEach(shape => shape.onResizeStart?.({ isSingle: this.isSingle }))
   }

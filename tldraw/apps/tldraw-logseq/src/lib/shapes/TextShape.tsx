@@ -273,7 +273,7 @@ export class TextShape extends TLTextShape<TextShapeProps> {
     const {
       props: { text, stroke, fontSize, fontFamily },
     } = this
-    // Stretch to the bound size 
+    // Stretch to the bound size
     const bounds = this.getBounds()
 
     return (

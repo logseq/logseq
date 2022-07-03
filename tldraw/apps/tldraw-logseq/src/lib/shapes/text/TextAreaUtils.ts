@@ -24,7 +24,10 @@ export class TextAreaUtils {
     )
   }
 
-  /** Inserts `text` at the cursor’s position, replacing any selection, with **undo** support and by firing the `input` event. */
+  /**
+   * Inserts `text` at the cursor’s position, replacing any selection, with **undo** support and by
+   * firing the `input` event.
+   */
   static insert(field: HTMLTextAreaElement | HTMLInputElement, text: string): void {
     const document = field.ownerDocument
     const initialFocus = document.activeElement
@@ -43,7 +46,10 @@ export class TextAreaUtils {
     }
   }
 
-  /** Replaces the entire content, equivalent to `field.value = text` but with **undo** support and by firing the `input` event. */
+  /**
+   * Replaces the entire content, equivalent to `field.value = text` but with **undo** support and
+   * by firing the `input` event.
+   */
   static set(field: HTMLTextAreaElement | HTMLInputElement, text: string): void {
     field.select()
     TextAreaUtils.insert(field, text)
@@ -58,7 +64,10 @@ export class TextAreaUtils {
     )
   }
 
-  /** Adds the `wrappingText` before and after field’s selection (or cursor). If `endWrappingText` is provided, it will be used instead of `wrappingText` at on the right. */
+  /**
+   * Adds the `wrappingText` before and after field’s selection (or cursor). If `endWrappingText` is
+   * provided, it will be used instead of `wrappingText` at on the right.
+   */
   static wrapSelection(
     field: HTMLTextAreaElement | HTMLInputElement,
     wrap: string,
@@ -73,7 +82,10 @@ export class TextAreaUtils {
     field.selectionEnd = (selectionEnd || 0) + wrap.length
   }
 
-  /** Finds and replaces strings and regex in the field’s value, like `field.value = field.value.replace()` but better */
+  /**
+   * Finds and replaces strings and regex in the field’s value, like `field.value =
+   * field.value.replace()` but better
+   */
   static replace(
     field: HTMLTextAreaElement | HTMLInputElement,
     searchValue: string | RegExp,

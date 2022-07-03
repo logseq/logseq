@@ -35,7 +35,7 @@ export const EdgeHandle = observer<EdgeHandleProps>(function EdgeHandle({
 
   return (
     <rect
-      pointerEvents={(isHidden || disabled) ? 'none' : 'all'}
+      pointerEvents={isHidden || disabled ? 'none' : 'all'}
       className={'tl-transparent tl-edge-handle ' + (isHidden ? '' : edgeClassnames[edge])}
       aria-label={`${edge} target`}
       opacity={isHidden ? 0 : 1}

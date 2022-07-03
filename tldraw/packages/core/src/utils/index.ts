@@ -62,4 +62,3 @@ export function isDarwin(): boolean {
 export function modKey(e: any): boolean {
   return isDarwin() ? e.metaKey : e.ctrlKey
 }
-

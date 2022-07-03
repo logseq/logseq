@@ -10,6 +10,6 @@ export default defineConfig({
     '.png': 'base64',
   },
   env: {
-    NODE_ENV: 'production'
-  }
+    NODE_ENV: 'production',
+  },
 })

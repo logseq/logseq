@@ -91,7 +91,7 @@
   (and (not journal?)
        (util/create-title-property? page-name)))
 
-(defn- build-page-tx [format properties page journal?]
+(defn- build-page-tx [format properties page journal? whiteboard?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
           create-title? (create-title-property? journal?
@@ -123,7 +123,7 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? whiteboard? uuid]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil

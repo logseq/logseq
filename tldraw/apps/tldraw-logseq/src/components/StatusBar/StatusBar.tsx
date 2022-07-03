@@ -9,10 +9,25 @@ export const StatusBar = observer(function StatusBar() {
   const app = useApp<Shape>()
   React.useEffect(() => {
     const canvas = document.querySelector<HTMLElement>('.logseq-tldraw-wrapper .tl-canvas')
+    const actionBar = document.querySelector<HTMLElement>('.logseq-tldraw-wrapper .action-bar')
     if (canvas) {
       canvas.style.height = 'calc(100% - 32px)'
     }
-  }, [])
+
+    if (actionBar) {
+      actionBar.style.marginBottom = '32px'
+    }
+
+    return () => {
+      if (canvas) {
+        canvas.style.height = '100%'
+      }
+
+      if (actionBar) {
+        actionBar.style.marginBottom = '0px'
+      }
+    }
+  })
   return (
     <div className="statusbar">
       {app.selectedTool.id} | {app.selectedTool.currentState.id}

@@ -16,11 +16,11 @@ export function useKeyboardEvents() {
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
-    document.addEventListener('paste', (e) => {
+    document.addEventListener('paste', e => {
       e.preventDefault()
       app.paste(e)
     })
-    document.addEventListener('copy', (e) => {
+    document.addEventListener('copy', e => {
       e.preventDefault()
       app.copy()
     })

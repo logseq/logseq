@@ -54,13 +54,13 @@
   font-size: inherit;
 }
 
-
 .logseq-tldraw .action-bar {
   position: absolute;
-  bottom: 31px;
+  bottom: 0;
+
   /* width: 100%; */
   float: left;
-  left: 0px;
+  left: 0;
   grid-row: 1;
   display: flex;
   align-items: center;
@@ -68,6 +68,8 @@
   color: black;
   border-top-right-radius: 15px;
   border: black solid 1px;
+  border-left: none;
+  border-bottom: none;
   z-index: 100000;
   user-select: none;
   background: white;
@@ -87,7 +89,7 @@
   background-color: #fff;
   border-radius: 6px;
   padding: 5px;
-  box-shadow: 0px 10px 38px -10px rgba(22, 23, 24, 0.35), 0px 10px 20px -15px rgba(22, 23, 24, 0.2); 
+  box-shadow: 0 10px 38px -10px rgba(22, 23, 24, 0.35), 0 10px 20px -15px rgba(22, 23, 24, 0.2);
 }
 
 .dropdown-item {
@@ -100,10 +102,11 @@
   display: flex;
   align-items: center;
   height: 25px;
-  padding: 0px 5px;
+  padding: 0 5px;
   position: relative;
   user-select: none;
 }
+
 .dropdown-item:focus {
   color: white;
   background-color: black;
@@ -115,7 +118,7 @@
   color: black;
 }
 
-.right-slot:focus{
+.right-slot:focus {
   color: whites;
 }
 
@@ -258,7 +261,7 @@
   gap: 8px;
 }
 
-.logseq-tldraw .floating-panel>button {
+.logseq-tldraw .floating-panel > button {
   border-radius: 4px;
 }
 
@@ -286,7 +289,7 @@
   color: var(--color-selectedContrast);
 }
 
-.logseq-tldraw .floating-panel[data-tool-locked='true']>.button[data-selected='true']::after {
+.logseq-tldraw .floating-panel[data-tool-locked='true'] > .button[data-selected='true']::after {
   content: '';
   display: block;
   height: 6px;
@@ -458,6 +461,7 @@
 .logseq-tldraw .preview-minimap {
   height: 300px;
   width: 400px;
+
   /* Set top to be the viewport minus 10px */
   bottom: calc(100vh - 320px);
 

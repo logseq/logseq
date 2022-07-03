@@ -18,6 +18,7 @@ export interface TLBounds {
 
 /**
  * Get an intersection.
+ *
  * @param message
  * @param points
  * @internal
@@ -28,7 +29,6 @@ function createIntersection(message: string, ...points: number[][]): TLIntersect
 }
 
 /**
- *
  * @param point
  * @param size
  * @param rotation
@@ -51,6 +51,7 @@ function getRectangleSides(point: number[], size: number[], rotation = 0): [stri
 
 /**
  * Get whether angle c lies between angles a and b.
+ *
  * @param a
  * @param b
  * @param c
@@ -94,6 +95,7 @@ export function intersectLineLine(AB: number[][], PQ: number[][]): number[] | un
 
 /**
  * Find the intersection between a ray and a ray.
+ *
  * @param p0 The first ray's point
  * @param n0 The first ray's direction vector.
  * @param p1 The second ray's point.
@@ -126,6 +128,7 @@ export function intersectRayRay(
 
 /**
  * Find the intersections between a ray and a line segment.
+ *
  * @param origin
  * @param direction
  * @param a1
@@ -157,6 +160,7 @@ export function intersectRayLineSegment(
 
 /**
  * Find the intersections between a ray and a rectangle.
+ *
  * @param origin
  * @param direction
  * @param point
@@ -175,6 +179,7 @@ export function intersectRayRectangle(
 
 /**
  * Find the intersections between a ray and an ellipse.
+ *
  * @param origin
  * @param direction
  * @param center
@@ -197,6 +202,7 @@ export function intersectRayEllipse(
 
 /**
  * Find the intersections between a ray and a bounding box.
+ *
  * @param origin
  * @param direction
  * @param bounds
@@ -218,6 +224,7 @@ export function intersectRayBounds(
 
 /**
  * Find the intersection between a line segment and a ray.
+ *
  * @param a1
  * @param a2
  * @param origin
@@ -234,6 +241,7 @@ export function intersectLineSegmentRay(
 
 /**
  * Find the intersection between a line segment and a line segment.
+ *
  * @param a1
  * @param a2
  * @param b1
@@ -274,6 +282,7 @@ export function intersectLineSegmentLineSegment(
 
 /**
  * Find the intersections between a line segment and a rectangle.
+ *
  * @param a1
  * @param a2
  * @param point
@@ -290,6 +299,7 @@ export function intersectLineSegmentRectangle(
 
 /**
  * Find the intersections between a line segment and an arc.
+ *
  * @param a1
  * @param a2
  * @param center
@@ -311,7 +321,7 @@ export function intersectLineSegmentArc(
 
   if (!ellipseTest.didIntersect) return createIntersection('no intersection')
 
-  const points = ellipseTest.points.filter((point) =>
+  const points = ellipseTest.points.filter(point =>
     isAngleBetween(sa, ea, Vec.angle(center, point))
   )
 
@@ -324,6 +334,7 @@ export function intersectLineSegmentArc(
 
 /**
  * Find the intersections between a line segment and a circle.
+ *
  * @param a1
  * @param a2
  * @param c
@@ -375,6 +386,7 @@ export function intersectLineSegmentCircle(
 
 /**
  * Find the intersections between a line segment and an ellipse.
+ *
  * @param a1
  * @param a2
  * @param center
@@ -429,15 +441,16 @@ export function intersectLineSegmentEllipse(
   // Filter to only points that are on the segment.
   // Solve for points, then counter-rotate points.
   const points = tValues
-    .filter((t) => t >= 0 && t <= 1)
-    .map((t) => Vec.add(center, Vec.add(a1, Vec.mul(Vec.sub(a2, a1), t))))
-    .map((p) => Vec.rotWith(p, center, rotation))
+    .filter(t => t >= 0 && t <= 1)
+    .map(t => Vec.add(center, Vec.add(a1, Vec.mul(Vec.sub(a2, a1), t))))
+    .map(p => Vec.rotWith(p, center, rotation))
 
   return createIntersection('intersection', ...points)
 }
 
 /**
  * Find the intersections between a line segment and a bounding box.
+ *
  * @param a1
  * @param a2
  * @param bounds
@@ -452,6 +465,7 @@ export function intersectLineSegmentBounds(
 
 /**
  * Find the intersections between a line segment and a polyline.
+ *
  * @param a1
  * @param a2
  * @param points
@@ -479,6 +493,7 @@ export function intersectLineSegmentPolyline(
 }
 /**
  * Find the intersections between a line segment and a closed polygon.
+ *
  * @param a1
  * @param a2
  * @param points
@@ -511,6 +526,7 @@ export function intersectLineSegmentPolygon(
 
 /**
  * Find the intersections between a rectangle and a ray.
+ *
  * @param point
  * @param size
  * @param rotation
@@ -537,11 +553,12 @@ export function intersectRectangleRay(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a line segment.
+ *
  * @param point
  * @param size
  * @param a1
@@ -566,11 +583,12 @@ export function intersectRectangleLineSegment(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a rectangle.
+ *
  * @param point1
  * @param size1
  * @param point2
@@ -587,9 +605,7 @@ export function intersectRectangleRectangle(
       const intersections = intersectRectangleLineSegment(point2, size2, a1, a2)
 
       acc.push(
-        ...intersections.map((int) =>
-          createIntersection(`${message} ${int.message}`, ...int.points)
-        )
+        ...intersections.map(int => createIntersection(`${message} ${int.message}`, ...int.points))
       )
 
       return acc
@@ -597,11 +613,12 @@ export function intersectRectangleRectangle(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and an arc.
+ *
  * @param point
  * @param size
  * @param center
@@ -630,11 +647,12 @@ export function intersectRectangleArc(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a circle.
+ *
  * @param point
  * @param size
  * @param c
@@ -659,11 +677,12 @@ export function intersectRectangleCircle(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and an ellipse.
+ *
  * @param point
  * @param size
  * @param c
@@ -692,11 +711,12 @@ export function intersectRectangleEllipse(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /**
  * Find the intersections between a rectangle and a bounding box.
+ *
  * @param point
  * @param size
  * @param bounds
@@ -712,6 +732,7 @@ export function intersectRectangleBounds(
 
 /**
  * Find the intersections between a rectangle and a polyline.
+ *
  * @param point
  * @param size
  * @param points
@@ -734,10 +755,11 @@ export function intersectRectanglePolyline(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 /**
  * Find the intersections between a rectangle and a polygon.
+ *
  * @param point
  * @param size
  * @param points
@@ -760,7 +782,7 @@ export function intersectRectanglePolygon(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 /* -------------------------------------------------- */
@@ -769,6 +791,7 @@ export function intersectRectanglePolygon(
 
 /**
  * Find the intersections between a arc and a line segment.
+ *
  * @param center
  * @param radius
  * @param start
@@ -789,6 +812,7 @@ export function intersectArcLineSegment(
 
 /**
  * Find the intersections between a arc and a rectangle.
+ *
  * @param center
  * @param radius
  * @param start
@@ -809,6 +833,7 @@ export function intersectArcRectangle(
 
 /**
  * Find the intersections between a arc and a bounding box.
+ *
  * @param center
  * @param radius
  * @param start
@@ -832,6 +857,7 @@ export function intersectArcBounds(
 
 /**
  * Find the intersections between a circle and a line segment.
+ *
  * @param c
  * @param r
  * @param a1
@@ -848,6 +874,7 @@ export function intersectCircleLineSegment(
 
 /**
  * Find the intersections between a circle and a circle.
+ *
  * @param c1
  * @param r1
  * @param c2
@@ -878,6 +905,7 @@ export function intersectCircleCircle(
 
 /**
  * Find the intersections between a circle and a rectangle.
+ *
  * @param c
  * @param r
  * @param point
@@ -894,6 +922,7 @@ export function intersectCircleRectangle(
 
 /**
  * Find the intersections between a circle and a bounding box.
+ *
  * @param c
  * @param r
  * @param bounds
@@ -909,6 +938,7 @@ export function intersectCircleBounds(c: number[], r: number, bounds: TLBounds):
 
 /**
  * Find the intersections between an ellipse and a ray.
+ *
  * @param center
  * @param rx
  * @param ry
@@ -929,6 +959,7 @@ export function intersectEllipseRay(
 
 /**
  * Find the intersections between an ellipse and a line segment.
+ *
  * @param center
  * @param rx
  * @param ry
@@ -953,6 +984,7 @@ export function intersectEllipseLineSegment(
 
 /**
  * Find the intersections between an ellipse and a rectangle.
+ *
  * @param center
  * @param rx
  * @param ry
@@ -976,8 +1008,9 @@ export function intersectEllipseRectangle(
 }
 
 /**
- * Find the intersections between an ellipse and an ellipse.
- * Adapted from https://gist.github.com/drawable/92792f59b6ff8869d8b1
+ * Find the intersections between an ellipse and an ellipse. Adapted from
+ * https://gist.github.com/drawable/92792f59b6ff8869d8b1
+ *
  * @param _c1
  * @param _rx1
  * @param _ry1
@@ -1011,6 +1044,7 @@ export function intersectEllipseEllipse(
 
 /**
  * Find the intersections between an ellipse and a circle.
+ *
  * @param c
  * @param rx
  * @param ry
@@ -1031,6 +1065,7 @@ export function intersectEllipseCircle(
 
 /**
  * Find the intersections between an ellipse and a bounding box.
+ *
  * @param c
  * @param rx
  * @param ry
@@ -1050,6 +1085,7 @@ export function intersectEllipseBounds(
 
 /**
  * Find the intersections between a bounding box and a ray.
+ *
  * @param bounds
  * @param origin
  * @param direction
@@ -1065,6 +1101,7 @@ export function intersectBoundsRay(
 
 /**
  * Find the intersections between a bounding box and a line segment.
+ *
  * @param bounds
  * @param a1
  * @param a2
@@ -1080,6 +1117,7 @@ export function intersectBoundsLineSegment(
 
 /**
  * Find the intersections between a bounding box and a rectangle.
+ *
  * @param bounds
  * @param point
  * @param size
@@ -1095,6 +1133,7 @@ export function intersectBoundsRectangle(
 
 /**
  * Find the intersections between a bounding box and a bounding box.
+ *
  * @param bounds1
  * @param bounds2
  */
@@ -1109,6 +1148,7 @@ export function intersectBoundsBounds(bounds1: TLBounds, bounds2: TLBounds): TLI
 
 /**
  * Find the intersections between a bounding box and an arc.
+ *
  * @param bounds
  * @param center
  * @param radius
@@ -1128,6 +1168,7 @@ export function intersectBoundsArc(
 
 /**
  * Find the intersections between a bounding box and a circle.
+ *
  * @param bounds
  * @param c
  * @param r
@@ -1139,6 +1180,7 @@ export function intersectBoundsCircle(bounds: TLBounds, c: number[], r: number):
 
 /**
  * Find the intersections between a bounding box and an ellipse.
+ *
  * @param bounds
  * @param c
  * @param rx
@@ -1158,6 +1200,7 @@ export function intersectBoundsEllipse(
 
 /**
  * Find the intersections between a bounding box and a polyline.
+ *
  * @param bounds
  * @param points
  */
@@ -1167,6 +1210,7 @@ export function intersectBoundsPolyline(bounds: TLBounds, points: number[][]): T
 
 /**
  * Find the intersections between a bounding box and a polygon.
+ *
  * @param bounds
  * @param points
  */
@@ -1180,6 +1224,7 @@ export function intersectBoundsPolygon(bounds: TLBounds, points: number[][]): TL
 
 /**
  * Find the intersections between a polyline and a line segment.
+ *
  * @param points
  * @param a1
  * @param a2
@@ -1194,6 +1239,7 @@ export function intersectPolylineLineSegment(
 
 /**
  * Find the intersections between a polyline and a rectangle.
+ *
  * @param points
  * @param point
  * @param size
@@ -1208,6 +1254,7 @@ export function intersectPolylineRectangle(
 
 /**
  * Find the intersections between a polyline and a bounding box.
+ *
  * @param points
  * @param bounds
  */
@@ -1225,6 +1272,7 @@ export function intersectPolylineBounds(points: number[][], bounds: TLBounds): T
 
 /**
  * Find the intersections between a polygon nd a line segment.
+ *
  * @param points
  * @param a1
  * @param a2
@@ -1239,6 +1287,7 @@ export function intersectPolygonLineSegment(
 
 /**
  * Find the intersections between a polygon and a rectangle.
+ *
  * @param points
  * @param point
  * @param size
@@ -1253,6 +1302,7 @@ export function intersectPolygonRectangle(
 
 /**
  * Find the intersections between a polygon and a bounding box.
+ *
  * @param points
  * @param bounds
  */
@@ -1266,6 +1316,7 @@ export function intersectPolygonBounds(points: number[][], bounds: TLBounds): TL
 
 /**
  * Find the intersections between a rectangle and a ray.
+ *
  * @param point
  * @param size
  * @param rotation
@@ -1290,7 +1341,7 @@ export function intersectRayPolygon(
     []
   )
 
-  return sideIntersections.filter((int) => int.didIntersect)
+  return sideIntersections.filter(int => int.didIntersect)
 }
 
 export function pointsToLineSegments(points: number[][], closed = false) {

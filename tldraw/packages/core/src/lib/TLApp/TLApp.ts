@@ -6,15 +6,28 @@ import { action, computed, makeObservable, observable, transaction } from 'mobx'
 import { GRID_SIZE } from '~constants'
 import {
   TLInputs,
-  TLPage, TLPageModel, TLSelectTool, TLShape, TLShapeConstructor,
-  TLShapeModel, TLToolConstructor, TLViewport
+  TLPage,
+  TLPageModel,
+  TLSelectTool,
+  TLShape,
+  TLShapeConstructor,
+  TLShapeModel,
+  TLToolConstructor,
+  TLViewport,
 } from '~lib'
 import { TLApi } from '~lib/TLApi'
 import { TLCursors } from '~lib/TLCursors'
 import type {
-  TLAsset, TLBounds, TLCallback, TLEventMap, TLEvents, TLShortcut, TLStateEvents, TLSubscription,
+  TLAsset,
+  TLBounds,
+  TLCallback,
+  TLEventMap,
+  TLEvents,
+  TLShortcut,
+  TLStateEvents,
+  TLSubscription,
   TLSubscriptionEventInfo,
-  TLSubscriptionEventName
+  TLSubscriptionEventName,
 } from '~types'
 import { BoundsUtils, KeyUtils } from '~utils'
 import { TLHistory } from '../TLHistory'

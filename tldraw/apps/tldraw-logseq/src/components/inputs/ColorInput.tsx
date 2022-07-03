@@ -27,7 +27,7 @@ export function ColorInput({ label, value, onChange, ...rest }: ColorInputProps)
           name={`color-${label}`}
           type="color"
           value={computedValue}
-          onChange={(e) => {
+          onChange={e => {
             setComputedValue(e.target.value)
             onChange?.(e)
           }}

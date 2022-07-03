@@ -10,7 +10,9 @@ export const Minimap = observer(function Minimap() {
   const app = useApp()
 
   const [whiteboardPreviewManager] = React.useState(() => new PreviewManager(app.serialized))
-  const [preview, setPreview] = React.useState(() => whiteboardPreviewManager.generatePreviewJsx(app.viewport))
+  const [preview, setPreview] = React.useState(() =>
+    whiteboardPreviewManager.generatePreviewJsx(app.viewport)
+  )
 
   const [active, setActive] = React.useState(false)
 
@@ -36,7 +38,7 @@ export const Minimap = observer(function Minimap() {
 
   return (
     <>
-    {active && (
+      {active && (
         <div className="preview-minimap" {...events}>
           {preview}
         </div>
@@ -48,7 +50,6 @@ export const Minimap = observer(function Minimap() {
       >
         <Crosshair2Icon />
       </button>
-      
     </>
   )
 })

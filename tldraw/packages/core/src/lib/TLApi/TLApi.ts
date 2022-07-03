@@ -141,7 +141,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app.viewport.update({
       point: Vec.add(Vec.neg(BoundsUtils.getBoundsCenter(commonBounds)), [
         this.app.viewport.currentView.width / 2,
-        this.app.viewport.currentView.height/ 2,
+        this.app.viewport.currentView.height / 2,
       ]),
     })
     return this

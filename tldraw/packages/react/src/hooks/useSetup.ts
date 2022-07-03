@@ -20,7 +20,7 @@ export function useSetup<
     onDeleteShapes,
     onFileDrop,
     onPaste,
-    onCanvasDBClick
+    onCanvasDBClick,
   } = props
 
   React.useLayoutEffect(() => {

@@ -17,7 +17,7 @@ export class TLBoxShape<P extends TLBoxShapeProps = TLBoxShapeProps, M = any> ex
   }
 
   static id = 'box'
-  
+
   canBind = true
 
   static defaultProps: TLBoxShapeProps = {

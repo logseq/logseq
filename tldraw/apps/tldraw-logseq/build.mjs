@@ -11,7 +11,7 @@ const packageJson = fs.readFileSync('package.json', 'utf8')
 const glob = JSON.parse(packageJson)
 Object.assign(glob, {
   main: './index.js',
-  module: './index.mjs'
+  module: './index.mjs',
 })
 
 fs.writeFileSync('dist/package.json', JSON.stringify(glob, null, 2))
