@@ -8,9 +8,8 @@ import { Minimap } from '~components/Minimap'
 import { RedoIcon, UndoIcon } from '~components/icons'
 import { ZoomMenu } from '~components/ZoomMenu'
 
-export const ActionBar = observer(function ToolBar(): JSX.Element {
+export const ActionBar = observer(function ActionBar(): JSX.Element {
   const app = useApp<Shape>()
-  //Use state isOpen
   const undo = React.useCallback(() => {
     app.api.undo()
   }, [app])
@@ -21,7 +20,6 @@ export const ActionBar = observer(function ToolBar(): JSX.Element {
 
   return (
     <div className="action-bar">
-      {/* <button>minimap</button> */}
       <Minimap></Minimap>
       <button onClick={undo}>
         <UndoIcon></UndoIcon>
