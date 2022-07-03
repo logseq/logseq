@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   target: 'es6',
   platform: 'browser',
-  format: ['cjs', 'esm'],
+  format: ['cjs'],
   entry: ['src/index.ts'],
   clean: false,
   loader: {

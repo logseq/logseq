@@ -1,5 +1,4 @@
 import { Vec } from '@tldraw/vec'
-import { transaction } from 'mobx'
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
 import type { TLEventMap, TLEvents } from '~types'
 
