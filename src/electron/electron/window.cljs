@@ -103,7 +103,9 @@
 (defn graph-has-other-windows? [win dir]
   (let [windows (get-graph-all-windows dir)]
         ;; windows (filter #(.isVisible %) windows) ;; for mac .hide windows. such windows should also included
-    (boolean (some (fn [^js window] (not= (.-id win) (.-id window))) windows))))
+    (boolean (some (fn [^js window] (and (not (.isDestroyed window))
+                                         (not= (.-id win) (.-id window))))
+                   windows))))
 
 (defn- open-default-app!
   [url default-open]

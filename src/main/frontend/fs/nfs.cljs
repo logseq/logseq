@@ -90,7 +90,6 @@
   (readdir [_this dir]
     (let [prefix (str "handle/" dir)
           cached-files (keys @nfs-file-handles-cache)]
-      (println "cached-files" cached-files)
       (p/resolved
        (->> (filter #(string/starts-with? % (str prefix "/")) cached-files)
             (map (fn [path]
@@ -240,6 +239,4 @@
 
   ;; TODO:
   (watch-dir! [_this _dir]
-    nil)
-  (unwatch-dir! [_this dir]
     nil))

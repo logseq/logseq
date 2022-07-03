@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons'
 import { TLBoxShape, TLBoxShapeProps } from '@tldraw/core'
-import { HTMLContainer, TLComponentProps, useApp } from '@tldraw/react'
+import { HTMLContainer, TLComponentProps, TLContextBarProps, useApp } from '@tldraw/react'
 import { makeObservable } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import * as React from 'react'
@@ -93,7 +93,6 @@ const LogseqPortalShapeHeader = observer(
 
 export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   static id = 'logseq-portal'
-  static smart = true
 
   static defaultProps: LogseqPortalShapeProps = {
     id: 'logseq-portal',
@@ -114,7 +113,6 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   hideRotateHandle = true
   canChangeAspectRatio = true
   canFlip = true
-  canActivate = true
   canEdit = true
 
   constructor(props = {} as Partial<LogseqPortalShapeProps>) {
@@ -134,6 +132,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   }
 
   ReactContextBar = observer(() => {
+    const app = useApp<Shape>()
     return (
       <>
         <ColorInput
@@ -143,6 +142,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             this.update({
               fill: e.target.value,
             })
+            app.persist(true)
           }}
         />
         <ColorInput
@@ -152,6 +152,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             this.update({
               stroke: e.target.value,
             })
+            app.persist(true)
           }}
         />
         <SwitchInput
@@ -165,6 +166,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
               size: [this.props.size[0], collapsing ? HEADER_HEIGHT : this.props.collapsedHeight],
               collapsedHeight: collapsing ? originalHeight : this.props.collapsedHeight,
             })
+            app.persist()
           }}
         />
       </>
@@ -180,8 +182,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const isMoving = useCameraMovingRef()
     const { Page } = React.useContext(LogseqContext)
     const isSelected = app.selectedIds.has(this.id)
+    const isCreating = app.isIn('logseq-portal.creating') && !pageId
     const tlEventsEnabled =
-      isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select'
+      (isMoving || (isSelected && !isEditing) || app.selectedTool.id !== 'select') && !isCreating
     const stop = React.useCallback(
       e => {
         if (!tlEventsEnabled) {
@@ -211,15 +214,14 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     }, [isEditing, this.props.collapsed])
 
     const onPageNameChanged = React.useCallback((id: string) => {
-      app.wrapUpdate(() => {
-        this.update({
-          pageId: id,
-          size: [600, 320],
-          blockType: 'P',
-        })
-        this.setDraft(false)
-        app.clearEditingShape()
+      this.update({
+        pageId: id,
+        size: [600, 320],
+        blockType: 'P',
       })
+      app.selectTool('select')
+      app.history.resume()
+      app.history.persist()
     }, [])
 
     if (!Page) {
@@ -244,7 +246,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             pointerEvents: isEditing ? 'all' : 'none',
           }}
         >
-          {this.draft ? (
+          {isCreating ? (
             <LogseqQuickSearch onChange={onPageNameChanged} />
           ) : (
             <div

@@ -90,8 +90,7 @@
             namespaces (db/get-all-namespace-relation repo)
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
-            get-original-name (fn [p] (or (:block/original-name p) (:block/name p)))
-            all-pages (map get-original-name full-pages)
+            all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
             pages-after-journal-filter (if-not journal?
                                          (remove :block/journal? full-pages)
@@ -164,9 +163,7 @@
                        (distinct))
             nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
-            get-original-name (fn [p] (or (:block/original-name p)
-                                         (:block/name p)))
-            all-pages (map get-original-name full-pages)
+            all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
          {:nodes nodes

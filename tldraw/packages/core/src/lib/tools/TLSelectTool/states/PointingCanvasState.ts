@@ -1,8 +1,6 @@
 import { Vec } from '@tldraw/vec'
-import { transaction } from 'mobx'
 import { TLApp, TLSelectTool, TLShape, TLToolState } from '~lib'
 import type { TLEventMap, TLEvents } from '~types'
-import { uniqueId } from '~utils'
 
 export class PointingCanvasState<
   S extends TLShape,
@@ -42,20 +40,6 @@ export class PointingCanvasState<
   }
 
   onDoubleClick: TLEvents<S>['pointer'] = () => {
-    transaction(() => {
-      const Shape = this.app.SmartShape
-      if (Shape) {
-        const shape = new Shape({
-          id: uniqueId(),
-          type: Shape.id,
-          parentId: this.app.currentPage.id,
-          point: [...this.app.inputs.originPoint],
-        })
-        shape.setDraft(true)
-        this.app.history.pause()
-        this.app.setEditingShape(shape)
-        this.app.currentPage.addShapes(shape)
-      }
-    })
+    this.app.notify('canvas-dbclick', { point: this.app.inputs.originPoint })
   }
 }

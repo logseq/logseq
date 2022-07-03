@@ -1,9 +1,9 @@
-import { TLApp, TLBoxShape, TLShape, TLTool } from '~lib'
+import { TLApp, TLDotShape, TLShape, TLTool } from '~lib'
 import { TLCursor, TLEventMap } from '~types'
 import { CreatingState, IdleState } from './states'
 
 export abstract class TLDotTool<
-  T extends TLBoxShape = TLBoxShape,
+  T extends TLDotShape = TLDotShape,
   S extends TLShape = TLShape,
   K extends TLEventMap = TLEventMap,
   R extends TLApp<S, K> = TLApp<S, K>
@@ -19,7 +19,6 @@ export abstract class TLDotTool<
   abstract Shape: {
     new (props: Partial<T['props']>): T
     id: string
-    smart: boolean
     defaultProps: T['props']
   }
 }

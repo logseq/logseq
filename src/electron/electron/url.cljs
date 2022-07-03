@@ -29,7 +29,7 @@
                                       :payload (str "Failed to open link. Missing graph identifier after `logseq://graph/`.")})))
 
 (defn local-url-handler
-  "Given a URL with `graph identifier` as path, `page` (optional) and `block-id` 
+  "Given a URL with `graph identifier` as path, `page` (optional) and `block-id`
    (optional) as parameters, open the local graphs accordingly.
    `graph identifier` is the name of the graph to open, e.g. `lambda`"
   [^js win parsed-url force-new-window?]
@@ -45,10 +45,10 @@
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
         (when (or page-name block-id file)
           (let [redirect-f (fn [win' graph-name']
-                         (when (= graph-name graph-name')
-                           (send-to-renderer win' "redirectWhenExists" {:page-name page-name
-                                                                        :block-id block-id
-                                                                        :file file})))]
+                             (when (= graph-name graph-name')
+                               (send-to-renderer win' "redirectWhenExists" {:page-name page-name
+                                                                            :block-id block-id
+                                                                            :file file})))]
             (if open-new-window?
               (state/set-state! :window/once-graph-ready redirect-f)
               (do (win/switch-to-window! window-on-graph)
@@ -57,12 +57,31 @@
           (send-to-renderer win "openNewWindowOfGraph" graph-name)))
       (graph-identifier-error-handler graph-identifier))))
 
+(defn- x-callback-url-handler
+  [^js parsed-url]
+  (let [action (.-pathname parsed-url)]
+    (cond
+      (= action "/quickCapture")
+      (let [[url title content] (get-URL-decoded-params parsed-url ["url" "title" "content"])]
+        (send-to-renderer "quickCapture" {:url url
+                                          :title title
+                                          :content content}))
+
+      :else
+      (send-to-renderer "notification" {:type "error"
+                                        :payload (str "Unimplemented x-callback-url action: `"
+                                                      action
+                                                      "`.")}))))
+
 (defn logseq-url-handler
   [^js win parsed-url]
   (let [url-host (.-host parsed-url)] ;; return "" when no pathname provided
     (cond
       (= "auth-callback" url-host)
       (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
+
+      (= "x-callback-url" url-host)
+      (x-callback-url-handler parsed-url)
 
       ;; identifier of graph in local
       (= "graph" url-host)

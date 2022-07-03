@@ -2,37 +2,24 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Vec } from '@tldraw/vec'
-import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
-import { BoundsUtils, KeyUtils } from '~utils'
+import { action, computed, makeObservable, observable, transaction } from 'mobx'
+import { GRID_SIZE } from '~constants'
 import {
-  TLSelectTool,
   TLInputs,
-  TLPage,
-  TLViewport,
-  TLShape,
-  TLPageModel,
-  TLToolConstructor,
-  TLShapeConstructor,
-  TLShapeModel,
+  TLPage, TLPageModel, TLSelectTool, TLShape, TLShapeConstructor,
+  TLShapeModel, TLToolConstructor, TLViewport
 } from '~lib'
+import { TLApi } from '~lib/TLApi'
+import { TLCursors } from '~lib/TLCursors'
 import type {
-  TLBounds,
-  TLEvents,
-  TLSubscription,
+  TLAsset, TLBounds, TLCallback, TLEventMap, TLEvents, TLShortcut, TLStateEvents, TLSubscription,
   TLSubscriptionEventInfo,
-  TLSubscriptionEventName,
-  TLCallback,
-  TLShortcut,
-  TLEventMap,
-  TLStateEvents,
-  TLAsset,
+  TLSubscriptionEventName
 } from '~types'
+import { BoundsUtils, KeyUtils } from '~utils'
 import { TLHistory } from '../TLHistory'
 import { TLSettings } from '../TLSettings'
 import { TLRootState } from '../TLState'
-import { TLApi } from '~lib/TLApi'
-import { TLCursors } from '~lib/TLCursors'
-import { GRID_SIZE } from '~constants'
 
 export interface TLDocumentModel<S extends TLShape = TLShape, A extends TLAsset = TLAsset> {
   currentPageId: string
@@ -672,15 +659,6 @@ export class TLApp<
   /* ------------------ Shape Classes ----------------- */
 
   Shapes = new Map<string, TLShapeConstructor<S>>()
-
-  get SmartShape() {
-    for (const S of this.Shapes.values()) {
-      if (S.smart) {
-        return S
-      }
-    }
-    return null
-  }
 
   registerShapes = (Shapes: TLShapeConstructor<S>[]) => {
     Shapes.forEach(Shape => this.Shapes.set(Shape.id, Shape))

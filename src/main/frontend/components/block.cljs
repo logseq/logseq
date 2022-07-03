@@ -33,6 +33,7 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.fs :as fs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.dnd :as dnd]
@@ -48,20 +49,20 @@
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
-            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
-            [frontend.util.text :as text-util]
             [frontend.util.property :as property]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
+            [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -271,12 +272,15 @@
 
     (when @src
       (let [ext (keyword (util/get-file-ext @src))
+            repo (state/get-current-repo)
+            repo-dir (config/get-repo-dir repo)
+            path (str repo-dir href)
             share-fn (fn [event]
                        (util/stop event)
                        (when (mobile-util/native-platform?)
-                         (p/let [url (str (config/get-repo-dir (state/get-current-repo)) href)]
-                           (.share Share #js {:url url
-                                              :title "Open file with your favorite app"}))))]
+                         (.share Share #js {:url path
+                                            :title "Open file with your favorite app"})))]
+
         (cond
           (contains? config/audio-formats ext)
           (audio-cp @src)
@@ -284,13 +288,20 @@
           (contains? (gp-config/img-formats) ext)
           (resizable-image config title @src metadata full_text true)
 
+          (contains? (gp-config/text-formats) ext)
+          [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
+                                      :on-click (fn [_event]
+                                                  (p/let [result (fs/read-file repo-dir path)]
+                                                    (db/set-file-content! repo path result )))}
+           title]
+
           (= ext :pdf)
           [:a.asset-ref.is-pdf {:href @src
                                 :on-click share-fn}
            title]
 
           :else
-          [:a.asset-ref.is-doc {:ref @src
+          [:a.asset-ref.is-doc {:href @src
                                 :on-click share-fn}
            title])))))
 
@@ -605,13 +616,10 @@
         nested-link? (:nested-link? config)
         contents-page? (= "contents" (string/lower-case (str (:id config))))
         block-uuid (:block/uuid config)]
-    (cond
-      (string/ends-with? s ".excalidraw")
+    (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
-
-      :else
       [:span.page-reference
        {:data-ref s}
        (when (and (or show-brackets? nested-link?)
@@ -1142,7 +1150,7 @@
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
-              height (int (* width (/ 315 560)))]
+              height (int (* width (/ 360 560)))]
           [:iframe
            {:allowfullscreen true
             :framespacing "0"
@@ -1156,10 +1164,7 @@
 (defn- macro-video-cp
   [_config arguments]
   (when-let [url (first arguments)]
-    (let [width (min (- (util/get-width) 96)
-                     560)
-          height (int (* width (/ 315 560)))
-          results (text-util/get-matched-video url)
+    (let [results (text-util/get-matched-video url)
           src (match results
                      [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
                      (if (= (count id) 11) ["youtube-player" id] url)
@@ -1173,8 +1178,10 @@
                      [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
                      (str "https://player.vimeo.com/video/" id)
 
-                     [_ _ _ "bilibili.com" _ id _]
-                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+                     [_ _ _ "bilibili.com" _ id & query]
+                     (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
+                          (when-let [page (second query)]
+                            (str "&page=" page)))
 
                      :else
                      url)]
@@ -1182,16 +1189,20 @@
                (= (first src) "youtube-player"))
         (youtube/youtube-video (last src))
         (when src
-          [:iframe
-           {:allowfullscreen true
-            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-            :framespacing "0"
-            :frameborder "no"
-            :border "0"
-            :scrolling "no"
-            :src src
-            :width width
-            :height height}])))))
+          (let [width (min (- (util/get-width) 96) 560)
+                height (int (* width (/ (if (string/includes? src "player.bilibili.com")
+                                          360 315)
+                                        560)))]
+            [:iframe
+             {:allow-full-screen true
+              :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+              :framespacing "0"
+              :frame-border "no"
+              :border "0"
+              :scrolling "no"
+              :src src
+              :width width
+              :height height}]))))))
 
 (defn- macro-else-cp
   [name config arguments]
@@ -1931,7 +1942,10 @@
         (when-not (target-forbidden-edit? target)
           (cond
             (and shift? (state/get-selection-start-block-or-first))
-            (editor-handler/highlight-selection-area! block-id)
+            (do
+              (util/stop e)
+              (util/clear-selection!)
+              (editor-handler/highlight-selection-area! block-id))
 
             shift?
             (util/clear-selection!)

@@ -8,7 +8,6 @@ import {
   uniqueId,
 } from '@tldraw/core'
 import type { TLReactCallbacks } from '@tldraw/react'
-import { transaction } from 'mobx'
 import * as React from 'react'
 import { LogseqPortalShape, Shape } from '~lib'
 

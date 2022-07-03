@@ -1,5 +1,5 @@
-import { computed, makeObservable, observable } from 'mobx'
-import { TLApp, TLPage, TLDocumentModel, TLShape } from '~lib'
+import { computed, makeObservable } from 'mobx'
+import { TLApp, TLDocumentModel, TLPage, TLShape } from '~lib'
 import type { TLEventMap } from '~types'
 import { deepEqual } from '~utils'
 

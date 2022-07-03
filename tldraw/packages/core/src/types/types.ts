@@ -168,6 +168,10 @@ export type TLSubscriptionEvent =
       event: 'delete-assets'
       info: { assets: TLAsset[] }
     }
+    | {
+      event: 'canvas-dbclick'
+      info: { point: number[] }
+    }
 
 export type TLSubscriptionEventName = TLSubscriptionEvent['event']
 

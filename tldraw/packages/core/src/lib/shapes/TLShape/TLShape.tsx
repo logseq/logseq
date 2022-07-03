@@ -6,7 +6,7 @@ import {
   intersectRayBounds,
 } from '@tldraw/intersect'
 import Vec from '@tldraw/vec'
-import { action, computed, makeObservable, observable, toJS } from 'mobx'
+import { action, computed, makeObservable, observable, toJS, transaction } from 'mobx'
 import { BINDING_DISTANCE } from '~constants'
 import type { TLAsset, TLBounds, TLHandle, TLResizeCorner, TLResizeEdge } from '~types'
 import { BoundsUtils, deepCopy, PointUtils } from '~utils'
@@ -18,7 +18,6 @@ export type TLShapeModel<P extends TLShapeProps = TLShapeProps> = {
 export interface TLShapeConstructor<S extends TLShape = TLShape> {
   new (props: any): S
   id: string
-  smart: boolean
 }
 
 export type TLFlag = boolean
@@ -81,8 +80,6 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     makeObservable(this)
   }
 
-  // there should be only one Shape that is smart (created by double click canvas)
-  static smart: boolean
   static type: string
 
   @observable props: P
@@ -103,14 +100,11 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
   canFlip: TLFlag = true
   canEdit: TLFlag = false
   canBind: TLFlag = false
-  canActivate: TLFlag = false
-  
+
   @observable nonce = 0
 
   bindingDistance = BINDING_DISTANCE
 
-  // For smart shape
-  @observable private _draft = false
   @observable private isDirty = false
   @observable private lastSerialized: TLShapeModel<P> | undefined
 
@@ -120,13 +114,8 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     return this.props.id
   }
 
-  @computed
-  get draft() {
-    return this._draft
-  }
-
-  @action setDraft(draft: boolean) {
-    this._draft = draft
+  @action setNonce(nonce: number) {
+    this.nonce = nonce
   }
 
   @action setIsDirty(isDirty: boolean) {
@@ -283,9 +272,11 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   protected getCachedSerialized = (): TLShapeModel<P> => {
     if (this.isDirty || !this.lastSerialized) {
-      this.nonce = Date.now()
-      this.setIsDirty(false)
-      this.setLastSerialized(this.getSerialized())
+      transaction(() => {
+        this.setNonce(Date.now())
+        this.setIsDirty(false)
+        this.setLastSerialized(this.getSerialized())
+      })
     }
     if (this.lastSerialized) {
       return this.lastSerialized
@@ -295,7 +286,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
 
   @computed
   get serialized(): TLShapeModel<P> | null {
-    return this.draft ? null : this.getCachedSerialized()
+    return this.getCachedSerialized()
   }
 
   validateProps = (

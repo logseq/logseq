@@ -31,7 +31,7 @@
 (defn text-formats
   []
   #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-    :excalidraw})
+    :excalidraw :tldr :sh})
 
 (defn img-formats
   []
