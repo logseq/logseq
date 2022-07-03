@@ -2206,7 +2206,10 @@
            :page/file-sync-versions "Versões da página"
            :plugin/not-installed "Não instalado"
            :tutorial/dummy-notes "dummy-notes-en.md"
-           :tutorial/text "tutorial-en.md"}
+           :tutorial/text "tutorial-en.md"
+           :settings-page/edit-export-css "Editar export.css"
+           :settings-page/enable-flashcards "Flashcards"
+           :settings-page/export-theme "Exportar Tema"}
 
    :pt-PT {:on-boarding/demo-graph "Isto é um grafo de demonstração, nenhuma mudança será guardada até abrir uma pasta local."
            :on-boarding/add-graph "Adicionar grafo"
@@ -2500,7 +2503,39 @@
         :select.graph/add-graph "Sim, adicionar outro grafo"
 
         :file-sync/other-user-graph "O gráfico local atual é obrigado ao gráfico remoto de outro usuário. Portanto, não consigo iniciar a sincronização."
-        :file-sync/graph-deleted "O gráfico remoto atual foi excluído"}
+        :file-sync/graph-deleted "O gráfico remoto atual foi excluído"
+        :export-graph "Exportar gráfico"
+        :export-page "Exportar Página"
+        :host "Host"
+        :port "Port"
+        :re-index-discard-unsaved-changes-warning "A reindexação descartará o gráfico atual e processará todos os arquivos novamente conforme estão armazenados no disco. Você perderá as alterações não salvas e pode demorar um pouco. Continuar?"
+        :re-index-multiple-windows-warning "Você precisa fechar as outras janelas antes de reindexar este gráfico."
+        :save "Salvar"
+        :settings-of-plugins "Configurações dos plugins"
+        :sync-from-local-changes-detected "Atualizar detecta e processa arquivos modificados em seu disco e que são diferentes do conteúdo atual da página do Logseq. Continuar?"
+        :type "Tipo"
+        :content/copy-block-emebed "Copiar bloco para incorporar"
+
+        :graph/persist "O Logseq está sincronizando seu status interno, aguarde alguns segundos."
+        :graph/persist-error "Falha na sincronização do status interno."
+        :graph/save "Salvando..."
+        :graph/save-success "Salvo com sucesso"
+        :graph/save-error "Falha ao salvar"
+
+        :page/copy-page-url "Copiar URL da página"
+        :page/file-sync-versions "Versões da Página"
+        :page/open-backup-directory "Abra a listagem de backups de página"
+        :page/unfavorite "Desfavoritar página"
+        :plugin/not-installed "Não instalado"
+        :search/page-names "Procurar nome da página"
+        :settings-page/auto-updater "Auto atualizar"
+        :tutorial/dummy-notes "dummy-notes-en.md"
+        :tutorial/text "tutorial-en.md"
+        :settings-page/edit-export-css "Editar export.css"
+        :settings-page/enable-flashcards "Flashcards"
+        :settings-page/export-theme "Exportar tema"
+        :settings-page/network-proxy "Proxy de rede"
+        :settings-page/plugin-system "Sistema de plugins"}
 
    :ru {:on-boarding/demo-graph "Это демонстрационный граф, изменения не будут сохранены, пока вы не откроете локальный файл."
         :on-boarding/add-graph "Добавить новый граф"
@@ -3426,7 +3461,10 @@
 
         :file-sync/other-user-graph "Il grafo locale attuale è associato al grafo remoto di un altro utente. Non è quindi possibile avviare la sincronizzazione."
         :file-sync/graph-deleted "Il grafo attuale è stato eliminato"
-        :settings-page/enable-encryption "Crittografia"}
+        :settings-page/enable-encryption "Crittografia"
+        :settings-page/edit-export-css "Modificare export.css"
+        :settings-page/enable-flashcards "Flashcard"
+        :settings-page/export-theme "Esporta tema"}
 
    :tr {:tutorial/text #?(:cljs (rc/inline "tutorial-tr.md")
                                 :default "tutorial-tr.md")

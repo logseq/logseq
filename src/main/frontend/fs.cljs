@@ -67,12 +67,6 @@
     (when (= fs bfs-record)
       (protocol/rmdir! fs dir))))
 
-(defn delete-file!
-  [repo dir path opts]
-  (let [fs-record (get-fs dir)]
-    (when (= fs-record mobile-record)
-      (protocol/delete-file! fs-record repo dir path opts))))
-
 (defn write-file!
   [repo dir path content opts]
   (when content

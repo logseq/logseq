@@ -223,6 +223,11 @@
  ;; :mobile/photo
  ;; {:allow-editing? true}
 
+ ;; Mobile features options
+ ;; Gestures
+ ;; :mobile
+ ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
+
  ;; Extra CodeMirror options
  ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
 
@@ -238,6 +243,6 @@
  ;; You can also reorder them, or even only use one or two of them in the template.
  ;; You can also insert or format any text in the template as shown in the following examples.
  ;; :quick-capture-templates
- ;; {:text "[[quick capture]] **{time}**: \n - {text} from {url}"
- ;;  :media "[[quick capture]] **{time}**: \n - {url}"}
+ ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
+ ;;  :media "[[quick capture]] **{time}**: {url}"}
  }
