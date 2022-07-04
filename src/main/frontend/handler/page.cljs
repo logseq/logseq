@@ -240,13 +240,21 @@
         (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
         (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
 
+(defn- replace-property-ref!
+  [content old-name new-name]
+  (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "_"))
+        old-property (str old-name "::")
+        new-property (str (name new-name) "::")]
+    (util/replace-ignore-case content old-property new-property)))
+
 (defn- replace-old-page!
   "Unsanitized names"
   [content old-name new-name]
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
         (replace-page-ref! old-name new-name)
-        (replace-tag-ref! old-name new-name))))
+        (replace-tag-ref! old-name new-name)
+        (replace-property-ref! old-name new-name))))
 
 (defn- walk-replace-old-page!
   "Unsanitized names"
@@ -264,6 +272,9 @@
                      (if (= f old-name)
                        new-name
                        (replace-old-page! f old-name new-name))
+
+                     (and (keyword f) (= (name f) old-name))
+                     (keyword (string/replace (string/lower-case new-name) #"\s+" "_"))
 
                      :else
                      f))

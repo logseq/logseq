@@ -1773,8 +1773,7 @@
 (defn close-autocomplete-if-outside
   [input]
   (when (and input
-             (or (state/get-editor-action)
-                 (state/get-editor-show-page-search-hashtag?))
+             (state/get-editor-action)
              (not (wrapped-by? input "[[" "]]")))
     (when (get-search-q)
       (let [value (gobj/get input "value")
@@ -1787,9 +1786,7 @@
                     (string/includes? between "]")
                     (string/includes? between "(")
                     (string/includes? between ")")))
-          (state/set-editor-show-block-search! false)
-          (state/set-editor-show-page-search! false)
-          (state/set-editor-show-page-search-hashtag! false))))))
+          (state/clear-editor-action!))))))
 
 (defn resize-image!
   [block-id metadata full_text size]
@@ -2800,11 +2797,8 @@
                (= c (util/nth-safe value (dec (dec current-pos))) " "))
           (state/clear-editor-action!)
 
-          (and (= c " ")
-               (or (= (util/nth-safe value (dec (dec current-pos))) "#")
-                   (not (state/get-editor-show-page-search?))
-                   (and (state/get-editor-show-page-search?)
-                        (not= (util/nth-safe value current-pos) "]"))))
+          (and (state/get-editor-show-page-search-hashtag?)
+               (= c " "))
           (state/set-editor-show-page-search-hashtag! false)
 
           :else
