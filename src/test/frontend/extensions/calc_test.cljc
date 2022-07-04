@@ -19,7 +19,11 @@
       98123      "98123"
       1.0        " 1.0 "
       22.1124131 "22.1124131"
-      100.01231  " 100.01231 ")
+      100.01231  " 100.01231 "
+      0.01231    " .01231 "
+      0.015       ".015 "
+      -0.2       "-.2"
+      -0.3       "- .3")
     (testing "even when they have the commas in the wrong place"
       (are [value expr] (= value (run expr))
         98123      "9812,3"
@@ -66,10 +70,15 @@
     (are [value expr] (= value (run expr))
       1.0    "1 ^ 0"
       4.0    "2^2 "
+      -9.0    "-3^2 "
+      9.0    "(-3)^2 "
       27.0   " 3^ 3"
       0.125  " 2^ -3"
-      16.0   "2 ^ 2 ^ 2"
+      512.0   "2 ^ 3 ^ 2"
       256.0  "4.000 ^ 4.0"
+      2.0    "4^0.5"
+      0.1    "100^(-0.5)"
+      125.0  "25^(3/2)"
       4096.0 "200% ^ 12"))
   (testing "operator precedence"
     (are [value expr] (= value (run expr))
@@ -90,9 +99,17 @@
       12.3     "123.0e-1"
       -12.3    "-123.0e-1"
       12.3     "123.0E-1"
-      2.0      "1e0 + 1e0"))
+      12300     "123.0E+2"
+      2.0      "1e0 + 1e0"
+      10       ".1e2"
+      0.001    ".1e-2"
+      -0.045   "-.45e-1"
+      -210     "-.21e3"))
   (testing "scientific functions"
     (are [value expr] (= value (run expr))
+      2.0  "sqrt( 4 )"
+      3.0  "abs( 3 )"
+      3.0  "abs( -3 )"
       1.0  "cos( 0 * 1 )"
       0.0  "sin( 1 -1 )"
       0.0  "atan(tan(0))"
@@ -101,7 +118,9 @@
       0.0  "acos(cos(0))"
       5.0  "2 * log(10) + 3"
       1.0  "-2 * log(10) + 3"
-      10.0 "ln(1) + 10")))
+      10.0 "ln(1) + 10"
+      1.0  "exp(0)"
+      2.0  "ln(exp(2))")))
 
 (deftest variables
   (testing "variables can be remembered"
@@ -109,7 +128,8 @@
                             (calc/eval env (calc/parse expr))
                             (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 1}        "a = 1"
-      {"a" -1}        "a = -1"
+      {"a" -1}       "a = -1"
+      {"k9" 27}       "k9 = 27"
       {"variable" 1} "variable = 1 + 0 * 2"
       {"x" 1}        "x= 2 * 1 - 1 "
       {"y" 4}        "y =8 / 4 + 2 * 1 - 25 * 0 / 1"
@@ -121,6 +141,7 @@
                             (calc/eval env (calc/parse expr))
                             (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a_a" 1}         "a_a = 1"
+      {"_foo" 1}        "_foo = 1"
       {"x_yy_zzz" 1}    "x_yy_zzz= 1"
       {"foo_bar_baz" 1} "foo_bar_baz = 1 + -0 * 2"))
   (testing "variables can be reused"
@@ -143,15 +164,32 @@
       {"a" 2 "b" 2}        ["a = 1" "b = a + 1" "a = b"]
       {"variable" 1 "x" 0} ["variable = 1 + 0 * 2" "x = log(variable)" "x = variable - 1"])))
 
+(deftest last-value
+  (testing "last value is set"
+    (are [values exprs] (let [env (calc/new-env)]
+                          (mapv (fn [expr]
+                                  (calc/eval env (calc/parse expr)))
+                                exprs))
+      [42 126] ["6*7" "last*3"]
+      [25 5]   ["3^2+4^2" "sqrt(last)"])))
+
+(deftest comments
+  (testing "comments are ignored"
+    (are [value expr] (= value (run expr))
+      nil    "# this comment is ignored"
+      nil    "    # this comment is ignored   "
+      8.0    "2*4# double 4"
+      10.0   "2*5 # double 5"
+      12.0   "2*6  # double 6"
+      14.0   "2*7  # 99")))
+
 (deftest failure
   (testing "expressions that don't match the spec fail"
     (are [expr] (calc/failure? (calc/eval (calc/new-env) (calc/parse expr)))
       "foo_ ="
       "foo__ ="
       "oo___ ="
-      "                        "
-      "bar_2  = 2 + 4"
-      "bar_2a = 3 + 4"
-      "foo_ = "
-      "foo__  ="
-      "foo_3  = a")))
+      " . "
+      "_ = 2"
+      "__ = 4"
+      "foo_3  = _")))
