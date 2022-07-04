@@ -251,7 +251,8 @@
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
           namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
-          page-entity (some-> db (d/entity [:block/name page-name]))]
+          page-entity (some-> db (d/entity [:block/name page-name]))
+          original-page-name (or (:block/original-name page-entity) original-page-name)]
       (merge
        {:block/name page-name
         :block/original-name original-page-name}
