@@ -37,14 +37,15 @@ yarn release
 1. Install npm packages for building the desktop app
 
 ``` bash
-yarn install && cd static && yarn install && cd ..
+yarn install
 ```
 2. Compile to JavaScript and open the dev app
 
 ```bash
 yarn watch
-# Wait until watch is finished building and then in a different shell
-# If you have opened desktop logseq, you should close it. Otherwise, the following command will fail.
+# Wait until watch reports `Build Completed.` for `:electron` and `:app`.
+# Then, run the following command in a different shell.
+# If you have opened desktop logseq, you should close it. Otherwise, this command will fail.
 yarn dev-electron-app
 ```
 
