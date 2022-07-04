@@ -598,6 +598,10 @@
   []
   (:editor/action @state))
 
+(defn get-editor-action-data
+  []
+  (:editor/action-data @state))
+
 (defn set-editor-show-page-search!
   [value]
   (set-editor-action! (when value :page-search)))
@@ -635,7 +639,7 @@
   [value]
   (if value
     (do
-      (set-editor-action-data! value)
+      (set-editor-action-data! (assoc (get-editor-action-data) :options value))
       (set-editor-action! :input))
     (do
       (set-editor-action! nil)
@@ -651,8 +655,6 @@
   []
   (when-not (get-editor-action) (set-editor-action! :block-commands)))
 
-
-
 (defn set-editor-show-zotero!
   [value]
   (set-state! :editor/show-zotero value))
@@ -660,9 +662,7 @@
 (defn clear-editor-action!
   []
   (swap! state (fn [state]
-                 (assoc state
-                        :editor/action nil
-                        :editor/action-data nil))))
+                 (assoc state :editor/action nil))))
 
 (defn set-edit-input-id!
   [input-id]

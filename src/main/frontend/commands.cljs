@@ -23,9 +23,7 @@
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce *slash-caret-pos (atom nil))
 (defonce angle-bracket "<")
-(defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
 
 (def query-doc
@@ -305,14 +303,19 @@
 
 (defonce *matched-block-commands (atom (block-commands-map)))
 
+(defn reinit-matched-commands!
+  []
+  (reset! *matched-commands @*initial-commands))
+
+(defn reinit-matched-block-commands!
+  []
+  (reset! *matched-block-commands (block-commands-map)))
+
 (defn restore-state
   [restore-slash-caret-pos?]
-  (when restore-slash-caret-pos?
-    (reset! *slash-caret-pos nil))
   (state/clear-editor-action!)
-  (reset! *angle-bracket-caret-pos nil)
-  (reset! *matched-commands @*initial-commands)
-  (reset! *matched-block-commands (block-commands-map)))
+  (reinit-matched-commands!)
+  (reinit-matched-block-commands!))
 
 (defn insert!
   [id value
@@ -467,7 +470,7 @@
     (let [type (:type option)
           input (gdom/getElement input-id)
           beginning-of-line? (or (cursor/beginning-of-line? input)
-                                 (= 1 (:pos @*angle-bracket-caret-pos)))
+                                 (= 1 (:pos (:pos (state/get-editor-action-data)))))
           value (if (and (contains? #{"block" "properties"} type)
                          (not beginning-of-line?))
                   (str "\n" value)
@@ -540,7 +543,7 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
-            slash-pos (:pos @*slash-caret-pos)
+            slash-pos (:pos (:pos (state/get-editor-action-data)))
             [re-pattern new-line-re-pattern] (if (= :org format)
                                                [#"\*+\s" #"\n\*+\s"]
                                                [#"#+\s" #"\n#+\s"])

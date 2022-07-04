@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *slash-caret-pos]]
+             :refer [*first-command-group *matched-block-commands *matched-commands]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
@@ -208,27 +208,26 @@
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
-  (when (= :template-search (state/sub :editor/action))
-    (let [pos (state/get-editor-last-pos)
-          input (gdom/getElement id)]
-      (when input
-        (let [current-pos (cursor/pos input)
-              edit-content (state/sub [:editor/content id])
-              q (or
-                 (when (>= (count edit-content) current-pos)
-                   (subs edit-content pos current-pos))
-                 "")
-              matched-templates (editor-handler/get-matched-templates q)
-              non-exist-handler (fn [_state]
-                                  (state/set-editor-show-template-search! false))]
-          (ui/auto-complete
-           matched-templates
-           {:on-chosen   (editor-handler/template-on-chosen-handler id)
-            :on-enter    non-exist-handler
-            :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
-            :item-render (fn [[template _block-db-id]]
-                           template)
-            :class       "black"}))))))
+  (let [pos (state/get-editor-last-pos)
+        input (gdom/getElement id)]
+    (when input
+      (let [current-pos (cursor/pos input)
+            edit-content (state/sub [:editor/content id])
+            q (or
+               (when (>= (count edit-content) current-pos)
+                 (subs edit-content pos current-pos))
+               "")
+            matched-templates (editor-handler/get-matched-templates q)
+            non-exist-handler (fn [_state]
+                                (state/set-editor-show-template-search! false))]
+        (ui/auto-complete
+         matched-templates
+         {:on-chosen   (editor-handler/template-on-chosen-handler id)
+          :on-enter    non-exist-handler
+          :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+          :item-render (fn [[template _block-db-id]]
+                         template)
+          :class       "black"})))))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -239,45 +238,44 @@
       {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
-                  input-option (state/get-editor-show-input)]
+                  input-option (:options (state/get-editor-show-input))]
               (when (seq @input-value)
                 ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
-                      {:keys [pos]} @*slash-caret-pos
                       command (:command (first input-option))]
-                  (on-submit command @input-value pos))
+                  (on-submit command @input-value))
                 (reset! input-value nil))))})))
   [state _id on-submit]
   (when (= :input (state/sub :editor/action))
-    (when-let [input-option (state/sub :editor/action-data)]
-     (let [{:keys [pos]} (util/react *slash-caret-pos)
-           input-value (get state ::input-value)]
-       (when (seq input-option)
-         (let [command (:command (first input-option))]
-           [:div.p-2.rounded-md.shadow-lg
-            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-              [:div.my-3 {:key id}
-               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-                (merge
-                 (cond->
-                   {:key           (str "modal-input-" (name id))
-                    :id            (str "modal-input-" (name id))
-                    :type          (or type "text")
-                    :on-change     (fn [e]
-                                     (swap! input-value assoc id (util/evalue e)))
-                    :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                   placeholder
-                   (assoc :placeholder placeholder)
-                   autoFocus
-                   (assoc :auto-focus true))
-                 (dissoc input-item :id))]])
-            (ui/button
-              "Submit"
-              :on-click
-              (fn [e]
-                (util/stop e)
-                (on-submit command @input-value pos)))]))))))
+    (when-let [action-data (state/sub :editor/action-data)]
+      (let [{:keys [pos options]} action-data
+            input-value (get state ::input-value)]
+        (when (seq options)
+          (let [command (:command (first options))]
+            [:div.p-2.rounded-md.shadow-lg
+             (for [{:keys [id placeholder type autoFocus] :as input-item} options]
+               [:div.my-3 {:key id}
+                [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+                 (merge
+                  (cond->
+                    {:key           (str "modal-input-" (name id))
+                     :id            (str "modal-input-" (name id))
+                     :type          (or type "text")
+                     :on-change     (fn [e]
+                                      (swap! input-value assoc id (util/evalue e)))
+                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                    placeholder
+                    (assoc :placeholder placeholder)
+                    autoFocus
+                    (assoc :auto-focus true))
+                  (dissoc input-item :id))]])
+             (ui/button
+               "Submit"
+               :on-click
+               (fn [e]
+                 (util/stop e)
+                 (on-submit command @input-value pos)))]))))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
@@ -332,14 +330,13 @@
      cp]))
 
 (rum/defc transition-cp < rum/reactive
-  [cp set-default-width? pos]
-  (when pos
-    (when-let [pos (rum/react pos)]
-      (ui/css-transition
-       {:class-names "fade"
-        :timeout     {:enter 500
-                      :exit  300}}
-       (absolute-modal cp set-default-width? pos)))))
+  [cp set-default-width?]
+  (when-let [pos (:pos (state/sub :editor/action-data))]
+    (ui/css-transition
+     {:class-names "fade"
+      :timeout     {:enter 500
+                    :exit  300}}
+     (absolute-modal cp set-default-width? pos))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -358,8 +355,7 @@
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
          (ui/loading
           (util/format "Uploading %s%" (util/format "%2d" processing)))]
-        false
-        *slash-caret-pos)))])
+        false)))])
 
 (defn- set-up-key-down!
   [state format]
@@ -456,9 +452,9 @@
   (let [content (state/sub-edit-content)]
     (mock-textarea content)))
 
-(defn animated-modal
-  [key component set-default-width? *pos]
-  (when *pos
+(rum/defc animated-modal < rum/reactive
+  [key component set-default-width?]
+  (when-let [pos (:pos (state/get-editor-action-data))]
     (ui/css-transition
      {:key key
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
@@ -470,44 +466,42 @@
        (absolute-modal
         component
         set-default-width?
-        *pos)))))
+        pos)))))
 
 (rum/defc modals < rum/reactive
   "React to atom changes, find and render the correct modal"
   [id format]
-  (let [action (state/sub :editor/action)
-        slash-pos @*slash-caret-pos]
-    (ui/transition-group
-     (cond
-       (and (= action :commands) slash-pos)
-       (animated-modal "commands" (commands id format) true slash-pos)
+  (let [action (state/sub :editor/action)]
+    (cond
+      (= action :commands)
+      (animated-modal "commands" (commands id format) true)
 
-       (and (= action :block-commands) @*angle-bracket-caret-pos)
-       (animated-modal "block-commands" (block-commands id format) true (util/react *angle-bracket-caret-pos))
+      (= action :block-commands)
+      (animated-modal "block-commands" (block-commands id format) true)
 
-       (contains? #{:page-search :page-search-hashtag} action)
-       (animated-modal "page-search" (page-search id format) true slash-pos)
+      (contains? #{:page-search :page-search-hashtag} action)
+      (animated-modal "page-search" (page-search id format) true)
 
-       (= :block-search action)
-       (animated-modal "block-search" (block-search id format) false slash-pos)
+      (= :block-search action)
+      (animated-modal "block-search" (block-search id format) true)
 
-       (= :template-search action)
-       (animated-modal "template-search" (template-search id format) true slash-pos)
+      (= :template-search action)
+      (animated-modal "template-search" (template-search id format) true)
 
-       (= :datepicker action)
-       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false slash-pos)
+      (= :datepicker action)
+      (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 
-       (= :input action)
-       (animated-modal "input" (input id
-                                      (fn [command m _pos]
-                                        (editor-handler/handle-command-input command id format m)))
-                       true slash-pos)
+      (= :input action)
+      (animated-modal "input" (input id
+                                     (fn [command m]
+                                       (editor-handler/handle-command-input command id format m)))
+                      true)
 
-       (= :zotero action)
-       (animated-modal "zotero-search" (zotero/zotero-search id) false slash-pos)
+      (= :zotero action)
+      (animated-modal "zotero-search" (zotero/zotero-search id) false)
 
-       :else
-       nil))))
+      :else
+      nil)))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
