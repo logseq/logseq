@@ -1,9 +1,9 @@
 import './index.css'
 import {
-  AppleLogo, AppStoreLogo, DownloadSimple, GooglePlayLogo,
-  LinuxLogo, QrCode, WindowsLogo
+  AppleLogo, AppStoreLogo, CaretDown, DownloadSimple, GooglePlayLogo,
+  LinuxLogo, QrCode, WindowsLogo,
 } from 'phosphor-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
 import { LSButton } from '../../components/Buttons'
 import { IconsIntel } from '../../components/Icons'
@@ -15,12 +15,108 @@ const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
 const iosImageQr: any = new URL('assets/ios_app_qr.png', import.meta.url)
 
 const releases = [
-  ['MacOS', <AppleLogo/>],
+  ['MacOS', (props = {}) => <AppleLogo {...props}/>],
   ['Windows', <WindowsLogo/>],
   ['Linux', <LinuxLogo/>],
   ['iOS', <AppStoreLogo/>],
-  ['Android', <GooglePlayLogo/>]
+  ['Android', <GooglePlayLogo/>],
 ]
+
+export function WrapGlobalDownloadButton (
+  props: any,
+) {
+  const appState = useAppState()
+  const wrapElRef = useRef<HTMLDivElement>(null)
+  const os = appState.get().os
+  const [active, setActive] = useState(releases[0])
+
+  const isIOS = active?.[0] === 'iOS'
+  const isMacOS = active?.[0] === 'MacOS'
+
+  const downloadHandler = (e: any, platform?: string) => {
+    const rollback = `https://github.com/logseq/logseq/releases`
+    const downloads: any = appState.releases.downloads.get()
+
+    platform = platform || active?.[0].toString().toLowerCase()
+
+    if (!downloads?.[platform]) {
+      return window?.open(rollback, '_blank')
+    }
+
+    window?.open(
+      downloads[platform]?.browser_download_url,
+      '_blank',
+    )
+  }
+
+  const rightIcon = isMacOS ? (
+    <CaretDown className={'ml-1 opacity-60'}/>
+  ) : (isIOS ? (
+    <QrCode className={'ml-1 opacity-60'}/>
+  ) : null)
+
+  useEffect(() => {
+    releases.some((it) => {
+      if (
+        os[it?.[0].toString().toLowerCase()]
+      ) {
+        setActive(it)
+        return true
+      }
+    })
+  }, [os])
+
+  const subItems = isMacOS ? (
+    <div className="sub-items flex flex-col absolute top-5 right-0 w-full pt-6">
+      <div className="flex flex-col items-center">
+        <LSButton
+          className={'bg-logseq-400 px-6 py-4 w-full'}
+          leftIcon={<IconsIntel size={26} color={'white'}/>}
+          rightIcon={<DownloadSimple className="opacity-50"/>}
+          onClick={(e) => downloadHandler(e, 'macos-x64')}
+        >
+          Intel chip
+        </LSButton>
+        <span className="text-xs opacity-60 py-2">
+               Most common in Macs
+             </span>
+      </div>
+
+      <div className="flex flex-col items-center pt-2">
+        <LSButton
+          className={'bg-logseq-600 px-6 py-4 w-full'}
+          leftIcon={<AppleLogo size={24} color={'white'}/>}
+          rightIcon={<DownloadSimple className="opacity-50"/>}
+          onClick={(e) => downloadHandler(e, 'macos-arm64')}
+        >
+          Apple chip
+        </LSButton>
+        <span className="text-xs opacity-60 py-2">
+          November 2020 and later
+        </span>
+      </div>
+    </div>
+  ) : (isIOS ? (
+      <span
+        className="sub-items absolute top-6 right-2 z-10 flex justify-center translate-x-4 transition-opacity qr">
+              <img src={iosImageQr} alt="qr" className="w-3/4"/>
+            </span>
+    ) : null
+  )
+
+  return (
+    <div className="global-downloads-wrap"
+         onClick={downloadHandler}
+         ref={wrapElRef}
+    >
+      {props.children({
+        active, rightIcon,
+      })}
+
+      {subItems}
+    </div>
+  )
+}
 
 export function HeadDownloadLinks () {
   const appState = useAppState()
@@ -48,7 +144,7 @@ export function HeadDownloadLinks () {
 
     window?.open(
       downloads[platform]?.browser_download_url,
-      '_blank'
+      '_blank',
     )
   }
 
@@ -66,7 +162,8 @@ export function HeadDownloadLinks () {
               Download on the App Store
             </LSButton>
 
-            <span className="absolute top-16 z-10 flex justify-center translate-x-4 transition-opacity qr opacity-0">
+            <span
+              className="absolute top-16 z-10 flex justify-center translate-x-4 transition-opacity qr opacity-0">
               <img src={iosImageQr} alt="qr" className="w-1/2"/>
             </span>
           </div>
@@ -126,7 +223,8 @@ export function HeadDownloadLinks () {
           <strong className="font-semibold tracking-wide">Download </strong>
           <span className="opacity-60">the apps.</span>
         </h1>
-        <h2 className="flex flex-col justify-center items-center pt-2 tracking-wide">
+        <h2
+          className="flex flex-col justify-center items-center pt-2 tracking-wide">
           <span className="opacity-60">
             Collect your thoughts and get inspired.
           </span>
@@ -138,9 +236,14 @@ export function HeadDownloadLinks () {
 
       <div className="dl-items">
         <ul className="tabs flex flex space-x-8 justify-around">
-          {releases.map(([label, icon]) => {
+          {releases.map(([label, icon]: any) => {
+            if (typeof icon === 'function') {
+              icon = icon()
+            }
+
             return (
-              <li className={cx({ active: activeRelease[0] === label }, `is-${(label as string).toLowerCase()}`)}
+              <li className={cx({ active: activeRelease[0] === label },
+                `is-${(label as string).toLowerCase()}`)}
                   onClick={() => {
                     setActiveRelease([label, icon])
                   }}

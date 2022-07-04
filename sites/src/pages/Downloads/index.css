@@ -82,3 +82,17 @@
     }
   }
 }
+
+.global-downloads-wrap {
+  @apply relative;
+
+  .sub-items {
+    display: none;
+  }
+
+  &:hover {
+    .sub-items {
+      display: flex !important;
+    }
+  }
+}

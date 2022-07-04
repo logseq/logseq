@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
-import { AppleLogo, ArrowSquareOut, CaretDown } from 'phosphor-react'
+import { ArrowSquareOut, CaretDown } from 'phosphor-react'
 import { ReactElement } from 'react'
-import { AppLogo } from '../pages/Landing/common'
+import { WrapGlobalDownloadButton } from '../pages/Downloads'
 
 export function LinksGroup (
-  props: { items: Array<{ link: string, label: string | ReactElement, icon?: ReactElement }> }
+  props: { items: Array<{ link: string, label: string | ReactElement, icon?: ReactElement }> },
 ) {
   return (
     <ul className="links-group ml-6 h-full">
@@ -12,15 +12,19 @@ export function LinksGroup (
         const inner = (
           <>
             {it.label}
-            {it.icon && <span className={'pl-2 opacity-40 group-hover:opacity-80'}>{it.icon}</span>}
+            {it.icon && <span
+              className={'pl-2 opacity-40 group-hover:opacity-80'}>{it.icon}</span>}
           </>)
 
         return (
           <li className={'flex items-center'}>
-            {it.link.startsWith('http') ?
+            {it.link.startsWith('http')
+              ?
               <a href={it.link} target={'_blank'}
-                 className={'h-full flex items-center group transition-colors'}>{inner}</a> :
-              <Link to={it.link} className={'h-full flex items-center group transition-colors'}>{inner}</Link>
+                 className={'h-full flex items-center group transition-colors'}>{inner}</a>
+              :
+              <Link to={it.link}
+                    className={'h-full flex items-center group transition-colors'}>{inner}</Link>
             }
 
           </li>
@@ -33,13 +37,25 @@ export function LinksGroup (
 export function Headbar () {
   const leftLinks = [
     { label: 'Home', link: '/' },
-    { label: 'Downloads', link: '/downloads' }
+    { label: 'Downloads', link: '/downloads' },
   ]
 
   const rightLinks = [
-    { label: 'Jobs', link: 'https://logseq.com', icon: <ArrowSquareOut size={15} weight={'bold'}/> },
-    { label: 'Community Hub', link: 'https://discord.com/invite/KpN4eHY', icon: <ArrowSquareOut size={15} weight={'bold'}/> },
-    { label: 'Blog', link: 'https://blog.logseq.com/', icon: <ArrowSquareOut size={15} weight={'bold'}/> }
+    {
+      label: 'Jobs',
+      link: 'https://logseq.com',
+      icon: <ArrowSquareOut size={15} weight={'bold'}/>,
+    },
+    {
+      label: 'Community Hub',
+      link: 'https://discord.com/invite/KpN4eHY',
+      icon: <ArrowSquareOut size={15} weight={'bold'}/>,
+    },
+    {
+      label: 'Blog',
+      link: 'https://blog.logseq.com/',
+      icon: <ArrowSquareOut size={15} weight={'bold'}/>,
+    },
   ]
 
   return (
@@ -56,13 +72,22 @@ export function Headbar () {
 
           {/*Downloads select*/}
           <div className="downloads-select ml-8">
-            <a
-              className={'flex items-center bg-sky-600 px-2 py-1 rounded text-sm hover:opacity-80 select-none cursor-pointer'}>
-              <AppleLogo weight={'bold'}/>
-              {/*<WindowsLogo />*/}
-              <span className={'pl-2'}>Download for Mac</span>
-              <CaretDown className={'ml-1 opacity-60'}/>
-            </a>
+            <WrapGlobalDownloadButton>
+              {({ active, rightIcon }: any) => {
+                const iconFn = active?.[1]
+
+                return (
+                  <a
+                    className={'flex items-center bg-sky-600 px-2 py-1 rounded text-sm hover:opacity-80 select-none cursor-pointer'}>
+                    {typeof iconFn === 'function'
+                      ? iconFn({ weight: 'bold' })
+                      : iconFn}
+                    <span className={'pl-2'}>Download for {active?.[0]}</span>
+                    {rightIcon}
+                  </a>
+                )
+              }}
+            </WrapGlobalDownloadButton>
           </div>
         </div>
       </div>
