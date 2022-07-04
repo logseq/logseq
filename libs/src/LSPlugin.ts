@@ -622,7 +622,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   renamePage: (oldName: string, newName: string) => Promise<void>
 
-  getAllPages: (repo?: string) => Promise<any>
+  getAllPages: (repo?: string) => Promise<PageEntity[] | null>
 
   prependBlockInPage: (
     page: PageIdentity,
