@@ -196,6 +196,7 @@ export interface PageEntity {
   children?: Array<PageEntity>
   format?: 'markdown' | 'org'
   journalDay?: number
+  updatedAt?: number
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
