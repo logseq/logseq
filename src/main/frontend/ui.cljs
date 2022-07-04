@@ -397,11 +397,13 @@
            get-group-name
            empty-placeholder
            item-render
-           class]}]
+           class
+           header]}]
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
+        (when header header)
         (for [[idx item] (medley/indexed matched)]
           [:<>
            {:key idx}

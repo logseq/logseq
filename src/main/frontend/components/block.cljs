@@ -1805,7 +1805,9 @@
   [config block k v]
   (let [date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:span.page-property-key.font-medium (name k)]
+     [:a.page-property-key
+      {:href (rfe/href :page {:name (name k)})}
+      (name k)]
      [:span.mr-1 ":"]
      (cond
        (int? v)

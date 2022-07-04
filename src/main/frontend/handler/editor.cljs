@@ -661,7 +661,7 @@
 (defn properties-block
   [properties format page]
   (let [content (property/insert-properties format "" properties)
-        refs (gp-block/get-page-refs-from-properties properties
+        refs (gp-block/get-page-refs-from-properties format properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter))]
     {:block/pre-block? true
@@ -1616,6 +1616,10 @@
   [q]
   (search/template-search q))
 
+(defn get-matched-properties
+  [q]
+  (search/property-search q))
+
 (defn get-matched-commands
   [input]
   (try
@@ -1825,7 +1829,9 @@
 (defn handle-last-input []
   (let [input           (state/get-input)
         pos             (cursor/pos input)
-        last-input-char (util/nth-safe (.-value input) (dec pos))]
+        last-input-char (util/nth-safe (.-value input) (dec pos))
+        last-prev-input-char (util/nth-safe (.-value input) (dec (dec pos)))
+        prev-prev-input-char (util/nth-safe (.-value input) (- pos 3))]
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
@@ -1841,6 +1847,16 @@
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-block-commands!)
         (state/set-editor-show-block-commands!))
+
+      (and (= last-input-char last-prev-input-char commands/colon)
+           (or (nil? prev-prev-input-char)
+               (= prev-prev-input-char "\n")))
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (state/set-editor-show-property-search! true))
+
+      (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
+      (state/clear-editor-action!)
 
       :else
       nil)))
@@ -2040,6 +2056,18 @@
   (fn [[_template db-id] _click?]
     (insert-template! element-id db-id
                       {:replace-empty-target? true})))
+
+(defn property-on-chosen-handler
+  [element-id q]
+  (fn [property]
+    (when-let [input (gdom/getElement element-id)]
+      (let [value (.-value input)
+            pos (util/get-selection-start input)
+            last-index (string/last-index-of (subs value 0 pos) "::")
+            last-pattern (subs value last-index pos)]
+        (commands/insert! element-id (str (or property q) ":: ")
+                          {:last-pattern last-pattern})
+        (state/clear-editor-action!)))))
 
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]
