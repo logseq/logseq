@@ -248,7 +248,7 @@
          matched-properties
          {:on-chosen (editor-handler/property-on-chosen-handler id q)
           :on-enter non-exist-handler
-          :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a property"]
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q)]
           :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
           :item-render (fn [property] property)
           :class       "black"})))))

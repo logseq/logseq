@@ -588,6 +588,7 @@
 
 (defn set-editor-action!
   [value]
+  (js/console.trace)
   (set-state! :editor/action value))
 
 (defn set-editor-action-data!
