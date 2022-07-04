@@ -95,4 +95,10 @@
       display: flex !important;
     }
   }
+
+  &.is-super-button {
+    .sub-items {
+      top: 40px;
+    }
+  }
 }

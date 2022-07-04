@@ -24,8 +24,8 @@ export function TutorialTips () {
     // @ts-ignore
     const sw = swiperRef.current = new Swiper(
       swiperElRef.current!, {
-        loop: true
-      }
+        loop: true,
+      },
     )
 
     sw.on('activeIndexChange', () => {
@@ -39,7 +39,8 @@ export function TutorialTips () {
         ticks={[500, 1, 300, 1]}
         className="hd flex flex-col justify-center items-center">
         {(t: Array<any>) => (<>
-          <h1 className={cx('invisible flex items-center', t[0] && 'ani-slide-in-from-bottom')}>
+          <h1 className={cx('invisible flex items-center',
+            t[0] && 'ani-slide-in-from-bottom')}>
             <span className="pr-5 opacity-60">
               Braindump everything into
             </span>
@@ -162,11 +163,14 @@ export function TutorialTips () {
            <ArrowCircleLeft size={26}/>
           </span>
 
-          <div className="dots flex space-x-3 rounded-2xl bg-gray-700/40 py-2 px-4 items-center">
+          <div
+            className="dots flex space-x-3 rounded-2xl bg-gray-700/40 py-2 px-4 items-center">
             {Array(sidesLen).fill(0).map((_, i) => {
               return (
-                <i className={cx('w-2 h-2 bg-logseq-100/50 rounded-2xl cursor-pointer select-none hover:opacity-80',
-                  (i === activeIndex) && '!bg-white/90')}
+                <i key={i}
+                   className={cx(
+                     'w-2 h-2 bg-logseq-100/50 rounded-2xl cursor-pointer select-none hover:opacity-80',
+                     (i === activeIndex) && '!bg-white/90')}
                    onClick={() => {
                      swiperRef.current?.slideTo(i + 1)
                    }}
@@ -204,7 +208,8 @@ export function TutorialTips () {
                 leftIcon={<MonitorPlay size={24}/>}>
                 Community Hub
               </LSButton>
-              <span className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
+              <span
+                className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
                 Accessible content for new users
               </span>
             </div>
@@ -215,14 +220,16 @@ export function TutorialTips () {
                 leftIcon={<Notebook size={24}/>}>
                 Documentation
               </LSButton>
-              <span className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
+              <span
+                className="text-[11px] inline-block pt-2 text-center w-full text-gray-400/80">
                 Feature details
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col justify-center items-center border-l border-l-logseq-500">
+        <div
+          className="flex-1 flex flex-col justify-center items-center border-l border-l-logseq-500">
           <h2 className="text-2xl tracking-wide">A helpful community</h2>
           <div className="flex flex-col space-x-2 pt-10 -translate-y-6">
             <LSButton
@@ -233,7 +240,8 @@ export function TutorialTips () {
               Join our Discord
             </LSButton>
 
-            <span className="text-[12px] flex items-center pt-2 justify-center text-gray-400/80">
+            <span
+              className="text-[12px] flex items-center pt-2 justify-center text-gray-400/80">
               <strong className="h-2 w-2 bg-green-600 rounded"></strong>
               <strong className="pl-2 pr-1">1,000</strong>
               users online currently

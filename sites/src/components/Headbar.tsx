@@ -17,7 +17,9 @@ export function LinksGroup (
           </>)
 
         return (
-          <li className={'flex items-center'}>
+          <li className={'flex items-center'}
+              key={it.label.toString()}
+          >
             {it.link.startsWith('http')
               ?
               <a href={it.link} target={'_blank'}
@@ -73,17 +75,16 @@ export function Headbar () {
           {/*Downloads select*/}
           <div className="downloads-select ml-8">
             <WrapGlobalDownloadButton>
-              {({ active, rightIcon }: any) => {
-                const iconFn = active?.[1]
+              {({ active, rightIconFn, leftIconFn }: any) => {
 
                 return (
                   <a
                     className={'flex items-center bg-sky-600 px-2 py-1 rounded text-sm hover:opacity-80 select-none cursor-pointer'}>
-                    {typeof iconFn === 'function'
-                      ? iconFn({ weight: 'bold' })
-                      : iconFn}
+                    {typeof leftIconFn === 'function'
+                      ? leftIconFn({ weight: 'bold' })
+                      : leftIconFn}
                     <span className={'pl-2'}>Download for {active?.[0]}</span>
-                    {rightIcon}
+                    {rightIconFn?.()}
                   </a>
                 )
               }}

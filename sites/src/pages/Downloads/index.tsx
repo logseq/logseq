@@ -18,13 +18,14 @@ const releases = [
   ['MacOS', (props = {}) => <AppleLogo {...props}/>],
   ['Windows', <WindowsLogo/>],
   ['Linux', <LinuxLogo/>],
-  ['iOS', <AppStoreLogo/>],
+  ['iOS', (props = {}) => <AppStoreLogo {...props}/>],
   ['Android', <GooglePlayLogo/>],
 ]
 
 export function WrapGlobalDownloadButton (
-  props: any,
+  props: any = {},
 ) {
+  const { className, children, ...rest } = props
   const appState = useAppState()
   const wrapElRef = useRef<HTMLDivElement>(null)
   const os = appState.get().os
@@ -34,7 +35,10 @@ export function WrapGlobalDownloadButton (
   const isMacOS = active?.[0] === 'MacOS'
 
   const downloadHandler = (e: any, platform?: string) => {
-    const rollback = `https://github.com/logseq/logseq/releases`
+    const rollback =
+      isIOS ? 'https://apps.apple.com/us/app/logseq/id1601013908' :
+        `https://github.com/logseq/logseq/releases`
+
     const downloads: any = appState.releases.downloads.get()
 
     platform = platform || active?.[0].toString().toLowerCase()
@@ -49,10 +53,10 @@ export function WrapGlobalDownloadButton (
     )
   }
 
-  const rightIcon = isMacOS ? (
-    <CaretDown className={'ml-1 opacity-60'}/>
+  const rightIconFn = isMacOS ? (
+    (props: any = {}) => <CaretDown className={'ml-1 opacity-60'} {...props}/>
   ) : (isIOS ? (
-    <QrCode className={'ml-1 opacity-60'}/>
+    (props: any = {}) => <QrCode className={'ml-1 opacity-60'} {...props}/>
   ) : null)
 
   useEffect(() => {
@@ -78,8 +82,8 @@ export function WrapGlobalDownloadButton (
           Intel chip
         </LSButton>
         <span className="text-xs opacity-60 py-2">
-               Most common in Macs
-             </span>
+          Most common in Macs
+        </span>
       </div>
 
       <div className="flex flex-col items-center pt-2">
@@ -99,18 +103,24 @@ export function WrapGlobalDownloadButton (
   ) : (isIOS ? (
       <span
         className="sub-items absolute top-6 right-2 z-10 flex justify-center translate-x-4 transition-opacity qr">
-              <img src={iosImageQr} alt="qr" className="w-3/4"/>
-            </span>
+         <img src={iosImageQr} alt="qr" className="w-3/4"/>
+        </span>
     ) : null
   )
 
+  const activePlatformIcon = active?.[1]
+
   return (
-    <div className="global-downloads-wrap"
+    <div className={cx('global-downloads-wrap', className)}
          onClick={downloadHandler}
          ref={wrapElRef}
     >
-      {props.children({
-        active, rightIcon,
+      {children({
+        active,
+        leftIconFn: typeof activePlatformIcon === 'function'
+          ? activePlatformIcon
+          : () => activePlatformIcon,
+        rightIconFn,
       })}
 
       {subItems}

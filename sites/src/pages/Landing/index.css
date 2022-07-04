@@ -7,8 +7,6 @@
 }
 
 .app-head-showcase {
-  @apply overflow-hidden;
-
   height: 790px;
   -webkit-font-smoothing: antialiased;
 
@@ -109,7 +107,6 @@
 
     > button {
       position: relative;
-      top: -10px;
     }
   }
 }

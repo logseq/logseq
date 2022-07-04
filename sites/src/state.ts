@@ -9,7 +9,7 @@ const appState = createState({
   releases: {
     fetching: false,
     downloads: {}, // macos -> download url
-    error: null
+    fetchErr: null
   }
 })
 
@@ -65,7 +65,7 @@ export function useReleases () {
           }
         })
         .catch(e => {
-          state.releases.error.set(e)
+          state.releases.fetchErr.set(e)
         })
         .finally(() => {
           state.releases.fetching.set(false)

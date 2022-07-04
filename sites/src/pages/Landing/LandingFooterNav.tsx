@@ -11,6 +11,7 @@ import {
 } from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
 import { AppLogo, FloatGlassButton, imageProductHuntLogo } from './common'
+import { WrapGlobalDownloadButton } from '../Downloads'
 
 export function FooterDescCard (props: any) {
   const { icon, title, desc } = props
@@ -65,7 +66,7 @@ export function LandingFooterDesc () {
             desc = (<span className="opacity-50">{desc}</span>)
           }
           return (
-            <FooterDescCard icon={icon} title={title} desc={desc}/>
+            <FooterDescCard key={title} icon={icon} title={title} desc={desc}/>
           )
         })}
       </div>
@@ -85,12 +86,23 @@ export function LandingFooterDesc () {
         </h2>
 
         <div className="actions-4 flex space-x-4 pt-10 pb-1">
-          <LSButton
-            leftIcon={<AppleLogo size={18} weight={'bold'}/>}
-            rightIcon={<CaretDown size={18} className={'opacity-70'}/>}
+          <WrapGlobalDownloadButton
+            className="is-super-button"
           >
-            Download for Mac
-          </LSButton>
+            {({ active, leftIconFn, rightIconFn }: any) => {
+              const leftIcon = leftIconFn?.({ weight: 'bold', size: 18 })
+              const rightIcon = rightIconFn?.({ size: 18 })
+
+              return (
+                <LSButton
+                  leftIcon={leftIcon}
+                  rightIcon={rightIcon}
+                >
+                  Download for {active?.[0]}
+                </LSButton>
+              )
+            }}
+          </WrapGlobalDownloadButton>
 
           <LSButton
             leftIcon={<Play size={18} weight={'bold'}/>}

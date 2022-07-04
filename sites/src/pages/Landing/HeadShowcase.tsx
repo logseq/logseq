@@ -7,6 +7,7 @@ import {
 } from 'phosphor-react'
 import { LSButton } from '../../components/Buttons'
 import { GlassCard } from '../../components/Cards'
+import { WrapGlobalDownloadButton } from '../Downloads'
 
 export function HeadShowcase () {
   return (
@@ -64,7 +65,8 @@ export function HeadShowcase () {
                   <span className="avatar-img">Image</span>
                 </div>
                 <div className="info flex flex-col px-3 text-logseq-100">
-                  <strong className="text-2xl font-semibold text-logseq-50">Jessica</strong>
+                  <strong
+                    className="text-2xl font-semibold text-logseq-50">Jessica</strong>
                   <p className="py-0.5 opacity-80">👥 Person</p>
                   <p className="py-0.5 opacity-80">👤 Jessica Albert</p>
                 </div>
@@ -74,7 +76,8 @@ export function HeadShowcase () {
                   <span className="avatar-img">Image</span>
                 </div>
                 <div className="info flex flex-col px-3 text-logseq-100">
-                  <strong className="text-2xl font-semibold text-logseq-50">Intertwingled</strong>
+                  <strong
+                    className="text-2xl font-semibold text-logseq-50">Intertwingled</strong>
                   <p className="py-0.5 opacity-80">📖 Book</p>
                   <p className="py-0.5 opacity-80">👤 Peter Morville</p>
                 </div>
@@ -86,7 +89,8 @@ export function HeadShowcase () {
                   <div className="outliner-list-item">
                     <div className="content">
                       <span>
-                        My notes on <a className="ref">📖Book / Intertwingled</a>:
+                        My notes on <a
+                        className="ref">📖Book / Intertwingled</a>:
                       </span>
                     </div>
                   </div>
@@ -97,12 +101,23 @@ export function HeadShowcase () {
 
           {/*  action buttons */}
           <div className="actions-4 z-30 flex space-x-4">
-            <LSButton
-              leftIcon={<AppleLogo size={18} weight={'bold'}/>}
-              rightIcon={<CaretDown size={18} className={'opacity-70'}/>}
+            <WrapGlobalDownloadButton
+              className="is-super-button"
             >
-              Download for Mac
-            </LSButton>
+              {({ active, leftIconFn, rightIconFn }: any) => {
+                const leftIcon = leftIconFn?.({ weight: 'bold', size: 18 })
+                const rightIcon = rightIconFn?.({ size: 18 })
+
+                return (
+                  <LSButton
+                    leftIcon={leftIcon}
+                    rightIcon={rightIcon}
+                  >
+                    Download for {active?.[0]}
+                  </LSButton>
+                )
+              }}
+            </WrapGlobalDownloadButton>
 
             <LSButton
               leftIcon={<Play size={18} weight={'bold'}/>}
