@@ -165,24 +165,25 @@
                      (reset! result matched-blocks)))
                  state)}
   [state _edit-block input id q format]
-  (let [result (rum/react (get state ::result))
+  (let [result (->> (rum/react (get state ::result))
+                    (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
         chosen-handler (editor-handler/block-on-chosen-handler input id q format)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
-    (when result
-      (ui/auto-complete
-       result
-       {:on-chosen   chosen-handler
-        :on-enter    non-exist-block-handler
-        :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-        :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
-                       (let [page (or (:block/original-name page)
-                                      (:block/name page))
-                             repo (state/sub :git/current-repo)
-                             format (db/get-page-format page)
-                             block (db-model/query-block-by-uuid uuid)
-                             content (:block/content block)]
-                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
-        :class       "black"}))))
+    (ui/auto-complete
+     result
+     {:on-chosen   chosen-handler
+      :on-enter    non-exist-block-handler
+      :empty-placeholder   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+      :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
+                     (let [page (or (:block/original-name page)
+                                    (:block/name page))
+                           repo (state/sub :git/current-repo)
+                           format (db/get-page-format page)
+                           block (db-model/query-block-by-uuid uuid)
+                           content (:block/content block)]
+                       (when-not (string/blank? content)
+                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
+      :class       "black"})))
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
