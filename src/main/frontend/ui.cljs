@@ -25,11 +25,12 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-visibility-sensor" :as rvs]
+            ["react-intersection-observer" :as react-intersection-observer]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [cljs.pprint :refer [pprint]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -38,7 +39,7 @@
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
-(def visibility-sensor (r/adapt-class (gobj/get rvs "default")))
+(def useInView (gobj/get react-intersection-observer "useInView"))
 
 (defn reset-ios-whole-page-offset!
   []
@@ -901,13 +902,10 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner < rum/reactive
-  {:init (fn [state]
-           (assoc state
-                  ::ref (atom nil)))}
-  [state visible? content-fn]
+(rum/defcs lazy-visible-inner
+  [state visible? content-fn ref]
   [:div.lazy-visibility
-   {:ref #(reset! (::ref state) %)
+   {:ref ref
     :style {:min-height 24}}
    (if visible?
      (when (fn? content-fn)
@@ -925,25 +923,19 @@
           [:div.h-2.bg-base-4.rounded.col-span-1]]
          [:div.h-2.bg-base-4.rounded]]]]])])
 
-(rum/defcs lazy-visible <
-  (rum/local false ::visible?)
-  (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [once?]}]
-  (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/native-platform?))
-      (content-fn)
-      (let [*visible? (::visible? state)]
-        (visibility-sensor
-         (merge
-          {:on-change (fn [v]
-                        (reset! *visible? v)
-                        (when (and once? v)
-                          (reset! *active? false)))
-           :partialVisibility true
-           :offset {:top -300
-                    :bottom -300}
-           :scrollCheck true
-           :scrollThrottle 500
-           :active @*active?}
-          sensor-opts)
-         (lazy-visible-inner @*visible? content-fn))))))
+(rum/defc lazy-visible
+  [content-fn]
+  (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
+        inViewState (useInView {:rootMargin "0px 0px 0px 0px"
+                                :on-change (fn [v] (when v (setHasBeenSeen v)))})]
+    (rum/use-effect!
+     (fn [] (when (gobj/get inViewState "inView") (setHasBeenSeen true)))
+     [(gobj/get inViewState "inView")])
+    (pprint {:ref (gobj/get inViewState "ref")}) ;; TODO: Remove pprints
+    (pprint {:inView (gobj/get inViewState "inView")})
+    (pprint {:hasBeenSeen hasBeenSeen})
+    (lazy-visible-inner
+     hasBeenSeen
+     content-fn
+     (gobj/get inViewState "ref"))
+    ))
