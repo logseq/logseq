@@ -229,6 +229,30 @@
                          template)
           :class       "black"})))))
 
+(rum/defc property-search < rum/reactive
+  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
+  [id]
+  (let [pos (:pos (:pos (state/get-editor-action-data)))
+        input (gdom/getElement id)]
+    (when input
+      (let [current-pos (cursor/pos input)
+            edit-content (state/sub [:editor/content id])
+            q (or
+               (when (>= (count edit-content) current-pos)
+                 (subs edit-content pos current-pos))
+               "")
+            matched-properties (editor-handler/get-matched-properties q)
+            non-exist-handler (fn [_state]
+                                ((editor-handler/property-on-chosen-handler id q) nil))]
+        (ui/auto-complete
+         matched-properties
+         {:on-chosen (editor-handler/property-on-chosen-handler id q)
+          :on-enter non-exist-handler
+          :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a property"]
+          :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
+          :item-render (fn [property] property)
+          :class       "black"})))))
+
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -487,6 +511,10 @@
 
       (= :template-search action)
       (animated-modal "template-search" (template-search id format) true)
+
+      (= :property-search action)
+      (animated-modal "property-search" (property-search id) true)
+
 
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)

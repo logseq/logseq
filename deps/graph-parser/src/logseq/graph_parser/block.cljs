@@ -139,26 +139,47 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
-;; TODO: we should move this to mldoc
-(defn extract-properties
-  [format properties user-config]
-  (when (seq properties)
-    (let [properties (seq properties)
-          page-refs (->>
+(defn- get-page-ref-names-from-properties
+  [format properties]
+  (let [page-refs (->>
                      properties
                      (remove (fn [[k _]]
                                (contains? #{:background-color :background_color} (keyword k))))
                      (map last)
                      (map (fn [v]
-                            (when (and (string? v)
-                                       (not (gp-mldoc/link? format v)))
+                            (cond
+                              (and (string? v)
+                                   (not (gp-mldoc/link? format v)))
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
                                   (map text/page-ref-un-brackets! result)
-                                  [])))))
-                     (apply concat)
-                     (remove string/blank?))
+                                  []))
+
+                              (coll? v)
+                              (map (fn [s]
+                                     (when-not (and (string? v)
+                                                    (gp-mldoc/link? format v))
+                                       (text/page-ref-un-brackets! s))) v)
+
+                              :else
+                              nil)))
+                     (apply concat))
+        property-keys-page-refs (some->> properties
+                                         (map (comp name first))
+                                         (remove string/blank?)
+                                         (distinct))]
+    (->> (concat page-refs property-keys-page-refs)
+         (remove string/blank?)
+         distinct)))
+
+;; TODO: we should move this to mldoc
+(defn extract-properties
+  [format properties user-config]
+  (when (seq properties)
+    (let [properties (seq properties)
+          properties (into {} properties)
+          page-refs (get-page-ref-names-from-properties format properties)
           properties (->> properties
                           (map (fn [[k v]]
                                  (let [k (-> (string/lower-case (name k))
@@ -437,17 +458,8 @@
       (d/squuid)))
 
 (defn get-page-refs-from-properties
-  [properties db date-formatter]
-  (let [page-refs (mapcat (fn [v] (cond
-                                   (coll? v)
-                                   v
-
-                                   (text/page-ref? v)
-                                   [(text/page-ref-un-brackets! v)]
-
-                                   :else
-                                   nil)) (vals properties))
-        page-refs (remove string/blank? page-refs)]
+  [format properties db date-formatter]
+  (let [page-refs (get-page-ref-names-from-properties format properties)]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
@@ -461,6 +473,7 @@
 (defn- with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [supported-formats db date-formatter]}]
   (let [first-block (first blocks)
+        format (or (:block/format first-block) :markdown)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
 
         ;; Add pre-block
@@ -471,7 +484,7 @@
                    (let [content (utf8/substring encoded-content 0 first-block-start-pos)
                          {:keys [properties properties-order]} pre-block-properties
                          id (get-custom-id-or-new-id {:properties properties})
-                         property-refs (->> (get-page-refs-from-properties properties db date-formatter)
+                         property-refs (->> (get-page-refs-from-properties format properties db date-formatter)
                                             (map :block/original-name))
                          block {:uuid id
                                 :content content

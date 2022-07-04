@@ -24,6 +24,7 @@
 ;; TODO: move to frontend.handler.editor.commands
 
 (defonce angle-bracket "<")
+(defonce colon ":")
 (defonce *current-command (atom nil))
 
 (def query-doc
