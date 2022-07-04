@@ -172,10 +172,10 @@
 
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :join-community)]]
-        :options {:href "https://discord.gg/KpN4eHY"
-                  :title (t :discord-title)
+        :options {:href "https://discuss.logseq.com"
+                  :title (t :discourse-title)
                   :target "_blank"}
-        :icon (ui/icon "brand-discord")}]
+        :icon (ui/icon "brand-discord")}]  ;; TODO we need a discourse brand
       (concat page-menu-and-hr)
       (remove nil?))
      {})))

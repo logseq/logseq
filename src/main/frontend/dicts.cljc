@@ -26,6 +26,7 @@
         :help/privacy "Privacy policy"
         :help/terms "Terms"
         :help/community "Discord community"
+        :help/forum-community "Forum community"
         :help/awesome-logseq "Awesome Logseq"
         :help/shortcuts "Keyboard shortcuts"
         :help/shortcuts-triggers "Triggers"
@@ -251,7 +252,8 @@
         :import "Import"
         :join-community "Join the community"
         :sponsor-us "Sponsor Us"
-        :discord-title "Our discord group!"
+        :discourse-title "Our forum!"
+        :discord-title "Our discord group!" ;; unused
         :help-shortcut-title "Click to check shortcuts and other tips"
         :loading "Loading"
         :cloning "Cloning"
