@@ -2551,10 +2551,7 @@
         custom-query? (boolean (:custom-query? config))]
     (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn []
-         (block-container-inner state repo config block))
-       nil
-       {})
+       (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2892,9 +2889,7 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q))
-    nil
-    {})))
+    (fn [] (custom-query* config q)))))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
