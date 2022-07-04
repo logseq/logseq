@@ -86,12 +86,11 @@
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
-          nil
-          ;; (p/let [dir-exists? (fs/file-exists? dir "")]
-          ;;   (when dir-exists?
-          ;;     (when-let [page-name (db/get-file-page path)]
-          ;;       (println "Delete page: " page-name ", file path: " path ".")
-          ;;       (page-handler/delete! page-name #() :unlink-file? true))))
+          (p/let [dir-exists? (fs/file-exists? dir "")]
+            (when dir-exists?
+              (when-let [page-name (db/get-file-page path)]
+                (println "Delete page: " page-name ", file path: " path ".")
+                (page-handler/delete! page-name #() :unlink-file? false))))
 
           (and (contains? #{"add" "change" "unlink"} type)
                (string/ends-with? path "logseq/custom.css"))
