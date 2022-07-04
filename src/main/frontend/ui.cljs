@@ -929,7 +929,7 @@
         inViewState (useInView {:rootMargin "0px 0px 0px 0px"
                                 :on-change (fn [v] (when v (setHasBeenSeen v)))})]
     (rum/use-effect!
-     (fn [] (when (gobj/get inViewState "inView") (setHasBeenSeen true)))
+     #(when (gobj/get inViewState "inView") (setHasBeenSeen true))
      [(gobj/get inViewState "inView")])
     (pprint {:ref (gobj/get inViewState "ref")}) ;; TODO: Remove pprints
     (pprint {:inView (gobj/get inViewState "inView")})
