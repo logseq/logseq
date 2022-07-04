@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.graph-parser.config :as gp-config]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.regex :as regex]
             [frontend.search.browser :as search-browser]
             [frontend.search.db :as search-db :refer [indices]]
@@ -160,6 +161,18 @@
      (when (seq templates)
        (let [result (fuzzy-search (keys templates) q :limit limit)]
          (vec (select-keys templates result)))))))
+
+(defn property-search
+  ([q]
+   (property-search q 10))
+  ([q limit]
+   (let [q (clean-str q)
+         properties (map name (db-model/get-all-properties))]
+     (when (seq properties)
+       (if (string/blank? q)
+         properties
+         (let [result (fuzzy-search properties q :limit limit)]
+          (vec result)))))))
 
 (defn sync-search-indice!
   [repo tx-report]

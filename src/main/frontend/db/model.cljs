@@ -1341,6 +1341,21 @@
                 [(get m :template) e]))
          (into {}))))
 
+(defn get-all-properties
+  []
+  (let [properties (d/q
+                     '[:find [?p ...]
+                       :where
+                       [_ :block/properties ?p]]
+                     (conn/get-db))
+        properties (remove (fn [m] (or (empty? m)
+                                       (and (= 1 (count m))
+                                            (= :id (first (keys m)))))) properties)]
+    (->> (map keys properties)
+         (apply concat)
+         distinct
+         sort)))
+
 (defn get-template-by-name
   [name]
   (when (string? name)
