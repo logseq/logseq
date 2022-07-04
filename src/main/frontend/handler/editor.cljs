@@ -4,9 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
-            [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos
-                     *slash-caret-pos]]
+            [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -1562,12 +1560,12 @@
           "[["
           (do
             (commands/handle-step [:editor/search-page])
-            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
           "(("
           (do
             (commands/handle-step [:editor/search-block :reference])
-            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
           nil)))))
 
@@ -1623,7 +1621,7 @@
   (try
     (let [edit-content (or (gobj/get input "value") "")
           pos (cursor/pos input)
-          last-slash-caret-pos (:pos @*slash-caret-pos)
+          last-slash-caret-pos (:pos (:pos (state/get-editor-action-data)))
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
@@ -1641,7 +1639,7 @@
     (let [edit-content (gobj/get input "value")
           pos (cursor/pos input)
           last-command (subs edit-content
-                             (:pos @*angle-bracket-caret-pos)
+                             (:pos (:pos (state/get-editor-action-data)))
                              pos)]
       (when (> pos 0)
         (or
@@ -1831,15 +1829,20 @@
 
     ;; TODO: is it cross-browser compatible?
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
-    (when (= last-input-char (state/get-editor-command-trigger))
-      (when (seq (get-matched-commands input))
-        (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
-        (state/set-editor-show-commands!)))
+    (cond
+      (= last-input-char (state/get-editor-command-trigger))
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (commands/reinit-matched-commands!)
+        (state/set-editor-show-commands!))
 
-    (if (= last-input-char commands/angle-bracket)
-      (when (seq (get-matched-block-commands input))
-        (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+      (= last-input-char commands/angle-bracket)
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (commands/reinit-matched-block-commands!)
         (state/set-editor-show-block-commands!))
+
+      :else
       nil)))
 
 (defn block-on-chosen-handler
@@ -2237,7 +2240,7 @@
                            parent-id bounds
                            {:backward-pos backward-pos
                             :check-fn (fn [_ _ _]
-                                        (reset! commands/*slash-caret-pos new-pos)
+                                        (state/set-editor-action-data! {:pos new-pos})
                                         (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
@@ -2270,7 +2273,7 @@
                             parent-id bounds
                             {:backward-pos backward-pos
                              :check-fn     (fn [_ _ _]
-                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (state/set-editor-action-data! {:pos new-pos})
                                              (commands/handle-step [:editor/search-block]))}))]
         (state/set-editor-show-block-search! false)
         (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
@@ -2553,16 +2556,14 @@
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
       (do
         (util/stop e)
-        (reset! *slash-caret-pos nil)
-        (state/clear-editor-action!)
+        (commands/restore-state true)
         (delete-and-update input (dec current-pos) current-pos))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
       (do
         (util/stop e)
-        (reset! *angle-bracket-caret-pos nil)
-        (state/clear-editor-action!)
+        (commands/restore-state true)
         (delete-and-update input (dec current-pos) current-pos))
 
       ;; pair
@@ -2703,7 +2704,7 @@
           (if (= key "#")
             (state/set-editor-last-pos! (inc (cursor/pos input))) ;; In keydown handler, the `#` is not inserted yet.
             (state/set-editor-last-pos! (cursor/pos input)))
-          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
         (let [sym "$"]
           (and (= key sym)
@@ -2748,9 +2749,7 @@
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
-              (do
-                (state/set-editor-show-commands!)
-                (reset! commands/*matched-commands matched-commands))
+              (reset! commands/*matched-commands matched-commands)
               (state/clear-editor-action!)))
 
           (and (= :block-commands editor-action) (not= key-code 188)) ; not <
@@ -2795,7 +2794,7 @@
                                    :editor/search-page-hashtag
                                    :editor/search-page)]
                 (commands/handle-step [command-step])
-                (reset! commands/*slash-caret-pos pos))
+                (state/set-editor-action-data! {:pos pos}))
 
               (and blank-selected?
                    (contains? keycode/left-square-brackets-keys k)
@@ -2806,7 +2805,7 @@
                 (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
                                                              :backward-pos 2}])
                 (commands/handle-step [:editor/search-page])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
               (and blank-selected?
                    (contains? keycode/left-paren-keys k)
@@ -2817,7 +2816,7 @@
                 (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
                                                              :backward-pos 2}])
                 (commands/handle-step [:editor/search-block :reference])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
               (and (= "〈" c)
                    (= "《" (util/nth-safe value (dec (dec current-pos))))
@@ -2825,7 +2824,7 @@
               (do
                 (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
                                                                              :backward-pos 0}])
-                (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+                (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
                 (state/set-editor-show-block-commands!))
 
               (nil? @search-timeout)

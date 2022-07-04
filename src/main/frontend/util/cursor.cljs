@@ -111,9 +111,10 @@
 (defn beginning-of-line?
   [input]
   (let [[content pos] (get-input-content&pos input)]
-    (or (zero? pos)
-        (when-let [pre-char (subs content (dec pos) pos)]
-          (= pre-char \newline)))))
+    (when content
+      (or (zero? pos)
+         (when-let [pre-char (subs content (dec pos) pos)]
+           (= pre-char \newline))))))
 
 (defn move-cursor-to-line-end
   [input]
