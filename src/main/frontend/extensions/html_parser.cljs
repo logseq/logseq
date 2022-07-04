@@ -73,7 +73,7 @@
                                              :else
                                              nil)
                                    children' (map-join children)]
-                               (when-not (string/blank? children')
+                               (when (not-empty children')
                                  (str (if (string? pattern) pattern (apply str pattern))
                                       children'
                                       (if (string? pattern) pattern (apply str (reverse pattern)))))))
@@ -122,11 +122,15 @@
                                       :org (util/format "[[%s][%s]]" href label)
                                       nil))))
                            :img (let [src (:src attrs)
-                                      alt (or (:alt attrs) "")]
-                                  (case format
-                                    :markdown (util/format "![%s](%s)" alt src)
-                                    :org (util/format "[[%s][%s]]" src alt)
-                                    nil))
+                                      alt (or (:alt attrs) "")
+                                      ;; reject url-encoded and utf8-encoded(svg)
+                                      unsafe-data-url? (and (string/starts-with? src "data:")
+                                                            (not (re-find #"^data:.*?;base64," src)))]
+                                  (when-not unsafe-data-url?
+                                    (case format
+                                      :markdown (util/format "![%s](%s)" alt src)
+                                      :org (util/format "[[%s][%s]]" src alt)
+                                      nil)))
                            :p (util/format "%s"
                                            (map-join children))
 
@@ -218,7 +222,7 @@
                  (for [x hiccup]
                    (single-hiccup-transform x))
                  (single-hiccup-transform hiccup))]
-    (string/replace (apply str result) #"\n\n+" "\n\n")))
+    (apply str result)))
 
 (defn hiccup->doc
   [format hiccup]
@@ -226,9 +230,8 @@
     (if (string/blank? s)
       ""
       (-> s
-          (string/trim)
-          (string/replace "\n\n\n\n" "\n\n")
-          (string/replace "\n\n\n" "\n\n")))))
+          string/trim
+          (string/replace #"\n\n+" "\n\n")))))
 
 (defn html-decode-hiccup
   [hiccup]
