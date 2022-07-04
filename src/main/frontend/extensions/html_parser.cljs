@@ -11,7 +11,11 @@
   [hiccup]
   (walk/postwalk (fn [f]
                    (if (map? f)
-                     (dissoc f :style)
+                      (apply dissoc f (conj (filter (fn [key]
+                                                      (string/starts-with? (str key) ":data-"))
+                                                    (keys f))
+                                            :style
+                                            :class))
                      f)) hiccup))
 
 (defn- export-hiccup
@@ -144,12 +148,19 @@
                                                    :span} %))
                            (emphasis-transform tag attrs children)
 
-                           :code (if @*inside-pre?
+                           :code (cond
+                                   @*inside-pre?
                                    (map-join children)
+
+                                   (string? (first children))
                                    (let [pattern (config/get-code format)]
                                      (str " "
                                           (str pattern (first children) pattern)
-                                          " ")))
+                                          " "))
+
+                                   ;; skip monospace style, since it has more complex children
+                                   :else
+                                   (map-join children))
 
                            :pre
                            (do
@@ -173,6 +184,9 @@
 
                            :li
                            (str "- " (map-join children))
+
+                           :br
+                           "\n"
 
                            :dt
                            (case format
