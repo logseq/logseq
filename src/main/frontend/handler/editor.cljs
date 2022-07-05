@@ -1620,6 +1620,10 @@
   [q]
   (search/property-search q))
 
+(defn get-matched-property-values
+  [property q]
+  (search/property-value-search property q))
+
 (defn get-matched-commands
   [input]
   (try
@@ -1849,6 +1853,15 @@
            (or (nil? prev-prev-input-char)
                (= prev-prev-input-char "\n")))
       (do
+        (cursor/move-cursor-backward input 2)
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (state/set-editor-show-property-search! true))
+
+      (and
+       (not= :property-search (state/get-editor-action))
+       (or (wrapped-by? input "" "::")
+           (wrapped-by? input "\n" "::")))
+      (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-show-property-search! true))
 
@@ -2054,17 +2067,39 @@
     (insert-template! element-id db-id
                       {:replace-empty-target? true})))
 
+(defn get-searching-property
+  [input]
+  (let [value (.-value input)
+        pos (util/get-selection-start input)
+        postfix (subs value pos)
+        end-index (when-let [idx (string/index-of postfix "::")]
+                    (+ (max 0 (count (subs value 0 pos))) idx))
+        start-index (or (when-let [p (string/last-index-of (subs value 0 pos) "\n")]
+                          (inc p))
+                        0)]
+    {:end-index end-index
+     :searching-property (when (and start-index end-index (>= end-index start-index))
+                           (subs value start-index end-index))}))
+
 (defn property-on-chosen-handler
   [element-id q]
   (fn [property]
     (when-let [input (gdom/getElement element-id)]
-      (let [value (.-value input)
-            pos (util/get-selection-start input)
-            last-index (string/last-index-of (subs value 0 pos) "::")
-            last-pattern (subs value last-index pos)]
-        (commands/insert! element-id (str (or property q) ":: ")
-                          {:last-pattern last-pattern})
-        (state/clear-editor-action!)))))
+      (let [{:keys [end-index searching-property]} (get-searching-property input)]
+        (cursor/move-cursor-to input (+ end-index 2))
+        (commands/insert! element-id (str (or property q) "::")
+                          {:last-pattern (str searching-property "::")})
+        (state/set-editor-action! :property-value-search)
+        (state/set-editor-action-data! {:property (or property q)
+                                        :pos (cursor/pos input)})))))
+
+(defn property-value-on-chosen-handler
+  [element-id q]
+  (fn [property-value]
+    (when-let [input (gdom/getElement element-id)]
+      (commands/insert! element-id (or property-value q)
+                        {:last-pattern q}))
+    (state/clear-editor-action!)))
 
 (defn parent-is-page?
   [{{:block/keys [parent page]} :data :as node}]

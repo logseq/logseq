@@ -237,20 +237,45 @@
     (when input
       (let [current-pos (cursor/pos input)
             edit-content (state/sub [:editor/content id])
-            q (or
-               (when (>= (count edit-content) current-pos)
-                 (subs edit-content pos current-pos))
-               "")
+            q (:searching-property (editor-handler/get-searching-property input))
             matched-properties (editor-handler/get-matched-properties q)
+            q-property (string/replace (string/lower-case q) #"\s+" "-")
             non-exist-handler (fn [_state]
-                                ((editor-handler/property-on-chosen-handler id q) nil))]
+                                ((editor-handler/property-on-chosen-handler id q-property) nil))]
         (ui/auto-complete
          matched-properties
-         {:on-chosen (editor-handler/property-on-chosen-handler id q)
+         {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
           :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q)]
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
           :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
           :item-render (fn [property] property)
+          :class       "black"})))))
+
+(rum/defc property-value-search < rum/reactive
+  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
+  [id]
+  (let [pos (:pos (:pos (state/get-editor-action-data)))
+        property (:property (state/get-editor-action-data))
+        input (gdom/getElement id)]
+    (when (and input
+               (not (string/blank? property)))
+      (let [current-pos (cursor/pos input)
+            edit-content (state/sub [:editor/content id])
+            start-idx (string/last-index-of (subs edit-content 0 current-pos) "::")
+            q (or
+               (when (>= current-pos (+ start-idx 2))
+                 (subs edit-content (+ start-idx 2) current-pos))
+               "")
+            matched-values (editor-handler/get-matched-property-values property q)
+            non-exist-handler (fn [_state]
+                                ((editor-handler/property-value-on-chosen-handler id q) nil))]
+        (ui/auto-complete
+         matched-values
+         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+          :on-enter non-exist-handler
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
+          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
+          :item-render (fn [property-value] property-value)
           :class       "black"})))))
 
 (rum/defcs input < rum/reactive
@@ -515,6 +540,8 @@
       (= :property-search action)
       (animated-modal "property-search" (property-search id) true)
 
+      (= :property-value-search action)
+      (animated-modal "property-value-search" (property-value-search id) true)
 
       (= :datepicker action)
       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)

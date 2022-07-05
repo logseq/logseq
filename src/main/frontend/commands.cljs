@@ -333,19 +333,19 @@
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
-          space? (when (and last-pattern orig-prefix)
-                   (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                             (gp-util/safe-subs orig-prefix 0 last-index))]
-                     (not
-                      (or
-                       (and s
-                            (string/ends-with? s "(")
-                            (or (string/starts-with? last-pattern "((")
-                                (string/starts-with? last-pattern "[[")))
-                       (and s (string/starts-with? s "{{embed"))))))
-          space? (if (and space? (string/starts-with? last-pattern "#[["))
-                   false
-                   space?)
+          space? (let [space? (when (and last-pattern orig-prefix)
+                                (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
+                                          (gp-util/safe-subs orig-prefix 0 last-index))]
+                                  (not
+                                   (or
+                                    (and s
+                                         (string/ends-with? s "(")
+                                         (or (string/starts-with? last-pattern "((")
+                                             (string/starts-with? last-pattern "[[")))
+                                    (and s (string/starts-with? s "{{embed"))))))]
+                   (if (and space? (string/starts-with? last-pattern "#[["))
+                     false
+                     space?))
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
                    (str (gp-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))

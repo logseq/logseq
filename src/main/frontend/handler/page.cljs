@@ -242,7 +242,7 @@
 
 (defn- replace-property-ref!
   [content old-name new-name]
-  (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "_"))
+  (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
         old-property (str old-name "::")
         new-property (str (name new-name) "::")]
     (util/replace-ignore-case content old-property new-property)))
@@ -274,7 +274,7 @@
                        (replace-old-page! f old-name new-name))
 
                      (and (keyword f) (= (name f) old-name))
-                     (keyword (string/replace (string/lower-case new-name) #"\s+" "_"))
+                     (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
 
                      :else
                      f))
@@ -380,6 +380,7 @@
                                   {:block/uuid       uuid
                                    :block/content    content
                                    :block/properties properties
+                                   :block/properties-order (map first properties)
                                    :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
                                    :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
                       (remove nil?))]
@@ -568,7 +569,8 @@
           (rename-namespace-pages! repo old-name new-name))
         (rename-nested-pages old-name new-name))
       (when (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+    (ui-handler/re-render-root!)))
 
 (defn- split-col-by-element
   [col element]
