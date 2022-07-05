@@ -88,7 +88,8 @@
        e))))
 
 (defn assign-last-value [env val]
-  (swap! env assoc "last" val)
+  (if (not (nil? val))
+    (swap! env assoc "last" val))
   val)
 
 (defn eval-lines [s]
