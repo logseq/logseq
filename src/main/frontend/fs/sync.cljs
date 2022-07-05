@@ -432,7 +432,7 @@
    cat))
 
 (defn- filter-filetxns-by-config
-  "transducer.
+  "return transducer.
   filter filetxns by `get-ignored-files` and `get-monitored-dirs`"
   []
   (let [ignored-files (get-ignored-files)
@@ -440,7 +440,7 @@
     (filter
      #(let [path (relative-path %)]
         (and (contains-path? monitored-dirs path)
-             (contains-path? ignored-files path))))))
+             (not (contains-path? ignored-files path)))))))
 
 (defn- diffs->partitioned-filetxns
   "transducer.
@@ -455,6 +455,7 @@
   (comp
    (map diff->filetxns)
    cat
+   (filter-filetxns-by-config)
    distinct-update-filetxns-xf
    remove-deleted-filetxns-xf
    (partition-filetxns n)))
@@ -476,8 +477,7 @@
    (map (fn [p]
           {:relative-path (first p) :user-uuid user-uuid :graph-uuid graph-uuid :checksum (second p)}))
    (map-indexed filepath+checksum->diff)
-   (diffs->partitioned-filetxns n)
-   (filter-filetxns-by-config)))
+   (diffs->partitioned-filetxns n)))
 
 
 (defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
@@ -1613,8 +1613,7 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [partitioned-filetxns (transduce (comp (diffs->partitioned-filetxns 10)
-                                                                  (filter-filetxns-by-config))
+                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
