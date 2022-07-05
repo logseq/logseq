@@ -313,7 +313,7 @@
   (reset! *matched-block-commands (block-commands-map)))
 
 (defn restore-state
-  [restore-slash-caret-pos?]
+  []
   (state/clear-editor-action!)
   (reinit-matched-commands!)
   (reinit-matched-block-commands!))
@@ -639,7 +639,7 @@
          (string/blank? value)))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
-      (restore-state false))
+      (restore-state))
     (state/set-editor-show-date-picker! true)))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
