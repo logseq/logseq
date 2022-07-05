@@ -33,8 +33,6 @@
          (route-handler/redirect-to-whiteboard! "test"))} "test"])
 
 (rum/defcs whiteboard < rum/reactive
-  ;; whiteboard has many custom shortcut. Disable default ones to make it simplier.
-  (shortcut/disable-all-shortcuts)
   [state]
   (let [name (get-whiteboard-name state)
         tldr-name (str "draws/" name ".tldr")]
