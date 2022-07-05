@@ -245,4 +245,12 @@
  ;; :quick-capture-templates
  ;; {:text "[[quick capture]] **{time}**: {text} from {url}"
  ;;  :media "[[quick capture]] **{time}**: {url}"}
+
+ ;; File sync options
+ ;; files in these directories will be synchronized.
+ ;; Except for dirs in :file-sync/monitor-dirs,
+ ;; ["assets" "journals" "logseq" "pages" "draws"] will also be synchronized.
+ :file-sync/monitor-dirs []
+ ;; Ignore these files when syncing, use regexp
+ :file-sync/ignore-files [".DS_Store$"]
  }

@@ -35,8 +35,8 @@
 ;;   transaction-id: sync progress of local files
 ;; - logseq/version-files
 ;;   downloaded version-files
-;; files included by `ignore-files` will not be synchronized.
-;; files in these `monitored-dirs` dirs will be synchronized.
+;; files included by `get-ignored-files` will not be synchronized.
+;; files in these `get-monitored-dirs` dirs will be synchronized.
 ;;
 ;; sync strategy:
 ;; - when toggle file-sync on,
@@ -537,15 +537,21 @@
           :else
           (- (.-size item)))))))
 ;;; ### configs
-(def ignore-files
-  #{#"logseq/graphs-txid.edn$"
-    #"logseq/bak/.*"
-    #"logseq/version-files/.*"
-    #"logseq/\.recycle/.*"
-    #"\.DS_Store$"})
+(defn- get-ignored-files
+  []
+  (into #{#"logseq/graphs-txid.edn$"
+          #"logseq/\.recycle/.*"
+          #"logseq/version-files/.*"
+          #"logseq/bak/.*"}
+        (map re-pattern)
+        (:file-sync/ignore-files (state/get-config))))
 
-(def monitored-dirs
-  #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"})
+(defn- get-monitor-dirs
+  []
+  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
+        (map #(re-pattern (str "^" % "/")))
+        (:file-sync/monitor-dirs (state/get-config))))
+
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -1682,8 +1688,8 @@
     (fn [^FileChangeEvent e]
       (go (and (instance? FileChangeEvent e)
                (string/starts-with? (.-dir e) base-path)
-               (not (contains-path? ignore-files (relative-path e)))
-               (contains-path? monitored-dirs (relative-path e))
+               (not (contains-path? (get-ignored-files) (relative-path e)))
+               (contains-path? (get-monitor-dirs) (relative-path e))
                (let [r (not (contains? (:recent-remote->local-files @*sync-state)
                                        (<! (<file-change-event=>recent-remote->local-file-item e))))]
                  (when (and (contains? #{::remote->local ::remote->local-full-sync} (:state @*sync-state))
@@ -1723,9 +1729,10 @@
     (if (empty? es)
       (go {:succ true})
       (let [type (.-type ^FileChangeEvent (first es))
+            ignored-files (get-ignored-files)
             es->paths-xf (comp
                           (map #(relative-path %))
-                          (filter #(not (contains-path? ignore-files %))))
+                          (filter #(not (contains-path? ignored-files %))))
             paths (sequence es->paths-xf es)]
         (println :sync-local->remote type paths)
         (let [r (case type
@@ -1778,6 +1785,8 @@
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
                 diff-local-files (diff-file-metadata-sets local-all-files-meta remote-all-files-meta)
+                monitored-dirs (get-monitor-dirs)
+                ignored-files (get-ignored-files)
                 change-events-partitions
                 (sequence
                  (comp
@@ -1785,7 +1794,7 @@
                   (map #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
                     ;; filter ignore-files & monitored-dirs
                   (filter #(let [path (relative-path %)]
-                             (and (not (contains-path? ignore-files path))
+                             (and (not (contains-path? ignored-files path))
                                   (contains-path? monitored-dirs path))))
                     ;; partition FileChangeEvents
                   (partition-file-change-events 10))
