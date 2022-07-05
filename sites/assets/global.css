@@ -41,7 +41,7 @@ body {
   visibility: hidden;
 
   &-inner {
-    @apply backdrop-blur-md bg-logseq-700/50 rounded-md p-3 w-full;
+    @apply backdrop-blur-5xl bg-logseq-700/50 rounded-md p-3 w-full;
 
     margin: .5px;
     padding-top: 15px;

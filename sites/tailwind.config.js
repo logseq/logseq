@@ -24,6 +24,10 @@ module.exports = {
         '4xl': '2rem',
         '6xl': '4rem'
       },
+      backdropBlur: {
+        '4xl': '80px',
+        '5xl': '100px'
+      },
       linearBorderGradients: ({ theme }) => ({
         colors: {
           'yellow-purple-red': [
