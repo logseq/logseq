@@ -7,6 +7,7 @@
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
+            [promesa.core :as p]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -20,7 +21,7 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (let [path (mobile-fs/iOS-ensure-documents!)]
+  (p/let [path (mobile-fs/iOS-ensure-documents!)]
     (println "iOS container path: " path))
 
   (state/pub-event! [:validate-appId])

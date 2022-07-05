@@ -20,48 +20,17 @@ var REGION: String = "us-east-2"
 
 var ENCRYPTION_SECRET_KEY: String? = nil
 var ENCRYPTION_PUBLIC_KEY: String? = nil
+var FNAME_ENCRYPTION_KEY: Data? = nil
 
-// MARK: Metadata type
 
-public struct SyncMetadata: CustomStringConvertible, Equatable {
-    var md5: String
-    var size: Int
+// MARK: Helpers
 
-    public init?(of fileURL: URL) {
-        do {
-            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey])
-            guard fileAttributes.isRegularFile! else {
-                return nil
-            }
-            size = fileAttributes.fileSize ?? 0
 
-            // incremental MD5 checksum
-            let bufferSize = 512 * 1024
-            let file = try FileHandle(forReadingFrom: fileURL)
-            defer {
-                file.closeFile()
-            }
-            var ctx = Insecure.MD5.init()
-            while autoreleasepool(invoking: {
-                let data = file.readData(ofLength: bufferSize)
-                if data.count > 0 {
-                    ctx.update(data: data)
-                    return true // continue
-                } else {
-                    return false // eof
-                }
-            }) {}
-
-            let computed = ctx.finalize()
-            md5 = computed.map { String(format: "%02hhx", $0) }.joined()
-        } catch {
-            return nil
-        }
+@inline(__always) func fnameEncryptionEnabled() -> Bool {
+    guard let _ = FNAME_ENCRYPTION_KEY else {
+        return false
     }
-
-    public var description: String {
-        return "SyncMetadata(md5=\(md5), size=\(size))"
-    }
+    return true
 }
 
 // MARK: encryption helper
@@ -97,13 +66,58 @@ func maybeDecrypt(_ cipherdata: Data) -> Data! {
     return cipherdata
 }
 
+// MARK: Metadata type
+
+public struct SyncMetadata: CustomStringConvertible, Equatable {
+    var md5: String
+    var size: Int
+    var ctime: Int64
+
+    public init?(of fileURL: URL) {
+        do {
+            let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey, .fileSizeKey, .contentModificationDateKey])
+            guard fileAttributes.isRegularFile! else {
+                return nil
+            }
+            size = fileAttributes.fileSize ?? 0
+            ctime = Int64((fileAttributes.contentModificationDate?.timeIntervalSince1970 ?? 0.0) * 1000)
+
+            // incremental MD5 checksum
+            let bufferSize = 512 * 1024
+            let file = try FileHandle(forReadingFrom: fileURL)
+            defer {
+                file.closeFile()
+            }
+            var ctx = Insecure.MD5.init()
+            while autoreleasepool(invoking: {
+                let data = file.readData(ofLength: bufferSize)
+                if data.count > 0 {
+                    ctx.update(data: data)
+                    return true // continue
+                } else {
+                    return false // eof
+                }
+            }) {}
+
+            let computed = ctx.finalize()
+            md5 = computed.map { String(format: "%02hhx", $0) }.joined()
+        } catch {
+            return nil
+        }
+    }
+
+    public var description: String {
+        return "SyncMetadata(md5=\(md5), size=\(size))"
+    }
+}
+
 // MARK: FileSync Plugin
 
 @objc(FileSync)
 public class FileSync: CAPPlugin, SyncDebugDelegate {
     override public func load() {
         print("debug File sync iOS plugin loaded!")
-
+        
         AWSMobileClient.default().initialize { (userState, error) in
             guard error == nil else {
                 print("error initializing AWSMobileClient. Error: \(error!.localizedDescription)")
@@ -129,6 +143,8 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         if secretKey == nil && publicKey == nil {
             ENCRYPTION_SECRET_KEY = nil
             ENCRYPTION_PUBLIC_KEY = nil
+            FNAME_ENCRYPTION_KEY = nil
+            return
         }
         guard let secretKey = secretKey, let publicKey = publicKey else {
             call.reject("both secretKey and publicKey should be provided")
@@ -136,6 +152,8 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         }
         ENCRYPTION_SECRET_KEY = secretKey
         ENCRYPTION_PUBLIC_KEY = publicKey
+        FNAME_ENCRYPTION_KEY = AgeEncryption.toRawX25519Key(secretKey)
+        
     }
 
     @objc func setEnv(_ call: CAPPluginCall) {
@@ -162,6 +180,41 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         self.debugNotification(["event": "setenv:\(env)"])
         call.resolve(["ok": true])
     }
+    
+    @objc func encryptFnames(_ call: CAPPluginCall) {
+        guard fnameEncryptionEnabled() else {
+            call.reject("fname encryption key not set")
+            return
+        }
+        guard var fnames = call.getArray("filePaths") as? [String] else {
+            call.reject("required parameters: filePaths")
+            return
+        }
+        
+        let nFiles = fnames.count
+        fnames = fnames.compactMap { $0.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+        if fnames.count != nFiles {
+            call.reject("cannot encrypt \(nFiles - fnames.count) file names")
+        }
+        call.resolve(["value": fnames])
+    }
+    
+    @objc func decryptFnames(_ call: CAPPluginCall) {
+        guard fnameEncryptionEnabled() else {
+            call.reject("fname encryption key not set")
+            return
+        }
+        guard var fnames = call.getArray("filePaths") as? [String] else {
+            call.reject("required parameters: filePaths")
+            return
+        }
+        let nFiles = fnames.count
+        fnames = fnames.compactMap { $0.fnameDecrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+        if fnames.count != nFiles {
+            call.reject("cannot decrypt \(nFiles - fnames.count) file names")
+        }
+        call.resolve(["value": fnames])
+    }
 
     @objc func getLocalFilesMeta(_ call: CAPPluginCall) {
         guard let basePath = call.getString("basePath"),
@@ -178,8 +231,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         for filePath in filePaths {
             let url = baseURL.appendingPathComponent(filePath)
             if let meta = SyncMetadata(of: url) {
-                fileMetadataDict[filePath] = ["md5": meta.md5,
-                                              "size": meta.size]
+                var metaObj: [String: Any] = ["md5": meta.md5,
+                                              "size": meta.size,
+                                              "ctime": meta.ctime]
+                if fnameEncryptionEnabled() {
+                    metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
+                }
+
+                fileMetadataDict[filePath] = metaObj
             }
         }
 
@@ -199,8 +258,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             for case let fileURL as URL in enumerator {
                 if !fileURL.isSkipped() {
                     if let meta = SyncMetadata(of: fileURL) {
-                        fileMetadataDict[fileURL.relativePath(from: baseURL)!] = ["md5": meta.md5,
-                                                                                  "size": meta.size]
+                        let filePath = fileURL.relativePath(from: baseURL)!
+                        var metaObj: [String: Any] = ["md5": meta.md5,
+                                                      "size": meta.size,
+                                                      "ctime": meta.ctime]
+                        if fnameEncryptionEnabled() {
+                            metaObj["encryptedFname"] = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!)
+                        }
+                        fileMetadataDict[filePath] = metaObj
                     }
                 } else if fileURL.isICloudPlaceholder() {
                     try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
@@ -262,11 +327,27 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   call.reject("required paremeters: basePath, filePaths, graphUUID, token")
                   return
               }
+    
+        // [encrypted-fname: original-fname]
+        var encryptedFilePathDict: [String: String] = [:]
+        if fnameEncryptionEnabled() {
+            for filePath in filePaths {
+                if let encryptedPath = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) {
+                    encryptedFilePathDict[encryptedPath] = filePath
+                } else {
+                    call.reject("cannot decrypt all file names")
+                }
+            }
+        } else {
+            encryptedFilePathDict = Dictionary(uniqueKeysWithValues: filePaths.map { ($0, $0) })
+        }
 
+        let encryptedFilePaths = Array(encryptedFilePathDict.keys)
+        
         let client = SyncClient(token: token, graphUUID: graphUUID)
         client.delegate = self // receives notification
 
-        client.getFiles(at: filePaths) {  (fileURLs, error) in
+        client.getFiles(at: encryptedFilePaths) {  (fileURLs, error) in
             if let error = error {
                 print("debug getFiles error \(error)")
                 self.debugNotification(["event": "download:error", "data": ["message": "error while getting files \(filePaths)"]])
@@ -277,9 +358,10 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
 
                 var downloaded: [String] = []
 
-                for (filePath, remoteFileURL) in fileURLs {
+                for (encryptedFilePath, remoteFileURL) in fileURLs {
                     group.enter()
 
+                    let filePath = encryptedFilePathDict[encryptedFilePath]!
                     // NOTE: fileURLs from getFiles API is percent-encoded
                     let localFileURL = baseURL.appendingPathComponent(filePath.decodeFromFname())
                     remoteFileURL.download(toFile: localFileURL) {error in
@@ -303,7 +385,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
     }
 
     @objc func deleteRemoteFiles(_ call: CAPPluginCall) {
-        guard let filePaths = call.getArray("filePaths") as? [String],
+        guard var filePaths = call.getArray("filePaths") as? [String],
               let graphUUID = call.getString("graphUUID"),
               let token = call.getString("token"),
               let txid = call.getInt("txid") else {
@@ -313,6 +395,14 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
         guard !filePaths.isEmpty else {
             call.reject("empty filePaths")
             return
+        }
+
+        let nFiles = filePaths.count
+        if fnameEncryptionEnabled() {
+            filePaths = filePaths.compactMap { $0.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) }
+        }
+        if filePaths.count != nFiles {
+            call.reject("cannot encrypt all file names")
         }
 
         let client = SyncClient(token: token, graphUUID: graphUUID, txid: txid)
@@ -339,6 +429,8 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                   call.reject("required paremeters: basePath, filePaths, graphUUID, token, txid")
                   return
               }
+        let fnameEncryption = call.getBool("fnameEncryption") ?? false // default to false
+        
         guard !filePaths.isEmpty else {
             return call.reject("empty filePaths")
         }
@@ -375,10 +467,21 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                     return
                 }
 
+                // encrypted-file-name: (file-key, md5)
                 var uploadedFileKeyMd5Dict: [String: [String]] = [:]
 
-                for (filePath, fileKey) in uploadedFileKeyDict {
-                    uploadedFileKeyMd5Dict[filePath] = [fileKey, fileMd5Dict[filePath]!]
+                if fnameEncryptionEnabled() && fnameEncryption {
+                    for (filePath, fileKey) in uploadedFileKeyDict {
+                        guard let encryptedFilePath = filePath.fnameEncrypt(rawKey: FNAME_ENCRYPTION_KEY!) else {
+                            call.reject("cannot encrypt file name")
+                            return
+                        }
+                        uploadedFileKeyMd5Dict[encryptedFilePath] = [fileKey, fileMd5Dict[filePath]!]
+                    }
+                } else {
+                    for (filePath, fileKey) in uploadedFileKeyDict {
+                        uploadedFileKeyMd5Dict[filePath] = [fileKey, fileMd5Dict[filePath]!]
+                    }
                 }
                 client.updateFiles(uploadedFileKeyMd5Dict) { (txid, error) in
                     guard error == nil else {

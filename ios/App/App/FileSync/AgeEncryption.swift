@@ -25,6 +25,21 @@ public enum AgeEncryption {
         return (secretKey, publicKey)
     }
     
+    public static func toRawX25519Key(_ secretKey: String) -> Data? {
+        let cOutput = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 1)
+
+        let ret = rust_age_encryption_to_raw_x25519_key(secretKey.cString(using: .utf8), cOutput)
+        if ret >= 0 {
+            let cOutputBuf = UnsafeBufferPointer.init(start: cOutput.pointee, count: 32)
+            let rawKey = Data.init(buffer: cOutputBuf)
+            rust_age_encryption_free_vec(cOutput.pointee, ret)
+            cOutput.deallocate()
+            return rawKey
+        } else {
+            return nil
+        }
+    }
+    
     public static func encryptWithPassphrase(_ plaintext: Data, _ passphrase: String, armor: Bool) -> Data? {
         plaintext.withUnsafeBytes { (cPlaintext) in
             let cOutput = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 1)
