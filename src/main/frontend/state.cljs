@@ -626,21 +626,12 @@
 (defn set-editor-show-template-search!
   [value]
   (set-editor-action! (when value :template-search)))
-(defn get-editor-show-template-search?
-  []
-  (= (get-editor-action) :template-search))
 (defn set-editor-show-property-search!
   [value]
   (set-editor-action! (when value :property-search)))
-(defn get-editor-show-property-search?
-  []
-  (= (get-editor-action) :property-search))
 (defn set-editor-show-date-picker!
   [value]
   (set-editor-action! (when value :datepicker)))
-(defn get-editor-show-date-picker?
-  []
-  (= (get-editor-action) :datepicker))
 (defn set-editor-show-input!
   [value]
   (if value

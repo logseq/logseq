@@ -232,12 +232,9 @@
 (rum/defc property-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
-  (let [pos (:pos (:pos (state/get-editor-action-data)))
-        input (gdom/getElement id)]
+  (let [input (gdom/getElement id)]
     (when input
-      (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
-            q (:searching-property (editor-handler/get-searching-property input))
+      (let [q (:searching-property (editor-handler/get-searching-property input))
             matched-properties (editor-handler/get-matched-properties q)
             q-property (string/replace (string/lower-case q) #"\s+" "-")
             non-exist-handler (fn [_state]
@@ -254,8 +251,7 @@
 (rum/defc property-value-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id]
-  (let [pos (:pos (:pos (state/get-editor-action-data)))
-        property (:property (state/get-editor-action-data))
+  (let [property (:property (state/get-editor-action-data))
         input (gdom/getElement id)]
     (when (and input
                (not (string/blank? property)))
