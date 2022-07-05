@@ -262,6 +262,7 @@
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))
                "")
+            q (string/triml q)
             matched-values (editor-handler/get-matched-property-values property q)
             non-exist-handler (fn [_state]
                                 ((editor-handler/property-value-on-chosen-handler id q) nil))]
