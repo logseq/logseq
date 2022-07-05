@@ -128,6 +128,27 @@
         :need-sync-remote ::need-sync-remote
         :unknown ::unknown-map))
 
+;;; ### configs in config.edn
+;; - :file-sync/ignore-files
+;; - :file-sync/monitor-dirs
+
+(defn- get-ignored-files
+  []
+  (into #{#"logseq/graphs-txid.edn$"
+          #"logseq/\.recycle/.*"
+          #"logseq/version-files/.*"
+          #"logseq/bak/.*"}
+        (map re-pattern)
+        (:file-sync/ignore-files (state/get-config))))
+
+(defn- get-monitor-dirs
+  []
+  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
+        (map #(re-pattern (str "^" % "/")))
+        (:file-sync/monitor-dirs (state/get-config))))
+
+;;; ### configs ends
+
 (def ws-addr config/WS-URL)
 
 (def graphs-txid (persist-var/persist-var nil "graphs-txid"))
@@ -274,6 +295,17 @@
 (defprotocol IRelativePath
   (-relative-path [this]))
 
+(defn relative-path [o]
+  (cond
+    (implements? IRelativePath o)
+    (-relative-path o)
+
+    (string? o)
+    (remove-user-graph-uuid-prefix o)
+
+    :else
+    (throw (js/Error. (str "unsupport type " (str o))))))
+
 (defprotocol IChecksum
   (-checksum [this]))
 
@@ -309,14 +341,17 @@
                "\" (updated? " updated? ", renamed? " (.renamed? coll) ", deleted? " deleted?
                ", txid " txid ", checksum " checksum ")]")))
 
+(defn- contains-path? [regexps path]
+  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
+
 (defn- assert-filetxns
   [filetxns]
   (every? true?
-   (mapv
-    (fn [^FileTxn filetxn]
-      (when (.-updated? filetxn)
-        (some? (-checksum filetxn))))
-    filetxns)))
+          (mapv
+           (fn [^FileTxn filetxn]
+             (when (.-updated? filetxn)
+               (some? (-checksum filetxn))))
+           filetxns)))
 
 (defn- diff->filetxns
   "convert diff(`<get-diff`) to `FileTxn`"
@@ -396,6 +431,17 @@
             (map list ts))))
    cat))
 
+(defn- filter-filetxns-by-config
+  "transducer.
+  filter filetxns by `get-ignored-files` and `get-monitored-dirs`"
+  []
+  (let [ignored-files (get-ignored-files)
+        monitored-dirs (get-monitor-dirs)]
+    (filter
+     #(let [path (relative-path %)]
+        (and (contains-path? monitored-dirs path)
+             (contains-path? ignored-files path))))))
+
 (defn- diffs->partitioned-filetxns
   "transducer.
   1. diff -> `FileTxn` , see also `<get-diff`
@@ -423,13 +469,15 @@
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.
   1. filepath+checksum-coll -> diff
-  2. diffs->partitioned-filetxns"
+  2. diffs->partitioned-filetxns
+  3. filter by config"
   [n graph-uuid user-uuid]
   (comp
    (map (fn [p]
           {:relative-path (first p) :user-uuid user-uuid :graph-uuid graph-uuid :checksum (second p)}))
    (map-indexed filepath+checksum->diff)
-   (diffs->partitioned-filetxns n)))
+   (diffs->partitioned-filetxns n)
+   (filter-filetxns-by-config)))
 
 
 (defrecord FileMetadata [size etag path encrypted-path last-modified remote? ^:mutable normalized-path]
@@ -492,16 +540,7 @@
   (-checksum [this] (.-checksum this)))
 
 
-(defn relative-path [o]
-  (cond
-    (implements? IRelativePath o)
-    (-relative-path o)
 
-    (string? o)
-    (remove-user-graph-uuid-prefix o)
-
-    :else
-    (throw (js/Error. (str "unsupport type " (str o))))))
 
 (defn- sort-file-metatdata-fn
   ":recent-days-range > :favorite-pages > small-size pages > ...
@@ -536,23 +575,6 @@
 
           :else
           (- (.-size item)))))))
-;;; ### configs
-(defn- get-ignored-files
-  []
-  (into #{#"logseq/graphs-txid.edn$"
-          #"logseq/\.recycle/.*"
-          #"logseq/version-files/.*"
-          #"logseq/bak/.*"}
-        (map re-pattern)
-        (:file-sync/ignore-files (state/get-config))))
-
-(defn- get-monitor-dirs
-  []
-  (into #{#"^assets/" #"^journals/" #"^logseq/" #"^pages/" #"^draws/"}
-        (map #(re-pattern (str "^" % "/")))
-        (:file-sync/monitor-dirs (state/get-config))))
-
-
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
@@ -1591,7 +1613,8 @@
                         {:need-remote->local-full-sync true})
 
                     (when (pos-int? latest-txid)
-                      (let [partitioned-filetxns (transduce (diffs->partitioned-filetxns 10)
+                      (let [partitioned-filetxns (transduce (comp (diffs->partitioned-filetxns 10)
+                                                                  (filter-filetxns-by-config))
                                                             (completing (fn [r i] (conj r (reverse i)))) ;reverse
                                                             '()
                                                             (reverse diff-txns))]
@@ -1653,9 +1676,6 @@
 (defn- <local-file-exists?
   [relative-path base-path]
   (go (nil? (ex-cause (<! (<get-local-files-meta rsapi "" base-path [relative-path]))))))
-
-(defn- contains-path? [regexps path]
-  (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
 (defn- <filter-local-changes-pred
   "filter local-change events:
