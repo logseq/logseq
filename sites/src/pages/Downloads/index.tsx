@@ -13,6 +13,8 @@ import { useAppState } from '../../state'
 const headImageBg: any = new URL('assets/dl_head_bg.jpg', import.meta.url)
 const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
 const iosImageQr: any = new URL('assets/ios_app_qr.png', import.meta.url)
+const intelImageIcon: any = new URL('assets/icon_intel.png', import.meta.url)
+const M1ImageIcon: any = new URL('assets/icon_m1.png', import.meta.url)
 
 const releases = [
   ['MacOS', (props = {}) => <AppleLogo {...props}/>],
@@ -21,6 +23,28 @@ const releases = [
   ['iOS', (props = {}) => <AppStoreLogo {...props}/>],
   ['Android', <GooglePlayLogo/>],
 ]
+
+const IntelIcon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx('color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={intelImageIcon} className={'w-4/5'} alt="intel"/>
+    </span>
+  )
+}
+
+const M1Icon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx('color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={M1ImageIcon} className={'w-4/5'} alt="M1"/>
+    </span>
+  )
+}
 
 export function WrapGlobalDownloadButton (
   props: any = {},
@@ -72,32 +96,43 @@ export function WrapGlobalDownloadButton (
 
   const subItems = isMacOS ? (
     <div className="sub-items flex flex-col absolute top-5 right-0 w-full pt-6">
-      <div className="flex flex-col items-center">
-        <LSButton
-          className={'bg-logseq-400 px-6 py-4 w-full'}
-          leftIcon={<IconsIntel size={26} color={'white'}/>}
-          rightIcon={<DownloadSimple className="opacity-50"/>}
-          onClick={(e) => downloadHandler(e, 'macos-x64')}
-        >
-          Intel chip
-        </LSButton>
-        <span className="text-xs opacity-60 py-2">
-          Most common in Macs
-        </span>
-      </div>
+      <div className="sub-items-inner">
+        <div className="flex items-center">
+          <div className="flex pr-2">
+            <IntelIcon className={'bg-black w-8 h-8'}/>
+          </div>
 
-      <div className="flex flex-col items-center pt-2">
-        <LSButton
-          className={'bg-logseq-600 px-6 py-4 w-full'}
-          leftIcon={<AppleLogo size={24} color={'white'}/>}
-          rightIcon={<DownloadSimple className="opacity-50"/>}
-          onClick={(e) => downloadHandler(e, 'macos-arm64')}
-        >
-          Apple chip
-        </LSButton>
-        <span className="text-xs opacity-60 py-2">
-          November 2020 and later
-        </span>
+          <div
+            className={'w-full flex flex-col opacity-80'}
+            onClick={(e) => downloadHandler(e, 'macos-x64')}
+          >
+            <span className="text-sm">
+              Intel chip
+            </span>
+            <span className="text-[11px] opacity-60">
+              Most common in Macs
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <div className="flex pr-2">
+            <M1Icon className={'bg-black w-8 h-8'}/>
+          </div>
+
+          <div
+            className={'w-full flex flex-col opacity-80'}
+            onClick={(e) => downloadHandler(e, 'macos-x64')}
+          >
+            <span className="text-sm">
+              Apple chip
+            </span>
+            <span className="text-[11px] opacity-60">
+              Macs from november 2020 and later
+            </span>
+          </div>
+
+        </div>
       </div>
     </div>
   ) : (isIOS ? (
@@ -184,7 +219,8 @@ export function HeadDownloadLinks () {
             <div className="flex flex-col items-center">
               <LSButton
                 className={'bg-logseq-400 px-6 py-4'}
-                leftIcon={<IconsIntel size={26} color={'white'}/>}
+                leftIcon={<IntelIcon className={'w-8 h-8 bg-white'}
+                                     color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => downloadHandler('macos-x64')}
               >
@@ -198,7 +234,7 @@ export function HeadDownloadLinks () {
             <div className="flex flex-col items-center">
               <LSButton
                 className={'bg-logseq-600 px-6 py-4'}
-                leftIcon={<AppleLogo size={24} color={'white'}/>}
+                leftIcon={<M1Icon className={'w-8 h-8 bg-gray-500'} color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => downloadHandler('macos-arm64')}
               >
