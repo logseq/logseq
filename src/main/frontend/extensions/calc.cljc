@@ -88,7 +88,7 @@
        e))))
 
 (defn assign-last-value [env val]
-  (if (not (nil? val))
+  (when-not (nil? val)
     (swap! env assoc "last" val))
   val)
 

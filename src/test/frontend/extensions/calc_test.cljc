@@ -172,7 +172,7 @@
                                 exprs))
       [42 126] ["6*7" "last*3"]
       [25 5]   ["3^2+4^2" "sqrt(last)"]
-      [6 12] ["2*3" "# a comment" "" "   " "last*2"])))
+      [6 12]   ["2*3" "# a comment" "" "   " "last*2"])))
 
 (deftest comments
   (testing "comments are ignored"
