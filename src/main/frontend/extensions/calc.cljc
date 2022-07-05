@@ -68,7 +68,7 @@
                   (swap! env assoc var val)
                   val)
     :toassign   str/trim
-    :comment    (fn [comment] nil)
+    :comment    (constantly nil)
     :variable   (fn resolve [var]
                   (let [var (str/trim var)]
                     (or (get @env var)
