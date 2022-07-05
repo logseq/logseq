@@ -172,7 +172,19 @@
        (if (string/blank? q)
          properties
          (let [result (fuzzy-search properties q :limit limit)]
-          (vec result)))))))
+           (vec result)))))))
+
+(defn property-value-search
+  ([property q]
+   (property-value-search property q 10))
+  ([property q limit]
+   (let [q (clean-str q)
+         result (db-model/get-property-values (keyword property))]
+     (when (seq result)
+       (if (string/blank? q)
+         result
+         (let [result (fuzzy-search result q :limit limit)]
+           (vec result)))))))
 
 (defn sync-search-indice!
   [repo tx-report]
