@@ -476,7 +476,11 @@
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (string/replace old-page-title old-name new-name)
+            ;; only replace one time, for the case that the namespace is a sub-string of the sub-namespace page name
+            ;; Example: has pages [[work]] [[work/worklog]],
+            ;; we want to rename [[work/worklog]] to [[work1/worklog]] when rename [[work]] to [[work1]],
+            ;; but don't rename [[work/worklog]] to [[work1/work1log]]
+            new-page-title (string/replace-first old-page-title old-name new-name)
             redirect? (= name (:block/name page))]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
