@@ -1348,13 +1348,31 @@
                        :where
                        [_ :block/properties ?p]]
                      (conn/get-db))
-        properties (remove (fn [m] (or (empty? m)
-                                       (and (= 1 (count m))
-                                            (= :id (first (keys m)))))) properties)]
+        properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
          distinct
+         (remove #{:id})
          sort)))
+
+(defn get-property-values
+  [property]
+  (let [pred (fn [_db properties]
+               (get properties property))]
+    (->>
+     (d/q
+       '[:find [?property-val ...]
+         :in $ ?pred
+         :where
+         [_ :block/properties ?p]
+         [(?pred $ ?p) ?property-val]]
+       (conn/get-db)
+       pred)
+     (map (fn [x] (if (coll? x) x [x])))
+     (apply concat)
+     (remove string/blank?)
+     (distinct)
+     (sort))))
 
 (defn get-template-by-name
   [name]

@@ -421,7 +421,9 @@
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
-     {:class (if tag? "tag" "page-ref")
+     {:class (cond-> (if tag? "tag" "page-ref")
+               (:property? config)
+               (str " page-property-key"))
       :data-ref page-name
       :on-mouse-down
       (fn [e]
@@ -1805,9 +1807,7 @@
   [config block k v]
   (let [date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:a.page-property-key
-      {:href (rfe/href :page {:name (name k)})}
-      (name k)]
+     (page-cp (assoc config :property? true) {:block/name (name k)})
      [:span.mr-1 ":"]
      (cond
        (int? v)
