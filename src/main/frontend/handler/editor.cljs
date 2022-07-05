@@ -2082,9 +2082,9 @@
         (cursor/move-cursor-to input (+ end-index 2))
         (commands/insert! element-id (str (or property q) "::")
                           {:last-pattern (str searching-property "::")})
-        (state/set-editor-action! :property-value-search)
         (state/set-editor-action-data! {:property (or property q)
-                                        :pos (cursor/pos input)})))))
+                                        :pos (cursor/get-caret-pos input)})
+        (state/set-editor-action! :property-value-search)))))
 
 (defn property-value-on-chosen-handler
   [element-id q]
