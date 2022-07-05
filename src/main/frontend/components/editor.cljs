@@ -234,7 +234,8 @@
   [id]
   (let [input (gdom/getElement id)]
     (when input
-      (let [q (:searching-property (editor-handler/get-searching-property input))
+      (let [q (or (:searching-property (editor-handler/get-searching-property input))
+                  "")
             matched-properties (editor-handler/get-matched-properties q)
             q-property (string/replace (string/lower-case q) #"\s+" "-")
             non-exist-handler (fn [_state]
