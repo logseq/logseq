@@ -281,7 +281,6 @@
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
-
      ["Embed HTML " (->inline "html")]
 
      ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
@@ -372,12 +371,13 @@
                       (str prefix postfix))
           new-pos (- (count prefix)
                      (or backward-pos 0))]
-      (state/set-block-content-and-last-pos! id new-value new-pos)
-      (cursor/move-cursor-to input
-                             (if (and (or backward-pos forward-pos)
-                                      (not= end-pattern "]]"))
-                               new-pos
-                               (inc new-pos))))))
+      (when-not (string/blank? new-value)
+        (state/set-block-content-and-last-pos! id new-value new-pos)
+        (cursor/move-cursor-to input
+                               (if (and (or backward-pos forward-pos)
+                                        (not= end-pattern "]]"))
+                                 new-pos
+                                 (inc new-pos)))))))
 
 (defn simple-insert!
   [id value
