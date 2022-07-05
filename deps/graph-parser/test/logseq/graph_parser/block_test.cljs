@@ -25,12 +25,12 @@
     [["file-path" "file:///home/x, y.pdf"]] {:file-path "file:///home/x, y.pdf"})
 
   (are [x y] (= (vec (:page-refs (gp-block/extract-properties :markdown x {}))) y)
-    [["year" "1000"]] []
-    [["year" "\"1000\""]] []
-    [["foo" "[[bar]] test"]] ["bar" "test"]
-    [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz"]
-    [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]"]
-    [["foo" "#bar, #baz"]] ["bar" "baz"]
-    [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test"]))
+    [["year" "1000"]] ["year"]
+    [["year" "\"1000\""]] ["year"]
+    [["foo" "[[bar]] test"]] ["bar" "test" "foo"]
+    [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz" "foo"]
+    [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]" "foo"]
+    [["foo" "#bar, #baz"]] ["bar" "baz" "foo"]
+    [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test" "foo"]))
 
 #_(cljs.test/run-tests)
