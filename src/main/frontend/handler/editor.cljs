@@ -522,8 +522,7 @@
 
 (defn clear-when-saved!
   []
-  (state/clear-editor-action!)
-  (commands/restore-state true))
+  (commands/restore-state))
 
 (defn get-state
   []
@@ -1347,13 +1346,7 @@
     nil)
 
   (when restore?
-    (let [restore-slash-caret-pos? (if (and
-                                        (seq? command-output)
-                                        (= :editor/click-hidden-file-input
-                                           (ffirst command-output)))
-                                     false
-                                     true)]
-      (commands/restore-state restore-slash-caret-pos?))))
+    (commands/restore-state)))
 
 (defn get-asset-file-link
   [format url file-name image?]
@@ -2096,9 +2089,8 @@
 (defn property-value-on-chosen-handler
   [element-id q]
   (fn [property-value]
-    (when-let [input (gdom/getElement element-id)]
-      (commands/insert! element-id (or property-value q)
-                        {:last-pattern q}))
+    (commands/insert! element-id (or property-value q)
+                      {:last-pattern q})
     (state/clear-editor-action!)))
 
 (defn parent-is-page?
@@ -2616,14 +2608,14 @@
            (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
       (do
         (util/stop e)
-        (commands/restore-state true)
+        (commands/restore-state)
         (delete-and-update input (dec current-pos) current-pos))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
       (do
         (util/stop e)
-        (commands/restore-state true)
+        (commands/restore-state)
         (delete-and-update input (dec current-pos) current-pos))
 
       ;; pair

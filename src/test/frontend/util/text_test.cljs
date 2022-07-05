@@ -23,11 +23,11 @@
 (deftest get-string-all-indexes
   []
   (are [x y] (= x y)
-    (text-util/get-string-all-indexes "[[hello]] [[world]]" "[[")
+    (text-util/get-string-all-indexes "[[hello]] [[world]]" "[[" true)
     [0 10]
 
-    (text-util/get-string-all-indexes "abc abc ab" "ab")
+    (text-util/get-string-all-indexes "abc abc ab" "ab" true)
     [0 4 8]
 
-    (text-util/get-string-all-indexes "a.c a.c ab" "a.")
+    (text-util/get-string-all-indexes "a.c a.c ab" "a." true)
     [0 4]))

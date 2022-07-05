@@ -106,7 +106,7 @@
       (reset! show? false)))
   (clear-timestamp!)
   (state/set-editor-show-date-picker! false)
-  (commands/restore-state false))
+  (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
   (mixins/event-mixin
