@@ -2080,17 +2080,22 @@
     (when-let [input (gdom/getElement element-id)]
       (let [{:keys [end-index searching-property]} (get-searching-property input)]
         (cursor/move-cursor-to input (+ end-index 2))
-        (commands/insert! element-id (str (or property q) "::")
+        (commands/insert! element-id (str (or property q) ":: ")
                           {:last-pattern (str searching-property "::")})
-        (state/set-editor-action-data! {:property (or property q)
-                                        :pos (cursor/get-caret-pos input)})
-        (state/set-editor-action! :property-value-search)))))
+        (state/clear-editor-action!)
+        (js/setTimeout (fn []
+                         (let [pos (let [input (gdom/getElement element-id)]
+                                     (cursor/get-caret-pos input))]
+                           (state/set-editor-action-data! {:property (or property q)
+                                                           :pos pos})
+                           (state/set-editor-action! :property-value-search)))
+                       50)))))
 
 (defn property-value-on-chosen-handler
   [element-id q]
   (fn [property-value]
-    (commands/insert! element-id (or property-value q)
-                      {:last-pattern q})
+    (commands/insert! element-id (str ":: " (or property-value q))
+                      {:last-pattern (str ":: " q)})
     (state/clear-editor-action!)))
 
 (defn parent-is-page?

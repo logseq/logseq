@@ -342,7 +342,10 @@
                                          (string/ends-with? s "(")
                                          (or (string/starts-with? last-pattern "((")
                                              (string/starts-with? last-pattern "[[")))
-                                    (and s (string/starts-with? s "{{embed"))))))]
+                                    (and s (string/starts-with? s "{{embed"))
+                                    (and last-pattern
+                                         (or (string/ends-with? last-pattern "::")
+                                             (string/starts-with? last-pattern "::")))))))]
                    (if (and space? (string/starts-with? last-pattern "#[["))
                      false
                      space?))

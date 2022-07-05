@@ -156,35 +156,38 @@
   ([q]
    (template-search q 10))
   ([q limit]
-   (let [q (clean-str q)
-         templates (db/get-all-templates)]
-     (when (seq templates)
-       (let [result (fuzzy-search (keys templates) q :limit limit)]
-         (vec (select-keys templates result)))))))
+   (when q
+     (let [q (clean-str q)
+           templates (db/get-all-templates)]
+       (when (seq templates)
+         (let [result (fuzzy-search (keys templates) q :limit limit)]
+           (vec (select-keys templates result))))))))
 
 (defn property-search
   ([q]
    (property-search q 10))
   ([q limit]
-   (let [q (clean-str q)
-         properties (map name (db-model/get-all-properties))]
-     (when (seq properties)
-       (if (string/blank? q)
-         properties
-         (let [result (fuzzy-search properties q :limit limit)]
-           (vec result)))))))
+   (when q
+     (let [q (clean-str q)
+           properties (map name (db-model/get-all-properties))]
+       (when (seq properties)
+         (if (string/blank? q)
+           properties
+           (let [result (fuzzy-search properties q :limit limit)]
+             (vec result))))))))
 
 (defn property-value-search
   ([property q]
    (property-value-search property q 10))
   ([property q limit]
-   (let [q (clean-str q)
-         result (db-model/get-property-values (keyword property))]
-     (when (seq result)
-       (if (string/blank? q)
-         result
-         (let [result (fuzzy-search result q :limit limit)]
-           (vec result)))))))
+   (when q
+     (let [q (clean-str q)
+           result (db-model/get-property-values (keyword property))]
+       (when (seq result)
+         (if (string/blank? q)
+           result
+           (let [result (fuzzy-search result q :limit limit)]
+             (vec result))))))))
 
 (defn sync-search-indice!
   [repo tx-report]
