@@ -40,18 +40,17 @@
     :sub        (fn sub [a b] (-> a (.minus b)))
     :mul        (fn mul [a b] (-> a (.multipliedBy b)))
     :div        (fn div [a b] (-> a (.dividedBy b)))
-    :pow        (fn pow [a b]
-                  #?(:clj (java.lang.Math/pow a b) :cljs (bn/BigNumber (js/Math.pow a b))))
+    :pow        (fn pow [a b] (if (.isInteger b)
+                                  (.exponentiatedBy a b)
+                                  (bn/BigNumber (js/Math.pow a b))))
+    :abs        (fn abs [a] (.abs a))
+    :sqrt       (fn abs [a] (.sqrt a))
     :log        (fn log [a]
                   #?(:clj (java.lang.Math/log10 a) :cljs (bn/BigNumber (js/Math.log10 a))))
     :ln         (fn ln [a]
                   #?(:clj (java.lang.Math/log a) :cljs (bn/BigNumber (js/Math.log a))))
     :exp        (fn ln [a]
                   #?(:clj (java.lang.Math/exp a) :cljs (bn/BigNumber (js/Math.exp a))))
-    :sqrt       (fn sqrt [a]
-                  #?(:clj (java.lang.Math/sqrt a) :cljs (bn/BigNumber (js/Math.sqrt a))))
-    :abs        (fn abs [a]
-                  #?(:clj (java.lang.Math/abs a) :cljs (bn/BigNumber (js/Math.abs a))))
     :sin        (fn sin [a]
                   #?(:clj (java.lang.Math/sin a) :cljs (bn/BigNumber(js/Math.sin a))))
     :cos        (fn cos [a]
