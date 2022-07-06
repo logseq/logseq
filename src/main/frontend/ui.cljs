@@ -926,16 +926,10 @@
 (rum/defc lazy-visible
   [content-fn]
   (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
-        inViewState (useInView {:rootMargin "0px 0px 0px 0px"
-                                :on-change (fn [v] (when v (setHasBeenSeen v)))})]
-    (rum/use-effect!
-     #(when (gobj/get inViewState "inView") (setHasBeenSeen true))
-     [(gobj/get inViewState "inView")])
-    (pprint {:ref (gobj/get inViewState "ref")}) ;; TODO: Remove pprints
-    (pprint {:inView (gobj/get inViewState "inView")})
-    (pprint {:hasBeenSeen hasBeenSeen})
-    (lazy-visible-inner
-     hasBeenSeen
-     content-fn
-     (gobj/get inViewState "ref"))
-    ))
+        inViewState (useInView #js {:rootMargin "100px"
+                                    :onChange (fn [v entry]
+                                                (let [self-top (.-top (.-boundingClientRect entry))
+                                                      v (if v v (if (> self-top 0) false true))]
+                                                  (setHasBeenSeen v)))})
+        ref (.-ref inViewState)]
+    (lazy-visible-inner hasBeenSeen content-fn ref)))
