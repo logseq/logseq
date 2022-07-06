@@ -2169,7 +2169,10 @@
             (ui/block-error "Block Render Error:"
                             {:content (:block/content block)
                              :section-attrs
-                             {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+                             {:on-click #(do
+                                           (editor-handler/clear-selection!)
+                                           (editor-handler/unhighlight-blocks!)
+                                           (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
