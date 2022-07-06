@@ -23,9 +23,7 @@
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
-(defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
@@ -311,9 +309,8 @@
   [restore-slash-caret-pos?]
   (when restore-slash-caret-pos?
     (reset! *slash-caret-pos nil))
-  (reset! *show-commands false)
+  (state/clear-editor-action!)
   (reset! *angle-bracket-caret-pos nil)
-  (reset! *show-block-commands false)
   (reset! *matched-commands @*initial-commands)
   (reset! *matched-block-commands (block-commands-map)))
 
@@ -476,7 +473,7 @@
                   (str "\n" value)
                   value)]
       (insert! input-id value option)
-      (reset! *show-commands false))))
+      (state/clear-editor-action!))))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
