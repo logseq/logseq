@@ -29,8 +29,7 @@
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]
-            [cljs.pprint :refer [pprint]]))
+            [goog.functions :refer [debounce]]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
