@@ -7,6 +7,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
@@ -101,58 +102,61 @@
   [id format]
   (let [action (state/sub :editor/action)]
     (when (contains? #{:page-search :page-search-hashtag} action)
-     (let [pos (state/get-editor-last-pos)
-           input (gdom/getElement id)]
-       (when input
-         (let [current-pos (cursor/pos input)
-               edit-content (or (state/sub [:editor/content id]) "")
-               sidebar? (in-sidebar? input)
-               q (or
-                  @editor-handler/*selected-text
-                  (when (= action :page-search-hashtag)
-                      (gp-util/safe-subs edit-content pos current-pos))
-                  (when (> (count edit-content) current-pos)
-                    (gp-util/safe-subs edit-content pos current-pos))
-                  "")
-               matched-pages (when-not (string/blank? q)
-                               (editor-handler/get-matched-pages q))
-               matched-pages (cond
-                               (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                               matched-pages
+      (let [pos (state/get-editor-last-pos)
+            input (gdom/getElement id)]
+        (when input
+          (let [current-pos (cursor/pos input)
+                edit-content (or (state/sub [:editor/content id]) "")
+                sidebar? (in-sidebar? input)
+                q (or
+                   @editor-handler/*selected-text
+                   (when (= action :page-search-hashtag)
+                     (gp-util/safe-subs edit-content pos current-pos))
+                   (when (> (count edit-content) current-pos)
+                     (gp-util/safe-subs edit-content pos current-pos))
+                   "")
+                matched-pages (when-not (string/blank? q)
+                                (editor-handler/get-matched-pages q))
+                matched-pages (cond
+                                (contains? (set (map util/page-name-sanity-lc matched-pages))
+                                           (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
+                                (sort-by (fn [m]
+                                           [(count m) m])
+                                         matched-pages)
 
-                               (string/blank? q)
-                               nil
+                                (string/blank? q)
+                                nil
 
-                               (empty? matched-pages)
-                               (cons (str "New page: " q) matched-pages)
+                                (empty? matched-pages)
+                                (cons (str (t :new-page) ": " q) matched-pages)
 
                                ;; reorder, shortest and starts-with first.
-                               :else
-                               (let [matched-pages (remove nil? matched-pages)
-                                     matched-pages (sort-by
-                                                    (fn [m]
-                                                      [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
-                                                    matched-pages)]
-                                 (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
-                                   (cons (first matched-pages)
-                                         (cons  (str "New page: " q) (rest matched-pages)))
-                                   (cons (str "New page: " q) matched-pages))))]
-           (ui/auto-complete
-            matched-pages
-            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-             :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-             :item-render (fn [page-name chosen?]
-                            [:div.preview-trigger-wrapper
-                             (block/page-preview-trigger
-                              {:children        [:div (search/highlight-exact-query page-name q)]
-                               :open?           chosen?
-                               :manual?         true
-                               :fixed-position? true
-                               :tippy-distance  24
-                               :tippy-position  (if sidebar? "left" "right")}
-                              page-name)])
-             :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
-             :class       "black"})))))))
+                                :else
+                                (let [matched-pages (remove nil? matched-pages)
+                                      matched-pages (sort-by
+                                                     (fn [m]
+                                                       [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
+                                                     matched-pages)]
+                                  (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                                    (cons (first matched-pages)
+                                          (cons  (str (t :new-page) ": " q) (rest matched-pages)))
+                                    (cons (str (t :new-page) ": " q) matched-pages))))]
+            (ui/auto-complete
+             matched-pages
+             {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+              :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+              :item-render (fn [page-name chosen?]
+                             [:div.preview-trigger-wrapper
+                              (block/page-preview-trigger
+                               {:children        [:div (search/highlight-exact-query page-name q)]
+                                :open?           chosen?
+                                :manual?         true
+                                :fixed-position? true
+                                :tippy-distance  24
+                                :tippy-position  (if sidebar? "left" "right")}
+                               page-name)])
+              :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+              :class       "black"})))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
