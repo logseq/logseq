@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [goog.string :as gstring]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *slash-caret-pos]]
             [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
@@ -29,8 +29,8 @@
 
 (rum/defc commands < rum/reactive
   [id format]
-  (let [matched (util/react *matched-commands)]
-    (when (util/react *show-commands)
+  (when (= :commands (state/sub :editor/action))
+    (let [matched (util/react *matched-commands)]
       (ui/auto-complete
        matched
        {:get-group-name
@@ -82,7 +82,7 @@
 
 (rum/defc block-commands < rum/reactive
   [id format]
-  (when (util/react *show-block-commands)
+  (when (= :block-commands (state/get-editor-action))
     (let [matched (util/react *matched-block-commands)]
       (ui/auto-complete
        (map first matched)
@@ -99,59 +99,60 @@
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   "Embedded page searching popup"
   [id format]
-  (when (state/sub :editor/show-page-search?)
-    (let [pos (state/get-editor-last-pos)
-          input (gdom/getElement id)]
-      (when input
-        (let [current-pos (cursor/pos input)
-              edit-content (or (state/sub [:editor/content id]) "")
-              sidebar? (in-sidebar? input)
-              q (or
-                 @editor-handler/*selected-text
-                 (when (state/sub :editor/show-page-search-hashtag?)
-                   (gp-util/safe-subs edit-content pos current-pos))
-                 (when (> (count edit-content) current-pos)
-                   (gp-util/safe-subs edit-content pos current-pos))
-                 "")
-              matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))
-              matched-pages (cond
-                              (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                              matched-pages
+  (let [action (state/sub :editor/action)]
+    (when (contains? #{:page-search :page-search-hashtag} action)
+     (let [pos (state/get-editor-last-pos)
+           input (gdom/getElement id)]
+       (when input
+         (let [current-pos (cursor/pos input)
+               edit-content (or (state/sub [:editor/content id]) "")
+               sidebar? (in-sidebar? input)
+               q (or
+                  @editor-handler/*selected-text
+                  (when (= action :page-search-hashtag)
+                      (gp-util/safe-subs edit-content pos current-pos))
+                  (when (> (count edit-content) current-pos)
+                    (gp-util/safe-subs edit-content pos current-pos))
+                  "")
+               matched-pages (when-not (string/blank? q)
+                               (editor-handler/get-matched-pages q))
+               matched-pages (cond
+                               (contains? (set (map util/page-name-sanity-lc matched-pages)) (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
+                               matched-pages
 
-                              (string/blank? q)
-                              nil
+                               (string/blank? q)
+                               nil
 
-                              (empty? matched-pages)
-                              (cons (str "New page: " q) matched-pages)
+                               (empty? matched-pages)
+                               (cons (str "New page: " q) matched-pages)
 
-                              ;; reorder, shortest and starts-with first.
-                              :else
-                              (let [matched-pages (remove nil? matched-pages)
-                                    matched-pages (sort-by
-                                                   (fn [m]
-                                                     [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
-                                                   matched-pages)]
-                                (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
-                                  (cons (first matched-pages)
-                                        (cons  (str "New page: " q) (rest matched-pages)))
-                                  (cons (str "New page: " q) matched-pages))))]
-          (ui/auto-complete
-           matched-pages
-           {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-            :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-            :item-render (fn [page-name chosen?]
-                           [:div.preview-trigger-wrapper
-                            (block/page-preview-trigger
-                             {:children        [:div (search/highlight-exact-query page-name q)]
-                              :open?           chosen?
-                              :manual?         true
-                              :fixed-position? true
-                              :tippy-distance  24
-                              :tippy-position  (if sidebar? "left" "right")}
-                             page-name)])
-            :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
-            :class       "black"}))))))
+                               ;; reorder, shortest and starts-with first.
+                               :else
+                               (let [matched-pages (remove nil? matched-pages)
+                                     matched-pages (sort-by
+                                                    (fn [m]
+                                                      [(not (gstring/caseInsensitiveStartsWith m q)) (count m)])
+                                                    matched-pages)]
+                                 (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                                   (cons (first matched-pages)
+                                         (cons  (str "New page: " q) (rest matched-pages)))
+                                   (cons (str "New page: " q) matched-pages))))]
+           (ui/auto-complete
+            matched-pages
+            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+             :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+             :item-render (fn [page-name chosen?]
+                            [:div.preview-trigger-wrapper
+                             (block/page-preview-trigger
+                              {:children        [:div (search/highlight-exact-query page-name q)]
+                               :open?           chosen?
+                               :manual?         true
+                               :fixed-position? true
+                               :tippy-distance  24
+                               :tippy-position  (if sidebar? "left" "right")}
+                              page-name)])
+             :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+             :class       "black"})))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
@@ -189,7 +190,7 @@
                    (state/clear-search-result!)
                    state)}
   [state id _format]
-  (when (state/sub :editor/show-block-search?)
+  (when (= :block-search (state/sub :editor/action))
     (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)
           [id format] (:rum/args state)
@@ -206,7 +207,7 @@
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id _format]
-  (when (state/sub :editor/show-template-search?)
+  (when (= :template-search (state/sub :editor/action))
     (let [pos (state/get-editor-last-pos)
           input (gdom/getElement id)]
       (when input
@@ -237,7 +238,7 @@
       {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
-                  input-option (get @state/state :editor/show-input)]
+                  input-option (state/get-editor-show-input)]
               (when (seq @input-value)
                 ;; no new line input
                 (util/stop e)
@@ -247,34 +248,35 @@
                   (on-submit command @input-value pos))
                 (reset! input-value nil))))})))
   [state _id on-submit]
-  (when-let [input-option (state/sub :editor/show-input)]
-    (let [{:keys [pos]} (util/react *slash-caret-pos)
-          input-value (get state ::input-value)]
-      (when (seq input-option)
-        (let [command (:command (first input-option))]
-          [:div.p-2.rounded-md.shadow-lg
-           (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3 {:key id}
-              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-               (merge
-                (cond->
-                 {:key           (str "modal-input-" (name id))
-                  :id            (str "modal-input-" (name id))
-                  :type          (or type "text")
-                  :on-change     (fn [e]
-                                   (swap! input-value assoc id (util/evalue e)))
-                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                  placeholder
-                  (assoc :placeholder placeholder)
-                  autoFocus
-                  (assoc :auto-focus true))
-                (dissoc input-item :id))]])
-           (ui/button
-            "Submit"
-            :on-click
-            (fn [e]
-              (util/stop e)
-              (on-submit command @input-value pos)))])))))
+  (when (= :input (state/sub :editor/action))
+    (when-let [input-option (state/sub :editor/action-data)]
+     (let [{:keys [pos]} (util/react *slash-caret-pos)
+           input-value (get state ::input-value)]
+       (when (seq input-option)
+         (let [command (:command (first input-option))]
+           [:div.p-2.rounded-md.shadow-lg
+            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
+              [:div.my-3 {:key id}
+               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+                (merge
+                 (cond->
+                   {:key           (str "modal-input-" (name id))
+                    :id            (str "modal-input-" (name id))
+                    :type          (or type "text")
+                    :on-change     (fn [e]
+                                     (swap! input-value assoc id (util/evalue e)))
+                    :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                   placeholder
+                   (assoc :placeholder placeholder)
+                   autoFocus
+                   (assoc :auto-focus true))
+                 (dissoc input-item :id))]])
+            (ui/button
+              "Submit"
+              :on-click
+              (fn [e]
+                (util/stop e)
+                (on-submit command @input-value pos)))]))))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
@@ -305,26 +307,27 @@
         to-max-height (if y-overflow-vh? max-height to-max-height)
         pos-rect (when (and (seq rect) editing-key)
                    (:rect (cursor/get-caret-pos (state/get-input))))
-        y-diff (when pos-rect (- (:height pos-rect) (:height rect)))]
+        y-diff (when pos-rect (- (:height pos-rect) (:height rect)))
+        style (merge
+               {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
+                :max-height to-max-height
+                :max-width 700
+                ;; TODO: auto responsive fixed size
+                :width "fit-content"
+                :z-index    11}
+               (when set-default-width?
+                 {:width max-width})
+               (let [^js/HTMLElement editor
+                     (js/document.querySelector ".editor-wrapper")]
+                 (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
+                   {:right 0}
+                   {:left (if (or (nil? y-diff) (and y-diff (= y-diff 0))) left 0)})))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :class (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-mouse-down (fn [e]
                        (.stopPropagation e))
-      :style (merge
-              {:top        (+ top offset-top (if (int? y-diff) y-diff 0))
-               :max-height to-max-height
-               :max-width 700
-               ;; TODO: auto responsive fixed size
-               :width "fit-content"
-               :z-index    11}
-              (when set-default-width?
-                {:width max-width})
-              (let [^js/HTMLElement editor
-                    (js/document.querySelector ".editor-wrapper")]
-                (if (<= (.-clientWidth editor) (+ left (if set-default-width? max-width 500)))
-                  {:right 0}
-                  {:left (if (and y-diff (= y-diff 0)) left 0)})))}
+      :style style}
      cp]))
 
 (rum/defc transition-cp < rum/reactive
@@ -471,43 +474,39 @@
 (rum/defc modals < rum/reactive
   "React to atom changes, find and render the correct modal"
   [id format]
-  (ui/transition-group
-   (cond
-     (and (util/react *show-commands)
-          (not (state/sub :editor/show-page-search?))
-          (not (state/sub :editor/show-block-search?))
-          (not (state/sub :editor/show-template-search?))
-          (not (state/sub :editor/show-input))
-          (not (state/sub :editor/show-zotero))
-          (not (state/sub :editor/show-date-picker?)))
-     (animated-modal "commands" (commands id format) true (util/react *slash-caret-pos))
+  (let [action (state/sub :editor/action)
+        slash-pos @*slash-caret-pos]
+    (ui/transition-group
+     (cond
+       (and (= action :commands) slash-pos)
+       (animated-modal "commands" (commands id format) true slash-pos)
 
-     (and (util/react *show-block-commands) @*angle-bracket-caret-pos)
-     (animated-modal "block-commands" (block-commands id format) true (util/react *angle-bracket-caret-pos))
+       (and (= action :block-commands) @*angle-bracket-caret-pos)
+       (animated-modal "block-commands" (block-commands id format) true (util/react *angle-bracket-caret-pos))
 
-     (state/sub :editor/show-page-search?)
-     (animated-modal "page-search" (page-search id format) true (util/react *slash-caret-pos))
+       (contains? #{:page-search :page-search-hashtag} action)
+       (animated-modal "page-search" (page-search id format) true slash-pos)
 
-     (state/sub :editor/show-block-search?)
-     (animated-modal "block-search" (block-search id format) false (util/react *slash-caret-pos))
+       (= :block-search action)
+       (animated-modal "block-search" (block-search id format) false slash-pos)
 
-     (state/sub :editor/show-template-search?)
-     (animated-modal "template-search" (template-search id format) true (util/react *slash-caret-pos))
+       (= :template-search action)
+       (animated-modal "template-search" (template-search id format) true slash-pos)
 
-     (state/sub :editor/show-date-picker?)
-     (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false (util/react *slash-caret-pos))
+       (= :datepicker action)
+       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false slash-pos)
 
-     (state/sub :editor/show-input)
-     (animated-modal "input" (input id
-                                    (fn [command m _pos]
-                                      (editor-handler/handle-command-input command id format m)))
-                     true (util/react *slash-caret-pos))
+       (= :input action)
+       (animated-modal "input" (input id
+                                      (fn [command m _pos]
+                                        (editor-handler/handle-command-input command id format m)))
+                       true slash-pos)
 
-     (state/sub :editor/show-zotero)
-     (animated-modal "zotero-search" (zotero/zotero-search id) false (util/react *slash-caret-pos))
+       (= :zotero action)
+       (animated-modal "zotero-search" (zotero/zotero-search id) false slash-pos)
 
-     :else
-     nil)))
+       :else
+       nil))))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
