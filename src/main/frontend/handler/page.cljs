@@ -683,7 +683,7 @@
 ;; Editor
 (defn page-not-exists-handler
   [input id q current-pos]
-  (state/set-editor-show-page-search! false)
+  (state/clear-editor-action!)
   (if (state/org-mode-file-link? (state/get-current-repo))
     (let [page-ref-text (get-page-ref-text q)
           value (gobj/get input "value")

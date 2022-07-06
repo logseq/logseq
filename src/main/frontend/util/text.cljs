@@ -86,7 +86,7 @@
 
 (defn get-string-all-indexes
   "Get all indexes of `value` in the string `s`."
-  [s value before?]
+  [s value {:keys [before?] :or {before? true}}]
   (if (= value "")
     (if before? [0] [(dec (count s))])
     (loop [acc []
@@ -98,9 +98,9 @@
 (defn wrapped-by?
   "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
   [value pos before end]
-  (let [before-matches (->> (get-string-all-indexes value before true)
+  (let [before-matches (->> (get-string-all-indexes value before {:before? true})
                             (map (fn [i] [i :before])))
-        end-matches (->> (get-string-all-indexes value end false)
+        end-matches (->> (get-string-all-indexes value end {:before? false})
                          (map (fn [i] [i :end])))
         indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
         ks (map second indexes)

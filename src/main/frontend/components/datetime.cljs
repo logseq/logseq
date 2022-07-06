@@ -105,7 +105,6 @@
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
-  (state/set-editor-show-date-picker! false)
   (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
@@ -164,7 +163,7 @@
                                                (util/format "[[%s]]" journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker! false)
+               (state/clear-editor-action!)
                (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?
          (time-repeater))])))
