@@ -14,7 +14,7 @@
   [:div.help.cp__sidebar-help-docs
    (let [discourse-with-icon [:div.flex-row.inline-flex.items-center
                             [:span.mr-1 (t :help/forum-community)]
-                            (ui/icon "brand-discord" {:style {:font-size 20}})] ;; TODO we need a discourse brand
+                            (ui/icon "message-circle" {:style {:font-size 20}})]
          list
          [{:title "Usage"
            :children [[[:a
