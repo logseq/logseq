@@ -219,7 +219,7 @@
                "")
             matched-templates (editor-handler/get-matched-templates q)
             non-exist-handler (fn [_state]
-                                (state/set-editor-show-template-search! false))]
+                                (state/clear-editor-action!))]
         (ui/auto-complete
          matched-templates
          {:on-chosen   (editor-handler/template-on-chosen-handler id)

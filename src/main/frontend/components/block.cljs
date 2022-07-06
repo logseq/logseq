@@ -1896,12 +1896,12 @@
                            (do
                              (reset! show? false)
                              (reset! commands/*current-command nil)
-                             (state/set-editor-show-date-picker! false)
+                             (state/clear-editor-action!)
                              (state/set-timestamp-block! nil))
                            (do
                              (reset! show? true)
                              (reset! commands/*current-command typ)
-                             (state/set-editor-show-date-picker! true)
+                             (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ
                                                           :show? show?}))))}

@@ -602,36 +602,18 @@
   []
   (:editor/action-data @state))
 
-(defn set-editor-show-page-search!
-  [value]
-  (set-editor-action! (when value :page-search)))
-
 (defn get-editor-show-page-search?
   []
   (= (get-editor-action) :page-search))
 
-(defn set-editor-show-page-search-hashtag!
-  [value]
-  (set-editor-action! (when value :page-search-hashtag)))
-
 (defn get-editor-show-page-search-hashtag?
   []
   (= (get-editor-action) :page-search-hashtag))
-(defn set-editor-show-block-search!
-  [value]
-  (set-editor-action! (when value :block-search)))
+
 (defn get-editor-show-block-search?
   []
   (= (get-editor-action) :block-search))
-(defn set-editor-show-template-search!
-  [value]
-  (set-editor-action! (when value :template-search)))
-(defn set-editor-show-property-search!
-  [value]
-  (set-editor-action! (when value :property-search)))
-(defn set-editor-show-date-picker!
-  [value]
-  (set-editor-action! (when value :datepicker)))
+
 (defn set-editor-show-input!
   [value]
   (if value
@@ -651,10 +633,6 @@
 (defn set-editor-show-block-commands!
   []
   (when-not (get-editor-action) (set-editor-action! :block-commands)))
-
-(defn set-editor-show-zotero!
-  [value]
-  (set-state! :editor/show-zotero value))
 
 (defn clear-editor-action!
   []
