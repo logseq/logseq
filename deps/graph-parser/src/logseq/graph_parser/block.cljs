@@ -173,7 +173,10 @@
          (remove string/blank?)
          distinct)))
 
-;; TODO: we should move this to mldoc
+(defn- invalid-property-key?
+  [s]
+  (string/includes? s "`"))
+
 (defn extract-properties
   [format properties user-config]
   (when (seq properties)
@@ -184,28 +187,29 @@
                           (map (fn [[k v]]
                                  (let [k (-> (string/lower-case (name k))
                                              (string/replace " " "-")
-                                             (string/replace "_" "-"))
-                                       k (if (contains? #{"custom_id" "custom-id"} k)
-                                           "id"
-                                           k)
-                                       v (if (coll? v)
-                                           (remove string/blank? v)
-                                           (cond
-                                             (string/blank? v)
-                                             nil
-                                             (and (= (keyword k) :file-path)
-                                                  (string/starts-with? v "file:"))
-                                             v
-                                             :else
-                                             (text/parse-property format k v user-config)))
-                                       k (keyword k)
-                                       v (if (and
-                                              (string? v)
-                                              (contains? #{:alias :aliases :tags} k))
-                                           (set [v])
-                                           v)
-                                       v (if (coll? v) (set v) v)]
-                                   [k v])))
+                                             (string/replace "_" "-"))]
+                                   (when-not (invalid-property-key? k)
+                                     (let [k (if (contains? #{"custom_id" "custom-id"} k)
+                                               "id"
+                                               k)
+                                           v (if (coll? v)
+                                               (remove string/blank? v)
+                                               (cond
+                                                 (string/blank? v)
+                                                 nil
+                                                 (and (= (keyword k) :file-path)
+                                                      (string/starts-with? v "file:"))
+                                                 v
+                                                 :else
+                                                 (text/parse-property format k v user-config)))
+                                           k (keyword k)
+                                           v (if (and
+                                                  (string? v)
+                                                  (contains? #{:alias :aliases :tags} k))
+                                               (set [v])
+                                               v)
+                                           v (if (coll? v) (set v) v)]
+                                       [k v])))))
                           (remove #(nil? (second %))))]
       {:properties (into {} properties)
        :properties-order (map first properties)
