@@ -105,7 +105,29 @@
       0.001    ".1e-2"
       -0.045   "-.45e-1"
       -210     "-.21e3"))
-  (testing "scientific functions"
+  (testing "avoiding rounding errors"
+    (are [value expr] (= value (run expr))
+      3.3 "1.1 + 2.2"
+      2.2 "3.3 - 1.1"
+      0.0001 "1/10000"
+      1e-7 "1/10000000")))
+
+(deftest scientific-functions
+  (testing "power"
+    (are [value expr] (= value (run expr))
+      1.0    "1 ^ 0"
+      4.0    "2^2 "
+      -9.0    "-3^2 "
+      9.0    "(-3)^2 "
+      27.0   " 3^ 3"
+      0.125  " 2^ -3"
+      512.0   "2 ^ 3 ^ 2"
+      256.0  "4.000 ^ 4.0"
+      2.0    "4^0.5"
+      0.1    "100^(-0.5)"
+      125.0  "25^(3/2)"
+      4096.0 "200% ^ 12"))
+  (testing "functions"
     (are [value expr] (= value (run expr))
       2.0  "sqrt( 4 )"
       3.0  "abs( 3 )"
@@ -120,13 +142,7 @@
       1.0  "-2 * log(10) + 3"
       10.0 "ln(1) + 10"
       1.0  "exp(0)"
-      2.0  "ln(exp(2))"))
-  (testing "avoiding rounding errors"
-    (are [value expr] (= value (run expr))
-      3.3 "1.1 + 2.2"
-      2.2 "3.3 - 1.1"
-      0.0001 "1/10000"
-      1e-7 "1/10000000")))
+      2.0  "ln(exp(2))")))
 
 (deftest variables
   (testing "variables can be remembered"
