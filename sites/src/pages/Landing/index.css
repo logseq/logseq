@@ -420,6 +420,40 @@
   }
 }
 
+.app-daily-showcase {
+  @apply min-h-screen -mt-2 relative;
+
+  z-index: 3;
+
+  > .tabs {
+
+    > .it {
+      @apply items-center py-6
+      bg-logseq-700 rounded-xl cursor-pointer select-none border-2 border-transparent
+      transition-all active:opacity-80;
+
+      &:hover, &.active {
+        @apply border-gradient-b-blue-white-green-logseq-900;
+      }
+
+      &.active strong {
+        @apply opacity-80 font-semibold;
+      }
+    }
+  }
+
+  > .panels {
+    .desc {
+      opacity: .8;
+      height: 140px;
+
+      > span {
+        @apply opacity-60;
+      }
+    }
+  }
+}
+
 .particles-bg {
   @apply absolute top-8 left-0 bottom-0 right-0 opacity-50;
 }

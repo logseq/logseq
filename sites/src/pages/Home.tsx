@@ -8,6 +8,7 @@ import {
 import { useEffect } from 'react'
 import { AnimateInTurnBox } from '../components/Animations'
 import cx from 'classnames'
+import { DailyShowcase } from './Landing/DailyShowcase'
 
 export function HomePage () {
   useEffect(() => {
@@ -63,6 +64,10 @@ export function HomePage () {
 
           </AnimateInTurnBox>
         </div>
+      </div>
+
+      <div className="page-inner">
+        <DailyShowcase />
       </div>
 
       <div className="page-inner-full-wrap b relative">
