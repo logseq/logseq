@@ -169,9 +169,7 @@
    (ui/component-error "Linked References: Unexpected error")
    (ui/lazy-visible
     (fn []
-      (references* page-name))
-    nil
-    {})))
+      (references* page-name)))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query

@@ -120,7 +120,13 @@
       1.0  "-2 * log(10) + 3"
       10.0 "ln(1) + 10"
       1.0  "exp(0)"
-      2.0  "ln(exp(2))")))
+      2.0  "ln(exp(2))"))
+  (testing "avoiding rounding errors"
+    (are [value expr] (= value (run expr))
+      3.3 "1.1 + 2.2"
+      2.2 "3.3 - 1.1"
+      0.0001 "1/10000"
+      1e-7 "1/10000000")))
 
 (deftest variables
   (testing "variables can be remembered"
