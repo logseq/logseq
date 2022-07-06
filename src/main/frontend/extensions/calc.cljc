@@ -42,7 +42,8 @@
     :div        (fn div [a b] (-> a (.dividedBy b)))
     :pow        (fn pow [a b] (if (.isInteger b)
                                   (.exponentiatedBy a b)
-                                  (bn/BigNumber (js/Math.pow a b))))
+                                  #?(:clj (java.lang.Math/pow a b)
+                                     :cljs (bn/BigNumber (js/Math.pow a b)))))
     :abs        (fn abs [a] (.abs a))
     :sqrt       (fn abs [a] (.sqrt a))
     :log        (fn log [a]
