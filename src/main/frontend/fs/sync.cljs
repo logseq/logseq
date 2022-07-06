@@ -779,7 +779,8 @@
                                                       :basePath base-path
                                                       :filePaths filepaths
                                                       :txid local-txid
-                                                      :token token}))))]
+                                                      :token token
+                                                      :fnameEncryption true}))))]
         (prn ::debug-update-remote-files r)
         (if (instance? ExceptionInfo r)
           r
