@@ -179,7 +179,7 @@ jobs:
         run: xvfb-run -- yarn e2e-test
         env:
           CI: true
-          DEBUG: "pw:test"
+          DEBUG: "pw:api"
 
       - name: Save test artifacts
         if: ${{ failure() }}
