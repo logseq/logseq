@@ -1807,7 +1807,7 @@
   [config block k v]
   (let [date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     (page-cp (assoc config :property? true) {:block/name (name k)})
+     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
      [:span.mr-1 ":"]
      (cond
        (int? v)
