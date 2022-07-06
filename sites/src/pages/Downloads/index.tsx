@@ -6,7 +6,6 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import cx from 'classnames'
 import { LSButton } from '../../components/Buttons'
-import { IconsIntel } from '../../components/Icons'
 import { LandingFooterDesc, LandingFooterNav } from '../Landing'
 import { useAppState } from '../../state'
 
@@ -15,20 +14,19 @@ const headImagePhone: any = new URL('assets/dl_head_bg_2.png', import.meta.url)
 const iosImageQr: any = new URL('assets/ios_app_qr.png', import.meta.url)
 const intelImageIcon: any = new URL('assets/icon_intel.png', import.meta.url)
 const M1ImageIcon: any = new URL('assets/icon_m1.png', import.meta.url)
-
-const releases = [
-  ['MacOS', (props = {}) => <AppleLogo {...props}/>],
-  ['Windows', <WindowsLogo/>],
-  ['Linux', <LinuxLogo/>],
-  ['iOS', (props = {}) => <AppStoreLogo {...props}/>],
-  ['Android', <GooglePlayLogo/>],
-]
+const WindowsImageIcon: any = new URL('assets/icon_windows_64.png',
+  import.meta.url)
+const LinuxImageIcon: any = new URL('assets/icon_linux.png', import.meta.url)
+const GooglePlayImageIcon: any = new URL('assets/icon_google_play.png',
+  import.meta.url)
+const AppleImageIcon: any = new URL('assets/icon_apple.png', import.meta.url)
 
 const IntelIcon = (props: any) => {
   const { className, ...rest } = props
 
   return (
-    <span className={cx('color-icon flex rounded overflow-hidden items-center justify-center',
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
       className)} {...rest}>
       <img src={intelImageIcon} className={'w-4/5'} alt="intel"/>
     </span>
@@ -39,12 +37,68 @@ const M1Icon = (props: any) => {
   const { className, ...rest } = props
 
   return (
-    <span className={cx('color-icon flex rounded overflow-hidden items-center justify-center',
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
       className)} {...rest}>
       <img src={M1ImageIcon} className={'w-4/5'} alt="M1"/>
     </span>
   )
 }
+
+const AppleIcon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={AppleImageIcon} className={'w-4/5'} alt="GooglePlay"/>
+    </span>
+  )
+}
+
+const Windows64Icon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={WindowsImageIcon} className={'w-4/5'} alt="Windows64"/>
+    </span>
+  )
+}
+const LinuxIcon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={LinuxImageIcon} className={'w-4/5'} alt="GooglePlay"/>
+    </span>
+  )
+}
+
+const GooglePlayIcon = (props: any) => {
+  const { className, ...rest } = props
+
+  return (
+    <span className={cx(
+      'color-icon flex rounded overflow-hidden items-center justify-center',
+      className)} {...rest}>
+      <img src={GooglePlayImageIcon} className={'w-4/5'} alt="GooglePlay"/>
+    </span>
+  )
+}
+
+const releases = [
+  ['MacOS', (props = {}) => <AppleLogo {...props}/>],
+  ['Windows', (props = {}) => <WindowsLogo {...props}/>],
+  ['Linux', (props = {}) => <LinuxLogo {...props}/>],
+  ['iOS', (props = {}) => <AppStoreLogo {...props}/>],
+  ['Android', (props = {}) => <GooglePlayLogo {...props}/>],
+]
 
 export function WrapGlobalDownloadButton (
   props: any = {},
@@ -194,6 +248,21 @@ export function HeadDownloadLinks () {
   }
 
   const resolvePanel = function ([label, icon]: [string, any]) {
+    const isWindows = label.toLowerCase() === 'windows'
+    const isAndroid = label.toLowerCase() === 'android'
+    const isLinux = label.toLowerCase() === 'linux'
+    const isIOS = label.toLowerCase() === 'ios'
+
+    icon = isWindows ? (
+      <Windows64Icon className="bg-black/50 w-8 h-8"/>
+    ) : (isAndroid ?
+      <GooglePlayIcon className="bg-black/50 w-8 h-8"/>
+      : (isLinux ?
+        <LinuxIcon className="bg-black/50 w-8 h-8" /> :
+        (isIOS ? (
+          <AppleIcon className="bg-black/50 w-8 h-8" />
+        ): icon)))
+
     switch (label) {
       case 'iOS':
         return (
@@ -234,7 +303,8 @@ export function HeadDownloadLinks () {
             <div className="flex flex-col items-center">
               <LSButton
                 className={'bg-logseq-600 px-6 py-4'}
-                leftIcon={<M1Icon className={'w-8 h-8 bg-gray-500'} color={'white'}/>}
+                leftIcon={<M1Icon className={'w-8 h-8 bg-gray-500'}
+                                  color={'white'}/>}
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => downloadHandler('macos-arm64')}
               >
