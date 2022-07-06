@@ -1370,6 +1370,7 @@
        pred)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
+     (map str)
      (remove string/blank?)
      (distinct)
      (sort))))
