@@ -2993,14 +2993,18 @@
   "shortcut cut action:
   * when in selection mode, cut selected blocks
   * when in edit mode with text selected, cut selected text
-  * otherwise same as delete shortcut"
+  * otherwise nothing need to be handled."
   [e]
   (cond
     (state/selection?)
     (shortcut-cut-selection e)
 
-    (state/editing?)
-    (keydown-backspace-handler true e)))
+    (and (state/editing?) (util/input-text-selected?
+                           (gdom/getElement (state/get-edit-input-id))))
+    (keydown-backspace-handler true e)
+
+    :else
+    nil))
 
 (defn delete-selection
   [e]
