@@ -187,7 +187,8 @@
                           (map (fn [[k v]]
                                  (let [k (-> (string/lower-case (name k))
                                              (string/replace " " "-")
-                                             (string/replace "_" "-"))]
+                                             (string/replace "_" "-")
+                                             (string/replace #"[\"|^|(|)|{|}]+" ""))]
                                    (when-not (invalid-property-key? k)
                                      (let [k (if (contains? #{"custom_id" "custom-id"} k)
                                                "id"
