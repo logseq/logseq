@@ -2809,6 +2809,11 @@
               (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
               (reset! commands/*show-block-commands true))
 
+            ;; Exit autocomplete if user inputs two consecutive spaces
+            (and @*show-commands
+                 (= c (util/nth-safe value (dec (dec current-pos))) " "))
+            (reset! *show-commands false)
+
             (and (= c " ")
                  (or (= (util/nth-safe value (dec (dec current-pos))) "#")
                      (not (state/get-editor-show-page-search?))

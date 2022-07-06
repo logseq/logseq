@@ -11,7 +11,11 @@
   [hiccup]
   (walk/postwalk (fn [f]
                    (if (map? f)
-                     (dissoc f :style)
+                      (apply dissoc f (conj (filter (fn [key]
+                                                      (string/starts-with? (str key) ":data-"))
+                                                    (keys f))
+                                            :style
+                                            :class))
                      f)) hiccup))
 
 (defn- export-hiccup
@@ -73,7 +77,7 @@
                                              :else
                                              nil)
                                    children' (map-join children)]
-                               (when-not (string/blank? children')
+                               (when (not-empty children')
                                  (str (if (string? pattern) pattern (apply str pattern))
                                       children'
                                       (if (string? pattern) pattern (apply str (reverse pattern)))))))
@@ -122,11 +126,15 @@
                                       :org (util/format "[[%s][%s]]" href label)
                                       nil))))
                            :img (let [src (:src attrs)
-                                      alt (or (:alt attrs) "")]
-                                  (case format
-                                    :markdown (util/format "![%s](%s)" alt src)
-                                    :org (util/format "[[%s][%s]]" src alt)
-                                    nil))
+                                      alt (or (:alt attrs) "")
+                                      ;; reject url-encoded and utf8-encoded(svg)
+                                      unsafe-data-url? (and (string/starts-with? src "data:")
+                                                            (not (re-find #"^data:.*?;base64," src)))]
+                                  (when-not unsafe-data-url?
+                                    (case format
+                                      :markdown (util/format "![%s](%s)" alt src)
+                                      :org (util/format "[[%s][%s]]" src alt)
+                                      nil)))
                            :p (util/format "%s"
                                            (map-join children))
 
@@ -140,12 +148,19 @@
                                                    :span} %))
                            (emphasis-transform tag attrs children)
 
-                           :code (if @*inside-pre?
+                           :code (cond
+                                   @*inside-pre?
                                    (map-join children)
+
+                                   (string? (first children))
                                    (let [pattern (config/get-code format)]
                                      (str " "
                                           (str pattern (first children) pattern)
-                                          " ")))
+                                          " "))
+
+                                   ;; skip monospace style, since it has more complex children
+                                   :else
+                                   (map-join children))
 
                            :pre
                            (do
@@ -169,6 +184,9 @@
 
                            :li
                            (str "- " (map-join children))
+
+                           :br
+                           "\n"
 
                            :dt
                            (case format
@@ -218,7 +236,7 @@
                  (for [x hiccup]
                    (single-hiccup-transform x))
                  (single-hiccup-transform hiccup))]
-    (string/replace (apply str result) #"\n\n+" "\n\n")))
+    (apply str result)))
 
 (defn hiccup->doc
   [format hiccup]
@@ -226,9 +244,8 @@
     (if (string/blank? s)
       ""
       (-> s
-          (string/trim)
-          (string/replace "\n\n\n\n" "\n\n")
-          (string/replace "\n\n\n" "\n\n")))))
+          string/trim
+          (string/replace #"\n\n+" "\n\n")))))
 
 (defn html-decode-hiccup
   [hiccup]
