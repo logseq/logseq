@@ -691,15 +691,17 @@
   [input id _q pos format]
   (let [current-pos (cursor/pos input)
         edit-content (state/sub [:editor/content id])
+        action (state/get-editor-action)
+        hashtag? (= action :page-search-hashtag)
         q (or
            @editor-handler/*selected-text
-           (when (state/sub :editor/show-page-search-hashtag?)
+           (when hashtag?
              (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
              (gp-util/safe-subs edit-content pos current-pos)))]
-    (if (state/sub :editor/show-page-search-hashtag?)
+    (if hashtag?
       (fn [chosen _click?]
-        (state/set-editor-show-page-search! false)
+        (state/clear-editor-action!)
         (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
@@ -721,7 +723,7 @@
                                            :end-pattern (when wrapped? "]]")
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
-        (state/set-editor-show-page-search! false)
+        (state/clear-editor-action!)
         (let [chosen (if (string/starts-with? chosen "New page: ")
                        (subs chosen 10)
                        chosen)

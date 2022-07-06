@@ -147,7 +147,7 @@
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
-    (when (state/sub :editor/show-date-picker?)
+    (when (= :datepicker (state/sub :editor/action))
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
                                             :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker

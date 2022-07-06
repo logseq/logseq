@@ -97,12 +97,9 @@
      :config                                {}
      :block/component-editing-mode?         false
      :editor/draw-mode?                     false
-     :editor/show-page-search?              false
-     :editor/show-page-search-hashtag?      false
-     :editor/show-date-picker?              false
+     :editor/action                         nil
+     :editor/action-data                    nil
      ;; With label or other data
-     :editor/show-input                     nil
-     :editor/show-zotero                    false
      :editor/last-saved-cursor              nil
      :editor/editing?                       nil
      :editor/in-composition?                false
@@ -589,63 +586,83 @@
   [value]
   (set-state! :search/mode value))
 
+(defn set-editor-action!
+  [value]
+  (set-state! :editor/action value))
+
+(defn set-editor-action-data!
+  [value]
+  (set-state! :editor/action-data value))
+
+(defn get-editor-action
+  []
+  (:editor/action @state))
+
 (defn set-editor-show-page-search!
   [value]
-  (set-state! :editor/show-page-search? value))
+  (set-editor-action! (when value :page-search)))
 
 (defn get-editor-show-page-search?
   []
-  (get @state :editor/show-page-search?))
+  (= (get-editor-action) :page-search))
 
 (defn set-editor-show-page-search-hashtag!
   [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? value))
+  (set-editor-action! (when value :page-search-hashtag)))
+
 (defn get-editor-show-page-search-hashtag?
   []
-  (get @state :editor/show-page-search-hashtag?))
+  (= (get-editor-action) :page-search-hashtag))
 (defn set-editor-show-block-search!
   [value]
-  (set-state! :editor/show-block-search? value))
+  (set-editor-action! (when value :block-search)))
 (defn get-editor-show-block-search?
   []
-  (get @state :editor/show-block-search?))
+  (= (get-editor-action) :block-search))
 (defn set-editor-show-template-search!
   [value]
-  (set-state! :editor/show-template-search? value))
+  (set-editor-action! (when value :template-search)))
 (defn get-editor-show-template-search?
   []
-  (get @state :editor/show-template-search?))
+  (= (get-editor-action) :template-search))
 (defn set-editor-show-date-picker!
   [value]
-  (set-state! :editor/show-date-picker? value))
+  (set-editor-action! (when value :datepicker)))
 (defn get-editor-show-date-picker?
   []
-  (get @state :editor/show-date-picker?))
+  (= (get-editor-action) :datepicker))
 (defn set-editor-show-input!
   [value]
-  (set-state! :editor/show-input value))
+  (if value
+    (do
+      (set-editor-action-data! value)
+      (set-editor-action! :input))
+    (do
+      (set-editor-action! nil)
+      (set-editor-action-data! nil))))
 (defn get-editor-show-input
   []
-  (get @state :editor/show-input))
+  (when (= (get-editor-action) :input)
+    (get @state :editor/action-data)))
+(defn set-editor-show-commands!
+  []
+  (when-not (get-editor-action) (set-editor-action! :commands)))
+(defn set-editor-show-block-commands!
+  []
+  (when-not (get-editor-action) (set-editor-action! :block-commands)))
+
 
 
 (defn set-editor-show-zotero!
   [value]
   (set-state! :editor/show-zotero value))
 
-;; TODO: refactor, use one state
-(defn clear-editor-show-state!
+(defn clear-editor-action!
   []
   (swap! state (fn [state]
                  (assoc state
-                        :editor/show-input nil
-                        :editor/show-zotero false
-                        :editor/show-date-picker? false
-                        :editor/show-block-search? false
-                        :editor/show-template-search? false
-                        :editor/show-page-search? false
-                        :editor/show-page-search-hashtag? false))))
+                        :editor/action nil
+                        :editor/action-data nil))))
 
 (defn set-edit-input-id!
   [input-id]

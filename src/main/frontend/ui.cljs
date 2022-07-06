@@ -65,10 +65,7 @@
                             (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e)))))))
                 state)}
   [{:keys [on-change] :as props}]
-  (let [skip-composition? (or
-                           (state/sub :editor/show-page-search?)
-                           (state/sub :editor/show-block-search?)
-                           (state/sub :editor/show-template-search?))
+  (let [skip-composition? (state/sub :editor/action)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
