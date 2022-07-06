@@ -175,7 +175,7 @@
         :options {:href "https://discuss.logseq.com"
                   :title (t :discourse-title)
                   :target "_blank"}
-        :icon (ui/icon "brand-discord")}]  ;; TODO we need a discourse brand
+        :icon (ui/icon "message-circle")}]
       (concat page-menu-and-hr)
       (remove nil?))
      {})))
