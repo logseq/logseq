@@ -203,6 +203,8 @@ test('auto completion and auto pair', async ({ page, block }) => {
   await block.mustType('type (', { toBe: 'type ()' })
   await block.mustType('(', { toBe: 'type (())' })
 
+  await block.escapeEditing() // escape any popup from `(())`
+
   // [[  #3251
   await block.clickNext()
 
