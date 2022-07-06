@@ -1848,7 +1848,7 @@
       (do
         (cursor/move-cursor-backward input 2)
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-        (state/set-editor-show-property-search! true))
+        (state/set-editor-action! :property-search))
 
       (and
        (not= :property-search (state/get-editor-action))
@@ -1856,7 +1856,7 @@
            (wrapped-by? input "\n" "::")))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-        (state/set-editor-show-property-search! true))
+        (state/set-editor-action! :property-search))
 
       (and (= last-input-char commands/colon) (= :property-search (state/get-editor-action)))
       (state/clear-editor-action!)
@@ -1867,7 +1867,7 @@
 (defn block-on-chosen-handler
   [_input id q format]
   (fn [chosen _click?]
-    (state/set-editor-show-block-search! false)
+    (state/clear-editor-action!)
     (let [uuid-string (str (:block/uuid chosen))]
 
       ;; block reference
@@ -1890,7 +1890,7 @@
 (defn block-non-exist-handler
   [input]
   (fn []
-    (state/set-editor-show-block-search! false)
+    (state/clear-editor-action!)
     (cursor/move-cursor-forward input 2)))
 
 (defn- paste-block-cleanup
@@ -2299,7 +2299,7 @@
                             :check-fn (fn [_ _ _]
                                         (state/set-editor-action-data! {:pos new-pos})
                                         (commands/handle-step [:editor/search-page]))}))]
-        (state/set-editor-show-page-search! false)
+        (state/clear-editor-action!)
         (let [selection (get-selection-and-format)
               {:keys [selection-start selection-end selection]} selection]
           (if selection
@@ -2332,7 +2332,7 @@
                              :check-fn     (fn [_ _ _]
                                              (state/set-editor-action-data! {:pos new-pos})
                                              (commands/handle-step [:editor/search-block]))}))]
-        (state/set-editor-show-block-search! false)
+        (state/clear-editor-action!)
         (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
           (let [{:keys [raw-content start end]} embed-ref]
             (delete-and-update input start end)
@@ -2638,10 +2638,10 @@
         (commands/delete-pair! id)
         (cond
           (and (= deleted "[") (state/get-editor-show-page-search?))
-          (state/set-editor-show-page-search! false)
+          (state/clear-editor-action!)
 
           (and (= deleted "(") (state/get-editor-show-block-search?))
-          (state/set-editor-show-block-search! false)
+          (state/clear-editor-action!)
 
           :else
           nil))
@@ -2649,7 +2649,7 @@
       ;; deleting hashtag
       (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
       (do
-        (state/set-editor-show-page-search-hashtag! false)
+        (state/clear-editor-action!)
         (delete-and-update input (dec current-pos) current-pos))
 
       ;; just delete
@@ -2729,7 +2729,7 @@
         (and (= key "#")
              (and (> pos 0)
                   (= "#" (util/nth-safe value (dec pos)))))
-        (state/set-editor-show-page-search-hashtag! false)
+        (state/clear-editor-action!)
 
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
@@ -2831,7 +2831,7 @@
 
           (and (state/get-editor-show-page-search-hashtag?)
                (= c " "))
-          (state/set-editor-show-page-search-hashtag! false)
+          (state/clear-editor-action!)
 
           :else
           (when (and (not editor-action) (not non-enter-processed?))

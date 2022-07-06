@@ -605,22 +605,22 @@
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
-  (state/set-editor-show-page-search! true))
+  (state/set-editor-action! :page-search))
 
 (defmethod handle-step :editor/search-page-hashtag [[_]]
-  (state/set-editor-show-page-search-hashtag! true))
+  (state/set-editor-action! :page-search-hashtag))
 
 (defmethod handle-step :editor/search-block [[_ _type]]
-  (state/set-editor-show-block-search! true))
+  (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]
-  (state/set-editor-show-template-search! true))
+  (state/set-editor-action! :template-search))
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input! option))
 
 (defmethod handle-step :editor/show-zotero [[_]]
-  (state/set-editor-show-zotero! true))
+  (state/set-editor-action! :zotero))
 
 (defn insert-youtube-timestamp
   []
@@ -643,7 +643,7 @@
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
-    (state/set-editor-show-date-picker! true)))
+    (state/set-editor-action! :datepicker)))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
