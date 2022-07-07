@@ -188,7 +188,7 @@
 
        :new-page
        [:div.text.font-bold (str (t :new-page) ": ")
-        [:span.ml-1 (str "\"" search-q "\"")]]
+        [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
 
        :page
        [:span {:data-page-ref data}
@@ -258,6 +258,7 @@
         [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
                                  :on-click (fn []
                                              (when-not (string/blank? search-q)
+                                               (state/close-modal!)
                                                (search-handler/search (state/get-current-repo) search-q {:limit 1000
                                                                                                          :more? true})
                                                (search-handler/clear-search!)))}

@@ -239,7 +239,8 @@
                            (set block-properties)
                            (set all-properties))
         shown-properties (set/intersection (set all-properties) shown-properties)]
-    (state/set-modal! (query-properties-settings block shown-properties all-properties))))
+    (state/set-modal! (query-properties-settings block shown-properties all-properties)
+                      {:center? true})))
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards {:id :srs

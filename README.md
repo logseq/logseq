@@ -3,6 +3,7 @@
 [![latest release version](https://img.shields.io/github/v/release/logseq/logseq)](https://github.com/logseq/logseq/releases)
 [![License](https://img.shields.io/github/license/logseq/logseq?color=blue)](https://github.com/logseq/logseq/blob/master/LICENSE.md)
 [![Twitter follow](https://img.shields.io/badge/follow-%40logseq-blue.svg?style=flat&logo=twitter)](https://twitter.com/logseq)
+[![forum](https://img.shields.io/badge/forum-Logseq-blue.svg?style=flat&logo=discourse)](https://discuss.logseq.com)
 [![discord](https://img.shields.io/discord/725182569297215569?label=discord&logo=Discord&color=blue)](https://discord.gg/KpN4eHY)
 [![total](https://opencollective.com/logseq/tiers/badge.svg?color=blue)](https://opencollective.com/logseq)
 
@@ -68,7 +69,8 @@ Logseq is also made possible by the following projects:
 
 - Our blog: https://logseq.com/blog - Please be sure to visit our [About page](https://logseq.com/blog/about) for the latest updates of the app
 - Twitter: https://twitter.com/logseq
-- Discord: https://discord.gg/KpN4eHY - Where we answer questions, discuss workflows and share tips
+- Forum: https://discuss.logseq.com - Where we answer questions, discuss workflows and share tips
+- Discord: https://discord.gg/KpN4eHY
 - 中文 Discord：https://discord.gg/xYqcrXWymg
 - Github: https://github.com/logseq/logseq - everyone is encouraged to report issues!
 

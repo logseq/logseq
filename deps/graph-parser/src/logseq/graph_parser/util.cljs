@@ -116,7 +116,7 @@
                       (remove-boundary-slashes)
                       (path-normalize))]
      (if replace-slash?
-       (string/replace page #"/" "%2A")
+       (string/replace page #"/" "%2F")
        page))))
 
 (defn page-name-sanity-lc
