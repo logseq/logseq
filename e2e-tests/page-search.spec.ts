@@ -68,6 +68,10 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   await page.waitForTimeout(500)
 
   // build target Page with alias
+  // the target page will contains the content in 
+  //   alias_test_content_1,
+  //   alias_test_content_2, and
+  //   alias_test_content_3 sequentialy, to validate the target page state
   await page.type('textarea >> nth=0', 'alias:: [[' + alias_name)
   await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
@@ -80,6 +84,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   // create alias ref in origin Page
   await newBlock(page)
   await page.type('textarea >> nth=0', '[[' + alias_name)
+  await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
   await page.waitForTimeout(100)
 
   await page.keyboard.press(hotkeyOpenLink)
