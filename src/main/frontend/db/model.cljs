@@ -1341,6 +1341,40 @@
                 [(get m :template) e]))
          (into {}))))
 
+(defn get-all-properties
+  []
+  (let [properties (d/q
+                     '[:find [?p ...]
+                       :where
+                       [_ :block/properties ?p]]
+                     (conn/get-db))
+        properties (remove (fn [m] (empty? m)) properties)]
+    (->> (map keys properties)
+         (apply concat)
+         distinct
+         (remove #{:id})
+         sort)))
+
+(defn get-property-values
+  [property]
+  (let [pred (fn [_db properties]
+               (get properties property))]
+    (->>
+     (d/q
+       '[:find [?property-val ...]
+         :in $ ?pred
+         :where
+         [_ :block/properties ?p]
+         [(?pred $ ?p) ?property-val]]
+       (conn/get-db)
+       pred)
+     (map (fn [x] (if (coll? x) x [x])))
+     (apply concat)
+     (map str)
+     (remove string/blank?)
+     (distinct)
+     (sort))))
+
 (defn get-template-by-name
   [name]
   (when (string? name)
