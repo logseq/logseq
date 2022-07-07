@@ -44,28 +44,34 @@
                              (let [style (:style attrs)
                                    [bold? italic? underline? strike-through? mark?]
                                    (when style
-                                     [(or (string/includes? style "font-weight:700")
-                                          (string/includes? style "font-weight:600"))
-                                      (string/includes? style "font-style:italic")
-                                      (string/includes? style "text-decoration:underline")
-                                      (string/includes? style "text-decoration:line-through")
-                                      (string/includes? style "background-color:#")])
+                                     [(re-find #"font-weight:\s*(([6789]\d\d)|1000|(semi)?bold)\b" style)
+                                      (re-find #"font-style:\s*italic\b" style)
+                                      (re-find #"text-decoration(-line)?:\s*underline\b" style)
+                                      (re-find #"text-decoration:\s*line-through\b" style)
+                                      (re-find #"background-color:\s*yellow\b" style)])
                                    pattern (cond
                                              (contains? #{:b :strong} tag)
-                                             (when-not (and style (string/includes? style "font-weight:normal"))
+                                             (when-not (and style (string/includes? style "font-weight: normal"))
                                                (config/get-bold format))
+
                                              (contains? #{:i :em} tag)
-                                             (when-not (and style (string/includes? style "font-style:normal"))
-                                               (config/get-italic format))
-                                             (contains? #{:ins} tag)
-                                             (when-not (and style (string/includes? style "text-decoration:normal"))
+                                             (when-not (and style (string/includes? style "font-style: normal"))
+                                               (if bold?
+                                                 (config/get-bold format)
+                                                 (config/get-italic format)))
+
+                                             (contains? #{:ins :u} tag)
+                                             (when-not (and style (string/includes? style "text-decoration: normal"))
                                                (config/get-underline format))
-                                             (contains? #{:del} tag)
-                                             (when-not (and style (string/includes? style "text-decoration:normal"))
+
+                                             (contains? #{:del :s :strike} tag)
+                                             (when-not (and style (string/includes? style "text-decoration: normal"))
                                                (config/get-strike-through format))
-                                             (contains? #{:mark} tag)
-                                             (when-not (and style (string/includes? style "background-color:transparent"))
+
+                                             (or (contains? #{:mark} tag) mark?)
+                                             (when-not (and style (string/includes? style "background-color: transparent"))
                                                (config/get-highlight format))
+
                                              (and (contains? #{:span} tag)
                                                   (not (every? string/blank? children)))
                                              (remove nil?
@@ -74,13 +80,23 @@
                                                       (when underline? (config/get-underline format))
                                                       (when strike-through? (config/get-strike-through format))
                                                       (when mark? (config/get-highlight format))])
+
                                              :else
                                              nil)
+                                   pattern (if (string? pattern)
+                                             pattern
+                                             (apply str pattern))
                                    children' (map-join children)]
                                (when (not-empty children')
-                                 (str (if (string? pattern) pattern (apply str pattern))
-                                      children'
-                                      (if (string? pattern) pattern (apply str (reverse pattern)))))))
+                                 (cond
+                                   (string/blank? pattern)
+                                   children'
+
+                                   (string/starts-with? children' pattern)
+                                   children'
+
+                                   :else
+                                   (str pattern children' (string/reverse pattern))))))
         wrapper (fn [tag content]
                   (let [content (cond
                                   (contains? denied-tags tag)
@@ -142,8 +158,8 @@
 
                            (_ :guard #(contains? #{:b :strong
                                                    :i :em
-                                                   :ins
-                                                   :del
+                                                   :ins :u
+                                                   :del :s :strike
                                                    :mark
                                                    :span} %))
                            (emphasis-transform tag attrs children)
