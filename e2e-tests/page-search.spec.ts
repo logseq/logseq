@@ -69,8 +69,7 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
 
   // build target Page with alias
   await page.type('textarea >> nth=0', 'alias:: [[' + alias_name)
-  await page.press('textarea >> nth=0', 'ArrowRight')
-  await page.press('textarea >> nth=0', 'ArrowRight')
+  await page.press('textarea >> nth=0', 'Enter') // Enter for finishing selection
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
   await page.press('textarea >> nth=0', 'Enter') // double Enter for exit property editing
   await page.waitForTimeout(500)
@@ -157,6 +156,6 @@ async function alias_test(page: Page, page_name: string, search_kws: string[]) {
   // TODO: search clicking (alias property)
 }
 
-test.skip('page diacritic alias', async ({ page }) => {
+test('page diacritic alias', async ({ page }) => {
   await alias_test(page, "ü", ["ü", "ü", "Ü"])
 })
