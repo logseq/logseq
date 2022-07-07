@@ -1078,36 +1078,29 @@ mark {
 }
 
 /* inline code */
-:not(pre):not(mark) > code {
+:not(pre) > code {
   border-radius: 3px;
   font-size: 0.9em;
+  font-style: normal;
   font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
     monospace;
-  padding: 3px 5px !important;
+  letter-spacing: 0;
+  word-spacing: -0.15em;
+  text-rendering: optimizeSpeed;
 }
 
 :not(pre):not(mark) > code {
-  font-style: normal;
-  letter-spacing: 0;
-  word-spacing: -0.15em;
-  -webkit-border-radius: var(--ls-border-radius-low);
-  border-radius: var(--ls-border-radius-low);
   line-height: 1.45;
-  text-rendering: optimizeSpeed;
+  padding: 3px 5px !important;
+  border-radius: var(--ls-border-radius-low);
+  -webkit-border-radius: var(--ls-border-radius-low);
 }
 
 mark > code {
-  font-style: normal;
-  letter-spacing: 0;
   padding: 0;
-  word-spacing: -0.15em;
   line-height: inherit !important;
-  text-rendering: optimizeSpeed;
   background: #fef3ac !important;
   color: #262626 !important;
-  font-size: 0.9em;
-  font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
-    monospace;
 }
 
 b > code {
