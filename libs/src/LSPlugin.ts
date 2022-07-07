@@ -228,7 +228,7 @@ export type SimpleCommandKeybinding = {
 
 export type SettingSchemaDesc = {
   key: string
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'object'
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'heading'
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
