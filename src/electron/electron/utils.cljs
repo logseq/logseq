@@ -6,7 +6,7 @@
             [cljs-bean.core :as bean]
             ["electron" :refer [app BrowserWindow]]))
 
-(defonce *win (atom nil))
+(defonce *win (atom nil)) ;; The main window
 (defonce mac? (= (.-platform js/process) "darwin"))
 (defonce win32? (= (.-platform js/process) "win32"))
 (defonce linux? (= (.-platform js/process) "linux"))
@@ -112,13 +112,21 @@
 
 (defn send-to-renderer
   "Notice: pass the `window` parameter if you can. Otherwise, the message
-  will not be received if there's no focused window."
+  will not be received if there's no focused window.
+   Use `send-to-focused-renderer` instead if you want to set a window for fallback"
   ([kind payload]
    (send-to-renderer (get-focused-window) kind payload))
   ([window kind payload]
    (when window
      (.. ^js window -webContents
          (send (name kind) (bean/->js payload))))))
+
+(defn send-to-focused-renderer
+  "Try to send to focused window. If no focused window, fallback to the `fallback-win`"
+  ([kind payload fallback-win]
+   (let [focused-win (get-focused-window)
+         win         (if focused-win focused-win fallback-win)]
+     (send-to-renderer win kind payload))))
 
 (defn get-graph-dir
   "required by all internal state in the electron section"
