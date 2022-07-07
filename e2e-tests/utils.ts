@@ -2,6 +2,7 @@ import { Page, Locator } from 'playwright'
 import { expect, ConsoleMessage } from '@playwright/test'
 import * as process from 'process'
 import { Block } from './types'
+import pathlib from 'path'
 
 export const IsMac = process.platform === 'darwin'
 export const IsLinux = process.platform === 'linux'
@@ -166,32 +167,26 @@ export async function openLeftSidebar(page: Page): Promise<void> {
   }
 }
 
-export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
+export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   await setMockedOpenDirPath(page, path);
-
+  
   const onboardingOpenButton = page.locator('strong:has-text("Choose a folder")')
 
   if (await onboardingOpenButton.isVisible()) {
     await onboardingOpenButton.click()
   } else {
-    await page.click('#left-menu.button')
     let sidebar = page.locator('#left-sidebar')
     if (!/is-open/.test(await sidebar.getAttribute('class'))) {
       await page.click('#left-menu.button')
       await expect(sidebar).toHaveClass(/is-open/)
     }
-
+    
     await page.click('#left-sidebar #repo-switch');
     await page.waitForSelector('#left-sidebar .dropdown-wrapper >> text="Add new graph"',
-      { state: 'visible', timeout: 5000 })
-
+    { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
-    await page.waitForSelector('strong:has-text("Choose a folder")',
-      { state: 'visible', timeout: 5000 })
-    await page.click('strong:has-text("Choose a folder")')
 
-    const skip = page.locator('a:has-text("Skip")')
-    await skip.click()
+    expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
   }
 
   setMockedOpenDirPath(page, ''); // reset it
