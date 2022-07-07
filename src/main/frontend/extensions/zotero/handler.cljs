@@ -41,7 +41,7 @@
 
 (defn handle-command-zotero
   [id page-name]
-  (state/set-editor-show-zotero! false)
+  (state/clear-editor-action!)
   (editor-handler/insert-command! id (str "[[" page-name "]]") nil {}))
 
 (defn- create-abstract-note!

@@ -74,7 +74,7 @@
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
          content (page-property/insert-properties format "" ps)
-         refs (gp-block/get-page-refs-from-properties properties
+         refs (gp-block/get-page-refs-from-properties format properties
                                                       (db/get-db (state/get-current-repo))
                                                       (state/get-date-formatter))]
      {:block/uuid (db/new-block-id)
@@ -243,13 +243,21 @@
         (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
         (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
 
+(defn- replace-property-ref!
+  [content old-name new-name]
+  (let [new-name (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
+        old-property (str old-name "::")
+        new-property (str (name new-name) "::")]
+    (util/replace-ignore-case content old-property new-property)))
+
 (defn- replace-old-page!
   "Unsanitized names"
   [content old-name new-name]
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
         (replace-page-ref! old-name new-name)
-        (replace-tag-ref! old-name new-name))))
+        (replace-tag-ref! old-name new-name)
+        (replace-property-ref! old-name new-name))))
 
 (defn- walk-replace-old-page!
   "Unsanitized names"
@@ -267,6 +275,9 @@
                      (if (= f old-name)
                        new-name
                        (replace-old-page! f old-name new-name))
+
+                     (and (keyword f) (= (name f) old-name))
+                     (keyword (string/replace (string/lower-case new-name) #"\s+" "-"))
 
                      :else
                      f))
@@ -312,6 +323,7 @@
 (defn delete!
   [page-name ok-handler & {:keys [delete-file?]
                            :or {delete-file? true}}]
+  (route-handler/redirect-to-home!)
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (util/page-name-sanity-lc page-name)
@@ -371,6 +383,7 @@
                                   {:block/uuid       uuid
                                    :block/content    content
                                    :block/properties properties
+                                   :block/properties-order (map first properties)
                                    :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
                                    :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
                       (remove nil?))]
@@ -478,7 +491,11 @@
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (string/replace old-page-title old-name new-name)
+            ;; only replace one time, for the case that the namespace is a sub-string of the sub-namespace page name
+            ;; Example: has pages [[work]] [[work/worklog]],
+            ;; we want to rename [[work/worklog]] to [[work1/worklog]] when rename [[work]] to [[work1]],
+            ;; but don't rename [[work/worklog]] to [[work1/work1log]]
+            new-page-title (string/replace-first old-page-title old-name new-name)
             redirect? (= name (:block/name page))]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
@@ -555,7 +572,8 @@
           (rename-namespace-pages! repo old-name new-name))
         (rename-nested-pages old-name new-name))
       (when (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))
+    (ui-handler/re-render-root!)))
 
 (defn- split-col-by-element
   [col element]
@@ -668,7 +686,7 @@
 ;; Editor
 (defn page-not-exists-handler
   [input id q current-pos]
-  (state/set-editor-show-page-search! false)
+  (state/clear-editor-action!)
   (if (state/org-mode-file-link? (state/get-current-repo))
     (let [page-ref-text (get-page-ref-text q)
           value (gobj/get input "value")
@@ -689,15 +707,17 @@
   [input id _q pos format]
   (let [current-pos (cursor/pos input)
         edit-content (state/sub [:editor/content id])
+        action (state/get-editor-action)
+        hashtag? (= action :page-search-hashtag)
         q (or
            @editor-handler/*selected-text
-           (when (state/sub :editor/show-page-search-hashtag?)
+           (when hashtag?
              (gp-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
              (gp-util/safe-subs edit-content pos current-pos)))]
-    (if (state/sub :editor/show-page-search-hashtag?)
+    (if hashtag?
       (fn [chosen _click?]
-        (state/set-editor-show-page-search! false)
+        (state/clear-editor-action!)
         (let [wrapped? (= "[[" (gp-util/safe-subs edit-content (- pos 2) pos))
               chosen (if (string/starts-with? chosen "New page: ") ;; FIXME: What if a page named "New page: XXX"?
                        (subs chosen 10)
@@ -719,7 +739,7 @@
                                            :end-pattern (when wrapped? "]]")
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
-        (state/set-editor-show-page-search! false)
+        (state/clear-editor-action!)
         (let [chosen (if (string/starts-with? chosen "New page: ")
                        (subs chosen 10)
                        chosen)

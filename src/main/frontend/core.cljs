@@ -31,7 +31,7 @@
    "
     Welcome to Logseq!
     If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/logseq)
-    or join our Discord server (https://discord.gg/KpN4eHY).
+    or join our forum (https://discuss.logseq.com).
     .____
     |    |    ____   ____  ______ ____  ______
     |    |   /  _ \\ / ___\\/  ___// __ \\/ ____/

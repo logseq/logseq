@@ -188,7 +188,7 @@
 .block-left-menu {
     background-color: var(--ls-secondary-background-color);
     background: linear-gradient(90deg, var(--ls-primary-background-color) 0%, var(--ls-secondary-background-color) 100%);
-    
+
     .commands-button {
         overflow: hidden;
         max-width: 40px;
@@ -613,7 +613,12 @@ a.cloze-revealed {
 }
 
 .page-property-key {
+  @apply font-medium;
   color: var(--ls-secondary-text-color);
+}
+
+.page-property-key:hover {
+    background-color: var(--ls-selection-background-color);
 }
 
 .block-parents a {

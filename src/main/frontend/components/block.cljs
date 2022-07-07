@@ -421,7 +421,9 @@
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
-     {:class (if tag? "tag" "page-ref")
+     {:class (cond-> (if tag? "tag" "page-ref")
+               (:property? config)
+               (str " page-property-key"))
       :data-ref page-name
       :on-mouse-down
       (fn [e]
@@ -1065,7 +1067,7 @@
 ;;;; Macro component render functions
 (defn- macro-query-cp
   [config arguments]
-  [:div.dsl-query
+  [:div.dsl-query.overflow-x-hidden.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
      (when-not (string/blank? query)
@@ -1805,7 +1807,7 @@
   [config block k v]
   (let [date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:span.page-property-key.font-medium (name k)]
+     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
      [:span.mr-1 ":"]
      (cond
        (int? v)
@@ -1894,12 +1896,12 @@
                            (do
                              (reset! show? false)
                              (reset! commands/*current-command nil)
-                             (state/set-editor-show-date-picker! false)
+                             (state/clear-editor-action!)
                              (state/set-timestamp-block! nil))
                            (do
                              (reset! show? true)
                              (reset! commands/*current-command typ)
-                             (state/set-editor-show-date-picker! true)
+                             (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ
                                                           :show? show?}))))}
@@ -1923,7 +1925,8 @@
    (util/details-or-summary? target)
    (and (util/sup? target)
         (dom/has-class? target "fn"))
-   (dom/has-class? target "image-resize")))
+   (dom/has-class? target "image-resize")
+   (dom/closest target "a")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
@@ -2057,7 +2060,7 @@
 
      [:<>
       [:div.flex.flex-row.justify-between.block-content-inner
-       [:div.flex-1
+       [:div.flex-1.w-full
         (cond
           (seq title)
           (build-block-title config block)
@@ -2168,7 +2171,10 @@
             (ui/block-error "Block Render Error:"
                             {:content (:block/content block)
                              :section-attrs
-                             {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+                             {:on-click #(do
+                                           (editor-handler/clear-selection!)
+                                           (editor-handler/unhighlight-blocks!)
+                                           (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
@@ -2551,10 +2557,7 @@
         custom-query? (boolean (:custom-query? config))]
     (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn []
-         (block-container-inner state repo config block))
-       nil
-       {})
+       (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2892,9 +2895,7 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q))
-    nil
-    {})))
+    (fn [] (custom-query* config q)))))
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
