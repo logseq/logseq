@@ -49,18 +49,18 @@ export function LandingFooterDesc () {
       {/*  descriptions */}
       <div className="cards flex">
         {[
-          [<GithubLogo size={34}/>, 'Open source', 'Free forever for personal use'],
-          [<Keyhole size={34}/>, 'Privacy first', 'You own your data locally forever'],
-          [<DeviceMobile size={34}/>, 'Mobile apps', 'Available for iOS & Android'],
-          [<FileText size={34}/>, 'Markdown files', 'Open your notes in other tools'],
-          [<HandWaving size={34}/>, 'Strong community', (
+          [<GithubLogo size={34} weight={'duotone'}/>, 'Open source', 'Free forever for personal use'],
+          [<Keyhole size={34} weight={'duotone'}/>, 'Privacy first', 'You own your data locally forever'],
+          [<DeviceMobile weight={'duotone'} size={34}/>, 'Mobile apps', 'Available for iOS & Android'],
+          [<FileText size={34} weight={'duotone'}/>, 'Markdown files', 'Open your notes in other tools'],
+          [<HandWaving size={34} weight={'duotone'}/>, 'Strong community', (
             <span className="flex space-x-2 items-center">
               <i className="w-[6px] h-[6px] bg-green-600 rounded-2xl"></i>
               <span className="opacity-50">1,000 users online currently</span>
             </span>)],
-          [<Globe size={34}/>, 'Localization', 'Translated in many languages'],
-          [<PuzzlePiece size={34}/>, '250+ Plugins', 'Extend functionality to your needs'],
-          [<Swatches size={34}/>, '70+ Themes', 'Customize look and feel'],
+          [<Globe size={34} weight={'duotone'}/>, 'Localization', 'Translated in many languages'],
+          [<PuzzlePiece size={34} weight={'duotone'}/>, '250+ Plugins', 'Extend functionality to your needs'],
+          [<Swatches size={34} weight={'duotone'}/>, '70+ Themes', 'Customize look and feel'],
         ].map(([icon, title, desc]) => {
           if (typeof desc === 'string') {
             desc = (<span className="opacity-50">{desc}</span>)
@@ -105,7 +105,7 @@ export function LandingFooterDesc () {
           </WrapGlobalDownloadButton>
 
           <LSButton
-            leftIcon={<Play size={18} weight={'bold'}/>}
+            leftIcon={<Play size={18} weight={'duotone'}/>}
             rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
             className={'bg-logseq-600'}
           >
@@ -135,17 +135,19 @@ export function LandingFooterNav () {
         </div>
       </div>
 
-      <div className="flex space-x-6">
+      <div className="flex space-x-4">
         <FloatGlassButton
           href="https://github.com/logseq/logseq"
+          className={'!px-3'}
         >
-          <GithubLogo size={20}/>
+          <GithubLogo size={26} weight={'duotone'}/>
         </FloatGlassButton>
 
         <FloatGlassButton
           href="https://twitter.com/logseq"
+          className={'!px-3'}
         >
-          <TwitterLogo size={20}/>
+          <TwitterLogo size={26} weight={'duotone'}/>
         </FloatGlassButton>
 
         <LSButton

@@ -120,7 +120,7 @@ export function HeadShowcase () {
             </WrapGlobalDownloadButton>
 
             <LSButton
-              leftIcon={<Play size={18} weight={'bold'}/>}
+              leftIcon={<Play size={18} weight={'duotone'}/>}
               rightIcon={<ArrowSquareOut size={18} className={'opacity-70'}/>}
               className={'bg-logseq-600'}
             >

@@ -89,7 +89,7 @@ export function DailyShowcase () {
                 <span> turn this daily <br/>mess into structured information.</span>
               </h2>
 
-              <h1 className={cx("text-6xl invisible", t[1] && 'ani-slide-in-from-bottom')}>
+              <h1 className={cx("text-6xl py-3 invisible", t[1] && 'ani-slide-in-from-bottom')}>
                 <strong>Gain clarity</strong>
                 <span className="opacity-60"> in your everyday life:</span>
               </h1>
@@ -110,7 +110,7 @@ export function DailyShowcase () {
               <span className="icon">
                 <img src={it.iconUrl as any} alt={it.label}/>
               </span>
-              <strong className="pt-2 font-normal text-lg opacity-60 tracking-wide">
+              <strong className="pt-2.5 font-normal text-[20px] opacity-60 tracking-wide">
                 {it.label}
               </strong>
             </div>

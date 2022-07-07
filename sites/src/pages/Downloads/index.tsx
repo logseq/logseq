@@ -93,11 +93,11 @@ const GooglePlayIcon = (props: any) => {
 }
 
 const releases = [
-  ['MacOS', (props = {}) => <AppleLogo {...props}/>],
-  ['Windows', (props = {}) => <WindowsLogo {...props}/>],
-  ['Linux', (props = {}) => <LinuxLogo {...props}/>],
-  ['iOS', (props = {}) => <AppStoreLogo {...props}/>],
-  ['Android', (props = {}) => <GooglePlayLogo {...props}/>],
+  ['MacOS', (props = {}) => <AppleLogo {...props} weight={'duotone'}/>],
+  ['Windows', (props = {}) => <WindowsLogo {...props} weight={'duotone'}/>],
+  ['Linux', (props = {}) => <LinuxLogo {...props} weight={'duotone'}/>],
+  ['iOS', (props = {}) => <AppStoreLogo {...props} weight={'duotone'}/>],
+  ['Android', (props = {}) => <GooglePlayLogo {...props} weight={'duotone'}/>],
 ]
 
 export function WrapGlobalDownloadButton (
@@ -134,7 +134,7 @@ export function WrapGlobalDownloadButton (
   const rightIconFn = isMacOS ? (
     (props: any = {}) => <CaretDown className={'ml-1 opacity-60'} {...props}/>
   ) : (isIOS ? (
-    (props: any = {}) => <QrCode className={'ml-1 opacity-60'} {...props}/>
+    (props: any = {}) => <QrCode weight={'duotone'} className={'ml-1 opacity-60'} {...props}/>
   ) : null)
 
   useEffect(() => {
