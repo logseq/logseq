@@ -2758,8 +2758,14 @@
                          (= key-code 0)))
               [(.charCodeAt value (dec current-pos))
                c
-               (if (= c " ")
+               (cond
+                 (= c " ")
                  "Space"
+
+                 (parse-long c)
+                 (str "Digit" c)
+                 
+                 :else
                  (str "Key" (string/upper-case c)))
                false]
               [key-code
@@ -2773,6 +2779,7 @@
             blank-selected? (string/blank? (util/get-selected-text))
             non-enter-processed? (and is-processed? ;; #3251
                                       (not= code keycode/enter-code))] ;; #3459
+        (prn :k k :code code :keycode key-code)
         (when-not (or (state/get-editor-show-input) non-enter-processed?)
           (cond
             (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
@@ -2846,7 +2853,7 @@
             (let [matched-block-commands (get-matched-block-commands input)]
               (if (seq matched-block-commands)
                 (cond
-                  (= key-code 9)       ;tab
+                  (= key-code 9)        ;tab
                   (when @*show-block-commands
                     (util/stop e)
                     (insert-command! input-id
