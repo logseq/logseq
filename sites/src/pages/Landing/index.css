@@ -421,7 +421,7 @@
 }
 
 .app-daily-showcase {
-  @apply min-h-screen -mt-2 relative;
+  @apply -mt-2 relative mb-10;
 
   z-index: 3;
 
@@ -443,12 +443,57 @@
   }
 
   > .panels {
+    @apply px-5;
+
     .desc {
       opacity: .8;
       height: 140px;
 
       > span {
         @apply opacity-60;
+      }
+    }
+
+    .card {
+      @apply pt-10 pb-20;
+
+      > .l {
+        @apply flex flex-1 border rounded-xl border-logseq-500 overflow-hidden;
+      }
+
+      > .r {
+        @apply pl-6 flex;
+
+        width: 500px;
+
+        > .inner {
+          @apply border p-6 w-full rounded-xl border-gray-700/80 bg-logseq-800/10
+          flex flex-col justify-between;
+
+          > .t {
+          }
+
+          > .b {
+            font-size: 26px;
+
+            -webkit-font-smoothing: antialiased;
+
+            > .fd {
+              line-height: 35px;
+              padding-bottom: 12px;
+
+              span {
+                @apply opacity-60;
+              }
+            }
+
+            > .ft {
+              @apply flex justify-between pt-3 pb-2;
+
+              font-size: 18px;
+            }
+          }
+        }
       }
     }
   }

@@ -192,8 +192,11 @@ export function TutorialTips () {
           </div>
 
           <FloatGlassButton className="absolute right-6 bottom-5">
-            <FrameCorners className={'opacity-80 font-bold cursor-pointer'}
-                          size={28}/>
+            <FrameCorners
+              className={'font-bold cursor-pointer'}
+              size={26}
+              weight={'duotone'}
+            />
           </FloatGlassButton>
         </div>
       </div>

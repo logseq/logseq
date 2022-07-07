@@ -36,8 +36,11 @@ export function TutorialFeaturesSlide () {
           </div>
           <div className="ft absolute bottom-6 right-6">
             <FloatGlassButton>
-              <FrameCorners className={'opacity-80 font-bold cursor-pointer'}
-                            size={28}/>
+              <FrameCorners
+                className={'font-bold cursor-pointer'}
+                size={26}
+                weight={'duotone'}
+              />
             </FloatGlassButton>
           </div>
         </article>

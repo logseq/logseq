@@ -49,7 +49,7 @@ body {
 }
 
 .glass-btn {
-  @apply backdrop-blur-sm bg-logseq-500/20 px-3 py-2 rounded-md border border-gray-700/20
+  @apply backdrop-blur-sm bg-logseq-500/20 px-2 py-2 rounded-md border border-gray-500/30
   select-none active:opacity-70 cursor-pointer hover:border-gray-500/50 flex justify-center items-center;
 }
 

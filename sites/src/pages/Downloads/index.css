@@ -109,7 +109,7 @@
 
   &.is-super-button {
     .sub-items {
-      top: 40px;
+      top: 36px;
       right: unset !important;
       left: 0;
       width: 280px;

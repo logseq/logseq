@@ -34,11 +34,11 @@ export function FooterDescCard (props: any) {
 export function LandingFooterDesc () {
   return (
     <div className="app-landing-footer-desc">
-      <h1 className="text-5xl text-center py-4 block">
+      <h1 className="text-6xl text-center py-4 block">
         <strong className="font-semibold">A safe space for </strong>
         <span className="text-gray-400/60">your thoughts.</span></h1>
 
-      <h2 className="text-[22px] px-72 text-center">
+      <h2 className="text-[24px] px-60 text-center">
         <span className="text-gray-400/60">Designed to store your </span>
         <strong className="font-normal">interests, questions, ideas, favorite quotes,
           reminders, reading and meeting
