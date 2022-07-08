@@ -18,6 +18,7 @@ test('favorite item and recent item test', async ({ page }) => {
   const another_page_name = await createRandomPage(page)
   expect(await page.innerText(':nth-match(.favorite-item a, 1)')).toBe(fav_page_name)
   await page.click(":nth-match(.favorite-item, 1)")
+  await page.waitForTimeout(100)
   expect(await page.innerText('.page-title .title')).toBe(fav_page_name)
 
   expect(await page.innerText(':nth-match(.recent-item a, 1)')).toBe(fav_page_name)
@@ -44,11 +45,13 @@ test('recent is updated #4320', async ({ page }) => {
   const firstRecent = page.locator('.nav-content-item.recent li >> nth=0')
   expect(await firstRecent.textContent()).toContain(page2)
 
+  await page.waitForTimeout(100)
   const secondRecent = page.locator('.nav-content-item.recent li >> nth=1')
   expect(await secondRecent.textContent()).toContain(page1)
 
   // then jump back
   await searchAndJumpToPage(page, page1)
+  await page.waitForTimeout(100)
   expect(await firstRecent.textContent()).toContain(page1)
   expect(await secondRecent.textContent()).toContain(page2)
 })
