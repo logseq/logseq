@@ -284,14 +284,6 @@
       (string/join "/" (drop 2 parts))
       path)))
 
-(defn- encode-filepath
-  [filepath]
-  (->> (string/split filepath "/")
-       (remove empty?)
-       (map js/encodeURIComponent)
-       (string/join "/")))
-
-
 (defprotocol IRelativePath
   (-relative-path [this]))
 
