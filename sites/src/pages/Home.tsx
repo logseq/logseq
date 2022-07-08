@@ -11,13 +11,13 @@ import cx from 'classnames'
 import { DailyShowcase } from './Landing/DailyShowcase'
 
 export function HomePage () {
-  useEffect(() => {
-    setTimeout(() => {
-      // @ts-ignore
-      particlesJS.load('particles-bg', './particlesjs-config.json', () => {
-      })
-    }, 1000)
-  }, [])
+  // useEffect(() => {
+  //   setTimeout(() => {
+  //     // @ts-ignore
+  //     particlesJS.load('particles-bg', './particlesjs-config.json', () => {
+  //     })
+  //   }, 1000)
+  // }, [])
 
   return (
     <main className={'app-page min-h-screen'}>
@@ -72,15 +72,17 @@ export function HomePage () {
 
       <div className="page-inner-full-wrap b relative">
         {/* particles background */}
-        <div id="particles-bg" className="particles-bg"></div>
+        {/*<div id="particles-bg" className="particles-bg"></div>*/}
 
-        <div className="page-inner">
+        <div className="page-inner footer-desc">
           <LandingFooterDesc/>
         </div>
-      </div>
 
-      <div className="page-inner">
-        <LandingFooterNav/>
+        <div className="page-inner footer-nav">
+          <div className="page-inner">
+            <LandingFooterNav/>
+          </div>
+        </div>
       </div>
     </main>
   )

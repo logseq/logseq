@@ -4,6 +4,24 @@
   &-full-wrap {
     @apply w-full;
   }
+
+  &.footer-desc {
+    max-width: 1440px;
+
+    background-image: url("./assets/light_spots_full_bg.png");
+    background-repeat: no-repeat;
+    background-size: 100%;
+    background-position-x: 0;
+    background-position-y: -100px;
+  }
+
+  &.footer-nav {
+    @apply flex justify-center;
+
+    max-width: unset !important;
+    width: 100%;
+    background-color: #011b22;
+  }
 }
 
 .app-head-showcase {
@@ -354,7 +372,7 @@
     @apply -translate-y-6;
 
     > .cards {
-      @apply flex-wrap mx-6 my-12;
+      @apply flex-wrap mx-[5.5rem] my-12 translate-y-5;
 
       > .item {
         @apply basis-1/4;
@@ -366,12 +384,12 @@
     }
 
     > .actions {
-      @apply bg-logseq-400/70 rounded-3xl mx-10 my-16 flex flex-col items-center py-16;
+      @apply rounded-3xl mx-10 mt-24 flex flex-col items-center py-16;
     }
   }
 
   &-navs {
-    @apply flex justify-between mt-6 mb-14 pl-5 pr-12 items-center;
+    @apply flex justify-between pt-6 pb-14 pl-5 pr-12 items-center;
   }
 }
 
@@ -379,7 +397,7 @@
   @apply flex flex-col items-center;
 
   .page-inner-full-wrap {
-    @apply flex items-center justify-center;
+    @apply flex items-center justify-center flex-col;
 
     &.a {
       @apply bg-[#001419] relative;
@@ -416,6 +434,10 @@
         z-index: 1;
         background-position: bottom;
       }
+    }
+
+    &.b {
+      background-image: url("./assets/light_spots_bg.png");
     }
   }
 }

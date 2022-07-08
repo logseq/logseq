@@ -399,14 +399,6 @@ export function HeadDownloadLinks () {
 }
 
 export function DownloadsPage () {
-  useEffect(() => {
-    setTimeout(() => {
-      // @ts-ignore
-      particlesJS.load('particles-bg', './particlesjs-config.json', () => {
-      })
-    }, 1000)
-  }, [])
-
   return (
     <div className="app-page">
       <div className="page-inner-full-wrap dl-a">
@@ -417,15 +409,17 @@ export function DownloadsPage () {
 
       <div className="page-inner-full-wrap b relative">
         {/* particles background */}
-        <div id="particles-bg" className="particles-bg"></div>
+        {/*<div id="particles-bg" className="particles-bg"></div>*/}
 
-        <div className="page-inner pt-32">
+        <div className="page-inner footer-desc">
           <LandingFooterDesc/>
         </div>
-      </div>
 
-      <div className="page-inner pt-0">
-        <LandingFooterNav/>
+        <div className="page-inner footer-nav">
+          <div className="page-inner">
+            <LandingFooterNav/>
+          </div>
+        </div>
       </div>
     </div>
   )
