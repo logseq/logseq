@@ -1954,10 +1954,12 @@
 
                    :else
                    true)]
+    (when editing-block
+      (outliner-tx/transact!
+       {:outliner-op :save-block}
+       (outliner-core/save-block! target-block)))
     (outliner-tx/transact!
       {:outliner-op :insert-blocks}
-      (when editing-block
-        (outliner-core/save-block! editing-block))
       (when target-block
         (let [format (or (:block/format target-block) (state/get-preferred-format))
               blocks' (map (fn [block]
