@@ -180,7 +180,7 @@ test('copy & paste block ref and replace its content', async ({ page, block }) =
     }
 })
 
-test.only('copy and paste block after editing new block', async ({ page, block }) => {
+test('copy and paste block after editing new block', async ({ page, block }) => {
   await createRandomPage(page)
 
   // Create a block and copy it in block-select mode
