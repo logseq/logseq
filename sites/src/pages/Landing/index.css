@@ -11,12 +11,11 @@
     background-image: url("./assets/light_spots_full_bg.png");
     background-repeat: no-repeat;
     background-size: 100%;
-    background-position-x: 0;
-    background-position-y: -100px;
+    background-position-y: bottom;
   }
 
   &.footer-nav {
-    @apply flex justify-center;
+    @apply flex justify-center pt-16;
 
     max-width: unset !important;
     width: 100%;
