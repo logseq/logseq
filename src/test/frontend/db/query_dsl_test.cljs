@@ -394,7 +394,7 @@ tags: other
                 (dsl-query "(or [[tag2]] [[page 3]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (is (= ["foo:: bar\n" "b1 [[page 1]] #tag2" "b3"]
+    (is (= ["b1 [[page 1]] #tag2" "foo:: bar\n" "b3"]
            (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
                 (filter #(= "page1" (get-in % [:block/page :block/name])))

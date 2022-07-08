@@ -12,9 +12,9 @@
 (defn help
   []
   [:div.help.cp__sidebar-help-docs
-   (let [discord-with-icon [:div.flex-row.inline-flex.items-center
-                            [:span.mr-1 (t :help/community)]
-                            (ui/icon "brand-discord" {:style {:font-size 20}})]
+   (let [discourse-with-icon [:div.flex-row.inline-flex.items-center
+                            [:span.mr-1 (t :help/forum-community)]
+                            (ui/icon "message-circle" {:style {:font-size 20}})]
          list
          [{:title "Usage"
            :children [[[:a
@@ -29,7 +29,7 @@
           {:title "Community"
            :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
                       [(t :help/blog) "https://blog.logseq.com"]
-                      [discord-with-icon "https://discord.gg/KpN4eHY"]]}
+                      [discourse-with-icon "https://discuss.logseq.com"]]}
 
           {:title "Development"
            :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
