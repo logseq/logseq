@@ -63,6 +63,12 @@
          (content/content block-id
                           {:hiccup ref-hiccup})]))))
 
+(defn- scheduled-or-deadlines?
+  [page-name]
+  (and (date/valid-journal-title? (string/capitalize page-name))
+       (not (true? (state/scheduled-deadlines-disabled?)))
+       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
@@ -82,10 +88,7 @@
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
-          journal? (date/valid-journal-title? (string/capitalize page-name))
-          scheduled-or-deadlines (when (and journal?
-                                            (not (true? (state/scheduled-deadlines-disabled?)))
-                                            (= page-name (string/lower-case (date/journal-name))))
+          scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
@@ -165,7 +168,8 @@
 (rum/defc references < rum/reactive db-mixins/query
   [page-name]
   (let [refed-blocks-ids (when page-name (model-db/get-referenced-blocks-ids page-name))]
-    (when (seq refed-blocks-ids)
+    (when (or (seq refed-blocks-ids)
+              (scheduled-or-deadlines? page-name))
       (ui/catch-error
        (ui/component-error "Linked References: Unexpected error")
        (ui/lazy-visible
