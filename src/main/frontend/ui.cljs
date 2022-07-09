@@ -932,11 +932,12 @@
            inViewState (useInView #js {:rootMargin "100px"
                                        :onChange (fn [in-view? entry]
                                                    (let [self-top (.-top (.-boundingClientRect entry))
-                                                         in-view? (or in-view? (<= self-top 0))
                                                          time' (util/time-ms)]
                                                      (when (or in-view?
-                                                               (nil? last-changed-time)
-                                                               (> (- time' last-changed-time) 50))
+                                                               (and
+                                                                (nil? last-changed-time)
+                                                                (> (- time' last-changed-time) 50)
+                                                                (<= self-top 0)))
                                                        (set-last-changed-time! time')
                                                        (setHasBeenSeen in-view?))))})
            ref (.-ref inViewState)]

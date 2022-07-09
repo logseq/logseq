@@ -2897,6 +2897,7 @@
    (ui/lazy-visible
     (fn [] (custom-query* config q))
     "custom-query")))
+
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))
