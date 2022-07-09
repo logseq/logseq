@@ -17,6 +17,7 @@
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [promesa.core :as p]
             [goog.object :as gobj]
+            [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [electron.ipc :as ipc]
@@ -28,8 +29,7 @@
             ["react-intersection-observer" :as react-intersection-observer]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
-            [frontend.mobile.util :as mobile-util]
-            [goog.functions :refer [debounce]]))
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -904,7 +904,7 @@
   [state visible? content-fn ref]
   [:div.lazy-visibility
    {:ref ref
-    :style {:min-height 24}}
+    :style {:min-height 88}}
    (if visible?
      (when (fn? content-fn)
        [:div.fade-enter
@@ -925,9 +925,9 @@
   [content-fn]
   (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
         inViewState (useInView #js {:rootMargin "100px"
-                                    :onChange (fn [v entry]
+                                    :onChange (fn [in-view? entry]
                                                 (let [self-top (.-top (.-boundingClientRect entry))
-                                                      v (if v v (if (> self-top 0) false true))]
-                                                  (setHasBeenSeen v)))})
+                                                      in-view? (or in-view? (<= self-top 0))]
+                                                  ((debounce setHasBeenSeen 100) in-view?)))})
         ref (.-ref inViewState)]
     (lazy-visible-inner hasBeenSeen content-fn ref)))
