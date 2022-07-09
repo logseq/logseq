@@ -31,7 +31,7 @@
                    (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
         (if page-block
-          (file/save-tree page-block tree)
+          (file/save-tree! page-block tree)
           (js/console.error (str "can't find page id: " page-db-id)))))))
 
 (defn write-files!

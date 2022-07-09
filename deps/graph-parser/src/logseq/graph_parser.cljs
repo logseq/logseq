@@ -23,35 +23,41 @@
                       :as options}]
   (db-set-file-content! conn file content)
   (let [format (gp-util/get-format file)
-        file-content [{:file/path file}]
-        {:keys [tx ast]}
-        (if (contains? gp-config/mldoc-support-formats format)
-             (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
-                                            :date-formatter "MMM do, yyyy"
-                                            :supported-formats (gp-config/supported-formats)}
-                                           extract-options
-                                           {:db @conn})
-                   {:keys [pages blocks ast]}
-                   (extract/extract file content extract-options')
-                   delete-blocks (delete-blocks-fn (first pages) file)
-                   block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-                   block-refs-ids (->> (mapcat :block/refs blocks)
-                                       (filter (fn [ref] (and (vector? ref)
-                                                              (= :block/uuid (first ref)))))
-                                       (map (fn [ref] {:block/uuid (second ref)}))
-                                       (seq))
-                   ;; To prevent "unique constraint" on datascript
-                   block-ids (set/union (set block-ids) (set block-refs-ids))
-                   pages (extract/with-ref-pages pages blocks)
-                   pages-index (map #(select-keys % [:block/name]) pages)]
-               ;; does order matter?
-               {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
-                :ast ast})
-             {:tx file-content})
-        tx (concat tx [(cond-> {:file/path file}
-                               new?
-                               ;; TODO: use file system timestamp?
-                               (assoc :file/created-at (date-time-util/time-ms)))])]
+        file-content [(cond-> {:file/path file}
+                        new?
+                        ;; TODO: use file system timestamp?
+                        (assoc :file/created-at (date-time-util/time-ms)))]
+        extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+                                 :date-formatter "MMM do, yyyy"
+                                 :supported-formats (gp-config/supported-formats)}
+                                extract-options
+                                {:db @conn})
+        {:keys [pages blocks ast]
+         :or   {pages []
+                blocks []
+                ast []}}
+        (cond (contains? gp-config/mldoc-support-formats format)
+              (extract/extract file content extract-options')
+
+              ;; File can be saved as plain edn (mostly, the whiteboard files)
+              (= format :edn)
+              (gp-util/safe-read-string content)
+
+              :else nil)
+
+        delete-blocks (delete-blocks-fn (first pages) file)
+        block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
+        block-refs-ids (->> (mapcat :block/refs blocks)
+                            (filter (fn [ref] (and (vector? ref)
+                                                   (= :block/uuid (first ref)))))
+                            (map (fn [ref] {:block/uuid (second ref)}))
+                            (seq))
+        ;; To prevent "unique constraint" on datascript
+        block-ids (set/union (set block-ids) (set block-refs-ids))
+        pages (extract/with-ref-pages pages blocks)
+        pages-index (map #(select-keys % [:block/name]) pages)
+
+        tx (concat file-content pages-index delete-blocks pages block-ids blocks)]
     {:tx
      (d/transact! conn (gp-util/remove-nils tx) (select-keys options [:new-graph? :from-disk?]))
      :ast ast}))

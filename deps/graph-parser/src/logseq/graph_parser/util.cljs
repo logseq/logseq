@@ -2,7 +2,9 @@
   "Util fns shared between graph-parser and rest of app. Util fns only rely on
   clojure standard libraries."
   (:require [clojure.walk :as walk]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.graph-parser.log :as log]
+            [clojure.reader :as reader]))
 
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
@@ -153,3 +155,11 @@
   [file]
   (when file
     (normalize-format (keyword (string/lower-case (last (string/split file #"\.")))))))
+
+(defn safe-read-string
+  [content]
+  (try
+    (reader/read-string content)
+    (catch :default e
+      (log/error :parse/read-string-failed e)
+      {})))

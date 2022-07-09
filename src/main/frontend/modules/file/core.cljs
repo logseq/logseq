@@ -153,7 +153,7 @@
         files [[file-path new-content]]]
     (push-to-write-chan files)))
 
-(defn save-tree
+(defn save-tree!
   [page-block tree]
   {:pre [(map? page-block)]}
   (let [ok-handler #(save-tree-aux! page-block tree)
