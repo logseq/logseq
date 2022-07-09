@@ -925,18 +925,19 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn _debug-id]
-   (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
-        [last-changed-time set-last-changed-time!] (rum/use-state nil)
-        inViewState (useInView #js {:rootMargin "100px"
-                                    :onChange (fn [in-view? entry]
-                                                (let [self-top (.-top (.-boundingClientRect entry))
-                                                      in-view? (or in-view? (<= self-top 0))
-                                                      time' (util/time-ms)]
-                                                  (when (or in-view?
-                                                            (nil? last-changed-time)
-                                                            (> (- time' last-changed-time) 50))
-                                                    (set-last-changed-time! time')
-                                                    (setHasBeenSeen in-view?))))})
-        ref (.-ref inViewState)]
-    (lazy-visible-inner hasBeenSeen content-fn ref)))
-  )
+   (if (or (util/mobile?) (mobile-util/native-platform?))
+     (content-fn)
+     (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
+           [last-changed-time set-last-changed-time!] (rum/use-state nil)
+           inViewState (useInView #js {:rootMargin "100px"
+                                       :onChange (fn [in-view? entry]
+                                                   (let [self-top (.-top (.-boundingClientRect entry))
+                                                         in-view? (or in-view? (<= self-top 0))
+                                                         time' (util/time-ms)]
+                                                     (when (or in-view?
+                                                               (nil? last-changed-time)
+                                                               (> (- time' last-changed-time) 50))
+                                                       (set-last-changed-time! time')
+                                                       (setHasBeenSeen in-view?))))})
+           ref (.-ref inViewState)]
+       (lazy-visible-inner hasBeenSeen content-fn ref)))))
