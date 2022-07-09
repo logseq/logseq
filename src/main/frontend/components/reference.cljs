@@ -70,12 +70,11 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name]
+  [state page-name refed-blocks-ids]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
           threshold (state/get-linked-references-collapsed-threshold)
-          refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
           n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
           default-collapsed? (>= (count refed-blocks-ids) threshold)
@@ -163,13 +162,16 @@
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
 
-(rum/defc references
+(rum/defc references < rum/reactive db-mixins/query
   [page-name]
-  (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error")
-   (ui/lazy-visible
-    (fn []
-      (references* page-name)))))
+  (let [refed-blocks-ids (when page-name (model-db/get-referenced-blocks-ids page-name))]
+    (when (seq refed-blocks-ids)
+      (ui/catch-error
+       (ui/component-error "Linked References: Unexpected error")
+       (ui/lazy-visible
+        (fn []
+          (references* page-name refed-blocks-ids))
+        (str "ref-" page-name))))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
