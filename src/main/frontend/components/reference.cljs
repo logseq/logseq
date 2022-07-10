@@ -125,7 +125,7 @@
                 :on-mouse-down (fn [e] (util/stop-propagation e))
                 :on-click (fn []
                             (let [ref-blocks (if block-id
-                                               (db/get-block-referenced-blocks block-id)
+                                               (db/get-block-referenced-blocks block-id true)
                                                (db/get-page-referenced-blocks page-name true))
                                   ;; ref-pages (map (comp :block/original-name first) ref-blocks)
                                   references (db/get-page-linked-refs-refed-pages repo page-name)
@@ -135,7 +135,6 @@
                                   references (into (sorted-map-by (fn [key1 key2] (let [numerical-sort (compare (get references key2)
                                                                                                                 (get references key1))]
                                                                                     (if (= numerical-sort 0) (compare (string/lower-case key1) (string/lower-case key2)) numerical-sort)))) references)]
-
                               (state/set-modal! (filter-dialog filters-atom references page-name)
                                                 {:center? true})))}
                (ui/icon "filter" {:class (cond

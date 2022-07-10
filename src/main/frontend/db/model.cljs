@@ -1251,23 +1251,25 @@
 ;; TODO: Replace recursive queries with datoms index implementation
 ;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
-  [block-uuid]
-  (when-let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (let [block (db-utils/entity [:block/uuid block-uuid])]
-        (->> (react/q repo [:frontend.db.react/page<-blocks-or-block<-blocks
-                            (:db/id block)]
-                      {:use-cache? false}
-                      '[:find [(pull ?ref-block ?block-attrs) ...]
-                        :in $ ?block-uuid ?block-attrs
-                        :where
-                        [?block :block/uuid ?block-uuid]
-                        [?ref-block :block/refs ?block]]
-                      block-uuid
-                      block-attrs)
-             react
-             (sort-by-left-recursive)
-             db-utils/group-by-page)))))
+  ([block-uuid & filter]
+   (when-let [repo (state/get-current-repo)]
+     (when (conn/get-db repo)
+       (let [block (db-utils/entity [:block/uuid block-uuid])
+             query-result (->> (react/q repo [:frontend.db.react/page<-blocks-or-block<-blocks
+                                              (:db/id block)]
+                                        {:use-cache? false}
+                                        '[:find [(pull ?ref-block ?block-attrs) ...]
+                                          :in $ ?block-uuid ?block-attrs
+                                          :where
+                                          [?block :block/uuid ?block-uuid]
+                                          [?ref-block :block/refs ?block]]
+                                        block-uuid
+                                        block-attrs)
+                               react
+                               (sort-by-left-recursive))]
+         (if filter
+           (map (comp :block/original-name :block/page) query-result)
+           (db-utils/group-by-page query-result)))))))
 
 (defn get-block-referenced-blocks-ids
   [block-uuid]
