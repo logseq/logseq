@@ -5,10 +5,11 @@
             [frontend.components.editor :as editor]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as model-db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as model-db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -20,19 +21,21 @@
         filtered-references (filter (fn [ref]
                                       (if (string/includes? (util/page-name-sanity-lc (ref 0)) (util/page-name-sanity-lc @filter-search)) true false))
                                     references)]
+    (println filtered-references)
+    ;; (println (search/fuzzy-search references (util/page-name-sanity-lc filter-search) :limit 20))
     [:div.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:style {:fontSize 20}})]
-      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
-       [:input.bg-white.w-full
-        {:placeholder "Search in filters"
-         :auto-focus true
-         :on-change (fn [e]
-                      (reset! filter-search (util/evalue e)))}]
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
+     [:div.cp__filters-input-panel.flex (ui/icon "search") [:input.cp__filters-input.w-full
+            {:placeholder "Search in filters"
+             :auto-focus true
+             :on-change (fn [e]
+                          (reset! filter-search (util/evalue e)))}]]
      (when (seq filtered-references)
        (let [filters (rum/react filters-atom)]
          [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
@@ -43,7 +46,7 @@
                           true "text-green-400"
                           false "text-red-400"
                           nil)]
-              [:button.border.rounded.px-1.mb-1.mr-1 {:key (reference 0) :class color :style {:border-color "currentColor"}
+              [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key (reference 0) :class color :style {:border-color "currentColor"}
                                                       :on-click (fn [e]
                                                                   (swap! filters-atom #(if (nil? (get filters lc-reference))
                                                                                          (assoc % lc-reference (not (.-shiftKey e)))
