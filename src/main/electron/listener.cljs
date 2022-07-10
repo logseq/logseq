@@ -15,6 +15,7 @@
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
+            [frontend.util.url :as url-util]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user]))
@@ -149,6 +150,24 @@
                            (editor-handler/api-insert-new-block! content {:page page
                                                                           :edit-block? false
                                                                           :replace-empty-target? true})))))
+
+  (js/window.apis.on "handleGetCurrentURL"
+                     (fn [args]
+                       (let [{:keys  [x-success x-error?]} (bean/->clj args)
+                             repo (state/get-current-repo)
+                             ;; may reuse the following logic for other api services
+                             edit-block-id   (some-> (state/get-edit-block) (:block/uuid))
+                             select-block-id (first (state/get-selection-block-ids))
+                             cur-page-id     (some-> (state/get-current-page) (db-model/get-page) (:block/uuid))
+                             uuid            (or edit-block-id select-block-id cur-page-id)
+
+                             url     (when uuid
+                                       (url-util/encode-param (url-util/get-logseq-graph-uuid-url nil repo uuid)))
+                             target  (if (and x-error? (nil? url))
+                                       x-error?
+                                       (str x-success url))]
+                         (js/setTimeout #(js/window.open target) 100) ;; Magic, don't remove the timeout, even 1ms works. Why?
+                         )))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage

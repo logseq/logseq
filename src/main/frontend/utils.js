@@ -276,6 +276,7 @@ export const writeClipboard = ({text, html}) => {
             }
             promise_written = navigator.clipboard.write(data)
         } else {
+            // mainly for E2E environment on Github CI @ Ubuntu
             console.debug("Degraded copy without `ClipboardItem` support:", text)
             promise_written = navigator.clipboard.writeText(text)
         }

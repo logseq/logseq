@@ -68,6 +68,11 @@
                                                   :title title
                                                   :content content} win))
 
+      (= action "/getCurrentURL")
+      (let [[x-success x-error] (get-URL-decoded-params parsed-url ["x-success" "x-error"])]
+        (send-to-focused-renderer "handleGetCurrentURL" {:x-success x-success
+                                                         :x-error?   x-error} win))
+
       :else
       (send-to-focused-renderer "notification" {:type "error"
                                                 :payload (str "Unimplemented x-callback-url action: `"
