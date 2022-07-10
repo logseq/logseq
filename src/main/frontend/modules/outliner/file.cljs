@@ -22,10 +22,7 @@
   (empty? @write-chan-batch-buf))
 
 (def blocks-pull-keys-with-persisted-ids
-  '[:block/uuid
-    :block/format
-    :block/content
-    :block/unordered
+  '[*
     {:block/page      [:block/name :block/uuid]}
     {:block/left      [:block/name :block/uuid]}
     {:block/parent    [:block/name :block/uuid]}

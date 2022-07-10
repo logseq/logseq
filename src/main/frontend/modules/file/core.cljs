@@ -142,13 +142,16 @@
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
 
+(defn- remove-db-id [block] (dissoc block :db/id))
+
 (defn save-tree-aux!
   [page-block tree]
   (let [page-block (db/pull '[* {:block/file [:file/path]}] (:db/id page-block))
         file-path (get-in page-block [:block/file :file/path])
         edn? (string/ends-with? file-path ".edn")
         new-content (if edn?
-                      (util/pp-str {:blocks tree :pages (list page-block)})
+                      (util/pp-str {:blocks (map remove-db-id tree)
+                                    :pages (list (remove-db-id page-block))})
                       (tree->file-content tree {:init-level init-level}))
         _ (assert (string? file-path) "File path should satisfy string?")
         ;; FIXME: name conflicts between multiple graphs
