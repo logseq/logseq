@@ -21,18 +21,31 @@
   []
   (empty? @write-chan-batch-buf))
 
+(def blocks-pull-keys-with-persisted-ids
+  '[:block/uuid
+    :block/format
+    :block/content
+    :block/unordered
+    {:block/page      [:block/name :block/uuid]}
+    {:block/left      [:block/name :block/uuid]}
+    {:block/parent    [:block/name :block/uuid]}
+    {:block/path-refs [:block/name :block/uuid]}])
+
 (defn do-write-file!
   [repo page-db-id]
-  (let [page-block (db/pull repo '[*] page-db-id)
-        page-db-id (:db/id page-block)
-        blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
+  (let [page-block (db/pull repo '[* {:block/file [:file/path]}] page-db-id)
+        file-path (get-in page-block [:block/file :file/path])
+        edn? (string/ends-with? file-path ".edn")
+        blocks (model/get-page-blocks-no-cache repo (:block/name page-block)
+                                               {:pull-keys (if edn? blocks-pull-keys-with-persisted-ids '[*])})]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
-      (let [tree (tree/blocks->vec-tree repo blocks (:block/name page-block))]
-        (if page-block
-          (file/save-tree! page-block tree)
-          (js/console.error (str "can't find page id: " page-db-id)))))))
+      (if page-block
+        (file/save-tree! page-block (if edn?
+                                      blocks
+                                      (tree/blocks->vec-tree repo blocks (:block/name page-block))))
+        (js/console.error (str "can't find page id: " page-db-id))))))
 
 (defn write-files!
   [pages]

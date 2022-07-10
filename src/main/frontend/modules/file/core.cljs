@@ -144,10 +144,12 @@
 
 (defn save-tree-aux!
   [page-block tree]
-  (let [page-block (db/pull (:db/id page-block))
-        new-content (tree->file-content tree {:init-level init-level})
-        file-db-id (-> page-block :block/file :db/id)
-        file-path (-> (db-utils/entity file-db-id) :file/path)
+  (let [page-block (db/pull '[* {:block/file [:file/path]}] (:db/id page-block))
+        file-path (get-in page-block [:block/file :file/path])
+        edn? (string/ends-with? file-path ".edn")
+        new-content (if edn?
+                      (util/pp-str {:blocks tree :pages (list page-block)})
+                      (tree->file-content tree {:init-level init-level}))
         _ (assert (string? file-path) "File path should satisfy string?")
         ;; FIXME: name conflicts between multiple graphs
         files [[file-path new-content]]]
