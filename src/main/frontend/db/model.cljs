@@ -62,12 +62,12 @@
     (when (conn/get-db repo)
       (->
        (react/q repo [:frontend.db.react/block id] {}
-         '[:find [(pull ?block ?block-attrs) ...]
-           :in $ ?id ?block-attrs
-           :where
-           [?block :block/uuid ?id]]
-         id
-         block-attrs)
+                '[:find [(pull ?block ?block-attrs) ...]
+                  :in $ ?id ?block-attrs
+                  :where
+                  [?block :block/uuid ?id]]
+                id
+                block-attrs)
        react
        first))))
 
@@ -96,7 +96,7 @@
          [?page :block/tags ?e]
          [?e :block/name ?tag]
          [?page :block/name ?page-name]]
-    (conn/get-db repo)))
+       (conn/get-db repo)))
 
 (defn get-all-namespace-relation
   [repo]
@@ -105,7 +105,7 @@
          [?page :block/name ?page-name]
          [?page :block/namespace ?e]
          [?e :block/name ?parent]]
-    (conn/get-db repo)))
+       (conn/get-db repo)))
 
 (defn get-pages
   [repo]
@@ -120,10 +120,10 @@
 (defn get-all-pages
   [repo]
   (d/q
-    '[:find [(pull ?page [*]) ...]
-      :where
-      [?page :block/name]]
-    (conn/get-db repo)))
+   '[:find [(pull ?page [*]) ...]
+     :where
+     [?page :block/name]]
+   (conn/get-db repo)))
 
 (defn get-page-alias
   [repo page-name]
@@ -164,13 +164,13 @@
   [repo]
   (when-let [db (conn/get-db repo)]
     (->> (d/q
-           '[:find ?path
+          '[:find ?path
              ;; ?modified-at
-             :where
-             [?file :file/path ?path]
+            :where
+            [?file :file/path ?path]
              ;; [?file :file/last-modified-at ?modified-at]
-             ]
-           db)
+            ]
+          db)
          (seq)
          ;; (sort-by last)
          (reverse))))
@@ -221,9 +221,9 @@
   (when (and repo path last-modified-at)
     (when-let [conn (conn/get-db repo false)]
       (d/transact! conn
-        [{:file/path path
-          :file/last-modified-at last-modified-at}]
-        {:skip-refresh? true}))))
+                   [{:file/path path
+                     :file/last-modified-at last-modified-at}]
+                   {:skip-refresh? true}))))
 
 (defn get-file-last-modified-at
   [repo path]
@@ -243,10 +243,10 @@
   (when-let [db (conn/get-db repo)]
     (->>
      (d/q
-       '[:find (pull ?file [*])
-         :where
-         [?file :file/path]]
-       db)
+      '[:find (pull ?file [*])
+        :where
+        [?file :file/path]]
+      db)
      (flatten))))
 
 (defn get-file
@@ -450,8 +450,8 @@
       (if-let [parent-sibling (get-by-parent-&-left db
                                                     (:db/id (:block/parent parent))
                                                     (:db/id parent))]
-       parent-sibling
-       (get-next-outdented-block db (:db/id parent))))))
+        parent-sibling
+        (get-next-outdented-block db (:db/id parent))))))
 
 (defn get-block-parent
   ([block-id]
@@ -722,52 +722,52 @@
                             scoped-block-id nil}}]
    (when block-id
      (assert (integer? block-id) (str "wrong block-id: " block-id))
-   (let [entity (db-utils/entity repo-url block-id)
-         page? (some? (:block/name entity))
-         page-entity (if page? entity (:block/page entity))
-         page-id (:db/id page-entity)
-         bare-page-map {:db/id page-id
-                        :block/name (:block/name page-entity)
-                        :block/original-name (:block/original-name page-entity)
-                        :block/journal-day (:block/journal-day page-entity)}
-         query-key (if page?
-                     :frontend.db.react/page-blocks
-                     :frontend.db.react/block-and-children)]
-     (some->
-      (react/q repo-url [query-key block-id]
-        {:use-cache? use-cache?
-         :query-fn (fn [db tx-report result]
-                     (let [tx-data (:tx-data tx-report)
-                           refs (some->> (filter #(= :block/refs (:a %)) tx-data)
-                                         (map :v))
-                           tx-block-ids (distinct (-> (map :e tx-data)
-                                                      (concat refs)))
-                           [tx-id->block cached-id->block] (when (and tx-report result)
-                                                             (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
-                                                                               (remove nil?))]
-                                                               [(zipmap (mapv :db/id blocks) blocks)
-                                                                (zipmap (mapv :db/id @result) @result)]))
-                           limit (if (and result @result)
-                                   (max (+ (count @result) 5) limit)
-                                   limit)
-                           outliner-op (get-in tx-report [:tx-meta :outliner-op])
-                           blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
-                           blocks (or blocks
-                                      (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
-                                                                                                      :include-start? (not page?)
-                                                                                                      :scoped-block-id scoped-block-id}))
-                           block-eids (map :db/id blocks)
-                           blocks (if (and (seq tx-id->block)
-                                           (not (contains? #{:move-blocks} outliner-op)))
-                                    (map (fn [id]
-                                           (or (get tx-id->block id)
-                                               (get cached-id->block id)
-                                               (db-utils/pull repo-url pull-keys id))) block-eids)
-                                    (db-utils/pull-many repo-url pull-keys block-eids))
-                           blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
-                       (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
-        nil)
-      react)))))
+     (let [entity (db-utils/entity repo-url block-id)
+           page? (some? (:block/name entity))
+           page-entity (if page? entity (:block/page entity))
+           page-id (:db/id page-entity)
+           bare-page-map {:db/id page-id
+                          :block/name (:block/name page-entity)
+                          :block/original-name (:block/original-name page-entity)
+                          :block/journal-day (:block/journal-day page-entity)}
+           query-key (if page?
+                       :frontend.db.react/page-blocks
+                       :frontend.db.react/block-and-children)]
+       (some->
+        (react/q repo-url [query-key block-id]
+                 {:use-cache? use-cache?
+                  :query-fn (fn [db tx-report result]
+                              (let [tx-data (:tx-data tx-report)
+                                    refs (some->> (filter #(= :block/refs (:a %)) tx-data)
+                                                  (map :v))
+                                    tx-block-ids (distinct (-> (map :e tx-data)
+                                                               (concat refs)))
+                                    [tx-id->block cached-id->block] (when (and tx-report result)
+                                                                      (let [blocks (->> (db-utils/pull-many repo-url pull-keys tx-block-ids)
+                                                                                        (remove nil?))]
+                                                                        [(zipmap (mapv :db/id blocks) blocks)
+                                                                         (zipmap (mapv :db/id @result) @result)]))
+                                    limit (if (and result @result)
+                                            (max (+ (count @result) 5) limit)
+                                            limit)
+                                    outliner-op (get-in tx-report [:tx-meta :outliner-op])
+                                    blocks (build-paginated-blocks-from-cache repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id)
+                                    blocks (or blocks
+                                               (get-paginated-blocks-no-cache (conn/get-db repo-url) block-id {:limit limit
+                                                                                                               :include-start? (not page?)
+                                                                                                               :scoped-block-id scoped-block-id}))
+                                    block-eids (map :db/id blocks)
+                                    blocks (if (and (seq tx-id->block)
+                                                    (not (contains? #{:move-blocks} outliner-op)))
+                                             (map (fn [id]
+                                                    (or (get tx-id->block id)
+                                                        (get cached-id->block id)
+                                                        (db-utils/pull repo-url pull-keys id))) block-eids)
+                                             (db-utils/pull-many repo-url pull-keys block-eids))
+                                    blocks (remove (fn [b] (nil? (:block/content b))) blocks)]
+                                (map (fn [b] (assoc b :block/page bare-page-map)) blocks)))}
+                 nil)
+        react)))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -863,13 +863,13 @@
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
     (-> (d/q
-          '[:find [(pull ?b [*]) ...]
-            :in $ ?parent-id
-            :where
-            [?parent :block/uuid ?parent-id]
-            [?b :block/parent ?parent]]
-          db
-          block-uuid)
+         '[:find [(pull ?b [*]) ...]
+           :in $ ?parent-id
+           :where
+           [?parent :block/uuid ?parent-id]
+           [?b :block/parent ?parent]]
+         db
+         block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
 (defn sub-block-direct-children
@@ -877,12 +877,12 @@
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
     (-> (react/q repo [:frontend.db.react/block-direct-children block-uuid] {}
-          '[:find [(pull ?b [*]) ...]
-            :in $ ?parent-id
-            :where
-            [?parent :block/uuid ?parent-id]
-            [?b :block/parent ?parent]]
-          block-uuid)
+                 '[:find [(pull ?b [*]) ...]
+                   :in $ ?parent-id
+                   :where
+                   [?parent :block/uuid ?parent-id]
+                   [?b :block/parent ?parent]]
+                 block-uuid)
         react
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
@@ -904,13 +904,13 @@
 (defn get-block-and-children
   [repo block-uuid]
   (some-> (d/q
-            '[:find [(pull ?block ?block-attrs) ...]
-              :in $ ?id ?block-attrs
-              :where
-              [?block :block/uuid ?id]]
-            (conn/get-db repo)
-            block-uuid
-            block-attrs)
+           '[:find [(pull ?block ?block-attrs) ...]
+             :in $ ?id ?block-attrs
+             :where
+             [?block :block/uuid ?id]]
+           (conn/get-db repo)
+           block-uuid
+           block-attrs)
           first
           flatten-tree))
 
@@ -1028,14 +1028,14 @@
            today (db-utils/date->int (js/Date.))]
        (->>
         (react/q repo-url [:frontend.db.react/journals] {:use-cache? false}
-          '[:find [(pull ?page [*]) ...]
-            :in $ ?today
-            :where
-            [?page :block/name ?page-name]
-            [?page :block/journal? true]
-            [?page :block/journal-day ?journal-day]
-            [(<= ?journal-day ?today)]]
-          today)
+                 '[:find [(pull ?page [*]) ...]
+                   :in $ ?today
+                   :where
+                   [?page :block/name ?page-name]
+                   [?page :block/journal? true]
+                   [?page :block/journal-day ?journal-day]
+                   [(<= ?journal-day ?today)]]
+                 today)
         (react)
         (sort-by :block/journal-day)
         (reverse)
@@ -1049,15 +1049,15 @@
           pages (page-alias-set repo page)
           page-id (:db/id (db-utils/entity [:block/name page-name]))
           ref-pages (d/q
-                      '[:find [?ref-page-name ...]
-                        :in $ ?pages
-                        :where
-                        [(untuple ?pages) [?page ...]]
-                        [?block :block/page ?page]
-                        [?block :block/refs ?ref-page]
-                        [?ref-page :block/name ?ref-page-name]]
-                      db
-                      pages)]
+                     '[:find [?ref-page-name ...]
+                       :in $ ?pages
+                       :where
+                       [(untuple ?pages) [?page ...]]
+                       [?block :block/page ?page]
+                       [?block :block/refs ?ref-page]
+                       [?ref-page :block/name ?ref-page-name]]
+                     db
+                     pages)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-page-linked-refs-refed-pages
@@ -1136,33 +1136,40 @@
 
 (defn get-page-referenced-blocks
   ([page]
-   (get-page-referenced-blocks (state/get-current-repo) page))
-  ([repo page]
+   (get-page-referenced-blocks (state/get-current-repo) page false))
+  ([page filter?]
+   (get-page-referenced-blocks (state/get-current-repo) page filter?))
+  ([repo page filter?]
    (when repo
      (when (conn/get-db repo)
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
              query-result (react/q repo
-                            [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-                            {}
-                            '[:find [(pull ?block ?block-attrs) ...]
-                              :in $ [?ref-page ...] ?block-attrs
-                              :where
-                              [?block :block/refs ?ref-page]]
-                            pages
-                            (butlast block-attrs))
-             result (->> query-result
-                         react
-                         (remove (fn [block]
-                                   (= page-id (:db/id (:block/page block)))))
-                         (sort-by-left-recursive)
-                         db-utils/group-by-page
-                         (map (fn [[k blocks]]
-                                (let [k (if (contains? aliases (:db/id k))
-                                          (assoc k :block/alias? true)
-                                          k)]
-                                  [k blocks]))))]
+                                   [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                                   {}
+                                   '[:find [(pull ?block ?block-attrs) ...]
+                                     :in $ [?ref-page ...] ?block-attrs
+                                     :where
+                                     [?block :block/refs ?ref-page]]
+                                   pages
+                                   (butlast block-attrs))
+             result (if (not filter?) (->> query-result
+                                           react
+                                           (remove (fn [block]
+                                                     (= page-id (:db/id (:block/page block)))))
+                                           (sort-by-left-recursive)
+                                           db-utils/group-by-page
+                                           (map (fn [[k blocks]]
+                                                  (let [k (if (contains? aliases (:db/id k))
+                                                            (assoc k :block/alias? true)
+                                                            k)]
+                                                    [k blocks]))))
+
+                        (map (comp :block/original-name :block/page) (->> query-result
+                                                                          react
+                                                                          (remove (fn [block]
+                                                                                    (= page-id (:db/id (:block/page block))))) (sort-by-left-recursive))))]
          result)))))
 
 (defn get-page-referenced-blocks-ids
@@ -1174,12 +1181,12 @@
      (when-let [db (conn/get-db repo)]
        (let [pages (page-alias-set repo page)]
          (d/q
-           '[:find ?block
-             :in $ [?ref-page ...]
-             :where
-             [?block :block/refs ?ref-page]]
-           db
-           pages))))))
+          '[:find ?block
+            :in $ [?ref-page ...]
+            :where
+            [?block :block/refs ?ref-page]]
+          db
+          pages))))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
@@ -1187,24 +1194,24 @@
     (let [future-days (state/get-scheduled-future-days)]
       (when-let [repo (state/get-current-repo)]
         (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
-               '[:find [(pull ?block ?block-attrs) ...]
-                 :in $ ?day ?future ?block-attrs
-                 :where
-                 (or
-                  [?block :block/scheduled ?d]
-                  [?block :block/deadline ?d])
-                 [(get-else $ ?block :block/repeated? false) ?repeated]
-                 [(get-else $ ?block :block/marker "NIL") ?marker]
-                 [(not= ?marker "DONE")]
-                 [(not= ?marker "CANCELED")]
-                 [(not= ?marker "CANCELLED")]
-                 [(<= ?d ?future)]
-                 (or-join [?repeated ?d ?day]
-                          [(true? ?repeated)]
-                          [(>= ?d ?day)])]
-               date
-               (+ date future-days)
-               block-attrs)
+                      '[:find [(pull ?block ?block-attrs) ...]
+                        :in $ ?day ?future ?block-attrs
+                        :where
+                        (or
+                         [?block :block/scheduled ?d]
+                         [?block :block/deadline ?d])
+                        [(get-else $ ?block :block/repeated? false) ?repeated]
+                        [(get-else $ ?block :block/marker "NIL") ?marker]
+                        [(not= ?marker "DONE")]
+                        [(not= ?marker "CANCELED")]
+                        [(not= ?marker "CANCELLED")]
+                        [(<= ?d ?future)]
+                        (or-join [?repeated ?d ?day]
+                                 [(true? ?repeated)]
+                                 [(>= ?d ?day)])]
+                      date
+                      (+ date future-days)
+                      block-attrs)
              react
              (sort-by-left-recursive)
              db-utils/group-by-page)))))
@@ -1259,8 +1266,8 @@
                       block-uuid
                       block-attrs)
              react
-            (sort-by-left-recursive)
-            db-utils/group-by-page)))))
+             (sort-by-left-recursive)
+             db-utils/group-by-page)))))
 
 (defn get-block-referenced-blocks-ids
   [block-uuid]
@@ -1268,13 +1275,13 @@
     (let [block (db-utils/entity [:block/uuid block-uuid])]
       (->> (react/q repo [:frontend.db.react/block<-block-ids
                           (:db/id block)] {}
-             '[:find ?ref-block
-               :in $ ?block-uuid ?block-attrs
-               :where
-               [?block :block/uuid ?block-uuid]
-               [?ref-block :block/refs ?block]]
-             block-uuid
-             block-attrs)
+                    '[:find ?ref-block
+                      :in $ ?block-uuid ?block-attrs
+                      :where
+                      [?block :block/uuid ?block-uuid]
+                      [?ref-block :block/refs ?block]]
+                    block-uuid
+                    block-attrs)
            react))))
 
 (defn get-referenced-blocks-ids
@@ -1303,26 +1310,26 @@
 (defn get-public-false-pages
   [db]
   (-> (d/q
-        '[:find ?p
-          :where
-          [?p :block/name]
-          [?p :block/properties ?properties]
-          [(get ?properties :public) ?pub]
-          [(= false ?pub)]]
-        db)
+       '[:find ?p
+         :where
+         [?p :block/name]
+         [?p :block/properties ?properties]
+         [(get ?properties :public) ?pub]
+         [(= false ?pub)]]
+       db)
       (db-utils/seq-flatten)))
 
 (defn get-public-false-block-ids
   [db]
   (-> (d/q
-        '[:find ?b
-          :where
-          [?p :block/name]
-          [?p :block/properties ?properties]
-          [(get ?properties :public) ?pub]
-          [(= false ?pub)]
-          [?b :block/page ?p]]
-        db)
+       '[:find ?b
+         :where
+         [?p :block/name]
+         [?p :block/properties ?properties]
+         [(get ?properties :public) ?pub]
+         [(= false ?pub)]
+         [?b :block/page ?p]]
+       db)
       (db-utils/seq-flatten)))
 
 (defn get-all-templates
@@ -1345,14 +1352,14 @@
   [name]
   (when (string? name)
     (->> (d/q
-           '[:find [(pull ?b [*]) ...]
-             :in $ ?name
-             :where
-             [?b :block/properties ?p]
-             [(get ?p :template) ?t]
-             [(= ?t ?name)]]
-           (conn/get-db)
-           name)
+          '[:find [(pull ?b [*]) ...]
+            :in $ ?name
+            :where
+            [?b :block/properties ?p]
+            [(get ?p :template) ?t]
+            [(= ?t ?name)]]
+          (conn/get-db)
+          name)
          (sort-by :block/name)
          (first))))
 
@@ -1505,16 +1512,16 @@
   (assert (string? namespace))
   (let [namespace (util/page-name-sanity-lc namespace)]
     (d/q
-      '[:find [(pull ?c [:db/id :block/name :block/original-name
-                         :block/namespace
-                         {:block/file [:db/id :file/path]}]) ...]
-        :in $ % ?namespace
-        :where
-        [?p :block/name ?namespace]
-        (namespace ?p ?c)]
-      (conn/get-db repo)
-      rules
-      namespace)))
+     '[:find [(pull ?c [:db/id :block/name :block/original-name
+                        :block/namespace
+                        {:block/file [:db/id :file/path]}]) ...]
+       :in $ % ?namespace
+       :where
+       [?p :block/name ?namespace]
+       (namespace ?p ?c)]
+     (conn/get-db repo)
+     rules
+     namespace)))
 
 (defn- tree [flat-col root]
   (let [sort-fn #(sort-by :block/name %)
@@ -1523,7 +1530,7 @@
                              (map (fn [m]
                                     (assoc m :namespace/children
                                            (sort-fn (namespace-children {:db/id (:db/id m)}))))
-                               (sort-fn (get children parent-id))))]
+                                  (sort-fn (get children parent-id))))]
     (namespace-children root)))
 
 (defn get-namespace-hierarchy
@@ -1560,33 +1567,33 @@
 
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
-          :or {repo (state/get-current-repo)
-               empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
+    :or {repo (state/get-current-repo)
+         empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
   (let [pages (->> (or pages (get-pages repo))
                    (remove nil?))
         built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
         orphaned-pages (->>
                         (map
-                          (fn [page]
-                            (let [name (util/page-name-sanity-lc page)]
-                              (when-let [page (db-utils/entity [:block/name name])]
-                                (and
-                                 (empty-ref-f page)
-                                 (or
-                                  (page-empty? repo (:db/id page))
-                                  (let [first-child (first (:block/_left page))
-                                        children (:block/_page page)]
-                                    (and
-                                     first-child
-                                     (= 1 (count children))
-                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
-                                 (not (contains? built-in-pages name))
-                                 (not (:block/_namespace page))
+                         (fn [page]
+                           (let [name (util/page-name-sanity-lc page)]
+                             (when-let [page (db-utils/entity [:block/name name])]
+                               (and
+                                (empty-ref-f page)
+                                (or
+                                 (page-empty? repo (:db/id page))
+                                 (let [first-child (first (:block/_left page))
+                                       children (:block/_page page)]
+                                   (and
+                                    first-child
+                                    (= 1 (count children))
+                                    (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                (not (contains? built-in-pages name))
+                                (not (:block/_namespace page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
-                                 (not (and (string/includes? name "/")
-                                           (not (:block/journal? page))))
-                                 page))))
-                          pages)
+                                (not (and (string/includes? name "/")
+                                          (not (:block/journal? page))))
+                                page))))
+                         pages)
                         (remove false?)
                         (remove nil?))]
     orphaned-pages))

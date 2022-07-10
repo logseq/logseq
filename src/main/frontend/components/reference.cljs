@@ -14,33 +14,42 @@
             [frontend.util :as util]
             [rum.core :as rum]))
 
-(rum/defc filter-dialog-inner < rum/reactive
-  [filters-atom _close-fn references page-name]
-  [:div.filters
-   [:div.sm:flex.sm:items-start
-    [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-     (ui/icon "filter" {:style {:fontSize 20}})]
-    [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-     [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
-     [:span.text-xs
-      "Click to include and shift-click to exclude. Click again to remove."]]]
-   (when (seq references)
-     (let [filters (rum/react filters-atom)]
-       [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-        (for [reference references]
-          (let [lc-reference (string/lower-case reference)
-                filtered (get filters lc-reference)
-                color (condp = filtered
-                        true "text-green-400"
-                        false "text-red-400"
-                        nil)]
-            [:button.border.rounded.px-1.mb-1.mr-1 {:key reference :class color :style {:border-color "currentColor"}
-                                                    :on-click (fn [e]
-                                                                (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                                                       (assoc % lc-reference (not (.-shiftKey e)))
-                                                                                       (dissoc % lc-reference)))
-                                                                (page-handler/save-filter! page-name @filters-atom))}
-             reference]))]))])
+(rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
+  [state filters-atom _close-fn references page-name]
+  (let [filter-search (get state ::filterSearch)
+        filtered-references (filter (fn [ref]
+                                      (if (string/includes? (util/page-name-sanity-lc (ref 0)) (util/page-name-sanity-lc @filter-search)) true false))
+                                    references)]
+    [:div.filters
+     [:div.sm:flex.sm:items-start
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
+       (ui/icon "filter" {:style {:fontSize 20}})]
+      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+       [:input.bg-white.w-full
+        {:placeholder "Search in filters"
+         :auto-focus true
+         :on-change (fn [e]
+                      (reset! filter-search (util/evalue e)))}]
+       [:span.text-xs
+        "Click to include and shift-click to exclude. Click again to remove."]]]
+     (when (seq filtered-references)
+       (let [filters (rum/react filters-atom)]
+         [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
+          (for [reference filtered-references]
+            (let [lc-reference (string/lower-case (reference 0))
+                  filtered (get filters lc-reference)
+                  color (condp = filtered
+                          true "text-green-400"
+                          false "text-red-400"
+                          nil)]
+              [:button.border.rounded.px-1.mb-1.mr-1 {:key (reference 0) :class color :style {:border-color "currentColor"}
+                                                      :on-click (fn [e]
+                                                                  (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                                                                         (assoc % lc-reference (not (.-shiftKey e)))
+                                                                                         (dissoc % lc-reference)))
+                                                                  (page-handler/save-filter! page-name @filters-atom))}
+               (reference 0) [:sub " " (reference 1)]]))]))]))
 
 (defn filter-dialog
   [filters-atom references page-name]
@@ -117,12 +126,16 @@
                 :on-click (fn []
                             (let [ref-blocks (if block-id
                                                (db/get-block-referenced-blocks block-id)
-                                               (db/get-page-referenced-blocks page-name))
-                                  ref-pages (map (comp :block/original-name first) ref-blocks)
+                                               (db/get-page-referenced-blocks page-name true))
+                                  ;; ref-pages (map (comp :block/original-name first) ref-blocks)
                                   references (db/get-page-linked-refs-refed-pages repo page-name)
-                                  references (->> (concat ref-pages references)
+                                  references (->> (concat ref-blocks references)
                                                   (remove nil?)
-                                                  (distinct))]
+                                                  (frequencies))
+                                  references (into (sorted-map-by (fn [key1 key2] (let [numerical-sort (compare (get references key2)
+                                                                                                                (get references key1))]
+                                                                                    (if (= numerical-sort 0) (compare (string/lower-case key1) (string/lower-case key2)) numerical-sort)))) references)]
+
                               (state/set-modal! (filter-dialog filters-atom references page-name)
                                                 {:center? true})))}
                (ui/icon "filter" {:class (cond
@@ -145,8 +158,8 @@
                                    (update-vals #(map first %))))
                      filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
-                             (for [[_ rfs] filtered-ref-blocks]
-                               (count rfs)))]
+                                  (for [[_ rfs] filtered-ref-blocks]
+                                    (count rfs)))]
                  (reset! *n-ref n-ref)
                  [:div.references-blocks
                   (let [ref-hiccup (block/->hiccup filtered-ref-blocks
@@ -180,10 +193,10 @@
      (fn [state]
        (reset! (second (:rum/args state))
                (apply +
-                 (for [[_ rfs]
-                       (db/get-page-unlinked-references
-                        (first (:rum/args state)))]
-                   (count rfs))))
+                      (for [[_ rfs]
+                            (db/get-page-unlinked-references
+                             (first (:rum/args state)))]
+                        (count rfs))))
        (render-fn state)))}
   [state page-name _n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)]
