@@ -146,7 +146,7 @@
   (util/format "{{zotero-imported-file %s, %s}}" item-key (pr-str filename)))
 
 (defn zotero-linked-file-macro [path]
-  (util/format "{{zotero-linked-file %s}}" (pr-str path)))
+  (util/format "{{zotero-linked-file %s}}" (pr-str (util/node-path.basename path))))
 
 (defmethod extract "attachment"
   [item]
@@ -158,15 +158,11 @@
        " "
        (zotero-imported-file-macro (item-key item) filename))
       "linked_file"
-      (if (string/starts-with? path "attachments:")
+      (when-let [path (string/replace path " " "%20")]
         (str
          (markdown-link title (local-link item))
          " "
-         (zotero-linked-file-macro path))
-        (let [path (string/replace path " " "%20")]
-          (if (= content-type "application/pdf")
-            (markdown-link title (str "file://" path) true)
-            (markdown-link title (str "file://" path)))))
+         (zotero-linked-file-macro path)))
       "imported_url"
       (str
        (markdown-link title url)
