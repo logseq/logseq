@@ -6,7 +6,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.util.url :as url-util]
             [frontend.config :as config]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]))
 
 (defn quick-capture
   [url title content]
@@ -40,14 +42,18 @@
         cur-page-name   (state/get-current-page)
         block-uuid      (or edit-block-id select-block-id)
         block-entity    (when block-uuid (db-model/get-block-by-uuid block-uuid))
-        block-content   (when block-entity (:block/content block-entity))
+        ;; TODO unify the get readable content functions
+        block-content   (when block-entity (some->> block-entity
+                                                   (:block/content)
+                                                   (drawer/remove-logbook)
+                                                   (property/remove-properties (:block/format block-entity))))
 
         block-url       (when block-uuid
                           (editor-handler/set-blocks-id! [block-uuid])
                           (url-util/get-logseq-graph-uuid-url nil repo block-uuid))
         page-url      (when cur-page-name (url-util/get-logseq-graph-page-url nil repo cur-page-name))
         page-title    (when cur-page-name (db-model/get-page-original-name cur-page-name))
-        page-file     (when cur-page-name (db-model/get-page-file cur-page-name))
+        page-file     (when cur-page-name (:file/path (db-model/get-page-file cur-page-name)))
         url     (or block-url page-url) ;; block has higher priority
         title   page-title              ;; only use page title
         file    page-file               ;; only use page file
