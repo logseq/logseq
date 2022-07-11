@@ -1366,7 +1366,7 @@
                 {:restore-pwd-failed (str "decrypt-pwd failed, salt: " salt-value)}
                 (swap! pwd-map assoc-in [graph-uuid :pwd] pwd)))))))))
 
-(defn- set-graph-encryption-keys!
+(defn- <set-graph-encryption-keys!
   [graph-uuid pwd public-key encrypted-private-key]
   (when-let [c (get-graph-pwd-changed-chan graph-uuid)]
     (go
@@ -1376,29 +1376,26 @@
          (do
            (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
            (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
-           (<! (<set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
            (offer! c true))
          (offer! c true))))))
 
 (defn- <ensure-pwd-exists!
-  [repo graph-uuid *stopped? graph-encrypted? public-key encrypted-private-key]
-  (let [c (get-graph-pwd-changed-chan graph-uuid)]
-    (go
-      (let [{:keys [restore-pwd-failed] :as result} (<! (restore-pwd! graph-uuid))
-            pwd (get-in result [graph-uuid :pwd])]
-        (cond
-          restore-pwd-failed
-          (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
-                             #(restore-pwd! graph-uuid)
-                             {:graph-encrypted? graph-encrypted?
-                              :verify-password (fn [pwd] (set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key))}])
+  [repo graph-uuid graph-encrypted? public-key encrypted-private-key]
+  (go
+    (let [{:keys [restore-pwd-failed] :as result} (<! (restore-pwd! graph-uuid))
+          pwd (get-in result [graph-uuid :pwd])]
+      (cond
+        restore-pwd-failed
+        (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
+                           #(restore-pwd! graph-uuid)
+                           {:graph-encrypted? graph-encrypted?
+                            :verify-password (fn [pwd] (<set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key))}])
 
-          (and graph-encrypted? pwd)
-          (set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key)
+        (and graph-encrypted? pwd)
+        (<set-graph-encryption-keys! graph-uuid pwd public-key encrypted-private-key)
 
-          :else
-          nil)))
-    c))
+        :else
+        nil))))
 
 (defn clear-pwd!
   "- clear pwd in `pwd-map`
@@ -1419,7 +1416,7 @@
             r (get @pwd-map graph-uuid)]
 
         (when-not (and (:public-key r) (:private-key r)) ; skip password validation
-          (<! (<ensure-pwd-exists! repo graph-uuid *stopped? graph-encrypted? public-key encrypted-private-key)))
+          (<! (<ensure-pwd-exists! repo graph-uuid graph-encrypted? public-key encrypted-private-key)))
 
         (let [pwd (get-in @pwd-map [graph-uuid :pwd])]
           (if-not graph-encrypted?
@@ -1435,7 +1432,6 @@
                 (do
                   (swap! pwd-map assoc-in [graph-uuid :public-key] public-key)
                   (swap! pwd-map assoc-in [graph-uuid :private-key] private-key)
-                  (<! (<set-env rsapi config/FILE-SYNC-PROD? private-key public-key))
                   ::idle)))
 
             (if-let [private-key (get-in @pwd-map [graph-uuid :private-key])]
@@ -1453,6 +1449,13 @@
                   (state/set-state! [:ui/loading? :set-graph-password] false))
                 (clear-pwd! graph-uuid)
                 ::need-password))))))))
+
+(defn- <set-env&keys
+  [prod? graph-uuid]
+  (let [{:keys [private-key public-key]} (get @pwd-map graph-uuid)]
+    (assert (and private-key public-key) (pr-str :private-key private-key :public-key public-key
+                                                 :pwd-map @pwd-map))
+    (<set-env rsapi prod? private-key public-key)))
 
 ;;; ### sync state
 
@@ -2081,6 +2084,19 @@
         (notification/show! (t :file-sync/graph-deleted) :warning false))
       result)))
 
+(defn <loop-set-env&keys-when-pwd-map-change
+  [graph-uuid *stopped?]
+  (go-loop []
+    (let [{:keys [change timeout]}
+          (async/alt!
+            (get-graph-pwd-changed-chan graph-uuid) {:change true}
+            (timeout 30000) {:timeout true})]
+      (cond
+        @*stopped? nil
+        change (do (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
+                   (recur))
+        timeout (recur)))))
+
 (defn sync-start []
   (let [[user-uuid graph-uuid txid] @graphs-txid
         *sync-state (atom (sync-state))
@@ -2091,72 +2107,71 @@
                          txid *sync-state)]
     (when-not (config/demo-graph? repo)
       (go
-       ;; 1. if remote graph has been deleted, clear graphs-txid.edn
-       ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
-       (if (not= 3 (count @graphs-txid))
-         (do (clear-graphs-txid! repo)
-             (state/set-file-sync-state repo nil))
-         (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
-           (if-not (<! (<check-remote-graph-exists graph-uuid))
-             (clear-graphs-txid! repo)
-             (do
-               ;; set-env
-               (<! (<set-env rsapi config/FILE-SYNC-PROD? nil nil))
-               (state/set-file-sync-state repo @*sync-state)
-               (state/set-file-sync-manager sm)
-               (let [*stop-after-5s (volatile! false)]
-                 (go (<! (timeout 5000)) (vreset! *stop-after-5s true))
-                 (<! (<ensure-pwd+keys-exists! graph-uuid repo *stop-after-5s)))
-               ;; wait seconds to receive all file change events,
-               ;; and then drop all of them.
-               ;; WHY: when opening a graph(or switching to another graph),
-               ;;      file-watcher will send a lot of file-change-events,
-               ;;      actually, each file corresponds to a file-change-event,
-               ;;      we need to ignore all of them.
-               (<! (timeout 5000))
-               (println :drain-local-changes-chan-at-starting
-                        (count (util/drain-chan local-changes-chan)))
-               (poll! stop-sync-chan)
-               (poll! remote->local-sync-chan)
-               (poll! remote->local-full-sync-chan)
+        ;; 1. if remote graph has been deleted, clear graphs-txid.edn
+        ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it
+        (if (not= 3 (count @graphs-txid))
+          (do (clear-graphs-txid! repo)
+              (state/set-file-sync-state repo nil))
+          (when (check-graph-belong-to-current-user current-user-uuid user-uuid)
+            (if-not (<! (<check-remote-graph-exists graph-uuid))
+              (clear-graphs-txid! repo)
+              (do
+                (state/set-file-sync-state repo @*sync-state)
+                (state/set-file-sync-manager sm)
+                (let [*stop-after-5s (volatile! false)]
+                  (go (<! (timeout 5000)) (vreset! *stop-after-5s true))
+                  (<! (<ensure-pwd+keys-exists! graph-uuid repo *stop-after-5s)))
+                (<loop-set-env&keys-when-pwd-map-change graph-uuid (.-*stopped? sm))
+                ;; wait seconds to receive all file change events,
+                ;; and then drop all of them.
+                ;; WHY: when opening a graph(or switching to another graph),
+                ;;      file-watcher will send a lot of file-change-events,
+                ;;      actually, each file corresponds to a file-change-event,
+                ;;      we need to ignore all of them.
+                (<! (timeout 5000))
+                (println :drain-local-changes-chan-at-starting
+                         (count (util/drain-chan local-changes-chan)))
+                (poll! stop-sync-chan)
+                (poll! remote->local-sync-chan)
+                (poll! remote->local-full-sync-chan)
 
-               ;; update global state when *sync-state changes
-               (add-watch *sync-state ::update-global-state
-                          (fn [_ _ _ n]
-                            (state/set-file-sync-state repo n)))
-               ;; watch :mobile/app-state-change,
-               ;; trigger a remote->local once activated
-               (add-watch (rum/cursor state/state :mobile/app-state-change) "sync-manage"
-                          (fn [_ _ _ {:keys [is-active?]}]
-                            (when is-active?
-                              (offer! remote->local-sync-chan true))))
+                ;; update global state when *sync-state changes
+                (add-watch *sync-state ::update-global-state
+                           (fn [_ _ _ n]
+                             (state/set-file-sync-state repo n)))
+                ;; watch :mobile/app-state-change,
+                ;; trigger a remote->local once activated
+                (add-watch (rum/cursor state/state :mobile/app-state-change) "sync-manage"
+                           (fn [_ _ _ {:keys [is-active?]}]
+                             (when is-active?
+                               (offer! remote->local-sync-chan true))))
 
-               (.start sm)
+                (.start sm)
 
 
-               ;; (if (zero? txid)
-               ;;   (offer! remote->local-full-sync-chan true)
-               ;;   (offer! remote->local-sync-chan true))
-               (offer! remote->local-full-sync-chan true)
-               (offer! full-sync-chan true)
+                ;; (if (zero? txid)
+                ;;   (offer! remote->local-full-sync-chan true)
+                ;;   (offer! remote->local-sync-chan true))
+                (offer! remote->local-full-sync-chan true)
+                (offer! full-sync-chan true)
 
-               ;; watch :network/online?
-               (add-watch (rum/cursor state/state :network/online?) "sync-manage"
-                          (fn [_k _r o n]
-                            (cond
-                              (and (true? o) (false? n))
-                              (sync-stop)
+                ;; watch :network/online?
+                (add-watch (rum/cursor state/state :network/online?) "sync-manage"
+                           (fn [_k _r o n]
+                             (cond
+                               (and (true? o) (false? n))
+                               (sync-stop)
 
-                              (and (false? o) (true? n))
-                              (sync-start)
+                               (and (false? o) (true? n))
+                               (sync-start)
 
-                              :else
-                              nil)))
-               ;; watch :auth/id-token
-               (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
-                          (fn [_k _r _o n]
-                            (when (nil? n)
-                              (sync-stop))))))))))))
+                               :else
+                               nil)))
+                ;; watch :auth/id-token
+                (add-watch (rum/cursor state/state :auth/id-token) "sync-manage"
+                           (fn [_k _r _o n]
+                             (when (nil? n)
+                               (sync-stop))))))))))))
 
 
 (defn trigger-input-password!
