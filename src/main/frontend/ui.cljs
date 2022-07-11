@@ -922,12 +922,23 @@
          [:div.h-2.bg-base-4.rounded]]]]])])
 
 (rum/defc lazy-visible
-  [content-fn]
-  (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
-        inViewState (useInView #js {:rootMargin "100px"
-                                    :onChange (fn [v entry]
-                                                (let [self-top (.-top (.-boundingClientRect entry))
-                                                      v (if v v (if (> self-top 0) false true))]
-                                                  (setHasBeenSeen v)))})
-        ref (.-ref inViewState)]
-    (lazy-visible-inner hasBeenSeen content-fn ref)))
+  ([content-fn]
+   (lazy-visible content-fn nil))
+  ([content-fn _debug-id]
+   (if (or (util/mobile?) (mobile-util/native-platform?))
+     (content-fn)
+     (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
+           [last-changed-time set-last-changed-time!] (rum/use-state nil)
+           inViewState (useInView #js {:rootMargin "100px"
+                                       :onChange (fn [in-view? entry]
+                                                   (let [self-top (.-top (.-boundingClientRect entry))
+                                                         time' (util/time-ms)]
+                                                     (when (or in-view?
+                                                               (and
+                                                                (nil? last-changed-time)
+                                                                (> (- time' last-changed-time) 50)
+                                                                (<= self-top 0)))
+                                                       (set-last-changed-time! time')
+                                                       (setHasBeenSeen in-view?))))})
+           ref (.-ref inViewState)]
+       (lazy-visible-inner hasBeenSeen content-fn ref)))))
