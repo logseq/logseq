@@ -40,7 +40,11 @@
      (get-repo-id-url host "graph" repo-identifier protocol?))))
 
 (defn get-logseq-graph-uuid-url
-  "The URL represents an entity in graph with uuid, for example:
+  "!!! ATTENTION !!!
+   `(set-blocks-id! [block-id])` must be called to persist the block-id before
+   distributing the URL.
+
+   The URL represents an entity in graph with uuid, for example:
    logseq://graph/abc?block-id=<uuid>
    Ensure repo and uuid are valid before hand.
    host: set to `nil` for local graph

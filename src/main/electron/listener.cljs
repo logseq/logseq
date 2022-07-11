@@ -1,12 +1,9 @@
 (ns electron.listener
   (:require [frontend.state :as state]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.config :as config]
-            [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.fs.sync :as sync]
@@ -15,9 +12,9 @@
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
-            [frontend.util.url :as url-util]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.url-protocol :as url-protocol-handler]
             [frontend.handler.user :as user]))
 
 (defn persist-dbs!
@@ -131,43 +128,13 @@
 
   (js/window.apis.on "quickCapture"
                      (fn [args]
-                       (let [{:keys [url title content]} (bean/->clj args)
-                             page (or (state/get-current-page)
-                                      (string/lower-case (date/journal-name)))
-                             format (db/get-page-format page)
-                             time (date/get-current-time)
-                             text (or (and content (not-empty (string/trim content))) "")
-                             link (if (not-empty title) (config/link-format format title url) url)
-                             template (get-in (state/get-config)
-                                              [:quick-capture-templates :text]
-                                              "**{time}** [[quick capture]]: {text} {url}")
-                             content (-> template
-                                         (string/replace "{time}" time)
-                                         (string/replace "{url}" link)
-                                         (string/replace "{text}" text))]
-                         (if (and (state/get-edit-block) (state/editing?))
-                           (editor-handler/insert content)
-                           (editor-handler/api-insert-new-block! content {:page page
-                                                                          :edit-block? false
-                                                                          :replace-empty-target? true})))))
+                       (let [{:keys [url title content]} (bean/->clj args)]
+                         (url-protocol-handler/quick-capture url title content))))
 
   (js/window.apis.on "handleGetCurrentURL"
                      (fn [args]
-                       (let [{:keys  [x-success x-error?]} (bean/->clj args)
-                             repo (state/get-current-repo)
-                             ;; may reuse the following logic for other api services
-                             edit-block-id   (some-> (state/get-edit-block) (:block/uuid))
-                             select-block-id (first (state/get-selection-block-ids))
-                             cur-page-id     (some-> (state/get-current-page) (db-model/get-page) (:block/uuid))
-                             uuid            (or edit-block-id select-block-id cur-page-id)
-
-                             url     (when uuid
-                                       (url-util/encode-param (url-util/get-logseq-graph-uuid-url nil repo uuid)))
-                             target  (if (and x-error? (nil? url))
-                                       x-error?
-                                       (str x-success url))]
-                         (js/setTimeout #(js/window.open target) 100) ;; Magic, don't remove the timeout, even 1ms works. Why?
-                         )))
+                       (let [{:keys  [x-success x-error?]} (bean/->clj args)]
+                         (url-protocol-handler/get-current-url x-success x-error?))))
 
   (js/window.apis.on "openNewWindowOfGraph"
                      ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
