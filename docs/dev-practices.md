@@ -5,7 +5,8 @@ This page describes development practices for this codebase.
 ## Linting
 
 Most of our linters require babashka. Before running them, please install
-https://github.com/babashka/babashka#installation.
+https://github.com/babashka/babashka#installation. To invoke all the linters in
+this section, run `bb dev:lint`.
 
 ### Clojure code
 
@@ -49,7 +50,7 @@ and understand them. To run this linter:
 bb lint:large-vars
 ```
 
-To configure the linter, see its `config` var.
+To configure the linter, see the `[:tasks/config :large-vars]` path of bb.edn.
 
 ### Datalog linting
 
@@ -59,6 +60,11 @@ something invalid. To avoid typos and other preventable mistakes, we lint our
 queries and rules. Our queries are linted through clj-kondo and
 [datalog-parser](https://github.com/lambdaforge/datalog-parser). clj-kondo will
 error if it detects an invalid query.
+
+### Invalid translations
+
+Our translations can be configured incorrectly. We can catch some of these
+mistakes [as noted here](./contributing-to-translations.md#fix-mistakes).
 
 ## Testing
 

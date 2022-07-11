@@ -40,11 +40,18 @@
     :sub        (fn sub [a b] (-> a (.minus b)))
     :mul        (fn mul [a b] (-> a (.multipliedBy b)))
     :div        (fn div [a b] (-> a (.dividedBy b)))
-    :pow        (fn pow [a b] (-> a (.exponentiatedBy b)))
+    :pow        (fn pow [a b] (if (.isInteger b)
+                                  (.exponentiatedBy a b)
+                                  #?(:clj (java.lang.Math/pow a b)
+                                     :cljs (bn/BigNumber (js/Math.pow a b)))))
+    :abs        (fn abs [a] (.abs a))
+    :sqrt       (fn abs [a] (.sqrt a))
     :log        (fn log [a]
                   #?(:clj (java.lang.Math/log10 a) :cljs (bn/BigNumber (js/Math.log10 a))))
     :ln         (fn ln [a]
                   #?(:clj (java.lang.Math/log a) :cljs (bn/BigNumber (js/Math.log a))))
+    :exp        (fn ln [a]
+                  #?(:clj (java.lang.Math/exp a) :cljs (bn/BigNumber (js/Math.exp a))))
     :sin        (fn sin [a]
                   #?(:clj (java.lang.Math/sin a) :cljs (bn/BigNumber(js/Math.sin a))))
     :cos        (fn cos [a]
@@ -61,6 +68,7 @@
                   (swap! env assoc var val)
                   val)
     :toassign   str/trim
+    :comment    (constantly nil)
     :variable   (fn resolve [var]
                   (let [var (str/trim var)]
                     (or (get @env var)
@@ -79,12 +87,17 @@
      (catch #?(:clj Exception :cljs js/Error) e
        e))))
 
+(defn assign-last-value [env val]
+  (when-not (nil? val)
+    (swap! env assoc "last" val))
+  val)
+
 (defn eval-lines [s]
   {:pre [(string? s)]}
   (let [env (new-env)]
     (mapv (fn [line]
             (when-not (str/blank? line)
-              (eval env (parse line))))
+              (assign-last-value env (eval env (parse line)))))
           (str/split-lines s))))
 
 ;; ======================================================================

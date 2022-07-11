@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.state :as state]
             [electron.window :as win]
-            [electron.utils :refer [send-to-renderer] :as utils]
+            [electron.utils :refer [send-to-renderer send-to-focused-renderer] :as utils]
             [clojure.string :as string]
             [promesa.core :as p]))
 
@@ -58,22 +58,24 @@
       (graph-identifier-error-handler graph-identifier))))
 
 (defn- x-callback-url-handler
-  [^js parsed-url]
+  "win - a window used for fallback (main window is prefered)"
+  [^js win parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
       (= action "/quickCapture")
       (let [[url title content] (get-URL-decoded-params parsed-url ["url" "title" "content"])]
-        (send-to-renderer "quickCapture" {:url url
-                                          :title title
-                                          :content content}))
+        (send-to-focused-renderer "quickCapture" {:url url
+                                                  :title title
+                                                  :content content} win))
 
       :else
-      (send-to-renderer "notification" {:type "error"
-                                        :payload (str "Unimplemented x-callback-url action: `"
-                                                      action
-                                                      "`.")}))))
+      (send-to-focused-renderer "notification" {:type "error"
+                                                :payload (str "Unimplemented x-callback-url action: `"
+                                                              action
+                                                              "`.")} win))))
 
 (defn logseq-url-handler
+  "win - the main window"
   [^js win parsed-url]
   (let [url-host (.-host parsed-url)] ;; return "" when no pathname provided
     (cond
@@ -81,7 +83,7 @@
       (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
 
       (= "x-callback-url" url-host)
-      (x-callback-url-handler parsed-url)
+      (x-callback-url-handler win parsed-url)
 
       ;; identifier of graph in local
       (= "graph" url-host)
