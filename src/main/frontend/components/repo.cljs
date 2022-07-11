@@ -80,7 +80,7 @@
                    [:a.text-gray-400.ml-4.font-medium.text-sm
                     {:on-click (fn []
                                  (if only-cloud?
-                                   (when (js/confirm (str "Are you sure to remove this remote graph (" GraphName ")?"))
+                                   (when (js/confirm (str "Are you sure to permanently delete graph (" GraphName ") from remote? Note: this operation only delete the remote graph, so you still have a local copy stored in you device."))
                                      (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
                                      (go (<! (file-sync/delete-graph GraphUUID))
                                          (file-sync/load-session-graphs)
