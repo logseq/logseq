@@ -158,11 +158,10 @@
        " "
        (zotero-imported-file-macro (item-key item) filename))
       "linked_file"
-      (when-let [path (string/replace path " " "%20")]
-        (str
-         (markdown-link title (local-link item))
-         " "
-         (zotero-linked-file-macro path)))
+      (str
+       (markdown-link title (local-link item))
+       " "
+       (zotero-linked-file-macro path))
       "imported_url"
       (str
        (markdown-link title url)
