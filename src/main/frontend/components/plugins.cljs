@@ -791,15 +791,23 @@
 (rum/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil))
   ([type payload opts]
-   (let [rs (util/rand-str 8)
-         id (str "slot__" rs)]
+   (let [rs      (util/rand-str 8)
+         id      (str "slot__" rs)
+         *el-ref (rum/use-ref nil)]
+
      (rum/use-effect!
       (fn []
-        (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
-        #())
+        (let [el (rum/deref *el-ref)]
+          (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
+          #(when-let [uis (seq (.querySelectorAll el "[data-injected-ui]"))]
+             (doseq [^js el uis]
+               (when-let [id (.-injectedUi (.-dataset el))]
+                 (js/LSPluginCore._forceCleanInjectedUI id))))))
       [id])
+
      [:div.lsp-hook-ui-slot
       (merge opts {:id            id
+                   :ref           *el-ref
                    :on-mouse-down (fn [e] (util/stop e))})])))
 
 (rum/defc ui-item-renderer
