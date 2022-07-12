@@ -15,6 +15,15 @@
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
                :default [lambdaisland.glogi :as log])))
 
+(defn- filepath->page-name
+  [filepath]
+  (when-let [file-name (last (string/split filepath #"/"))]
+    (let [result (first (gp-util/split-last "." file-name))
+          ext (string/lower-case (gp-util/get-file-ext filepath))]
+      (if (or (gp-config/mldoc-support? ext) (= "edn" ext))
+        (js/decodeURIComponent (string/replace result "." "/"))
+        result))))
+
 (defn- get-page-name
   [file ast page-name-order]
   ;; headline
@@ -29,11 +38,7 @@
                                (and first-block
                                     (string? title)
                                     title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (let [result (first (gp-util/split-last "." file-name))]
-                          (if (gp-config/mldoc-support? (string/lower-case (gp-util/get-file-ext file)))
-                            (js/decodeURIComponent (string/replace result "." "/"))
-                            result)))]
+            file-name (filepath->page-name file)]
         (or property-name
             (if (= page-name-order "heading")
               (or first-block-name file-name)
@@ -77,9 +82,6 @@
 
       (seq aliases)
       (assoc :block/alias aliases)
-
-      (gp-config/whiteboard? file)
-      (assoc :block/whiteboard? true)
 
       (:tags properties)
       (assoc :block/tags (let [tags (:tags properties)
@@ -175,6 +177,25 @@
         {:pages pages
          :blocks blocks
          :ast ast}))))
+
+(defn extract-whiteboard-edn
+  "Extracts whiteboard page from given edn file
+   Whiteboard page edn is a subset of page schema
+   - it will only contain a single page (for now). The page properties contains 'bindings' etc
+   - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
+  [file content {:keys [verbose] :or {verbose true} :as options}]
+  (let [_ (when verbose (println "Parsing start: " file))
+        {:keys [pages blocks]} (gp-util/safe-read-string content)
+        page-block (first pages)]
+    (when (:block/whiteboard? page-block)
+      (let [page-name (filepath->page-name file)
+            page-entity (build-page-entity {} file page-name page-name nil options)
+            page-block (merge page-block page-entity {:block/uuid (d/squuid)})
+            blocks (->> blocks
+                        (map #(assoc % :block/level 1))
+                        (gp-block/with-parent-and-left {:block/name page-name}))]
+        {:pages [page-block]
+         :blocks blocks}))))
 
 (defn- with-block-uuid
   [pages]

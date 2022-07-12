@@ -41,7 +41,7 @@
 
               ;; File can be saved as plain edn (mostly, the whiteboard files)
               (= format :edn)
-              (gp-util/safe-read-string content)
+              (extract/extract-whiteboard-edn file content extract-options')
 
               :else nil)
 

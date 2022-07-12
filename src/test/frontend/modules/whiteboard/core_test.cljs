@@ -1,5 +1,5 @@
-(ns frontend.modules.file.core-test
-  (:require [cljs.test :refer [use-fixtures] :as test]
+(ns frontend.modules.whiteboard.core-test
+  (:require [cljs.test :refer [use-fixtures]]
             [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as helper]))
 
@@ -10,3 +10,5 @@
   fixtures/load-test-env
   fixtures/react-components
   fixtures/reset-db)
+
+
