@@ -1361,7 +1361,7 @@
     (->> (map keys properties)
          (apply concat)
          distinct
-         (remove #{:id})
+         (remove #{:id :title :alias :template-including-parent :tags :file-path :icon :background-color :background_color :filters})
          sort)))
 
 (defn get-property-values
