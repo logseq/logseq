@@ -150,7 +150,7 @@
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title url link-mode path content-type filename]} (-> item :data)]
+  (let [{:keys [title url link-mode path filename]} (-> item :data)]
     (case link-mode
       "imported_file"
       (str
