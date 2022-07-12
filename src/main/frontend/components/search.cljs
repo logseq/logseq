@@ -188,7 +188,7 @@
 
        :new-page
        [:div.text.font-bold (str (t :new-page) ": ")
-        [:span.ml-1 (str "\"" search-q "\"")]]
+        [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
 
        :page
        [:span {:data-page-ref data}

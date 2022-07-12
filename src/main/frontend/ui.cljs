@@ -25,7 +25,7 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@logseq/react-tweet-embed" :as react-tweet-embed]
-            ["react-visibility-sensor" :as rvs]
+            ["react-intersection-observer" :as react-intersection-observer]
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.mobile.util :as mobile-util]
@@ -38,7 +38,7 @@
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
-(def visibility-sensor (r/adapt-class (gobj/get rvs "default")))
+(def useInView (gobj/get react-intersection-observer "useInView"))
 
 (defn reset-ios-whole-page-offset!
   []
@@ -65,10 +65,7 @@
                             (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e)))))))
                 state)}
   [{:keys [on-change] :as props}]
-  (let [skip-composition? (or
-                           (state/sub :editor/show-page-search?)
-                           (state/sub :editor/show-block-search?)
-                           (state/sub :editor/show-template-search?))
+  (let [skip-composition? (state/sub :editor/action)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
@@ -400,11 +397,13 @@
            get-group-name
            empty-placeholder
            item-render
-           class]}]
+           class
+           header]}]
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
+        (when header header)
         (for [[idx item] (medley/indexed matched)]
           [:<>
            {:key idx}
@@ -901,13 +900,10 @@
      label-right]]
    (progress-bar width)])
 
-(rum/defcs lazy-visible-inner < rum/reactive
-  {:init (fn [state]
-           (assoc state
-                  ::ref (atom nil)))}
-  [state visible? content-fn]
+(rum/defcs lazy-visible-inner
+  [state visible? content-fn ref]
   [:div.lazy-visibility
-   {:ref #(reset! (::ref state) %)
+   {:ref ref
     :style {:min-height 24}}
    (if visible?
      (when (fn? content-fn)
@@ -925,25 +921,24 @@
           [:div.h-2.bg-base-4.rounded.col-span-1]]
          [:div.h-2.bg-base-4.rounded]]]]])])
 
-(rum/defcs lazy-visible <
-  (rum/local false ::visible?)
-  (rum/local true ::active?)
-  [state content-fn sensor-opts {:keys [once?]}]
-  (let [*active? (::active? state)]
-    (if (or (util/mobile?) (mobile-util/native-platform?))
-      (content-fn)
-      (let [*visible? (::visible? state)]
-        (visibility-sensor
-         (merge
-          {:on-change (fn [v]
-                        (reset! *visible? v)
-                        (when (and once? v)
-                          (reset! *active? false)))
-           :partialVisibility true
-           :offset {:top -300
-                    :bottom -300}
-           :scrollCheck true
-           :scrollThrottle 500
-           :active @*active?}
-          sensor-opts)
-         (lazy-visible-inner @*visible? content-fn))))))
+(rum/defc lazy-visible
+  ([content-fn]
+   (lazy-visible content-fn nil))
+  ([content-fn _debug-id]
+   (if (or (util/mobile?) (mobile-util/native-platform?))
+     (content-fn)
+     (let [[hasBeenSeen setHasBeenSeen] (rum/use-state false)
+           [last-changed-time set-last-changed-time!] (rum/use-state nil)
+           inViewState (useInView #js {:rootMargin "100px"
+                                       :onChange (fn [in-view? entry]
+                                                   (let [self-top (.-top (.-boundingClientRect entry))
+                                                         time' (util/time-ms)]
+                                                     (when (or in-view?
+                                                               (and
+                                                                (nil? last-changed-time)
+                                                                (> (- time' last-changed-time) 50)
+                                                                (<= self-top 0)))
+                                                       (set-last-changed-time! time')
+                                                       (setHasBeenSeen in-view?))))})
+           ref (.-ref inViewState)]
+       (lazy-visible-inner hasBeenSeen content-fn ref)))))

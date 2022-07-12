@@ -421,7 +421,9 @@
   [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
-     {:class (if tag? "tag" "page-ref")
+     {:class (cond-> (if tag? "tag" "page-ref")
+               (:property? config)
+               (str " page-property-key"))
       :data-ref page-name
       :on-mouse-down
       (fn [e]
@@ -1065,7 +1067,7 @@
 ;;;; Macro component render functions
 (defn- macro-query-cp
   [config arguments]
-  [:div.dsl-query
+  [:div.dsl-query.overflow-x-hidden.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
                     (string/trim))]
      (when-not (string/blank? query)
@@ -1805,7 +1807,7 @@
   [config block k v]
   (let [date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:span.page-property-key.font-medium (name k)]
+     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
      [:span.mr-1 ":"]
      (cond
        (int? v)
@@ -1894,12 +1896,12 @@
                            (do
                              (reset! show? false)
                              (reset! commands/*current-command nil)
-                             (state/set-editor-show-date-picker! false)
+                             (state/clear-editor-action!)
                              (state/set-timestamp-block! nil))
                            (do
                              (reset! show? true)
                              (reset! commands/*current-command typ)
-                             (state/set-editor-show-date-picker! true)
+                             (state/set-editor-action! :datepicker)
                              (state/set-timestamp-block! {:block block
                                                           :typ typ
                                                           :show? show?}))))}
@@ -1923,7 +1925,9 @@
    (util/details-or-summary? target)
    (and (util/sup? target)
         (dom/has-class? target "fn"))
-   (dom/has-class? target "image-resize")))
+   (dom/has-class? target "image-resize")
+   (dom/closest target "a")
+   (dom/closest target ".dsl-query")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
@@ -2057,7 +2061,7 @@
 
      [:<>
       [:div.flex.flex-row.justify-between.block-content-inner
-       [:div.flex-1
+       [:div.flex-1.w-full
         (cond
           (seq title)
           (build-block-title config block)
@@ -2168,7 +2172,10 @@
             (ui/block-error "Block Render Error:"
                             {:content (:block/content block)
                              :section-attrs
-                             {:on-click #(state/set-editing! edit-input-id (:block/content block) block "")}})
+                             {:on-click #(do
+                                           (editor-handler/clear-selection!)
+                                           (editor-handler/unhighlight-blocks!)
+                                           (state/set-editing! edit-input-id (:block/content block) block ""))}})
             (block-content config block edit-input-id block-id slide?))]
           [:div.flex.flex-row.items-center
            (when (and (:embed? config)
@@ -2551,10 +2558,7 @@
         custom-query? (boolean (:custom-query? config))]
     (if (and ref? (not custom-query?) (not (:ref-query-child? config)))
       (ui/lazy-visible
-       (fn []
-         (block-container-inner state repo config block))
-       nil
-       {})
+       (fn [] (block-container-inner state repo config block)))
       (block-container-inner state repo config block))))
 
 (defn divide-lists
@@ -2724,29 +2728,32 @@
   [state]
   (let [[config query] (:rum/args state)
         repo (state/get-current-repo)
-        result-atom (atom nil)
-        query-atom (if (:dsl-query? config)
-                     (let [q (:query query)
-                           form (safe-read-string q false)]
-                       (cond
-                          ;; Searches like 'foo' or 'foo bar' come back as symbols
-                         ;; and are meant to go directly to full text search
-                         (and (util/electron?) (symbol? form)) ; full-text search
-                         (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                           (when (seq blocks)
-                             (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                               (reset! result-atom result))))
+        result-atom (or (:query-atom state) (atom nil))
+        [full-text-search? query-atom] (if (:dsl-query? config)
+                                         (let [q (:query query)
+                                               form (safe-read-string q false)]
+                                           (cond
+                                             ;; Searches like 'foo' or 'foo bar' come back as symbols
+                                             ;; and are meant to go directly to full text search
+                                             (and (util/electron?) (symbol? form)) ; full-text search
+                                             [true
+                                              (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
+                                                (when (seq blocks)
+                                                  (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                                    (reset! result-atom result))))]
 
-                         (symbol? form)
-                         (atom nil)
+                                             (symbol? form)
+                                             [false (atom nil)]
 
-                         :else
-                         (query-dsl/query (state/get-current-repo) q)))
-                     (db/custom-query query))
+                                             :else
+                                             [false (query-dsl/query (state/get-current-repo) q)]))
+                                         [false (db/custom-query query)])
         query-atom (if (instance? Atom query-atom)
                      query-atom
                      result-atom)]
-    (assoc state :query-atom query-atom)))
+    (assoc state
+           :query-atom query-atom
+           :full-text-search? full-text-search?)))
 
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
@@ -2806,21 +2813,30 @@
         [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
           [:div.custom-query-title.flex.justify-between.w-full
-           [:div [:span.title-text (cond
-                               (vector? title) title
-                               (string? title) (inline-text config
-                                                            (get-in config [:block :block/format] :markdown)
-                                                            title)
-                               :else title)]
+           [:div.flex.items-center
+            (when (:full-text-search? state)
+              [:a.control.fade-link.mr-1.inline-flex
+               {:title "Refresh query result"
+                :on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (trigger-custom-query! state))}
+               (ui/icon "refresh" {:style {:font-size 20}})])
+            [:span.title-text (cond
+                                (vector? title) title
+                                (string? title) (inline-text config
+                                                             (get-in config [:block :block/format] :markdown)
+                                                             title)
+                                :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
+
            ;;insert an "edit" button in the query view
            (when-not built-in?
-            [:a.opacity-70.hover:opacity-100.svg-small.inline
-                      {:on-mouse-down (fn [e]
-                                        (util/stop e)
-                                        (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
-                      svg/edit])]
+             [:a.opacity-70.hover:opacity-100.svg-small.inline
+              {:on-mouse-down (fn [e]
+                                (util/stop e)
+                                (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+              svg/edit])]
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))
@@ -2893,8 +2909,8 @@
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
     (fn [] (custom-query* config q))
-    nil
-    {})))
+    "custom-query")))
+
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))

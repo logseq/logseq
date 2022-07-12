@@ -105,8 +105,7 @@
     (when show?
       (reset! show? false)))
   (clear-timestamp!)
-  (state/set-editor-show-date-picker! false)
-  (commands/restore-state false))
+  (commands/restore-state))
 
 (rum/defc time-repeater < rum/reactive
   (mixins/event-mixin
@@ -147,7 +146,7 @@
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
-    (when (state/sub :editor/show-date-picker?)
+    (when (= :datepicker (state/sub :editor/action))
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
                                             :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker
@@ -164,7 +163,7 @@
                                                (util/format "[[%s]]" journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker! false)
+               (state/clear-editor-action!)
                (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?
          (time-repeater))])))

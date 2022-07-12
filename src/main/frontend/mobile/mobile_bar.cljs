@@ -49,8 +49,7 @@
                         (set-command-stats icon))
                       (if event?
                         (command-handler e)
-                        (command-handler))
-                      (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000)))}
+                        (command-handler)))}
     (ui/icon icon {:style {:fontSize ui/icon-size}})]])
 
 (rum/defc timestamp-submenu
@@ -70,7 +69,6 @@
       {:on-mouse-down (fn [event]
                         (util/stop event)
                         (set-command-stats :calendar)
-                        (state/set-state! :mobile/toolbar-update-observer (rand-int 1000000))
                         (let [target (gdom/getNextElementSibling (.-target event))]
                           (dom/add-class! target "show-submenu")))}
       (ui/icon "calendar" {:style {:fontSize ui/icon-size}})
@@ -118,8 +116,7 @@
   []
   (when (and (state/sub :editor/editing?)
              (or (state/sub :mobile/show-toolbar?)
-                 (mobile-util/native-ipad?))
-             (state/sub :mobile/toolbar-update-observer))
+                 (mobile-util/native-ipad?)))
     (when-let [config-toolbar-stats (:mobile/toolbar-stats (state/get-config))]
       (reset! commands-stats config-toolbar-stats))
     (let [parent-id (state/get-edit-input-id)

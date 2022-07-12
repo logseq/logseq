@@ -43,6 +43,8 @@
                    :win    win})))
 
 (defn open-url-handler
+  "win - the main window instance (first renderer process)
+   url - the input URL"
   [win url]
   (.info logger "open-url" (str {:url url}))
 

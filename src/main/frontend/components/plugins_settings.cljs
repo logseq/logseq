@@ -74,6 +74,12 @@
     [:small.pl-1.flex-1 description]
     [:div.pl-1 (edit-settings-file pid nil)]]])
 
+(rum/defc render-item-heading
+  [{:keys [title]}]
+
+  [:div.heading-item
+   [:h2 title]])
+
 (rum/defc settings-container
   [schema ^js pl]
   (let [^js _settings (.-settings pl)
@@ -107,6 +113,7 @@
            #{:boolean} (render-item-toggle val desc update-setting!)
            #{:enum} (render-item-enum val desc update-setting!)
            #{:object} (render-item-object val desc pid)
+           #{:heading} (render-item-heading desc)
 
            [:p (str "#Not Handled#" key)]))]
 
