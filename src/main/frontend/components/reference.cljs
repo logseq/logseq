@@ -3,13 +3,13 @@
             [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model-db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -32,7 +32,7 @@
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
      [:div.cp__filters-input-panel.flex (ui/icon "search") [:input.cp__filters-input.w-full
-            {:placeholder "Search in filters"
+            {:placeholder (t :filter/search)
              :auto-focus true
              :on-change (fn [e]
                           (reset! filter-search (util/evalue e)))}]]
