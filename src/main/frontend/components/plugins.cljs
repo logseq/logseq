@@ -797,13 +797,20 @@
 
      (rum/use-effect!
       (fn []
+        (let [timer (js/setTimeout
+                     #(plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
+                     100)]
+          #(js/clearTimeout timer)))
+      [id])
+
+     (rum/use-effect!
+      (fn []
         (let [el (rum/deref *el-ref)]
-          (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
           #(when-let [uis (seq (.querySelectorAll el "[data-injected-ui]"))]
              (doseq [^js el uis]
                (when-let [id (.-injectedUi (.-dataset el))]
                  (js/LSPluginCore._forceCleanInjectedUI id))))))
-      [id])
+      [])
 
      [:div.lsp-hook-ui-slot
       (merge opts {:id            id
