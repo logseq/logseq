@@ -63,6 +63,12 @@
          (content/content block-id
                           {:hiccup ref-hiccup})]))))
 
+(defn- scheduled-or-deadlines?
+  [page-name]
+  (and (date/valid-journal-title? (string/capitalize page-name))
+       (not (true? (state/scheduled-deadlines-disabled?)))
+       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
@@ -70,12 +76,11 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name]
+  [state page-name refed-blocks-ids]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
           threshold (state/get-linked-references-collapsed-threshold)
-          refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
           n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
           default-collapsed? (>= (count refed-blocks-ids) threshold)
@@ -83,10 +88,7 @@
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
-          journal? (date/valid-journal-title? (string/capitalize page-name))
-          scheduled-or-deadlines (when (and journal?
-                                            (not (true? (state/scheduled-deadlines-disabled?)))
-                                            (= page-name (string/lower-case (date/journal-name))))
+          scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
@@ -163,13 +165,17 @@
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
 
-(rum/defc references
+(rum/defc references < rum/reactive db-mixins/query
   [page-name]
-  (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error")
-   (ui/lazy-visible
-    (fn []
-      (references* page-name)))))
+  (let [refed-blocks-ids (when page-name (model-db/get-referenced-blocks-ids page-name))]
+    (when (or (seq refed-blocks-ids)
+              (scheduled-or-deadlines? page-name))
+      (ui/catch-error
+       (ui/component-error "Linked References: Unexpected error")
+       (ui/lazy-visible
+        (fn []
+          (references* page-name refed-blocks-ids))
+        (str "ref-" page-name))))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
