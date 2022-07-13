@@ -452,7 +452,7 @@
       content
       (gp-property/->new-properties content))))
 
-(defn- get-custom-id-or-new-id
+(defn get-custom-id-or-new-id
   [properties]
   (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
                                (get-in properties [:properties :custom_id])

@@ -7,6 +7,7 @@
   [text]
   (let [{:keys [blocks]} (extract/extract "a.md" text {:block-pattern "-"})
           lefts (map (juxt :block/parent :block/left) blocks)]
+    (pprint/pprint blocks)
     (if (not= (count lefts) (count (distinct lefts)))
       (do
         (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) blocks))
@@ -53,7 +54,10 @@
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    [{:block/content "foo content",
+    [{:block/content "foo content a",
+      :block/format :markdown,
+      :block/unordered true},
+     {:block/content "foo content b",
       :block/format :markdown,
       :block/unordered true}],
     :pages
@@ -67,5 +71,5 @@
         page (first pages)]
     (is (= (get-in page [:block/file :file/path]) "foo.edn"))
     (is (= (get-in page [:block/name]) "foo"))
-    (is (every? #(and (= (:block/left %) {:block/name "foo"})
-                      (= (:block/parent %) {:block/name "foo"})) blocks))))
+    (is (every? #(= (:block/parent %) {:block/name "foo"}) blocks))
+    (is (= (:block/uuid (first blocks)) (get-in (second blocks) [:block/left 1])))))

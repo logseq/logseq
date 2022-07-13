@@ -192,7 +192,8 @@
             page-entity (build-page-entity {} file page-name page-name nil options)
             page-block (merge page-block page-entity {:block/uuid (d/squuid)})
             blocks (->> blocks
-                        (map #(assoc % :block/level 1))
+                        (map #(merge % {:block/level 1
+                                        :block/uuid (gp-block/get-custom-id-or-new-id (:block/properties %))}))
                         (gp-block/with-parent-and-left {:block/name page-name}))]
         {:pages [page-block]
          :blocks blocks}))))
