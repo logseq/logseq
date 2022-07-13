@@ -11,19 +11,11 @@
             [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
 
-(def built-in-extended-properties (atom #{}))
-(defn register-built-in-properties
-  [props]
-  (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
-
 (defn built-in-properties
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc
-     :ls-type :hl-type :hl-page :hl-stamp}
-   (set (map keyword config/markers))
-   (set (config/get-block-hidden-properties))
-   @built-in-extended-properties))
+   (gp-property/built-in-properties)
+   (set (config/get-block-hidden-properties))))
 
 (defn properties-built-in?
   [properties]

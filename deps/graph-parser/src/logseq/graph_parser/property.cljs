@@ -2,6 +2,7 @@
   "Property fns needed by graph-parser"
   (:require [logseq.graph-parser.util :as gp-util]
             [clojure.string :as string]
+            [clojure.set :as set]
             [goog.string :as gstring]
             [goog.string.format]))
 
@@ -11,6 +12,24 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
+
+(def markers
+  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
+    "canceled" "cancelled" "started" "in-progress"})
+
+(def built-in-extended-properties (atom #{}))
+(defn register-built-in-properties
+  [props]
+  (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
+
+(defn built-in-properties
+  "Properties that should only be used by logseq"
+  []
+  (set/union
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc
+     :ls-type :hl-type :hl-page :hl-stamp}
+   (set (map keyword markers))
+   @built-in-extended-properties))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")

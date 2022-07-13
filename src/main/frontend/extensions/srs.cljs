@@ -3,6 +3,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.util :as util]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
@@ -707,12 +708,12 @@
 (component-macro/register query-macro-name cards)
 
 ;;; register builtin properties
-(property/register-built-in-properties #{card-last-interval-property
-                                         card-repeats-property
-                                         card-last-reviewed-property
-                                         card-next-schedule-property
-                                         card-last-easiness-factor-property
-                                         card-last-score-property})
+(gp-property/register-built-in-properties #{card-last-interval-property
+                                            card-repeats-property
+                                            card-last-reviewed-property
+                                            card-next-schedule-property
+                                            card-last-easiness-factor-property
+                                            card-last-score-property})
 
 ;;; register slash commands
 (commands/register-slash-command ["Cards"
