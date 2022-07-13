@@ -26,8 +26,10 @@
   "Properties that should only be used by logseq"
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc
-     :ls-type :hl-type :hl-page :hl-stamp}
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at
+     :last-modified-at :created_at :last_modified_at :query-table
+     :query-properties :query-sort-by :query-sort-desc :ls-type :hl-type
+     :hl-page :hl-stamp :template-including-parent :icon :filters}
    (set (map keyword markers))
    @built-in-extended-properties))
 
