@@ -658,7 +658,8 @@
     :date-picker/next-day
     :date-picker/prev-week
     :date-picker/next-week
-    :date-picker/complete]})
+    :date-picker/complete
+    :git/commit]})
 
 (let [category-maps {::category (set (keys category*))
                      ::dicts/category (set (keys dicts/category))}]
