@@ -11,18 +11,26 @@
             [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
 
-(defn built-in-properties
+(defn hidden-properties
+  "These are properties hidden from user including built-in ones and ones
+  configured by user"
   []
   (set/union
-   (gp-property/built-in-properties)
+   (gp-property/hidden-built-in-properties)
    (set (config/get-block-hidden-properties))))
 
-(defn properties-built-in?
+;; TODO: Investigate if this behavior is correct for configured hidden
+;; properties and for editable built in properties
+(def built-in-properties
+  "Alias to hidden-properties to keep existing behavior"
+  hidden-properties)
+
+(defn properties-hidden?
   [properties]
   (and (seq properties)
        (let [ks (map (comp keyword string/lower-case name) (keys properties))
-             built-in-properties-set (built-in-properties)]
-         (every? built-in-properties-set ks))))
+             hidden-properties-set (hidden-properties)]
+         (every? hidden-properties-set ks))))
 
 (defn remove-empty-properties
   [content]

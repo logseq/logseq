@@ -1549,7 +1549,7 @@
   (and
    (or
     (empty? properties)
-    (property/properties-built-in? properties))
+    (property/properties-hidden? properties))
 
    (empty? title)
 
@@ -2083,7 +2083,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (property/properties-built-in? properties)]
+                 (let [hidden? (property/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))

@@ -22,14 +22,19 @@
   [props]
   (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
 
-(defn built-in-properties
-  "Properties that should only be used by logseq"
+(defn editable-built-in-properties
+  "Properties used by logseq that user can edit"
+  []
+  #{:title :alias :tags :template :template-including-parent :public})
+
+(defn hidden-built-in-properties
+  "Properties used by logseq that user can't edit or see"
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at
-     :last-modified-at :created_at :last_modified_at :query-table
-     :query-properties :query-sort-by :query-sort-desc :ls-type :hl-type
-     :hl-page :hl-stamp :template-including-parent :icon :filters}
+   #{:id :custom-id :background-color :background_color :heading :collapsed
+     :created-at :updated-at :last-modified-at :created_at :last_modified_at
+     :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
+     :hl-type :hl-page :hl-stamp :icon :filters :file-path}
    (set (map keyword markers))
    @built-in-extended-properties))
 

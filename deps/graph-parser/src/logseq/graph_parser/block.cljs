@@ -170,7 +170,8 @@
                                          (remove string/blank?)
                                          ;; Remove built-in properties as we don't want pages
                                          ;; created for them by default
-                                         (remove (set (map name (gp-property/built-in-properties))))
+                                         (remove (set (map name (into (gp-property/editable-built-in-properties)
+                                                                      (gp-property/hidden-built-in-properties)))))
                                          (distinct))]
     (->> (concat page-refs property-keys-page-refs)
          (remove string/blank?)
