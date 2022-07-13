@@ -32,7 +32,7 @@
   [repo page-db-id]
   (let [page-block (db/pull repo '[* {:block/file [:file/path]}] page-db-id)
         file-path (get-in page-block [:block/file :file/path])
-        edn? (string/ends-with? file-path ".edn")
+        edn? (and file-path (string/ends-with? file-path ".edn"))
         blocks (model/get-page-blocks-no-cache repo (:block/name page-block)
                                                {:pull-keys (if edn? blocks-pull-keys-with-persisted-ids '[*])})]
     (when-not (and (= 1 (count blocks))

@@ -186,17 +186,17 @@
   [file content {:keys [verbose] :or {verbose true} :as options}]
   (let [_ (when verbose (println "Parsing start: " file))
         {:keys [pages blocks]} (gp-util/safe-read-string content)
-        page-block (first pages)]
-    (when (:block/whiteboard? page-block)
-      (let [page-name (filepath->page-name file)
-            page-entity (build-page-entity {} file page-name page-name nil options)
-            page-block (merge page-block page-entity {:block/uuid (d/squuid)})
-            blocks (->> blocks
-                        (map #(merge % {:block/level 1
-                                        :block/uuid (gp-block/get-custom-id-or-new-id (:block/properties %))}))
-                        (gp-block/with-parent-and-left {:block/name page-name}))]
-        {:pages [page-block]
-         :blocks blocks}))))
+        page-block (first pages)
+        page-name (filepath->page-name file)
+        page-entity (build-page-entity {} file page-name page-name nil options)
+        page-block (merge page-block page-entity {:block/uuid (d/squuid)})
+        blocks (->> blocks
+                    (map #(merge % {:block/level 1
+                                    :block/uuid (gp-block/get-custom-id-or-new-id (:block/properties %))}))
+                    (gp-block/with-parent-and-left {:block/name page-name}))
+        _ (when verbose (println "Parsing finished: " file))]
+    {:pages [page-block]
+     :blocks blocks}))
 
 (defn- with-block-uuid
   [pages]

@@ -1,6 +1,7 @@
 (ns frontend.modules.whiteboard.core
   (:require [frontend.db :as db]
             [frontend.db.model :as model]
+            [clojure.pprint :as pprint]
             [goog.object :as gobj]))
 
 (defn- get-page-block [page-name]
@@ -8,7 +9,8 @@
 
 (defn- block->shape [block]
   (let [properties (:block/properties block)]
-    (merge properties
+    (merge block
+           properties
            ;; Use the block's id as the shape's id.
            {:id (str (:block/uuid block))})))
 
@@ -47,3 +49,5 @@
                                blocks {})
         blocks (map #(shape->block blocks-by-uuid %) shapes)]
     [page-block blocks]))
+
+(js/console.log (page-name->tldr "edn-test"))
