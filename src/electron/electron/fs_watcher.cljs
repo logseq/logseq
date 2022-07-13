@@ -82,8 +82,11 @@
              (fn [path]
                (publish-file-event! dir path "change")))
         (.on dir-watcher "unlink"
+             ;; delay 500ms for syncing disks
              (fn [path]
-               (publish-file-event! dir path "unlink")))
+               (js/setTimeout #(when (not (fs/existsSync path))
+                                 (publish-file-event! dir path "unlink"))
+                              500)))
         (.on dir-watcher "error"
              (fn [path]
                (println "Watch error happened: "
