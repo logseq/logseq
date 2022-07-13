@@ -1136,10 +1136,10 @@
 
 (defn get-page-referenced-blocks
   ([page]
-   (get-page-referenced-blocks (state/get-current-repo) page false))
-  ([page filter?]
-   (get-page-referenced-blocks (state/get-current-repo) page filter?))
-  ([repo page filter?]
+   (get-page-referenced-blocks (state/get-current-repo) page {:filter? false}))
+  ([page options]
+   (get-page-referenced-blocks (state/get-current-repo) page options))
+  ([repo page options]
    (when repo
      (when (conn/get-db repo)
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
@@ -1154,7 +1154,7 @@
                                      [?block :block/refs ?ref-page]]
                                    pages
                                    (butlast block-attrs))
-             result (if (not filter?) (->> query-result
+             result (if (not (options :filter?)) (->> query-result
                                            react
                                            (remove (fn [block]
                                                      (= page-id (:db/id (:block/page block)))))
@@ -1251,7 +1251,7 @@
 ;; TODO: Replace recursive queries with datoms index implementation
 ;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
-  ([block-uuid & filter]
+  ([block-uuid & options]
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
        (let [block (db-utils/entity [:block/uuid block-uuid])
@@ -1267,7 +1267,7 @@
                                         block-attrs)
                                react
                                (sort-by-left-recursive))]
-         (if filter
+         (if (options :filter?)
            (map (comp :block/original-name :block/page) query-result)
            (db-utils/group-by-page query-result)))))))
 

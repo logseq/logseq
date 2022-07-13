@@ -16,10 +16,14 @@
             [frontend.util :as util]
             [rum.core :as rum]))
 
+(defn- frequencies-sort
+  [references]
+  (sort-by second #(> %1 %2) references))
+
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
   [state filters-atom _close-fn references page-name]
   (let [filter-search (get state ::filterSearch)
-        filtered-references  (search/fuzzy-search references @filter-search :limit 20 :extract-fn (fn [arg] (arg 0)))]
+        filtered-references  (frequencies-sort (search/fuzzy-search references @filter-search :limit 5000 :extract-fn first))]
     [:div.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -29,27 +33,27 @@
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
      [:div.cp__filters-input-panel.flex (ui/icon "search") [:input.cp__filters-input.w-full
-                                                            {:placeholder (t :filter/search)
+                                                            {:placeholder (t :linked-references/filter-search)
                                                              :auto-focus true
                                                              :on-change (fn [e]
                                                                           (reset! filter-search (util/evalue e)))}]]
      (when (seq filtered-references)
        (let [filters (rum/react filters-atom)]
          [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-          (for [reference filtered-references]
-            (let [lc-reference (string/lower-case (reference 0))
+          (for [[ref-name ref-count] filtered-references]
+            (let [lc-reference (string/lower-case ref-name)
                   filtered (get filters lc-reference)
                   color (condp = filtered
                           true "text-green-400"
                           false "text-red-400"
                           nil)]
-              [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key (reference 0) :class color :style {:border-color "currentColor"}
+              [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key ref-name :class color :style {:border-color "currentColor"}
                                                                   :on-click (fn [e]
                                                                               (swap! filters-atom #(if (nil? (get filters lc-reference))
                                                                                                      (assoc % lc-reference (not (.-shiftKey e)))
                                                                                                      (dissoc % lc-reference)))
                                                                               (page-handler/save-filter! page-name @filters-atom))}
-               (reference 0) [:sub " " (reference 1)]]))]))]))
+               ref-name [:sub " " ref-count]]))]))]))
 
 (defn filter-dialog
   [filters-atom references page-name]
@@ -127,16 +131,13 @@
                 :on-mouse-down (fn [e] (util/stop-propagation e))
                 :on-click (fn []
                             (let [ref-blocks (if block-id
-                                               (db/get-block-referenced-blocks block-id true)
-                                               (db/get-page-referenced-blocks page-name true))
-                                  ;; ref-pages (map (comp :block/original-name first) ref-blocks)
+                                               (db/get-block-referenced-blocks block-id {:filter? true})
+                                               (db/get-page-referenced-blocks page-name {:filter? true}))
                                   references (db/get-page-linked-refs-refed-pages repo page-name)
-                                  references (->> (concat ref-blocks references)
-                                                  (remove nil?)
-                                                  (frequencies))
-                                  references (into (sorted-map-by (fn [key1 key2] (let [numerical-sort (compare (get references key2)
-                                                                                                                (get references key1))]
-                                                                                    (if (= numerical-sort 0) (compare (string/lower-case key1) (string/lower-case key2)) numerical-sort)))) references)]
+                                  references (->>
+                                              (concat ref-blocks references)
+                                              (remove nil?)
+                                              (frequencies))]
                               (state/set-modal! (filter-dialog filters-atom references page-name)
                                                 {:center? true})))}
                (ui/icon "filter" {:class (cond
