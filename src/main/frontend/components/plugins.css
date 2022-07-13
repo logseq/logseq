@@ -465,6 +465,12 @@
         right: 8px;
       }
 
+      .heading-item {
+        margin: 12px 12px 6px;
+        font-weight: bold;
+        border-bottom: 1px solid var(--ls-border-color, #738694);
+      }
+
       .desc-item {
         padding: 12px 12px 6px;
 
@@ -783,7 +789,7 @@
         max-height: 80vh;
         overflow-y: auto;
       }
-      
+
       .menu-link {
         padding: 3px 5px;
       }

@@ -855,26 +855,31 @@
   "type of :toolbar, :pagebar"
   [_state type]
   (when (state/sub [:plugin/installed-ui-items])
-    (let [pinned-items (state/sub [:plugin/preferences :pinnedToolbarItems])
+    (let [toolbar?     (= :toolbar type)
+          pinned-items (state/sub [:plugin/preferences :pinnedToolbarItems])
           pinned-items (and (sequential? pinned-items) (into #{} pinned-items))
           items        (state/get-plugins-ui-items-with-type type)
           items        (sort-by #(:key (second %)) items)]
 
       (when-let [items (and (seq items)
-                            (map #(assoc-in % [1 :pinned?]
-                                            (let [[_ {:keys [key]} pid] %
-                                                  pkey (str (name pid) ":" key)]
-                                              (contains? pinned-items pkey)))
-                                 items))]
+                            (if toolbar?
+                              (map #(assoc-in % [1 :pinned?]
+                                              (let [[_ {:keys [key]} pid] %
+                                                    pkey (str (name pid) ":" key)]
+                                                (contains? pinned-items pkey)))
+                                   items)
+                              items))]
 
         [:div {:class     (str "ui-items-container")
                :data-type (name type)}
          (conj (for [[_ {:keys [key pinned?] :as opts} pid] items]
-                 (when (or (not (set? pinned-items)) pinned?)
+                 (when (or (not toolbar?)
+                           (not (set? pinned-items)) pinned?)
                    (rum/with-key (ui-item-renderer pid type opts) key))))
 
          ;; manage plugin buttons
-         (toolbar-plugins-manager-list items)]))))
+         (when toolbar?
+           (toolbar-plugins-manager-list items))]))))
 
 (rum/defcs hook-ui-fenced-code < rum/reactive
   [_state content {:keys [render edit] :as _opts}]

@@ -196,6 +196,7 @@ export interface PageEntity {
   children?: Array<PageEntity>
   format?: 'markdown' | 'org'
   journalDay?: number
+  updatedAt?: number
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -227,7 +228,7 @@ export type SimpleCommandKeybinding = {
 
 export type SettingSchemaDesc = {
   key: string
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'object'
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'heading'
   default: string | number | boolean | Array<any> | object | null
   title: string
   description: string // support markdown
@@ -622,7 +623,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   renamePage: (oldName: string, newName: string) => Promise<void>
 
-  getAllPages: (repo?: string) => Promise<any>
+  getAllPages: (repo?: string) => Promise<PageEntity[] | null>
 
   prependBlockInPage: (
     page: PageIdentity,

@@ -11,7 +11,11 @@
   [hiccup]
   (walk/postwalk (fn [f]
                    (if (map? f)
-                     (dissoc f :style)
+                      (apply dissoc f (conj (filter (fn [key]
+                                                      (string/starts-with? (str key) ":data-"))
+                                                    (keys f))
+                                            :style
+                                            :class))
                      f)) hiccup))
 
 (defn- export-hiccup
@@ -40,28 +44,34 @@
                              (let [style (:style attrs)
                                    [bold? italic? underline? strike-through? mark?]
                                    (when style
-                                     [(or (string/includes? style "font-weight:700")
-                                          (string/includes? style "font-weight:600"))
-                                      (string/includes? style "font-style:italic")
-                                      (string/includes? style "text-decoration:underline")
-                                      (string/includes? style "text-decoration:line-through")
-                                      (string/includes? style "background-color:#")])
+                                     [(re-find #"font-weight:\s*(([6789]\d\d)|1000|(semi)?bold)\b" style)
+                                      (re-find #"font-style:\s*italic\b" style)
+                                      (re-find #"text-decoration(-line)?:\s*underline\b" style)
+                                      (re-find #"text-decoration:\s*line-through\b" style)
+                                      (re-find #"background-color:\s*yellow\b" style)])
                                    pattern (cond
                                              (contains? #{:b :strong} tag)
-                                             (when-not (and style (string/includes? style "font-weight:normal"))
+                                             (when-not (and style (string/includes? style "font-weight: normal"))
                                                (config/get-bold format))
+
                                              (contains? #{:i :em} tag)
-                                             (when-not (and style (string/includes? style "font-style:normal"))
-                                               (config/get-italic format))
-                                             (contains? #{:ins} tag)
-                                             (when-not (and style (string/includes? style "text-decoration:normal"))
+                                             (when-not (and style (string/includes? style "font-style: normal"))
+                                               (if bold?
+                                                 (config/get-bold format)
+                                                 (config/get-italic format)))
+
+                                             (contains? #{:ins :u} tag)
+                                             (when-not (and style (string/includes? style "text-decoration: normal"))
                                                (config/get-underline format))
-                                             (contains? #{:del} tag)
-                                             (when-not (and style (string/includes? style "text-decoration:normal"))
+
+                                             (contains? #{:del :s :strike} tag)
+                                             (when-not (and style (string/includes? style "text-decoration: normal"))
                                                (config/get-strike-through format))
-                                             (contains? #{:mark} tag)
-                                             (when-not (and style (string/includes? style "background-color:transparent"))
+
+                                             (or (contains? #{:mark} tag) mark?)
+                                             (when-not (and style (string/includes? style "background-color: transparent"))
                                                (config/get-highlight format))
+
                                              (and (contains? #{:span} tag)
                                                   (not (every? string/blank? children)))
                                              (remove nil?
@@ -70,13 +80,23 @@
                                                       (when underline? (config/get-underline format))
                                                       (when strike-through? (config/get-strike-through format))
                                                       (when mark? (config/get-highlight format))])
+
                                              :else
                                              nil)
+                                   pattern (if (string? pattern)
+                                             pattern
+                                             (apply str pattern))
                                    children' (map-join children)]
-                               (when-not (string/blank? children')
-                                 (str (if (string? pattern) pattern (apply str pattern))
-                                      children'
-                                      (if (string? pattern) pattern (apply str (reverse pattern)))))))
+                               (when (not-empty children')
+                                 (cond
+                                   (string/blank? pattern)
+                                   children'
+
+                                   (string/starts-with? children' pattern)
+                                   children'
+
+                                   :else
+                                   (str pattern children' (string/reverse pattern))))))
         wrapper (fn [tag content]
                   (let [content (cond
                                   (contains? denied-tags tag)
@@ -122,11 +142,15 @@
                                       :org (util/format "[[%s][%s]]" href label)
                                       nil))))
                            :img (let [src (:src attrs)
-                                      alt (or (:alt attrs) "")]
-                                  (case format
-                                    :markdown (util/format "![%s](%s)" alt src)
-                                    :org (util/format "[[%s][%s]]" src alt)
-                                    nil))
+                                      alt (or (:alt attrs) "")
+                                      ;; reject url-encoded and utf8-encoded(svg)
+                                      unsafe-data-url? (and (string/starts-with? src "data:")
+                                                            (not (re-find #"^data:.*?;base64," src)))]
+                                  (when-not unsafe-data-url?
+                                    (case format
+                                      :markdown (util/format "![%s](%s)" alt src)
+                                      :org (util/format "[[%s][%s]]" src alt)
+                                      nil)))
                            :p (util/format "%s"
                                            (map-join children))
 
@@ -134,18 +158,25 @@
 
                            (_ :guard #(contains? #{:b :strong
                                                    :i :em
-                                                   :ins
-                                                   :del
+                                                   :ins :u
+                                                   :del :s :strike
                                                    :mark
                                                    :span} %))
                            (emphasis-transform tag attrs children)
 
-                           :code (if @*inside-pre?
+                           :code (cond
+                                   @*inside-pre?
                                    (map-join children)
+
+                                   (string? (first children))
                                    (let [pattern (config/get-code format)]
                                      (str " "
                                           (str pattern (first children) pattern)
-                                          " ")))
+                                          " "))
+
+                                   ;; skip monospace style, since it has more complex children
+                                   :else
+                                   (map-join children))
 
                            :pre
                            (do
@@ -169,6 +200,9 @@
 
                            :li
                            (str "- " (map-join children))
+
+                           :br
+                           "\n"
 
                            :dt
                            (case format
@@ -218,7 +252,7 @@
                  (for [x hiccup]
                    (single-hiccup-transform x))
                  (single-hiccup-transform hiccup))]
-    (string/replace (apply str result) #"\n\n+" "\n\n")))
+    (apply str result)))
 
 (defn hiccup->doc
   [format hiccup]
@@ -226,9 +260,8 @@
     (if (string/blank? s)
       ""
       (-> s
-          (string/trim)
-          (string/replace "\n\n\n\n" "\n\n")
-          (string/replace "\n\n\n" "\n\n")))))
+          string/trim
+          (string/replace #"\n\n+" "\n\n")))))
 
 (defn html-decode-hiccup
   [hiccup]

@@ -312,6 +312,11 @@
   (when input
     (.-selectionEnd input)))
 
+(defn input-text-selected?
+  [input]
+  (not= (get-selection-start input)
+        (get-selection-end input)))
+
 (defn get-selection-direction
   [input]
   (when input
