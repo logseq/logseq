@@ -66,9 +66,9 @@
 
 (deftest test-extract-whiteboard-edn
   []
-  (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "foo.edn" (pr-str foo-edn) {})
+  (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
         page (first pages)]
-    (is (= (get-in page [:block/file :file/path]) "foo.edn"))
+    (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
     (is (= (get-in page [:block/name]) "foo"))
     (is (every? #(= (:block/parent %) {:block/name "foo"}) blocks))
     (is (= (:block/uuid (first blocks)) (get-in (second blocks) [:block/left 1])))))

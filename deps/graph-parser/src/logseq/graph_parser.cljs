@@ -39,8 +39,7 @@
         (cond (contains? gp-config/mldoc-support-formats format)
               (extract/extract file content extract-options')
 
-              ;; File can be saved as plain edn (mostly, the whiteboard files)
-              (and (= format :edn) (gp-config/whiteboard? file))
+              (gp-config/whiteboard? file)
               (extract/extract-whiteboard-edn file content extract-options')
 
               :else nil)

@@ -24,7 +24,8 @@
 
 (defn whiteboard?
   [path]
-  (string/includes? path (str "/" default-whiteboards-directory "/")))
+  (and (string/includes? path (str "/" default-whiteboards-directory "/"))
+       (string/ends-with? path ".edn")))
 
 ;; TODO: rename
 (defonce mldoc-support-formats
