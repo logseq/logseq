@@ -254,8 +254,9 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [query-string (template/resolve-dynamic-template! query-string)
-           query-string (if (and (not (string/starts-with? query-string "("))
-                                 (not (string/starts-with? query-string "[")))
+           query-string (if-not (or (string/blank? query-string)
+                                    (string/starts-with? query-string "(")
+                                    (string/starts-with? query-string "["))
                           (util/format "[[%s]]" (string/trim query-string))
                           query-string)
            {:keys [query sort-by rules]} (query-dsl/parse query-string)

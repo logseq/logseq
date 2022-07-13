@@ -2790,17 +2790,36 @@
   [_state input input-id search-timeout]
   (fn [e key-code]
     (when-not (util/event-is-composing? e)
-      (let [k (gobj/get e "key")
-            code (gobj/getValueByKeys e "event_" "code")
-            format (:format (get-state))
-            current-pos (cursor/pos input)
+      (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
+            [key-code k code is-processed?]
+            (if (and (mobile-util/native-android?)
+                     (or (= key-code 229)
+                         (= key-code 0)))
+              [(.charCodeAt value (dec current-pos))
+               c
+               (cond
+                 (= c " ")
+                 "Space"
+
+                 (parse-long c)
+                 (str "Digit" c)
+
+                 :else
+                 (str "Key" (string/upper-case c)))
+               false]
+              [key-code
+               (gobj/get e "key")
+               (if (mobile-util/native-android?)
+                 (gobj/get e "key")
+                 (gobj/getValueByKeys e "event_" "code"))
+               (util/event-is-composing? e true)]) ;; #3440
+            format (:format (get-state))
             last-key-code (state/get-last-key-code)
             blank-selected? (string/blank? (util/get-selected-text))
-            is-processed? (util/event-is-composing? e true) ;; #3440
             non-enter-processed? (and is-processed? ;; #3251
-                                      (not= code keycode/enter-code)) ;; #3459
+                                      (not= code keycode/enter-code))  ;; #3459
             editor-action (state/get-editor-action)]
         (cond
           (and (= :commands (state/get-editor-action)) (not= k (state/get-editor-command-trigger)))
@@ -2813,7 +2832,7 @@
           (let [matched-block-commands (get-matched-block-commands input)]
             (if (seq matched-block-commands)
               (cond
-                (= key-code 9)       ;tab
+                (= key-code 9)          ;tab
                 (do
                   (util/stop e)
                   (insert-command! input-id

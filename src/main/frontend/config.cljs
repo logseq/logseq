@@ -124,7 +124,7 @@
       :org
       "/"
       :markdown
-      "_"
+      "*"
       "")))
 (defn get-underline
   [format]
@@ -132,8 +132,8 @@
     (case format
       :org
       "_"
-      :markdown
-      "__"
+      :markdown ;; no underline for markdown
+      ""
       "")))
 (defn get-strike-through
   [format]
