@@ -441,9 +441,7 @@
         [:div.ls-card.content
          {:class (when (or preview? modal?)
                    (str (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto")
-                        (when modal? " modal-cards")))
-          :on-mouse-down (fn [e]
-                           (util/stop e))}
+                        (when modal? " modal-cards")))}
          (let [repo (state/get-current-repo)]
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])

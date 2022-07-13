@@ -101,8 +101,10 @@
            (repo-handler/setup-local-repo-if-not-exists!)
 
            :else
-           (state/set-db-restoring! false))
-
+           (state/set-db-restoring! false))))
+      (p/then
+       (fn []
+         (prn "db restored, setting up repo hooks")
          (store-schema!)
 
          (state/pub-event! [:modal/nfs-ask-permission])
