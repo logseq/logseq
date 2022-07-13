@@ -55,8 +55,8 @@
 
   (testing "parsing whiteboard page"
     (let [conn (ldb/start-conn)]
-      (graph-parser/parse-file conn "foo.edn" (pr-str foo-edn) {})
-      (is (= {:block/name "foo" :block/file {:file/path "foo.edn"}}
+      (graph-parser/parse-file conn "whiteboard/foo.edn" (pr-str foo-edn) {})
+      (is (= {:block/name "foo" :block/file {:file/path "whiteboard/foo.edn"}}
              (let [blocks (d/q '[:find (pull ?b [* {:block/parent
                                                     [:block/name
                                                      {:block/file

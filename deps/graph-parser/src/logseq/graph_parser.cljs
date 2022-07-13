@@ -40,7 +40,7 @@
               (extract/extract file content extract-options')
 
               ;; File can be saved as plain edn (mostly, the whiteboard files)
-              (= format :edn)
+              (and (= format :edn) (gp-config/whiteboard? file))
               (extract/extract-whiteboard-edn file content extract-options')
 
               :else nil)
