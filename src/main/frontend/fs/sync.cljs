@@ -779,15 +779,16 @@
           (get (js->clj r) "txid")))))
 
   (<delete-remote-files [this graph-uuid _base-path filepaths local-txid]
-    (let [token (<! (<get-token this))
-          r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
-                                          (clj->js {:graphUUID graph-uuid
-                                                    :filePaths filepaths
-                                                    :txid local-txid
-                                                    :token token}))))]
-      (if (instance? ExceptionInfo r)
-        r
-        (get (js->clj r) "txid"))))
+    (go
+     (let [token (<! (<get-token this))
+           r (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
+                                           (clj->js {:graphUUID graph-uuid
+                                                     :filePaths filepaths
+                                                     :txid local-txid
+                                                     :token token}))))]
+       (if (instance? ExceptionInfo r)
+         r
+         (get (js->clj r) "txid")))))
 
   (<encrypt-fnames [_ fnames]
     (go
@@ -2185,5 +2186,5 @@
   (<get-remote-all-files-meta remoteapi graph-uuid)
   (<get-local-all-files-meta rsapi graph-uuid
                             (config/get-repo-dir (state/get-current-repo)))
-
+  (def base-path (config/get-repo-dir (state/get-current-repo)))
   )
