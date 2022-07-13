@@ -45,28 +45,28 @@
         queuing?           (and idle? (boolean (seq queuing-files)))
         no-active-files?   (empty? (concat downloading-files queuing-files uploading-files))
         turn-on            #(if-not synced-file-graph?
-                              (let [repo       (state/get-current-repo)
-                                    graph-name (util/node-path.basename repo)
+                              (let [repo (state/get-current-repo)]
+                                (when (and repo (not (config/demo-graph? repo)))
+                                  (let [graph-name (util/node-path.basename repo)
+                                        confirm-fn (fn []
+                                                     (ui/make-confirm-modal
+                                                      {:title      (str "Are you sure to create a new remote graph (" graph-name ")?")
+                                                       :on-confirm (fn [_ {:keys [close-fn]}]
+                                                                     (async/go
+                                                                       (close-fn)
+                                                                       (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+                                                                         (async/<! (fs-sync/sync-start))
+                                                                         ;; update existing repo
+                                                                         (state/set-repos! (map (fn [r]
+                                                                                                  (if (= (:url r) repo)
+                                                                                                    (assoc r
+                                                                                                           :GraphUUID GraphUUID
+                                                                                                           :GraphName graph-name
+                                                                                                           :remote? true)
+                                                                                                    r))
+                                                                                                (state/get-repos))))))}))]
 
-                                    confirm-fn (fn []
-                                                 (ui/make-confirm-modal
-                                                  {:title      (str "Are you sure to create a new remote graph (" graph-name ")?")
-                                                   :on-confirm (fn [_ {:keys [close-fn]}]
-                                                                 (async/go
-                                                                   (close-fn)
-                                                                   (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                                                                     (async/<! (fs-sync/sync-start))
-                                                                     ;; update existing repo
-                                                                     (state/set-repos! (map (fn [r]
-                                                                                              (if (= (:url r) repo)
-                                                                                                (assoc r
-                                                                                                       :GraphUUID GraphUUID
-                                                                                                       :GraphName graph-name
-                                                                                                       :remote? true)
-                                                                                                r))
-                                                                                            (state/get-repos))))))}))]
-
-                                (state/set-modal! (confirm-fn)))
+                                    (state/set-modal! (confirm-fn)))))
                               (fs-sync/sync-start))]
 
     [:div.cp__file-sync-indicator

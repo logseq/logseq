@@ -2106,7 +2106,7 @@
         sm (sync-manager current-user-uuid graph-uuid
                          (config/get-repo-dir repo) repo
                          txid *sync-state)]
-    (when-not (config/demo-graph? repo)
+    (when (and repo (not (config/demo-graph? repo)))
       (go
         ;; 1. if remote graph has been deleted, clear graphs-txid.edn
         ;; 2. if graphs-txid.edn's content isn't [user-uuid graph-uuid txid], clear it

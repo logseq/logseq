@@ -151,9 +151,7 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))
-        graph-file-sync-init-downloading? (:downloading?
-                                           (state/sub [:file-sync/download-init-progress (state/get-current-repo)]))]
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -184,8 +182,9 @@
              (ui/icon "chevron-left" {:style {:fontSize 25}})])))]
 
      [:div.r.flex
-      (when-not (or file-sync-handler/hiding-login&file-sync
-                    graph-file-sync-init-downloading?)
+      (when (and (not file-sync-handler/hiding-login&file-sync)
+                 current-repo
+                 (not (config/demo-graph? current-repo)))
         (fs-sync/indicator))
 
       (when (and (not= (state/get-current-route) :home)
