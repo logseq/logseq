@@ -23,7 +23,10 @@
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
   [state filters-atom _close-fn references page-name]
   (let [filter-search (get state ::filterSearch)
-        filtered-references  (frequencies-sort (search/fuzzy-search references @filter-search :limit 5000 :extract-fn first))]
+        filtered-references  (frequencies-sort
+                              (if (= @filter-search "")
+                                references
+                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))]
     [:div.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
