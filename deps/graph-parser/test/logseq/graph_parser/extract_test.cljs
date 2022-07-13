@@ -7,7 +7,6 @@
   [text]
   (let [{:keys [blocks]} (extract/extract "a.md" text {:block-pattern "-"})
           lefts (map (juxt :block/parent :block/left) blocks)]
-    (pprint/pprint blocks)
     (if (not= (count lefts) (count (distinct lefts)))
       (do
         (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) blocks))

@@ -4,7 +4,7 @@
   (:require [clojure.walk :as walk]
             [clojure.string :as string]
             [logseq.graph-parser.log :as log]
-            [clojure.reader :as reader]))
+            [cljs.reader :as reader]))
 
 (defn safe-re-find
   "Copy of frontend.util/safe-re-find. Too basic to couple to main app"
