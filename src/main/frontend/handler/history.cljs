@@ -9,7 +9,7 @@
 
 (defn restore-cursor!
   [{:keys [last-edit-block container pos]}]
-  (ui-handler/re-render-root!)
+  ;; (ui-handler/re-render-root!)
   (when (and container last-edit-block)
     #_:clj-kondo/ignore
     (when-let [container (gdom/getElement container)]
