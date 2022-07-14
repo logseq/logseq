@@ -57,21 +57,22 @@
                    (when-let [graph-uuid (:GraphUUID (last (:rum/args state)))]
                      (js/setTimeout #(sync/trigger-input-password! graph-uuid) 5000))
                    state)}
-  [state repo-url close-fn {:keys [type GraphName GraphUUID graph-encrypted? verify-password]}]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID init-graph-keys]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
         input-remote-pw? (= type :input-pwd-remote)
-        loading? (state/sub [:ui/loading? :set-graph-password])]
+        loading? (state/sub [:ui/loading? :set-graph-password])
+        set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])]
     [:div.encrytion-password.sm:max-w-2xl
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold.mb-4
-        (if graph-encrypted?
-          "Decrypt this graph"
-          "Encrypt this graph")]]]
+        (if init-graph-keys
+          "Encrypt this graph"
+          "Decrypt this graph")]]]
 
-     (when (and input-remote-pw? (not graph-encrypted?))
+     (when (and input-remote-pw? init-graph-keys)
        (ui/admonition
         :warning
         [:div.opacity-70
@@ -84,12 +85,14 @@
        :on-change (fn [e]
                     (reset! password (util/evalue e)))}]
 
-     (when-not graph-encrypted?
+     (when init-graph-keys
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:type        "password"
          :placeholder "Re-enter the password"
          :on-change   (fn [e]
                         (reset! password-confirm (util/evalue e)))}])
+     (when-let [display-str (:fail set-remote-graph-pwd-result)]
+       [:div display-str])
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -101,7 +104,7 @@
                          (string/blank? value)
                          nil
 
-                         (and (not graph-encrypted?) (not= @password @password-confirm))
+                         (and init-graph-keys (not= @password @password-confirm))
                          (notification/show! "The passwords are not matched." :error)
 
                          :else
@@ -109,24 +112,18 @@
                            :local
                            (p/let [keys (encrypt/generate-key-pair-and-save! repo-url)
                                    db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
-                                  (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
-                                  (close-fn true))
+                             (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
+                             (close-fn true))
 
                            (:create-pwd-remote :input-pwd-remote)
                            (do
                              (state/set-state! [:ui/loading? :set-graph-password] true)
+                             (state/set-state! [:file-sync/set-remote-graph-password-result] {})
                              (async/go
                                (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
                                  (if (instance? ExceptionInfo persist-r)
                                    (js/console.error persist-r)
-                                   (do
-                                     (sync/set-graph-pwd! GraphUUID @password)
-                                     (if (and graph-encrypted? (fn? verify-password))
-                                       (verify-password @password)
-                                       (do
-                                         (sync/mark-graph-pwd-changed! GraphUUID)
-                                         (notification/show! "Successfully set the password" :success)
-                                         (close-fn true))))))))))))}
+                                   (close-fn true)))))))))}
         [:span.inline-flex
          [:span (t :submit)]
          (when loading?
