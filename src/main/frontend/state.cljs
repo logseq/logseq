@@ -232,7 +232,8 @@
 
      :encryption/graph-parsing?             false
 
-     :ui/loading?                           {}})))
+     :ui/loading?                           {}
+     :file-sync/set-remote-graph-password-result {}})))
 
 ;; block uuid -> {content(String) -> ast}
 (def blocks-ast-cache (atom {}))
