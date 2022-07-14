@@ -64,7 +64,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       id: this.id,
       name: this.name,
       // @ts-expect-error maybe later
-      shapes: this.shapes.map(shape => shape.serialized).filter(s => !!s),
+      shapes: this.shapes.map(shape => shape.serialized).filter(s => !!s).map(toJS),
       bindings: deepCopy(this.bindings),
       nonce: this.nonce,
     }

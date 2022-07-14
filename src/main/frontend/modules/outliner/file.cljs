@@ -30,16 +30,15 @@
 
 (defn do-write-file!
   [repo page-db-id]
-  (let [page-block (db/pull repo '[* {:block/file [:file/path]}] page-db-id)
-        file-path (get-in page-block [:block/file :file/path])
-        edn? (and file-path (string/ends-with? file-path ".edn"))
+  (let [page-block (db/pull repo '[*] page-db-id)
+        whiteboard? (:block/whiteboard? page-block)
         blocks (model/get-page-blocks-no-cache repo (:block/name page-block)
-                                               {:pull-keys (if edn? blocks-pull-keys-with-persisted-ids '[*])})]
+                                               {:pull-keys (if whiteboard? blocks-pull-keys-with-persisted-ids '[*])})]
     (when-not (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
       (if page-block
-        (file/save-tree! page-block (if edn?
+        (file/save-tree! page-block (if whiteboard?
                                       blocks
                                       (tree/blocks->vec-tree repo blocks (:block/name page-block))))
         (js/console.error (str "can't find page id: " page-db-id))))))

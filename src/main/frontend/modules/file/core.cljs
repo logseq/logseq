@@ -113,7 +113,6 @@
 
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]
-  (println page)
   (when-let [repo (state/get-current-repo)]
     (when (:block/name page)
       (let [format (name (get page :block/format
@@ -148,8 +147,8 @@
   [page-block tree]
   (let [page-block (db/pull '[* {:block/file [:file/path]}] (:db/id page-block))
         file-path (get-in page-block [:block/file :file/path])
-        edn? (string/ends-with? file-path ".edn")
-        new-content (if edn?
+        whiteboard? (:block/whiteboard? page-block)
+        new-content (if whiteboard?
                       (util/pp-str {:blocks (map remove-transit-ids tree)
                                     :pages (list (remove-transit-ids page-block))})
                       (tree->file-content tree {:init-level init-level}))

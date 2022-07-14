@@ -1624,3 +1624,48 @@
                         (remove false?)
                         (remove nil?))]
     orphaned-pages))
+
+
+(defn- block->shape [block]
+  (let [properties (:block/properties block)]
+    (merge block
+           properties
+           ;; Use the block's id as the shape's id.
+           {:id (str (:block/uuid block))})))
+
+(defn- shape->block [shape]
+  (let [properties shape]
+    {:block/uuid (uuid (:id shape))
+     :block/properties properties}))
+
+(defn- tldr-page->blocks-tx [page-name tldr-data]
+  (let [shapes (mapv shape->block (:shapes tldr-data))
+        page-block {:block/name page-name
+                    :block/whiteboard? true
+                    :block/properties (dissoc tldr-data :shapes)}]
+    (cons page-block shapes)))
+
+(defn- get-whiteboard-clj [page-name]
+  (let [page-block (get-page page-name)
+        blocks (get-page-blocks-no-cache page-name)]
+    [page-block blocks]))
+
+(defn- whiteboard-clj->tldr [page-block blocks]
+  (let [shapes (map block->shape blocks)
+        page-name (:block/name page-block)
+        page-properties (:block/properties page-block)]
+    (clj->js {:currentPageId page-name
+              :pages [(merge page-properties
+                             {:id "page"
+                              :name "page"
+                              :shapes shapes})]})))
+
+(defn page-name->tldr [page-name]
+  (let [[page-block blocks] (get-whiteboard-clj page-name)]
+    (whiteboard-clj->tldr page-block blocks)))
+
+(defn transact-tldr! [page-name tldr]
+  (let [{:keys [pages]} (js->clj tldr :keywordize-keys true)
+        tx (tldr-page->blocks-tx page-name (first pages))]
+    (println tx)
+    (db-utils/transact! tx)))
