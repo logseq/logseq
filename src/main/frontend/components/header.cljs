@@ -55,7 +55,7 @@
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:button.button.icon
+       [:button.button.icon.toolbar-dots-btn
         {:on-click toggle-fn}
         (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>

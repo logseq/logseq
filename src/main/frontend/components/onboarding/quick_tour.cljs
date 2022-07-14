@@ -13,8 +13,8 @@
 (defn js-load$
   [url]
   (p/create
-    (fn [resolve]
-      (load url resolve))))
+   (fn [resolve]
+     (load url resolve))))
 
 (def JS_ROOT
   (if (= js/location.protocol "file:")
@@ -39,16 +39,16 @@
   (p/let [action (if (string? fn-or-selector)
                    #(d/sel1 fn-or-selector)
                    fn-or-selector)
-          _      (action)
-          _      (p/delay time)]))
+          _ (action)
+          _ (p/delay time)]))
 
 (defn- inject-steps-indicator
   [current total]
 
   (h/render-html
-    [:div.steps
-     [:strong (str "STEP " current)]
-     [:ul (for [i (range total)] [:li {:class (when (= current (inc i)) "active")} i])]]))
+   [:div.steps
+    [:strong (str "STEP " current)]
+    [:ul (for [i (range total)] [:li {:class (when (= current (inc i)) "active")} i])]]))
 
 (defn- create-steps! [^js jsTour]
   [
@@ -77,7 +77,7 @@
 
     :attachTo          {:element ".page.is-journals .page-title" :on "top-end"}
     :beforeShowPromise #(if-not (= (util/safe-lower-case (state/get-current-page))
-                                  (util/safe-lower-case (date/today)))
+                                   (util/safe-lower-case (date/today)))
                           (wait-target (fn []
                                          (router-handler/redirect-to-page! (date/today))
                                          (util/scroll-to-top)) 200)
@@ -116,13 +116,42 @@
                         {:text "Finish" :action (.-complete jsTour)}]}
    ])
 
+(defn- create-steps-file-sync! [^js jsTour]
+  [
+   ;; indicator
+   {:id             "sync-indicator"
+    :text           (h/render-html [:section [:h2 "💡 Learn about your sync status"]
+                                    [:p "By clicking this icon you will see the progress of your local graph being synced with the cloud."]])
+    :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
+    :canClickTarget true
+    :buttons        [{:text "Got it!" :action (.-complete jsTour)}]
+    :popperOptions  {:modifiers [{:name    "preventOverflow"
+                                  :options {:padding 20}}
+                                 {:name    "offset"
+                                  :options {:offset [0, 15]}}]}}
+
+   ;; history
+   {:id                "sync-history"
+    :text              (h/render-html [:section [:h2 "⏱ Get back in time!"]
+                                       [:p "With file sync you can now go through older version of this page and revert back to them if you like..."]])
+    :attachTo          {:element ".cp__btn_history_version" :on "left"}
+    :beforeShowPromise #(when-let [^js target (js/document.querySelector ".toolbar-dots-btn")]
+                          (.click target)
+                          (p/delay 300))
+    :canClickTarget    true
+    :buttons           [{:text "Got it!" :action (.-complete jsTour)}]
+    :popperOptions     {:modifiers [{:name    "preventOverflow"
+                                     :options {:padding 20}}
+                                    {:name    "offset"
+                                     :options {:offset [0, 15]}}]}}])
+
 (defn start
   []
   (let [^js jsTour (js/Shepherd.Tour.
-                     (bean/->js
-                       {:useModalOverlay    true
-                        :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
-                                             :scrollTo false}}))
+                    (bean/->js
+                     {:useModalOverlay    true
+                      :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
+                                           :scrollTo false}}))
         steps      (create-steps! jsTour)
         steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
         [show-skip! hide-skip!] (make-skip-fns jsTour)]
@@ -139,12 +168,41 @@
 
     (.start jsTour)))
 
+(defn start-file-sync
+  []
+  (let [^js jsTour (js/Shepherd.Tour.
+                    (bean/->js
+                     {:useModalOverlay    true
+                      :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
+                                           :scrollTo false}}))
+        steps      (create-steps-file-sync! jsTour)
+        ;steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
+        ]
+
+    ;; events
+    (doto jsTour
+      ;(.on "show" show-skip!)
+      ;(.on "hide" hide-skip!)
+      ;(.on "complete" hide-skip!)
+      ;(.on "cancel" hide-skip!)
+      )
+
+    (doseq [step steps]
+      (.addStep jsTour (bean/->js step)))
+
+    (js/setTimeout
+     #(.show jsTour "sync-history")
+     1000)
+
+    ;(.start jsTour)
+    ))
+
 (defn- ready
   [callback]
   (p/then
-    (if (nil? js/window.Shepherd)
-      (load-base-assets$) (p/resolved true))
-    callback))
+   (if (nil? js/window.Shepherd)
+     (load-base-assets$) (p/resolved true))
+   callback))
 
 (def should-guide? false)
 

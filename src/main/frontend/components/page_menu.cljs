@@ -142,7 +142,8 @@
                            (shell/get-file-latest-git-log page 100)
 
                            :else
-                           nil))}})
+                           nil))
+                       :class "cp__btn_history_version"}})
 
           (when (and (util/electron?) file-path)
             {:title   (t :page/open-backup-directory)
