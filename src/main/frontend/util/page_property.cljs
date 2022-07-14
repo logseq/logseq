@@ -13,13 +13,16 @@
     (let [key (if (string? key) (keyword key) key)
           key-part (util/format (case format
                                   :org "#+%s: "
-                                  "%s:: ") (name key))
+                                  "%s:: ") (string/lower-case (name key)))
           new-property-line (str key-part value)
           lines (string/split-lines content)
           key-exists? (atom false)
           lines (doall
                  (map (fn [line]
-                        (if (and (string/starts-with? line key-part) (not @key-exists?)) ; only replace the first match
+                        (if (and (string/starts-with?
+                                  (string/lower-case line)
+                                  (string/lower-case key-part))
+                                 (not @key-exists?)) ; only replace the first match
                           (do
                             (reset! key-exists? true)
                             new-property-line)

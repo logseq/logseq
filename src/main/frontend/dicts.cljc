@@ -3489,6 +3489,7 @@
         :help/privacy "Gizlilik ilkesi"
         :help/terms "Koşullar"
         :help/community "Discord topluluğu"
+        :help/forum-community "Forum topluluğu"
         :help/awesome-logseq "Awesome Logseq"
         :help/shortcuts "Klavye kısayolları"
         :help/shortcuts-triggers "Tetikleyiciler"
@@ -3714,7 +3715,8 @@
         :import "İçe aktar"
         :join-community "Topluluğa katıl"
         :sponsor-us "Bize Sponsor Olun"
-        :discord-title "Discord grubumuz!"
+        :discourse-title "Forum sayfamız!"
+        :discord-title "Discord grubumuz!" ;; unused
         :help-shortcut-title "Kısayolları ve diğer ipuçlarını kontrol etmek için tıklayın"
         :loading "Yükleniyor"
         :cloning "Kopyalanıyor"

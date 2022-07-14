@@ -348,8 +348,9 @@
   (state/set-current-repo! repo)
   (db/start-db-conn! repo))
 
-(defn setup-local-repo-if-not-exists!
+(defn- setup-local-repo-if-not-exists-impl!
   []
+  ;; loop query if js/window.pfs is ready, interval 100ms
   (if js/window.pfs
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
@@ -367,7 +368,17 @@
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))
-    (js/setTimeout setup-local-repo-if-not-exists! 100)))
+    (p/then (p/delay 100) ;; TODO Junyi remove the string
+            setup-local-repo-if-not-exists-impl!)))
+
+(defn setup-local-repo-if-not-exists!
+  []
+  ;; ensure `(state/set-db-restoring! false)` at exit
+  (-> (setup-local-repo-if-not-exists-impl!)
+      (p/timeout 3000)
+      (p/catch (fn []
+                 (state/set-db-restoring! false)
+                 (prn "setup-local-repo failed! timeout 3000ms")))))
 
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
