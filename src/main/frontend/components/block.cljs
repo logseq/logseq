@@ -1805,9 +1805,12 @@
 
 (rum/defc property-cp
   [config block k v]
-  (let [date (and (= k :date) (date/get-locale-string (str v)))]
+  (let [date (and (= k :date) (date/get-locale-string (str v)))
+        property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? (state/get-config)))]
     [:div
-     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+     (if property-pages-enabled?
+       (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+       [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
      (cond
        (int? v)

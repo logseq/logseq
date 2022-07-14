@@ -139,8 +139,22 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
+(defn- get-page-refs-from-property-names
+  [properties {:property-pages/keys [enabled? excludelist]}]
+  (if (contains? #{true nil} enabled?)
+    (some->> properties
+             (map (comp name first))
+             (remove string/blank?)
+             (remove (set (map name excludelist)))
+             ;; Remove built-in properties as we don't want pages
+             ;; created for them by default
+             (remove (set (map name (into (gp-property/editable-built-in-properties)
+                                          (gp-property/hidden-built-in-properties)))))
+             distinct)
+    []))
+
 (defn- get-page-ref-names-from-properties
-  [format properties]
+  [format properties user-config]
   (let [page-refs (->>
                    properties
                    (remove (fn [[k _]]
@@ -165,15 +179,8 @@
                             :else
                             nil)))
                    (apply concat))
-        property-keys-page-refs (some->> properties
-                                         (map (comp name first))
-                                         (remove string/blank?)
-                                         ;; Remove built-in properties as we don't want pages
-                                         ;; created for them by default
-                                         (remove (set (map name (into (gp-property/editable-built-in-properties)
-                                                                      (gp-property/hidden-built-in-properties)))))
-                                         (distinct))]
-    (->> (concat page-refs property-keys-page-refs)
+        page-refs-from-property-names (get-page-refs-from-property-names properties user-config)]
+    (->> (concat page-refs page-refs-from-property-names)
          (remove string/blank?)
          distinct)))
 
@@ -186,7 +193,7 @@
   (when (seq properties)
     (let [properties (seq properties)
           properties (into {} properties)
-          page-refs (get-page-ref-names-from-properties format properties)
+          page-refs (get-page-ref-names-from-properties format properties user-config)
           properties (->> properties
                           (map (fn [[k v]]
                                  (let [k (-> (string/lower-case (name k))
@@ -468,7 +475,7 @@
 
 (defn get-page-refs-from-properties
   [format properties db date-formatter]
-  (let [page-refs (get-page-ref-names-from-properties format properties)]
+  (let [page-refs (get-page-ref-names-from-properties format properties {})]
     (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
