@@ -80,11 +80,19 @@
                    [:a.text-gray-400.ml-4.font-medium.text-sm
                     {:on-click (fn []
                                  (if only-cloud?
-                                   (when (js/confirm (str "Are you sure to permanently delete graph (" GraphName ") from remote? Note: this operation only delete the remote graph, so you still have a local copy stored in you device."))
-                                     (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
-                                     (go (<! (file-sync/delete-graph GraphUUID))
-                                         (file-sync/load-session-graphs)
-                                         (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))
+                                   (let [confirm-fn
+                                         (fn []
+                                           (ui/make-confirm-modal
+                                            {:title      [:div
+                                                          {:style {:max-width 700}}
+                                                          (str "Are you sure to permanently delete graph (" GraphName ") from remote? Note: this operation only delete the remote graph, so you still have a local copy stored in you device.")]
+                                             :on-confirm (fn [_ {:keys [close-fn]}]
+                                                           (close-fn)
+                                                           (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] true)
+                                                           (go (<! (file-sync/delete-graph GraphUUID))
+                                                             (file-sync/load-session-graphs)
+                                                             (state/set-state! [:ui/loading? :remove/remote-graph GraphUUID] false)))}))]
+                                     (state/set-modal! (confirm-fn)))
                                    (do
                                      (repo-handler/remove-repo! repo)
                                      (file-sync/load-session-graphs))))}
