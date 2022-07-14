@@ -571,8 +571,9 @@
 ;; `RSAPI` call apis through rsapi package, supports operations on files
 
 (defprotocol IRSAPI
+  (rsapi-ready? [this graph-uuid] "return true when rsapi ready")
   (<key-gen [this] "generate public+private keys")
-  (<set-env [this prod? private-key public-key] "set environment")
+  (<set-env [this prod? private-key public-key graph-uuid] "set environment")
   (<get-local-files-meta [this graph-uuid base-path filepaths] "get local files' metadata")
   (<get-local-all-files-meta [this graph-uuid base-path] "get all local files' metadata")
   (<rename-local-file [this graph-uuid base-path from to])
@@ -614,7 +615,7 @@
           (recur (dec n)))
         r))))
 
-(deftype RSAPI []
+(deftype RSAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
   IToken
   (<get-token [this]
     (go
@@ -626,11 +627,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
   (<key-gen [_] (go (js->clj (<! (p->c (ipc/ipc "key-gen")))
-                            :keywordize-keys true)))
-  (<set-env [_ prod? private-key public-key]
+                             :keywordize-keys true)))
+  (<set-env [_ prod? private-key public-key graph-uuid]
     (when (not-empty private-key)
-      (print "[sync] setting sync age-encryption passphrase..."))
+      (print (util/format "[%s] setting sync age-encryption passphrase..." graph-uuid)))
+    (set! _graph-uuid graph-uuid)
+    (set! _private-key private-key)
+    (set! _public-key public-key)
     (p->c (ipc/ipc "set-env" (if prod? "prod" "dev") private-key public-key)))
   (<get-local-all-files-meta [_ graph-uuid base-path]
     (go
@@ -690,7 +695,7 @@
   (<decrypt-fnames [_ fnames] (go (js->clj (<! (p->c (ipc/ipc "decrypt-fnames" fnames)))))))
 
 
-(deftype CapacitorAPI []
+(deftype CapacitorAPI [^:mutable _graph-uuid ^:mutable _private-key ^:mutable _public-key]
   IToken
   (<get-token [this]
     (go
@@ -702,11 +707,15 @@
       (state/get-auth-id-token)))
 
   IRSAPI
+  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid _graph-uuid) _private-key _public-key))
   (<key-gen [_]
     (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
           (-> r
               (js->clj :keywordize-keys true)))))
-  (<set-env [_ prod? secret-key public-key]
+  (<set-env [_ prod? secret-key public-key graph-uuid]
+    (set! _graph-uuid graph-uuid)
+    (set! _private-key secret-key)
+    (set! _public-key public-key)
     (p->c (.setEnv mobile-util/file-sync (clj->js {:env (if prod? "prod" "dev")
                                                    :secretKey secret-key
                                                    :publicKey public-key}))))
@@ -806,10 +815,10 @@
 
 (def rsapi (cond
              (util/electron?)
-             (->RSAPI)
+             (->RSAPI nil nil nil)
 
              (mobile-util/native-ios?)
-             (->CapacitorAPI)
+             (->CapacitorAPI nil nil nil)
 
              :else
              nil))
@@ -1246,6 +1255,7 @@
   (-pr-writer [_ w _opts]
     (write-all w (str {:type type :base-path dir :path path :size (:size stat)}))))
 
+
 (defn- <file-change-event=>recent-remote->local-file-item
   [^FileChangeEvent e]
   (go
@@ -1280,6 +1290,7 @@
     (when (string/ends-with? current-graph dir)
       (when-not (some-> (state/get-file-sync-state current-graph)
                         sync-state--stopped?)
+        (assert (some? (:mtime stat)) {:path path :stat stat})
         (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))))
 
 ;;; ### encryption
@@ -1502,7 +1513,7 @@
   (let [{:keys [private-key public-key]} (get @pwd-map graph-uuid)]
     (assert (and private-key public-key) (pr-str :private-key private-key :public-key public-key
                                                  :pwd-map @pwd-map))
-    (<set-env rsapi prod? private-key public-key)))
+    (<set-env rsapi prod? private-key public-key graph-uuid)))
 
 ;;; ### sync state
 
@@ -1749,17 +1760,17 @@
   (filter-file-change-events-fn [_]
     (fn [^FileChangeEvent e]
       (go (and (instance? FileChangeEvent e)
-               (string/starts-with? (.-dir e) base-path)
-               (not (contains-path? (get-ignored-files) (relative-path e)))
-               (contains-path? (get-monitor-dirs) (relative-path e))
-               (let [r (not (contains? (:recent-remote->local-files @*sync-state)
-                                       (<! (<file-change-event=>recent-remote->local-file-item e))))]
-                 (when (and (contains? #{::remote->local ::remote->local-full-sync} (:state @*sync-state))
-                            r)
-                   (println :debug :filter-recent-remote->local-files
-                            (<! (<file-change-event=>recent-remote->local-file-item e))
-                            (:recent-remote->local-files @*sync-state)))
-                 r)))))
+               (if-let [mtime (:mtime (.-stat e))]
+                 ;; if mtime is not nil, it should be after (- now 1min)
+                 ;; ignore events too early
+                 (> (* 1000 mtime) (tc/to-long (t/minus (t/now) (t/minutes 1))))
+                 true)
+               (string/starts-with? (.-dir e) base-path) ; valid path prefix
+               (not (contains-path? (get-ignored-files) (relative-path e))) ;not ignored
+               (contains-path? (get-monitor-dirs) (relative-path e)) ; dir is monitored
+               ;; download files will also trigger file-change-events, ignore them
+               (not (contains? (:recent-remote->local-files @*sync-state)
+                               (<! (<file-change-event=>recent-remote->local-file-item e))))))))
 
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
@@ -1775,7 +1786,8 @@
        :filter-fn
        (fn [e]
          (go
-           (and (<! (<fast-filter-e-fn e))
+           (and (rsapi-ready? rsapi graph-uuid)
+                (<! (<fast-filter-e-fn e))
                 (let [e-path [(relative-path e)]]
                   (swap! *sync-state sync-state--add-queued-local->remote-files e-path)
                   (let [v (<! (<filter-local-changes-pred e base-path graph-uuid))]
@@ -2046,7 +2058,7 @@
       (assert (some? local-changes) local-changes)
       (go
         (let [change-events-partitions (sequence (partition-file-change-events 10) local-changes)
-              {:keys [succ need-sync-remote unknown stop] :as r}
+              {:keys [succ need-sync-remote unknown stop]}
               (loop [es-partitions change-events-partitions]
                 (cond
                   @*stopped?             {:stop true}
