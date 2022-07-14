@@ -116,6 +116,7 @@
         :page/created-at "Created At"
         :page/updated-at "Updated At"
         :page/backlinks "Back Links"
+        :linked-references/filter-search "Search in linked pages"
         :editor/block-search "Search for a block"
         :editor/image-uploading "Uploading"
         :draw/invalid-file "Could not load this invalid excalidraw file"
