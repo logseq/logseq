@@ -2,8 +2,7 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
-            [frontend.state :as state]
-            [frontend.modules.outliner.pipeline :as pipelines]))
+            [frontend.state :as state]))
 
 ;;;; APIs
 
@@ -92,10 +91,9 @@
 ;;;; Invokes
 
 (defn- transact!
-  [txs]
-  (let [conn (conn/get-db false)
-        db-report (d/transact! conn txs)]
-    (pipelines/invoke-hooks db-report)))
+  [txs tx-meta]
+  (let [conn (conn/get-db false)]
+    (d/transact! conn txs tx-meta)))
 
 (defn undo
   []
@@ -108,7 +106,7 @@
                             (:editor-cursor prev-e)
                             (:editor-cursor e))]
         (push-redo e)
-        (transact! new-txs)
+        (transact! new-txs {:undo? true})
         (assoc e
                :txs-op new-txs
                :editor-cursor editor-cursor)))))
@@ -118,7 +116,7 @@
   (when-let [{:keys [txs]:as e} (pop-redo)]
     (let [new-txs (get-txs true txs)]
       (push-undo e)
-      (transact! new-txs)
+      (transact! new-txs {:redo? true})
       (assoc e :txs-op new-txs))))
 
 (defn listen-outliner-operation

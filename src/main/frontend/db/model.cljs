@@ -372,7 +372,7 @@
                                                               (= k (:db/id (:block/left block))))
                                                             blocks)
                                                     (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-         #_(util/pprint duplicates)))
+         (util/pprint duplicates)))
      (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
 
    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
@@ -523,7 +523,7 @@
 
 (defn get-paginated-blocks-no-cache
   "Result should be sorted."
-  [db start-id {:keys [limit include-start? scoped-block-id]}]
+  [db start-id {:keys [limit include-start? scoped-block-id end-id]}]
   (when-let [start (d/entity db start-id)]
     (let [scoped-block-parents (when scoped-block-id
                                  (let [block (d/entity db scoped-block-id)]
@@ -536,9 +536,15 @@
                      result
                      (let [next-block (get-next-open-block db block scoped-block-id)]
                        (if next-block
-                         (if (and (seq scoped-block-parents)
-                                  (contains? scoped-block-parents (:db/id (:block/parent next-block))))
+                         (cond
+                           (and (seq scoped-block-parents)
+                                (contains? scoped-block-parents (:db/id (:block/parent next-block))))
                            result
+
+                           (and end-id (= end-id (:db/id next-block)))
+                           (conj result next-block)
+
+                           :else
                            (recur next-block (conj result next-block)))
                          result))))]
       (if include-start?
@@ -689,9 +695,19 @@
 (defn- build-paginated-blocks-from-cache
   "Notice: tx-report could be nil."
   [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
-  (let [{:keys [tx-meta]} tx-report
+  (let [{:keys [tx-meta tx-data]} tx-report
         current-db (conn/get-db repo-url)]
     (cond
+      (and (or (:undo? tx-meta) (:redo? tx-meta)) @result)
+      (when-let [start-id (get-start-id-for-pagination-query
+                           repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
+        (let [end-block-id (:db/id (:end (meta @result)))
+              previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
+              more (get-paginated-blocks-no-cache current-db start-id {:end-id end-block-id
+                                                                       :include-start? true
+                                                                       :scoped-block-id scoped-block-id})]
+          (concat previous-blocks more)))
+
       (contains? #{:save-block :delete-blocks} outliner-op)
       @result
 

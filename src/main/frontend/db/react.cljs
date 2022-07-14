@@ -70,15 +70,27 @@
 ;; component -> query-key
 (defonce query-components (atom {}))
 
+(defn- with-block-start-end
+  [result-atom new-result]
+  (let [block? (and (coll? @result-atom) (map? (first @result-atom)) (:block/uuid (first @result-atom)))
+        [start end] (when block?
+                      [(first @result-atom)
+                       (last @result-atom)])
+        new-result (if block? (util/distinct-by-last-wins :block/uuid new-result) new-result)]
+    (with-meta new-result {:start (select-keys start [:db/id :block/uuid :block/content])
+                           :end (select-keys end [:db/id :block/uuid :block/content])})))
+
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (reset! result-atom new-result)))
+    (let [new-result' (with-block-start-end result-atom new-result)]
+      (reset! result-atom new-result'))))
 
 (defn swap-new-result!
   [k f]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (swap! result-atom f)))
+    (let [new-result' (with-block-start-end result-atom (f @result-atom))]
+      (reset! result-atom new-result'))))
 
 (defn kv
   [key value]
