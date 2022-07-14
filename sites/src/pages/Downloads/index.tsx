@@ -179,7 +179,7 @@ export function WrapGlobalDownloadButton (
             onClick={(e) => downloadHandler(e, 'macos-x64')}
           >
             <span className="text-sm">
-              Apple chip
+              Apple silicon
             </span>
             <span className="text-[11px] opacity-60">
               Macs from november 2020 and later
@@ -308,7 +308,7 @@ export function HeadDownloadLinks () {
                 rightIcon={<DownloadSimple className="opacity-50"/>}
                 onClick={() => downloadHandler('macos-arm64')}
               >
-                Download for Apple chip
+                Download for Apple silicon
               </LSButton>
               <span className="text-xs opacity-60 py-2">
                 Macs from November 2020 and later
@@ -363,6 +363,7 @@ export function HeadDownloadLinks () {
                   onClick={() => {
                     setActiveRelease([label, icon])
                   }}
+                  key={label}
               >
                 <span className="opacity-60">
                 {icon}
