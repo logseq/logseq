@@ -119,6 +119,7 @@
                               (state/get-preferred-format)))
             title (string/capitalize (:block/name page))
             whiteboard-page? (:block/whiteboard? page)
+            format (if whiteboard-page? "edn" format)
             journal-page? (date/valid-journal-title? title)
             filename (if journal-page?
                        (date/date->file-name journal-page?)

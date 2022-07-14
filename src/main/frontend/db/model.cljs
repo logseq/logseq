@@ -1625,25 +1625,31 @@
                         (remove nil?))]
     orphaned-pages))
 
-
 (defn- block->shape [block]
-  (let [properties (:block/properties block)]
-    (merge block
-           properties
+  (let [properties (:block/properties block)
+        uuid (str (:block/uuid block))]
+    (merge properties
            ;; Use the block's id as the shape's id.
-           {:id (str (:block/uuid block))})))
+           {:id uuid})))
 
-(defn- shape->block [shape]
+(defn- shape->block [shape page-name]
   (let [properties shape]
-    {:block/uuid (uuid (:id shape))
+    {:block/uuid (uuid (:id properties))
+     :block/page {:block/name page-name}
      :block/properties properties}))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
-  (let [shapes (mapv shape->block (:shapes tldr-data))
-        page-block {:block/name page-name
+  (let [page-block {:block/name page-name
                     :block/whiteboard? true
-                    :block/properties (dissoc tldr-data :shapes)}]
-    (cons page-block shapes)))
+                    :block/properties (dissoc tldr-data :shapes)}
+        existing-blocks (get-page-blocks-no-cache page-name)
+        blocks (mapv #(shape->block % page-name) (:shapes tldr-data))
+        block-ids (set (map :block/uuid blocks))
+        delete-shapes (filter (fn [shape]
+                                  (not (block-ids (:block/uuid shape))))
+                              existing-blocks)
+        delete-shapes-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-shapes)]
+    (concat [page-block] blocks delete-shapes-tx)))
 
 (defn- get-whiteboard-clj [page-name]
   (let [page-block (get-page page-name)
@@ -1654,7 +1660,7 @@
   (let [shapes (map block->shape blocks)
         page-name (:block/name page-block)
         page-properties (:block/properties page-block)]
-    (clj->js {:currentPageId page-name
+    (clj->js {:currentPageId "page"
               :pages [(merge page-properties
                              {:id "page"
                               :name "page"
@@ -1667,5 +1673,4 @@
 (defn transact-tldr! [page-name tldr]
   (let [{:keys [pages]} (js->clj tldr :keywordize-keys true)
         tx (tldr-page->blocks-tx page-name (first pages))]
-    (println tx)
     (db-utils/transact! tx)))
