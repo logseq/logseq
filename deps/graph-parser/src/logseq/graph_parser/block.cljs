@@ -160,8 +160,9 @@
                    properties
                    (remove (fn [[k _]]
                              (contains?
-                              (set/union (disj (gp-property/editable-built-in-properties)
-                                               :alias :aliases :tags)
+                              (set/union (apply disj
+                                           (gp-property/editable-built-in-properties)
+                                           gp-property/editable-linkable-built-in-properties)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
                    (map last)
@@ -222,7 +223,7 @@
                                            k (keyword k)
                                            v (if (and
                                                   (string? v)
-                                                  (contains? #{:alias :aliases :tags} k))
+                                                  (contains? gp-property/editable-linkable-built-in-properties k))
                                                (set [v])
                                                v)
                                            v (if (coll? v) (set v) v)]

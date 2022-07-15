@@ -4,10 +4,16 @@
 
 (deftest test-extract-properties
   (are [x y] (= (:properties (gp-block/extract-properties :markdown x {})) y)
-       [["year" "1000"]] {:year 1000}
-       [["year" "\"1000\""]] {:year "\"1000\""}
+       ;; Built-in properties
        [["background-color" "#000000"]] {:background-color "#000000"}
        [["alias" "name/with space"]] {:alias #{"name/with space"}}
+       [["tags" "foo, bar"]] {:tags #{"foo" "bar"}}
+       [["tags" "'bar'"]] {:tags #{"'bar'"}}
+       [["file-path" "file:///home/x, y.pdf"]] {:file-path "file:///home/x, y.pdf"}
+
+       ;; User properties
+       [["year" "1000"]] {:year 1000}
+       [["year" "\"1000\""]] {:year "\"1000\""}
        [["year" "1000"] ["alias" "name/with space"]] {:year 1000, :alias #{"name/with space"}}
        [["year" "1000"] ["tags" "name/with space"]] {:year 1000, :tags #{"name/with space"}}
        [["year" "1000"] ["tags" "name/with space, another"]] {:year 1000, :tags #{"name/with space" "another"}}
@@ -21,8 +27,7 @@
        [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
        [["foo" "[[bar]], [[nested [[baz]]]]"]] {:foo #{"bar" "nested [[baz]]"}}
        [["foo" "bar, [[baz, test]]"]] {:foo #{"bar" "baz, test"}}
-       [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}}
-       [["file-path" "file:///home/x, y.pdf"]] {:file-path "file:///home/x, y.pdf"})
+       [["foo" "bar, [[baz, test, [[nested]]]]"]] {:foo #{"bar" "baz, test, [[nested]]"}})
 
   (testing "page-refs"
     (are [x y] (= (vec (:page-refs
@@ -53,9 +58,15 @@
 
     (is (= ["year"]
            (:page-refs
-                (gp-block/extract-properties :markdown
-                                             [["year" "1000"]]
-                                             {})))
-        "Default to enabled when :property-pages/enabled? is not in config")))
+            (gp-block/extract-properties :markdown
+                                         [["year" "1000"]]
+                                         {})))
+        "Default to enabled when :property-pages/enabled? is not in config")
 
-#_(cljs.test/run-tests)
+    (is (= ["foo" "bar"]
+           (:page-refs
+            (gp-block/extract-properties :markdown
+                                         ;; tags is linkable and background-color is not
+                                         [["tags" "foo, bar"] ["background-color" "#008000"]]
+                                         {:property-pages/enabled? true})))
+        "Only editable linkable built-in properties have page-refs in property values")))
