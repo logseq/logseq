@@ -167,18 +167,13 @@
                    (map last)
                    (map (fn [v]
                           (cond
-                            (and (string? v) (not (string/blank? v)))
-                            (let [v (string/trim v)]
-                              (when-not (or (gp-mldoc/link? format v)
-                                            (= v "true")
-                                            (= v "false")
-                                            (parse-long v))
-                                (let [result (if (gp-util/wrapped-by-quotes? v)
-                                               (gp-util/unquote-string v)
-                                               (text/split-page-refs-without-brackets v {:un-brackets? false}))]
-                                  (if (coll? result)
-                                    (map text/page-ref-un-brackets! result)
-                                    [result]))))
+                            (and (string? v)
+                                 (not (gp-mldoc/link? format v)))
+                            (let [v (string/trim v)
+                                  result (text/split-page-refs-without-brackets v {:un-brackets? false})]
+                              (if (coll? result)
+                                (map text/page-ref-un-brackets! result)
+                                []))
 
                             (coll? v)
                             (map (fn [s]

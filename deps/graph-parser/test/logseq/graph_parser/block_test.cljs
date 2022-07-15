@@ -28,7 +28,7 @@
     (are [x y] (= (vec (:page-refs
                         (gp-block/extract-properties :markdown x {:property-pages/enabled? true}))) y)
          [["year" "1000"]] ["year"]
-         [["year" "\"1000\""]] ["1000" "year"]
+         [["year" "\"1000\""]] ["year"]
          [["year" "1000"] ["month" "12"]] ["year" "month"]
          [["foo" "[[bar]] test"]] ["bar" "test" "foo"]
          [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz" "foo"]
