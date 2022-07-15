@@ -130,6 +130,23 @@
       1.0  "exp(0)"
       2.0  "ln(exp(2))")))
 
+(deftest additional-operators
+  (testing "mod"
+    (are [value expr] (= value (run expr))
+      0.0    "1 mod 1"
+      1.0    "7 mod 3"
+      3.0    "7 mod 4"
+      0.5    "4.5 mod 2"
+      -3.0   "-7 mod 4"))
+  (testing "factorial"
+    (are [value expr] (= value (run expr))
+      1.0     "0!"
+      1.0     "1!"
+      6.0     "3.0!"
+      -120.0  "-5!"
+      124.0   "(2+3)!+4"
+      240.0   "10 * 4!")))
+
 (deftest variables
   (testing "variables can be remembered"
     (are [final-env expr] (let [env (calc/new-env)]
@@ -182,6 +199,59 @@
       [25 5]   ["3^2+4^2" "sqrt(last)"]
       [6 12]   ["2*3" "# a comment" "" "   " "last*2"])))
 
+(deftest formatting
+  (testing "display normal"
+    (are [values exprs] (let [env (calc/new-env)]
+                          (mapv (fn [expr]
+                                  (calc/eval env (calc/parse expr)))
+                                exprs))
+      [1e6 "1000000"]         ["1e6" ":norm"]
+      [1e6 "1000000"]         ["1e6" ":norm 7"]
+      [1e6 "1e+6"]            ["1e6" ":norm 6"]
+      [0 "0" "3.14"]          ["0" ":norm 3" "PI"]
+      [0 "0" "2"]             ["0" ":norm 1" "E"]
+      [0.000123 "0.000123"]   ["0.000123" ":norm 5"]
+      [0.000123 "1.23e-4"]    ["0.000123" ":norm 4"]
+      [123400000 "123400000"] ["1.234e8" ":norm 9"]
+      [123400000 "1.234e+8"]  ["1.234e8" ":norm 8"]))
+  (testing "display fixed"
+    (are [values exprs] (let [env (calc/new-env)]
+                          (mapv (fn [expr]
+                                  (calc/eval env (calc/parse expr)))
+                                exprs))
+      [0.12345 "0.123450"]    ["0.12345" ":fix 6"]
+      [0.12345 "0.1235"]      ["0.12345" ":fix 4"]
+      ["" "2.7183"]           [":fixed 4" "E"]
+      [0.0005 "0.001"]        ["0.0005" ":fix 3"]
+      [0.0005 "4.000e-4"]     ["0.0004" ":fix 3"]
+      [1e21 "1.00e+21"]       ["1e21+0.1" ":fix 2"]))
+  (testing "display scientific"
+    (are [values exprs] (let [env (calc/new-env)]
+                          (mapv (fn [expr]
+                                  (calc/eval env (calc/parse expr)))
+                                exprs))
+      [1e6 "1e+6"]            ["1e6" ":sci"]
+      [0 "0.000e0" "3.142e+3"]["0" ":sci 3" "PI"]
+      ["" "3.14e+2"]          [":sci" "3.14*10^2"])))
+
+(deftest base-conversion
+  (testing "mixed base input"
+    (are [value expr] (= value (run expr))
+      255.0     "0xff"
+      511.0     "0x0A + 0xF5 + 0x100"
+      83.0      "0o123"
+      324.0     "0x100 + 0o100 + 0b100"
+      32.0      "0b100 * 0b1000"))
+  (testing "mixed base output"
+    (are [values exprs] (let [env (calc/new-env)]
+                          (mapv (fn [expr]
+                                  (calc/eval env (calc/parse expr)))
+                                exprs))
+      ["12345" "3039"]          ["12345" ":hex"]
+      ["12345" "30071"]         ["12345" ":oct"]
+      ["12345" "11000000111001"]["12345" ":bin"]
+      ["" "100000000"]          [":bin" "0b10000 * 0b10000"])))
+
 (deftest comments
   (testing "comments are ignored"
     (are [value expr] (= value (run expr))
@@ -201,4 +271,5 @@
       " . "
       "_ = 2"
       "__ = 4"
+      "PI = 3.14"
       "foo_3  = _")))
