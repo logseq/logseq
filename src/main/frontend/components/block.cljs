@@ -418,8 +418,9 @@
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label]
-  (let [tag? (:tag? config)]
+  [config page-name-in-block page-name redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  (let [tag? (:tag? config)
+        config (assoc config :whiteboard-page? whiteboard-page?)]
     [:a
      {:class (cond-> (if tag? "tag" "page-ref")
                (:property? config)
@@ -429,6 +430,9 @@
       (fn [e]
         (util/stop e)
         (cond
+          whiteboard-page?
+          (route-handler/redirect-to-whiteboard! page-name)
+
           (gobj/get e "shiftKey")
           (when-let [page-entity (db/entity [:block/name redirect-page-name])]
             (state/sidebar-add-block!
@@ -544,6 +548,7 @@
     (let [page-name-in-block (gp-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
           page-entity (db/entity [:block/name page-name])
+          whiteboard-page? (model/whiteboard-page? page-name)
           redirect-page-name (or (and (= :org (state/get-preferred-format))
                                       (:org-mode/insert-file-link? (state/get-config))
                                       redirect-page-name)
@@ -551,14 +556,15 @@
           inner (page-inner config
                             page-name-in-block
                             page-name
-                            redirect-page-name page-entity contents-page? children html-export? label)]
+                            redirect-page-name page-entity contents-page? children html-export? label whiteboard-page?)]
       (cond
         (:breadcrumb? config)
         (or (:block/original-name page)
             (:block/name page))
 
         (and (not (util/mobile?))
-             (not preview?))
+             (not preview?)
+             (not whiteboard-page?)) ;; TODO: support preview for whiteboard
         (page-preview-trigger (assoc config :children inner) page-name)
 
         :else
@@ -613,21 +619,22 @@
       (draw-component {:file file :block-uuid block-uuid}))))
 
 (rum/defc page-reference < rum/reactive
-  [html-export? s config label]
+  [html-export? s {:keys [nested-link? block-uuid id] :as config} label]
   (let [show-brackets? (state/show-brackets?)
-        nested-link? (:nested-link? config)
-        contents-page? (= "contents" (string/lower-case (str (:id config))))
-        block-uuid (:block/uuid config)]
+        contents-page? (= "contents" (string/lower-case (str id)))
+        whiteboard? (model/whiteboard-page? s)]
     (if (string/ends-with? s ".excalidraw")
       [:div.draw {:on-click (fn [e]
                               (.stopPropagation e))}
        (excalidraw s block-uuid)]
       [:span.page-reference
-       {:data-ref s}
+       {:data-ref s
+        :class (str (if whiteboard? " whiteboard-page-ref" ""))}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket "[["])
+       (when whiteboard? [:span.text-gray-500.ti.ti-artboard])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)

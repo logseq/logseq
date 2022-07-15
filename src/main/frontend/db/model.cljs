@@ -15,6 +15,7 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.graph-parser.util :as gp-util]
+            [logseq.graph-parser.config :as gp-config]
             [logseq.db.rules :refer [rules]]
             [logseq.db.default :as default-db]
             [frontend.util.drawer :as drawer]))
@@ -1674,3 +1675,12 @@
   (let [{:keys [pages]} (js->clj tldr :keywordize-keys true)
         tx (tldr-page->blocks-tx page-name (first pages))]
     (db-utils/transact! tx)))
+
+(defn whiteboard-page?
+  [page-name]
+  (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page-name)])]
+    (or
+     (:block/whiteboard? page)
+     (when-let [file (:block/file page)]
+       (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+         (gp-config/whiteboard? path))))))
