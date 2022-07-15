@@ -197,6 +197,33 @@
       }
     }
   }
+
+  &-welcome-logseq-sync {
+    > .head-bg {
+      @apply flex m-auto mb-10;
+
+      background-image: url("../img/file-sync-welcome-backer-dark.png");
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      width: 500px;
+      padding-top: 70px;
+      max-width: 90vw;
+
+      > strong {
+        @apply block bg-gray-200 rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5 opacity-40
+        m-auto translate-y-8;
+      }
+    }
+
+    > h1, > h2 {
+      @apply flex justify-center text-center;
+    }
+
+    > h2 {
+      @apply text-sm opacity-80 pt-3;
+    }
+  }
 }
 
 div[label=modal-page-histories] {

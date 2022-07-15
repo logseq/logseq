@@ -108,12 +108,12 @@
 
            (when sync-state
              (map-indexed (fn [i f] (:time f)
-                            (let [path (:path f)
-                                  ext (string/lower-case (util/get-file-ext path))
+                            (let [path       (:path f)
+                                  ext        (string/lower-case (util/get-file-ext path))
                                   supported? (gp-config/mldoc-support? ext)
-                                  full-path (js/decodeURI
-                                             (str (config/get-repo-dir current-repo) path))
-                                  page-name (db/get-file-page full-path)]
+                                  full-path  (js/decodeURI
+                                              (str (config/get-repo-dir current-repo) path))
+                                  page-name  (db/get-file-page full-path)]
                               {:title [:div {:key i}
                                        [:a.file-sync-item
                                         {:href (if page-name
@@ -327,3 +327,38 @@
     (if-let [page-entity (db-model/get-page page-name)]
       (pick-page-histories-for-sync (state/get-current-repo) graph-uuid page-name page-entity)
       (ui/admonition :warning (str "The page (" page-name ") does not exist!")))))
+
+(rum/defc onboarding-welcome-logseq-sync
+  [close-fn]
+
+  [:div.cp__file-sync-welcome-logseq-sync
+   [:span.head-bg
+
+    [:strong "CLOSED BETA"]]
+
+   [:h1.text-2xl.font-bold
+    [:span.opacity-80 "Welcome to "]
+    [:span.pl-2.dark:text-white.text-gray-800 "Logseq Sync! 👋"]]
+
+   [:h2
+    "No more cloud storage worries. With Logseq's encrypted file syncing, "
+    [:br]
+    "you'll always have your notes backed up and available in real-time on any device."]
+
+   [:div.pt-6.flex.justify-end.space-x-2
+    (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button "Start syncing")]])
+
+
+(defn make-onboarding-panel
+  [type]
+
+  (fn [close-fn]
+
+    (case type
+      :welcome
+      (onboarding-welcome-logseq-sync close-fn)
+
+      [:p
+       [:h1.text-xl.font-bold "Not handled!"]
+       [:a.button {:on-click close-fn} "Got it!"]])))

@@ -568,6 +568,12 @@
                                     :path-params {:name (:block/name page-entity)}}))))))
 
 
+(defmethod handle :file-sync/onboarding-tip [[_ type opts]]
+  (state/set-modal!
+   (file-sync/make-onboarding-panel
+    (keyword type))
+   (merge {:close-btn? false :center? true} opts)))
+
 (defmethod handle :file-sync/storage-exceed-limit [[_]]
   (notification/show! "file sync storage exceed limit" :warning false)
   (file-sync-stop!))
