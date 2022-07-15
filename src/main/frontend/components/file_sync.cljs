@@ -349,6 +349,27 @@
     (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button "Start syncing")]])
 
+(rum/defc onboarding-unavailable-file-sync
+  [close-fn]
+
+  [:div.cp__file-sync-unavailable-logseq-sync
+   [:span.head-bg]
+
+   [:h1.text-2xl.font-bold
+    [:span.pr-2.dark:text-white.text-gray-800 "Logseq Sync"]
+    [:span.opacity-80 "is not yet available for you. 😔 "]]
+
+   [:h2
+    "Thanks for creating an account! To ensure that our file syncing service runs well when we release it"
+    [:br]
+    "to our users we need a little more time testing it. That’s why we decided to first roll it out only for our "
+    [:br]
+    "charitable OpenCollective backers. We can notify you once it becomes available for you."]
+
+   [:div.pt-6.flex.justify-end.space-x-2
+    (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")
+    (ui/button "Send email notification")]])
+
 
 (defn make-onboarding-panel
   [type]
@@ -358,6 +379,9 @@
     (case type
       :welcome
       (onboarding-welcome-logseq-sync close-fn)
+
+      :unavailable
+      (onboarding-unavailable-file-sync close-fn)
 
       [:p
        [:h1.text-xl.font-bold "Not handled!"]

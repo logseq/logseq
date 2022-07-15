@@ -198,7 +198,7 @@
     }
   }
 
-  &-welcome-logseq-sync {
+  &-welcome-logseq-sync, &-unavailable-logseq-sync {
     > .head-bg {
       @apply flex m-auto mb-10;
 
@@ -207,7 +207,7 @@
       background-repeat: no-repeat;
       background-position: center;
       width: 500px;
-      padding-top: 70px;
+      padding-top: 86px;
       max-width: 90vw;
 
       > strong {
@@ -224,10 +224,32 @@
       @apply text-sm opacity-80 pt-3;
     }
   }
+
+  &-unavailable-logseq-sync {
+    > .head-bg {
+      background-image: url("../img/file-sync-unavailale-nonbacker-dark.png");
+    }
+  }
 }
 
 div[label=modal-page-histories] {
   .panel-content {
     overflow: hidden;
+  }
+}
+
+html[data-theme='light'] {
+  .cp__file-sync {
+    &-welcome-logseq-sync {
+      > .head-bg {
+        background-image: url("../img/file-sync-welcome-backer-light.png");
+      }
+    }
+
+    &-unavailable-logseq-sync {
+      > .head-bg {
+        background-image: url("../img/file-sync-unavailale-nonbacker-light.png");
+      }
+    }
   }
 }
