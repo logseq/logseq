@@ -1,15 +1,16 @@
 (ns logseq.graph-parser.block
   "Block related code needed for graph-parser"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.date-time-util :as date-time-util]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.date-time-util :as date-time-util]))
+            [logseq.graph-parser.util :as gp-util]))
 
 (defn heading-block?
   [block]
@@ -159,19 +160,25 @@
                    properties
                    (remove (fn [[k _]]
                              (contains?
-                              (set (into (gp-property/editable-built-in-properties)
-                                         (gp-property/hidden-built-in-properties)))
+                              (set/union (disj (gp-property/editable-built-in-properties)
+                                               :alias :tags)
+                                         (gp-property/hidden-built-in-properties))
                               (keyword k))))
                    (map last)
                    (map (fn [v]
                           (cond
-                            (and (string? v)
-                                 (not (gp-mldoc/link? format v)))
-                            (let [v (string/trim v)
-                                  result (text/split-page-refs-without-brackets v {:un-brackets? false})]
-                              (if (coll? result)
-                                (map text/page-ref-un-brackets! result)
-                                []))
+                            (and (string? v) (not (string/blank? v)))
+                            (let [v (string/trim v)]
+                              (when-not (or (gp-mldoc/link? format v)
+                                            (= v "true")
+                                            (= v "false")
+                                            (parse-long v))
+                                (let [result (if (gp-util/wrapped-by-quotes? v)
+                                               (gp-util/unquote-string v)
+                                               (text/split-page-refs-without-brackets v {:un-brackets? false}))]
+                                  (if (coll? result)
+                                    (map text/page-ref-un-brackets! result)
+                                    [result]))))
 
                             (coll? v)
                             (map (fn [s]
