@@ -405,17 +405,21 @@
 
 (defmethod handle :validate-appId [[_ graph-switch-f graph]]
   (when-let [deprecated-repo (or graph (state/get-current-repo))]
-    ;; Installation is will not be changed for iCloud
+    ;; Installation is not changed for iCloud
     (if (mobile-util/iCloud-container-path? deprecated-repo)
-      (when graph-switch-f (graph-switch-f graph true))
+      (when graph-switch-f
+        (graph-switch-f graph true)
+        (state/pub-event! [:graph/ready (state/get-current-repo)]))
       (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
               current-document-url (.getUri Filesystem #js {:path ""
                                                             :directory (.-Documents Directory)})
               current-app-id (-> (js->clj current-document-url :keywordize-keys true)
                                  get-ios-app-id)]
+        (prn :valid :deprecated-app-id deprecated-app-id :current-app-id current-app-id)
         (if (= deprecated-app-id current-app-id)
           (when graph-switch-f (graph-switch-f graph true))
           (do
+            (file-sync-stop!)
             (.unwatch mobile-util/fs-watcher)
             (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
                   current-repo-dir (config/get-repo-dir current-repo)]
@@ -432,7 +436,9 @@
               (db/persist-if-idle! current-repo)
               (file-handler/restore-config! current-repo false)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
-              (when graph-switch-f (graph-switch-f current-repo true)))))))))
+              (when graph-switch-f (graph-switch-f current-repo true))
+              (file-sync-restart!))))
+        (state/pub-event! [:graph/ready (state/get-current-repo)])))))
 
 (defmethod handle :plugin/consume-updates [[_ id pending? updated?]]
   (let [downloading? (:plugin/updates-downloading? @state/state)]
@@ -571,7 +577,10 @@
   (file-sync-stop!))
 
 (defmethod handle :graph/restored [[_ _graph]]
-  (mobile/init!))
+  (mobile/init!)
+  (when-not (mobile-util/native-ios?)
+    (state/pub-event! [:graph/ready (state/get-current-repo)])))
+
 (defmethod handle :graph/dir-gone [[_ dir]]
   (state/pub-event! [:notification/show
                      {:content (str "The directory " dir " has been renamed or deleted, the editor will be disabled for this graph, you can unlink the graph.")

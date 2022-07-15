@@ -110,7 +110,6 @@
 
          (watch-for-date!)
          (file-handler/watch-for-current-graph-dir!)
-         (state/pub-event! [:graph/ready (state/get-current-repo)])
          (state/pub-event! [:graph/restored (state/get-current-repo)])))
       (p/catch (fn [error]
                  (log/error :exception error)))))
