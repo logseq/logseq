@@ -25,7 +25,7 @@
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
-  #{:title :alias :tags :template :template-including-parent :public})
+  #{:title :alias :aliases :tags :icon :template :template-including-parent :public})
 
 (defn hidden-built-in-properties
   "Properties used by logseq that user can't edit or see"

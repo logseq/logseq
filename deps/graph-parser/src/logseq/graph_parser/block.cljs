@@ -161,7 +161,7 @@
                    (remove (fn [[k _]]
                              (contains?
                               (set/union (disj (gp-property/editable-built-in-properties)
-                                               :alias :tags)
+                                               :alias :aliases :tags)
                                          (gp-property/hidden-built-in-properties))
                               (keyword k))))
                    (map last)
