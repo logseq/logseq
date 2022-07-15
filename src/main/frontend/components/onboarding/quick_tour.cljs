@@ -118,8 +118,20 @@
 
 (defn- create-steps-file-sync! [^js jsTour]
   [
-   ;; indicator
-   {:id             "sync-indicator"
+   ;; initiate graph
+   {:id             "sync-initiate"
+    :text           (h/render-html [:section [:h2 "🚀 Initiate synchronization of your current graph"]
+                                    [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph.."]])
+    :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
+    :canClickTarget true
+    :buttons        [{:text "Continue" :action (.-complete jsTour)}]
+    :popperOptions  {:modifiers [{:name    "preventOverflow"
+                                  :options {:padding 20}}
+                                 {:name    "offset"
+                                  :options {:offset [0, 15]}}]}}
+
+   ;; learn
+   {:id             "sync-learn"
     :text           (h/render-html [:section [:h2 "💡 Learn about your sync status"]
                                     [:p "By clicking this icon you will see the progress of your local graph being synced with the cloud."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
@@ -191,7 +203,7 @@
       (.addStep jsTour (bean/->js step)))
 
     (js/setTimeout
-     #(.show jsTour "sync-history")
+     #(.show jsTour "sync-initiate")
      1000)
 
     ;(.start jsTour)
