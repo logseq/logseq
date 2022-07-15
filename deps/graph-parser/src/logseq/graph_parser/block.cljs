@@ -158,7 +158,10 @@
   (let [page-refs (->>
                    properties
                    (remove (fn [[k _]]
-                             (contains? #{:background-color :background_color} (keyword k))))
+                             (contains?
+                              (set (into (gp-property/editable-built-in-properties)
+                                         (gp-property/hidden-built-in-properties)))
+                              (keyword k))))
                    (map last)
                    (map (fn [v]
                           (cond
