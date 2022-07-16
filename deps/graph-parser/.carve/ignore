@@ -2,3 +2,5 @@
 logseq.graph-parser.cli/parse-graph
 ;; For CLI
 logseq.graph-parser.mldoc/ast-export-markdown
+;; API
+logseq.graph-parser.property/register-built-in-properties

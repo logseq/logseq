@@ -203,6 +203,9 @@ export function setupInjectedStyle(
 
 const injectedUIEffects = new Map<string, () => void>()
 
+// @ts-ignore
+window.__injectedUIEffects = injectedUIEffects
+
 export function setupInjectedUI(
   this: PluginLocal,
   ui: UIOptions,
@@ -378,6 +381,16 @@ export function setupInjectedUI(
 
   injectedUIEffects.set(id, teardownUI)
   return teardownUI
+}
+
+export function cleanInjectedUI(
+  id: string
+) {
+  if (!injectedUIEffects.has(id)) return
+  const clean = injectedUIEffects.get(id)
+  try { clean() } catch (e) {
+    console.warn('[CLEAN Injected UI] ', id, e)
+  }
 }
 
 export function cleanInjectedScripts(this: PluginLocal) {
