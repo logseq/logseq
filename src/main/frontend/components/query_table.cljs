@@ -170,7 +170,7 @@
                              (interpose [:span ", "] vals))
                            (cond
                              (boolean? value) (str value)
-                             (not (string? value)) value
-                             :else (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                                     (page-cp {} page)
-                                     (inline-text format value)))))))]))]))]]])))
+                             (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                                               (page-cp {} page)
+                                               (inline-text format value))
+                             :else value)))))]))]))]]])))
