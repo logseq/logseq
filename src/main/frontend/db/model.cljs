@@ -1267,9 +1267,8 @@
                                         block-attrs)
                                react
                                (sort-by-left-recursive))]
-         (if (options :filter?)
-           (map (comp :block/original-name :block/page) query-result)
-           (db-utils/group-by-page query-result)))))))
+         (if options (map (comp :block/original-name :block/page) query-result)
+             (db-utils/group-by-page query-result)))))))
 
 (defn get-block-referenced-blocks-ids
   [block-uuid]
