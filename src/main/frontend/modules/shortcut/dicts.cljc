@@ -116,7 +116,7 @@
    :ui/goto-plugins                 "Go to plugins dashboard"
    :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
    :ui/toggle-cards                 "Toggle cards"
-   :git/commit                      "Git commit message"})
+   :git/commit                      "Create git commit with message"})
 
 (def category
   {:shortcut.category/basics "Basics"

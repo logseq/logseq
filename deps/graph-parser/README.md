@@ -49,7 +49,7 @@ To see available options that can run specific tests or namespaces: `clojure -M:
 
 To run nbb-logseq tests:
 ```
-yarn nbb-logseq -cp src:test -m logseq.graph-parser.nbb-test-runner/run-tests
+yarn test
 ```
 
 ### Managing dependencies
