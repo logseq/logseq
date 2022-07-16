@@ -168,10 +168,9 @@
                            (let [vals (for [item value]
                                         (page-cp {} {:block/name item}))]
                              (interpose [:span ", "] vals))
-                           (if (not (string? value))
-                              (if (boolean? value) 
-                                (str value)
-                                value)
-                             (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
-                               (page-cp {} page)
-                               (inline-text format value)))))))]))]))]]])))
+                           (cond
+                             (boolean? value) (str value)
+                             (not (string? value)) value
+                             :else (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+                                     (page-cp {} page)
+                                     (inline-text format value)))))))]))]))]]])))
