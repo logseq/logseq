@@ -1,11 +1,11 @@
 (ns frontend.extensions.calc-test
   (:require [clojure.test :as test :refer [are deftest testing]]
+            [clojure.string :as str]
             [clojure.edn :as edn]
             [frontend.extensions.calc :as calc]))
 
 (defn convert-bigNum [b]
-  (edn/read-string (str b))
-  )
+  (edn/read-string (str b)))
 
 (defn run [expr]
   {:pre [(string? expr)]}
@@ -191,48 +191,36 @@
 
 (deftest last-value
   (testing "last value is set"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
-      [42 126] ["6*7" "last*3"]
-      [25 5]   ["3^2+4^2" "sqrt(last)"]
-      [6 12]   ["2*3" "# a comment" "" "   " "last*2"])))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      ["42" "126"]            ["6*7" "last*3"]
+      ["25" "5"]              ["3^2+4^2" "sqrt(last)"]
+      ["6" nil nil nil "12"]  ["2*3" "# a comment" "" "   " "last*2"])))
 
 (deftest formatting
   (testing "display normal"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
-      [1e6 "1000000"]         ["1e6" ":norm"]
-      [1e6 "1000000"]         ["1e6" ":norm 7"]
-      [1e6 "1e+6"]            ["1e6" ":norm 6"]
-      [0 "0" "3.14"]          ["0" ":norm 3" "PI"]
-      [0 "0" "2"]             ["0" ":norm 1" "E"]
-      [0.000123 "0.000123"]   ["0.000123" ":norm 5"]
-      [0.000123 "1.23e-4"]    ["0.000123" ":norm 4"]
-      [123400000 "123400000"] ["1.234e8" ":norm 9"]
-      [123400000 "1.234e+8"]  ["1.234e8" ":norm 8"]))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "1000000"]     [":norm" "1e6" ]
+      [nil "1000000"]     [":norm 7" "1e6"]
+      [nil "1e+6"]        [":norm 6" "1e6"]
+      [nil "3.14"]        [":norm 3" "PI"]
+      [nil "3"]           [":norm 1" "E"]
+      [nil "0.000123"]    [":norm 5" "0.000123"]
+      [nil "1.23e-4"]     [":norm 4" "0.000123"]
+      [nil "123400000"]   [":norm 9" "1.234e8"]
+      [nil "1.234e+8"]    [":norm 8" "1.234e8"]))
   (testing "display fixed"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
-      [0.12345 "0.123450"]    ["0.12345" ":fix 6"]
-      [0.12345 "0.1235"]      ["0.12345" ":fix 4"]
-      ["" "2.7183"]           [":fixed 4" "E"]
-      [0.0005 "0.001"]        ["0.0005" ":fix 3"]
-      [0.0005 "4.000e-4"]     ["0.0004" ":fix 3"]
-      [1e21 "1.00e+21"]       ["1e21+0.1" ":fix 2"]))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "0.123450"]    [":fix 6" "0.12345"]
+      [nil "0.1235"]      [":fix 4" "0.12345"]
+      [nil "2.7183"]      [":fixed 4" "E"]
+      [nil "0.001"]       [":fix 3" "0.0005"]
+      [nil "4.000e-4"]    [":fix 3" "0.0004"]
+      [nil "1.00e+21"]    [":fix 2" "1e21+0.1"]))
   (testing "display scientific"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
-      [1e6 "1e+6"]            ["1e6" ":sci"]
-      [0 "0.000e0" "3.142e+3"]["0" ":sci 3" "PI"]
-      ["" "3.14e+2"]          [":sci" "3.14*10^2"])))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "1e+6"]        [":sci" "1e6"]
+      [nil "3.142e+0"]    [":sci 3" "PI"]
+      [nil "3.14e+2"]     [":sci" "3.14*10^2"])))
 
 (deftest base-conversion
   (testing "mixed base input"
@@ -243,14 +231,11 @@
       324.0     "0x100 + 0o100 + 0b100"
       32.0      "0b100 * 0b1000"))
   (testing "mixed base output"
-    (are [values exprs] (let [env (calc/new-env)]
-                          (mapv (fn [expr]
-                                  (calc/eval env (calc/parse expr)))
-                                exprs))
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
       ["12345" "3039"]          ["12345" ":hex"]
       ["12345" "30071"]         ["12345" ":oct"]
       ["12345" "11000000111001"]["12345" ":bin"]
-      ["" "100000000"]          [":bin" "0b10000 * 0b10000"])))
+      [nil "100000000"]         [":bin" "0b10000 * 0b10000"])))
 
 (deftest comments
   (testing "comments are ignored"
