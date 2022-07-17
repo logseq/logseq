@@ -70,7 +70,7 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name icon]
+  [name icon display-name]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
@@ -82,7 +82,7 @@
                             :page))
                          (route-handler/redirect-to-page! name))))}
      [:span.page-icon icon]
-     (pdf-assets/fix-local-asset-filename original-name)]))
+     (pdf-assets/fix-local-asset-filename (if (empty? display-name) name display-name))]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "file-text")
@@ -94,7 +94,7 @@
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
   (rum/local nil ::dragging-over)
-  [state _t name icon]
+  [state _t name icon display-name]
   (let [up? (get state ::up?)
         dragging-over (get state ::dragging-over)
         target (state/sub :favorites/dragging)]
@@ -120,7 +120,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name icon)]))
+     (page-name name icon display-name)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -142,9 +142,11 @@
        [:ul.favorites.text-sm
         (for [name favorites]
           (when-not (string/blank? name)
-            (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-              (let [icon (get-page-icon entity)]
-                (favorite-item t name icon)))))]))))
+            (let [source-page (db-model/get-alias-source-page (state/get-current-repo) name) ]
+              (let [source-page-name (if (empty? source-page) name (db-model/get-original-name source-page))]
+                (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc source-page-name)])]
+                  (let [icon (get-page-icon entity)]
+                    (favorite-item t source-page-name icon name)))))))]))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
