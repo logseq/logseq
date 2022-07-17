@@ -259,10 +259,6 @@
 
 (def config-default-content (rc/inline "config.edn"))
 
-(def markers
-  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
-    "canceled" "cancelled" "started" "in-progress"})
-
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")

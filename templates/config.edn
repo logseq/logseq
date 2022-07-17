@@ -212,6 +212,13 @@
  ;; E.g. #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
 
+ ;; Enable all your properties to have corresponding pages
+ :property-pages/enabled? true
+
+ ;; Properties to exclude from having property pages
+ ;; E.g. #{:duration :author}
+ ;; :property-pages/excludelist
+
  ;; logbook setup
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated

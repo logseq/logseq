@@ -3,6 +3,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.util :as util]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
@@ -441,9 +442,7 @@
         [:div.ls-card.content
          {:class (when (or preview? modal?)
                    (str (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto")
-                        (when modal? " modal-cards")))
-          :on-mouse-down (fn [e]
-                           (util/stop e))}
+                        (when modal? " modal-cards")))}
          (let [repo (state/get-current-repo)]
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])
@@ -709,12 +708,12 @@
 (component-macro/register query-macro-name cards)
 
 ;;; register builtin properties
-(property/register-built-in-properties #{card-last-interval-property
-                                         card-repeats-property
-                                         card-last-reviewed-property
-                                         card-next-schedule-property
-                                         card-last-easiness-factor-property
-                                         card-last-score-property})
+(gp-property/register-built-in-properties #{card-last-interval-property
+                                            card-repeats-property
+                                            card-last-reviewed-property
+                                            card-next-schedule-property
+                                            card-last-easiness-factor-property
+                                            card-last-score-property})
 
 ;;; register slash commands
 (commands/register-slash-command ["Cards"

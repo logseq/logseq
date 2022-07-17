@@ -48,10 +48,12 @@ public class FsWatcher: CAPPlugin, PollingWatcherDelegate {
         // NOTE: Event in js {dir path content stat{mtime}}
         switch event {
         case .Unlink:
-            self.notifyListeners("watcher", data: ["event": "unlink",
-                                                   "dir": baseUrl?.description as Any,
-                                                   "path": url.description,
-                                                  ])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.notifyListeners("watcher", data: ["event": "unlink",
+                                                       "dir": self.baseUrl?.description as Any,
+                                                       "path": url.description,
+                                                      ])
+            }
         case .Add, .Change:
             var content: String? = nil
             if url.shouldNotifyWithContent() {
