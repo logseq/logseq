@@ -149,8 +149,8 @@
 
   &[label="flashcards__cp"] {
       .panel-content {
-          padding: 2rem 0rem;
-          
+          padding: 2rem 0;
+
           @screen sm {
               padding: 2rem 2rem;
           }
@@ -162,7 +162,7 @@
       .ui__modal-panel {
           height: 90%;
       }
-    
+
       .panel-content {
           height: 100%;
       }
@@ -241,7 +241,7 @@ html.is-mobile {
     cursor: not-allowed;
   }
 
-  &:hover {
+  &:hover:not([disabled]) {
     opacity: 0.8;
   }
 

@@ -42,7 +42,7 @@
                                          r))
                                      (state/get-repos))))))]
 
-    [:div.cp__file-sync-create-remote-modal
+    [:div.cp__file-sync-related-normal-modal
      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
 
      [:h1.text-xl.font-semibold.opacity-90.text-center.py-2

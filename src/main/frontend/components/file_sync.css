@@ -231,7 +231,7 @@
     }
   }
 
-  &-create-remote-modal {
+  &-related-normal-modal {
     .icon-wrap {
       @apply rounded flex justify-center items-center;
 
