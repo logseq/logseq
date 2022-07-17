@@ -110,7 +110,7 @@
       padding: 2rem;
 
       @screen md {
-        min-width: 760px;
+        min-width: 720px;
         width: auto;
 
         .ls-card {

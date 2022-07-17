@@ -230,6 +230,40 @@
       background-image: url("../img/file-sync-unavailale-nonbacker-dark.png");
     }
   }
+
+  &-create-remote-modal {
+    .icon-wrap {
+      @apply rounded flex justify-center items-center;
+
+      width: 48px;
+      height: 48px;
+      background-color: var(--ls-quaternary-background-color);
+
+      > .ti {
+        font-size: 34px;
+        opacity: .9;
+      }
+    }
+
+    > .folder-tip {
+      @apply mt-5 py-4 rounded-md;
+
+      background-color: var(--ls-quaternary-background-color);
+
+      .ti {
+        font-weight: 400;
+        font-size: 20px;
+      }
+
+      h3, h3 > span {
+        @apply dark:text-white flex items-center space-x-2 font-semibold opacity-95;
+      }
+
+      h4 {
+        @apply text-sm opacity-50 pt-1;
+      }
+    }
+  }
 }
 
 div[label=modal-page-histories] {
@@ -249,6 +283,20 @@ html[data-theme='light'] {
     &-unavailable-logseq-sync {
       > .head-bg {
         background-image: url("../img/file-sync-unavailale-nonbacker-light.png");
+      }
+    }
+
+    &-create-remote-modal {
+      .icon-wrap {
+        background-color: #908E8B;
+
+        .ti {
+          color: whitesmoke;
+        }
+      }
+
+      > .folder-tip {
+        background-color: var(--ls-tertiary-background-color);
       }
     }
   }

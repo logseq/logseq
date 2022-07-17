@@ -23,6 +23,45 @@
             [reitit.frontend.easy :as rfe]
             [frontend.db :as db]))
 
+(rum/defc create-remote-graph-panel
+  [repo graph-name close-fn]
+
+  (let [on-confirm
+        (fn []
+          (async/go
+            (close-fn)
+            (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
+              (async/<! (fs-sync/sync-start))
+              ;; update existing repo
+              (state/set-repos! (map (fn [r]
+                                       (if (= (:url r) repo)
+                                         (assoc r
+                                                :GraphUUID GraphUUID
+                                                :GraphName graph-name
+                                                :remote? true)
+                                         r))
+                                     (state/get-repos))))))]
+
+    [:div.cp__file-sync-create-remote-modal
+     [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "cloud-upload")]]
+
+     [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
+      "Are you sure you want to create a new remote graph?"]
+     [:h2.text-center.opacity-70.text-xs
+      "By continuing this action you will create an encrypted cloud version of your current local graph." [:br]
+      "You can always delete the remote graph at a later point."]
+
+     [:div.folder-tip.flex.flex-col.items-center
+      [:h3
+       [:span (ui/icon "folder") [:label.pl-0.5 graph-name]]
+       [:span.opacity-50.scale-75 (ui/icon "arrow-right")]
+       [:span (ui/icon "cloud-lock")]]
+      [:h4.px-2 repo]]
+
+     [:p.flex.items-center.space-x-2.pt-6.flex.justify-end.-mb-2
+      (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
+      (ui/button "Create remote graph" :on-click on-confirm)]]))
+
 (rum/defcs indicator <
   rum/reactive
   [_state]
@@ -47,26 +86,14 @@
         turn-on            #(if-not synced-file-graph?
                               (let [repo (state/get-current-repo)]
                                 (when (and repo (not (config/demo-graph? repo)))
-                                  (let [graph-name (util/node-path.basename repo)
-                                        confirm-fn (fn []
-                                                     (ui/make-confirm-modal
-                                                      {:title      (str "Are you sure to create a new remote graph (" graph-name ")?")
-                                                       :on-confirm (fn [_ {:keys [close-fn]}]
-                                                                     (async/go
-                                                                       (close-fn)
-                                                                       (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
-                                                                         (async/<! (fs-sync/sync-start))
-                                                                         ;; update existing repo
-                                                                         (state/set-repos! (map (fn [r]
-                                                                                                  (if (= (:url r) repo)
-                                                                                                    (assoc r
-                                                                                                           :GraphUUID GraphUUID
-                                                                                                           :GraphName graph-name
-                                                                                                           :remote? true)
-                                                                                                    r))
-                                                                                                (state/get-repos))))))}))]
+                                  (let [graph-name
+                                        (util/node-path.basename repo)
 
-                                    (state/set-modal! (confirm-fn)))))
+                                        confirm-fn
+                                        (fn [close-fn]
+                                          (create-remote-graph-panel repo graph-name close-fn))]
+
+                                    (state/set-modal! confirm-fn {:center? true :close-btn? false}))))
                               (fs-sync/sync-start))]
 
     [:div.cp__file-sync-indicator
@@ -369,7 +396,6 @@
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button "Send email notification")]])
-
 
 (defn make-onboarding-panel
   [type]
