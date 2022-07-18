@@ -70,26 +70,27 @@
 ;; component -> query-key
 (defonce query-components (atom {}))
 
-(defn- with-block-start-end
+(defn- get-blocks-range
   [result-atom new-result]
-  (let [block? (and (coll? @result-atom) (map? (first @result-atom)) (:block/uuid (first @result-atom)))
-        [start end] (when block?
-                      [(first @result-atom)
-                       (last @result-atom)])
-        new-result (if block? (util/distinct-by-last-wins :block/uuid new-result) new-result)]
-    (with-meta new-result {:start (select-keys start [:db/id :block/uuid :block/content])
-                           :end (select-keys end [:db/id :block/uuid :block/content])})))
+  (let [block? (and (coll? @result-atom) (map? (first @result-atom)) (:block/uuid (first @result-atom)))]
+    (when block?
+      {:old [(:db/id (first @result-atom))
+             (:db/id (last @result-atom))]
+       :new [(:db/id (first new-result))
+             (:db/id (last new-result))]})))
 
 (defn set-new-result!
-  [k new-result]
+  [k new-result tx-report]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (let [new-result' (with-block-start-end result-atom new-result)]
-      (reset! result-atom new-result'))))
+    (when tx-report
+      (when-let [range (get-blocks-range result-atom new-result)]
+       (state/set-state! [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] range)))
+    (reset! result-atom new-result)))
 
 (defn swap-new-result!
   [k f]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (let [new-result' (with-block-start-end result-atom (f @result-atom))]
+    (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
 (defn kv
@@ -101,7 +102,7 @@
 (defn remove-key!
   [repo-url key]
   (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
+  (set-new-result! [repo-url :kv key] nil nil))
 
 (defn clear-query-state!
   []
@@ -294,7 +295,7 @@
                       (d/q query db))
                     transform-fn)]
     (when-not (= new-result result)
-      (set-new-result! k new-result))))
+      (set-new-result! k new-result (:tx-report tx)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."

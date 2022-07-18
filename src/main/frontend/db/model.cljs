@@ -699,14 +699,12 @@
         current-db (conn/get-db repo-url)]
     (cond
       (and (or (:undo? tx-meta) (:redo? tx-meta)) @result)
-      (when-let [start-id (get-start-id-for-pagination-query
-                           repo-url current-db tx-report result outliner-op page-id block-id tx-block-ids)]
-        (let [end-block-id (:db/id (:end (meta @result)))
-              previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-              more (get-paginated-blocks-no-cache current-db start-id {:end-id end-block-id
-                                                                       :include-start? true
-                                                                       :scoped-block-id scoped-block-id})]
-          (concat previous-blocks more)))
+      (let [blocks-range (:pagination-blocks-range tx-meta)
+            [start-block-id end-block-id] (:new blocks-range)]
+        (get-paginated-blocks-no-cache current-db start-block-id
+                                       {:end-id end-block-id
+                                        :include-start? true
+                                        :scoped-block-id scoped-block-id}))
 
       (contains? #{:save-block :delete-blocks} outliner-op)
       @result
