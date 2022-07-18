@@ -1556,7 +1556,7 @@
   (and
    (or
     (empty? properties)
-    (property/properties-built-in? properties))
+    (property/properties-hidden? properties))
 
    (empty? title)
 
@@ -1812,9 +1812,12 @@
 
 (rum/defc property-cp
   [config block k v]
-  (let [date (and (= k :date) (date/get-locale-string (str v)))]
+  (let [date (and (= k :date) (date/get-locale-string (str v)))
+        property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? (state/get-config)))]
     [:div
-     (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+     (if property-pages-enabled?
+       (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+       [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
      (cond
        (int? v)
@@ -1933,7 +1936,8 @@
    (and (util/sup? target)
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
-   (dom/closest target "a")))
+   (dom/closest target "a")
+   (dom/closest target ".dsl-query")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
@@ -2089,7 +2093,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (property/properties-built-in? properties)]
+                 (let [hidden? (property/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
                  (not (:slide? config)))
@@ -2914,7 +2918,9 @@
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (ui/lazy-visible
-    (fn [] (custom-query* config q)))))
+    (fn [] (custom-query* config q))
+    "custom-query")))
+
 (defn admonition
   [config type result]
   (when-let [icon (case (string/lower-case (name type))

@@ -124,7 +124,7 @@
       :org
       "/"
       :markdown
-      "_"
+      "*"
       "")))
 (defn get-underline
   [format]
@@ -132,8 +132,8 @@
     (case format
       :org
       "_"
-      :markdown
-      "__"
+      :markdown ;; no underline for markdown
+      ""
       "")))
 (defn get-strike-through
   [format]
@@ -263,10 +263,6 @@
 (def pages-metadata-file "pages-metadata.edn")
 
 (def config-default-content (rc/inline "config.edn"))
-
-(def markers
-  #{"now" "later" "todo" "doing" "done" "wait" "waiting"
-    "canceled" "cancelled" "started" "in-progress"})
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")

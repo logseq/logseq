@@ -56,6 +56,7 @@
               (when (and (not (state/nfs-refreshing?))
                          (not (contains? (:file/unlinked-dirs @state/state)
                                          (config/get-repo-dir repo))))
+                (srs/update-cards-due-count!)
                 ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))))]
     (f)
@@ -100,8 +101,10 @@
            (repo-handler/setup-local-repo-if-not-exists!)
 
            :else
-           (state/set-db-restoring! false))
-
+           (state/set-db-restoring! false))))
+      (p/then
+       (fn []
+         (prn "db restored, setting up repo hooks")
          (store-schema!)
 
          (state/pub-event! [:modal/nfs-ask-permission])

@@ -3,44 +3,60 @@
             [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as model-db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as model-db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]))
 
-(rum/defc filter-dialog-inner < rum/reactive
-  [filters-atom _close-fn references page-name]
-  [:div.filters
-   [:div.sm:flex.sm:items-start
-    [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-     (ui/icon "filter" {:style {:fontSize 20}})]
-    [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-     [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
-     [:span.text-xs
-      "Click to include and shift-click to exclude. Click again to remove."]]]
-   (when (seq references)
-     (let [filters (rum/react filters-atom)]
-       [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-        (for [reference references]
-          (let [lc-reference (string/lower-case reference)
-                filtered (get filters lc-reference)
-                color (condp = filtered
-                        true "text-green-400"
-                        false "text-red-400"
-                        nil)]
-            [:button.border.rounded.px-1.mb-1.mr-1 {:key reference :class color :style {:border-color "currentColor"}
-                                                    :on-click (fn [e]
-                                                                (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                                                       (assoc % lc-reference (not (.-shiftKey e)))
-                                                                                       (dissoc % lc-reference)))
-                                                                (page-handler/save-filter! page-name @filters-atom))}
-             reference]))]))])
+(defn- frequencies-sort
+  [references]
+  (sort-by second #(> %1 %2) references))
+
+(rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
+  [state filters-atom _close-fn references page-name]
+  (let [filter-search (get state ::filterSearch)
+        filtered-references  (frequencies-sort
+                              (if (= @filter-search "")
+                                references
+                                (search/fuzzy-search references @filter-search :limit 500 :extract-fn first)))]
+    [:div.filters
+     [:div.sm:flex.sm:items-start
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
+       (ui/icon "filter" {:style {:fontSize 20}})]
+      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
+       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+       [:span.text-xs
+        "Click to include and shift-click to exclude. Click again to remove."]]]
+     [:div.cp__filters-input-panel.flex (ui/icon "search") [:input.cp__filters-input.w-full
+                                                            {:placeholder (t :linked-references/filter-search)
+                                                             :auto-focus true
+                                                             :on-change (fn [e]
+                                                                          (reset! filter-search (util/evalue e)))}]]
+     (when (seq filtered-references)
+       (let [filters (rum/react filters-atom)]
+         [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
+          (for [[ref-name ref-count] filtered-references]
+            (let [lc-reference (string/lower-case ref-name)
+                  filtered (get filters lc-reference)
+                  color (condp = filtered
+                          true "text-green-400"
+                          false "text-red-400"
+                          nil)]
+              [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key ref-name :class color :style {:border-color "currentColor"}
+                                                                  :on-click (fn [e]
+                                                                              (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                                                                                     (assoc % lc-reference (not (.-shiftKey e)))
+                                                                                                     (dissoc % lc-reference)))
+                                                                              (page-handler/save-filter! page-name @filters-atom))}
+               ref-name [:sub " " ref-count]]))]))]))
 
 (defn filter-dialog
   [filters-atom references page-name]
@@ -63,6 +79,12 @@
          (content/content block-id
                           {:hiccup ref-hiccup})]))))
 
+(defn- scheduled-or-deadlines?
+  [page-name]
+  (and (date/valid-journal-title? (string/capitalize page-name))
+       (not (true? (state/scheduled-deadlines-disabled?)))
+       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
@@ -70,12 +92,11 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name]
+  [state page-name refed-blocks-ids]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
           threshold (state/get-linked-references-collapsed-threshold)
-          refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
           n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
           default-collapsed? (>= (count refed-blocks-ids) threshold)
@@ -83,10 +104,7 @@
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
           page-name (string/lower-case page-name)
-          journal? (date/valid-journal-title? (string/capitalize page-name))
-          scheduled-or-deadlines (when (and journal?
-                                            (not (true? (state/scheduled-deadlines-disabled?)))
-                                            (= page-name (string/lower-case (date/journal-name))))
+          scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
       (when (or (seq refed-blocks-ids)
                 (seq scheduled-or-deadlines)
@@ -116,13 +134,13 @@
                 :on-mouse-down (fn [e] (util/stop-propagation e))
                 :on-click (fn []
                             (let [ref-blocks (if block-id
-                                               (db/get-block-referenced-blocks block-id)
-                                               (db/get-page-referenced-blocks page-name))
-                                  ref-pages (map (comp :block/original-name first) ref-blocks)
+                                               (db/get-block-referenced-blocks block-id {:filter? true})
+                                               (db/get-page-referenced-blocks page-name {:filter? true}))
                                   references (db/get-page-linked-refs-refed-pages repo page-name)
-                                  references (->> (concat ref-pages references)
-                                                  (remove nil?)
-                                                  (distinct))]
+                                  references (->>
+                                              (concat ref-blocks references)
+                                              (remove nil?)
+                                              (frequencies))]
                               (state/set-modal! (filter-dialog filters-atom references page-name)
                                                 {:center? true})))}
                (ui/icon "filter" {:class (cond
@@ -145,8 +163,8 @@
                                    (update-vals #(map first %))))
                      filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
                      n-ref (apply +
-                             (for [[_ rfs] filtered-ref-blocks]
-                               (count rfs)))]
+                                  (for [[_ rfs] filtered-ref-blocks]
+                                    (count rfs)))]
                  (reset! *n-ref n-ref)
                  [:div.references-blocks
                   (let [ref-hiccup (block/->hiccup filtered-ref-blocks
@@ -163,13 +181,17 @@
              {:default-collapsed? default-collapsed?
               :title-trigger? true}))]]))))
 
-(rum/defc references
+(rum/defc references < rum/reactive db-mixins/query
   [page-name]
-  (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error")
-   (ui/lazy-visible
-    (fn []
-      (references* page-name)))))
+  (let [refed-blocks-ids (when page-name (model-db/get-referenced-blocks-ids page-name))]
+    (when (or (seq refed-blocks-ids)
+              (scheduled-or-deadlines? page-name))
+      (ui/catch-error
+       (ui/component-error "Linked References: Unexpected error")
+       (ui/lazy-visible
+        (fn []
+          (references* page-name refed-blocks-ids))
+        (str "ref-" page-name))))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
@@ -178,10 +200,10 @@
      (fn [state]
        (reset! (second (:rum/args state))
                (apply +
-                 (for [[_ rfs]
-                       (db/get-page-unlinked-references
-                        (first (:rum/args state)))]
-                   (count rfs))))
+                      (for [[_ rfs]
+                            (db/get-page-unlinked-references
+                             (first (:rum/args state)))]
+                        (count rfs))))
        (render-fn state)))}
   [state page-name _n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)]

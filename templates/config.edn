@@ -180,9 +180,9 @@
 
  ;; Macros replace texts and will make you more productive.
  ;; For example:
- ;; Add this to the macros below:
+ ;; Change the :macros value below to:
  ;; {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}
- ;; input "{{{poem red,blue}}}"
+ ;; input "{{poem red,blue}}"
  ;; becomes
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
  :macros {}
@@ -211,6 +211,13 @@
  ;; hide specific properties for blocks
  ;; E.g. #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
+
+ ;; Enable all your properties to have corresponding pages
+ :property-pages/enabled? true
+
+ ;; Properties to exclude from having property pages
+ ;; E.g. #{:duration :author}
+ ;; :property-pages/excludelist
 
  ;; logbook setup
  ;; :logbook/settings
