@@ -372,7 +372,7 @@
                                                               (= k (:db/id (:block/left block))))
                                                             blocks)
                                                     (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-         (util/pprint duplicates)))
+         #_(util/pprint duplicates)))
      (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
 
    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
