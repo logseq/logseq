@@ -206,8 +206,8 @@
       [nil "3"]           [":norm 1" "E"]
       [nil "0.000123"]    [":norm 5" "0.000123"]
       [nil "1.23e-4"]     [":norm 4" "0.000123"]
-      [nil "123400000"]   [":norm 9" "1.234e8"]
-      [nil "1.234e+8"]    [":norm 8" "1.234e8"]))
+      [nil "123400000"]   [":normal 9" "1.234e8"]
+      [nil "1.234e+8"]    [":normal 8" "1.234e8"]))
   (testing "display fixed"
     (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
       [nil "0.123450"]    [":fix 6" "0.12345"]
@@ -215,12 +215,38 @@
       [nil "2.7183"]      [":fixed 4" "E"]
       [nil "0.001"]       [":fix 3" "0.0005"]
       [nil "4.000e-4"]    [":fix 3" "0.0004"]
-      [nil "1.00e+21"]    [":fix 2" "1e21+0.1"]))
+      [nil "1.00e+21"]    [":fixed 2" "1e21+0.1"]))
   (testing "display scientific"
     (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
       [nil "1e+6"]        [":sci" "1e6"]
       [nil "3.142e+0"]    [":sci 3" "PI"]
-      [nil "3.14e+2"]     [":sci" "3.14*10^2"])))
+      [nil "3.14e+2"]     [":scientific" "3.14*10^2"])))
+
+(deftest fractions
+  (testing "mixed numbers"
+    (are [value expr] (= value (run expr))
+      0          "0_0_1"
+      1          "0_1/1"
+      1          "1_0/1"
+      2.5        "2_1/2"
+      2.5        "2_1_2"
+      -4.28      "-4_7/25"
+      2.00101    "2_101/100000"
+      -99.2      "-99_8_40"))
+  (testing "display fractions"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "4_3/8"]           [":frac" "4.375"]
+      [nil "-7_1/4"]          [":fraction" "-7.25"]
+      [nil "2"]               [":fractions" "19/20 + 1_1/20"]
+      [nil "-2"]              [":frac" "19/17 - 3_2/17"]
+      [nil "3.14157"]         [":frac" "3.14157"]
+      [nil "3_14157/100000"]  [":frac 100000" "3.14157"]))
+  (testing "display improper fractions"
+    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+      [nil "35/8"]            [":frac-i" "4.375"]
+      [nil "-29/4"]           [":frac-imp" "-7.25"]
+      [nil "3.14157"]         [":fractions-improper" "3.14157" ]
+      [nil "314157/100000"]   [":frac-i 100000" "3.14157"])))
 
 (deftest base-conversion
   (testing "mixed base input"

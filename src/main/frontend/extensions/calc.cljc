@@ -43,6 +43,8 @@
    {:number     (comp bn/BigNumber #(str/replace % "," ""))
     :percent    (fn percent [a] (-> a (.dividedBy 100.00)))
     :scientific bn/BigNumber
+    :mixed-number (fn [whole numerator denominator]
+                    (.plus (.dividedBy (bn/BigNumber numerator) denominator) whole))
     :negterm    (fn neg [a] (-> a (.negated)))
     :expr       identity
     :add        (fn add [a b] (-> a (.plus b)))
@@ -91,6 +93,13 @@
                   (get @env "last"))
     :mode-sci   (fn format [places]
                   (swap! env assoc :mode "sci" :places places)
+                  (get @env "last"))
+    :mode-frac  (fn format [max-denominator]
+                  (swap! env dissoc :mode :improper)
+                  (swap! env assoc :mode "frac" :max-denominator max-denominator)
+                  (get @env "last"))
+    :mode-frac-i (fn format [max-denominator]
+                  (swap! env assoc :mode "frac" :max-denominator max-denominator :improper true)
                   (get @env "last"))
     :mode-norm  (fn format [precision]
                   (swap! env dissoc :mode :places)
@@ -141,6 +150,20 @@
   (and (< (.-e num) digits)
        (.isInteger (.shiftedBy num (+ tolerance digits)))))
 
+(defn format-fraction [numerator denominator improper]
+  (let [whole (.dividedToIntegerBy numerator denominator)]
+    (if (or improper (.isZero whole))
+      (str numerator "/" denominator )
+      (str whole "_"
+           (.abs (.modulo numerator denominator)) "/" denominator))))
+
+(defn format-normal [env val]
+  (let [precision (or (get @env :precision) 21)
+        display-val (.precision val precision)]
+    (if (can-fit? display-val precision 1)
+      (.toFixed display-val)
+      (.toExponential display-val))))
+
 (defn format-val [env val]
   (if (instance? bn/BigNumber val)
     (let [mode (get @env :mode)
@@ -160,13 +183,19 @@
             (.toExponential val places))
         (= mode "sci")
           (.toExponential val places)
+        (= mode "frac")
+          (let [max-denominator (or (get @env :max-denominator) 4095)
+                improper  (get @env :improper)
+                [numerator denominator] (.toFraction val max-denominator)
+                delta (.minus (.dividedBy numerator denominator) val)]
+            (if (or (.isZero delta) (< (.-e delta) -16))
+              (if (> denominator 1)
+                (format-fraction numerator denominator improper)
+                (format-normal env numerator))
+              (format-normal env val)))
 
         :else
-          (let [precision (or (get @env :precision) 21)
-                display_val (.precision val precision)]
-            (if (can-fit? display_val precision 1)
-              (.toFixed display_val)
-              (.toExponential display_val)))))
+          (format-normal env val)))
     val))
 
 (defn eval-lines [s]
