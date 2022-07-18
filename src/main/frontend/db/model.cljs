@@ -1251,7 +1251,9 @@
 ;; TODO: Replace recursive queries with datoms index implementation
 ;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
-  ([block-uuid & options]
+  ([block-uuid]
+   (get-block-referenced-blocks block-uuid {:filter? false}))
+  ([block-uuid options]
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
        (let [block (db-utils/entity [:block/uuid block-uuid])
