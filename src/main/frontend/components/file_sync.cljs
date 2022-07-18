@@ -58,7 +58,7 @@
        [:span (ui/icon "cloud-lock")]]
       [:h4.px-2 repo]]
 
-     [:p.flex.items-center.space-x-2.pt-6.flex.justify-end.-mb-2
+     [:p.flex.items-center.space-x-2.pt-6.flex.justify-center.sm:justify-end.-mb-2
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 

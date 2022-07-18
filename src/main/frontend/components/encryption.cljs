@@ -98,7 +98,7 @@
      (when-let [display-str (:fail set-remote-graph-pwd-result)]
        [:div display-str])
 
-     [:div.mt-5.sm:mt-4.flex.justify-end.space-x-3
+     [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3
       (ui/button (t :cancel) :background "gray" :class "opacity-60")
       (ui/button [:span.inline-flex.items-center
                   [:span (t :submit)]
