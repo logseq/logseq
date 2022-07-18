@@ -1648,6 +1648,7 @@
   (let [properties shape]
     {:block/uuid (uuid (:id properties))
      :block/page {:block/name page-name}
+     :block/content "" ;; give it empty string since some block utility requires it
      :block/properties properties}))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
@@ -1695,3 +1696,20 @@
      (when-let [file (:block/file page)]
        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
          (gp-config/whiteboard? path))))))
+
+;; fixme: caching?
+(defn get-all-whiteboard-tldrs
+  "Returns a vector of all whiteboard tldrs."
+  [repo]
+  (let [result (d/q
+                '[:find [(pull ?page [* {:block/_page [:block/properties]}]) ...]
+                  :where
+                  [?page :block/name]
+                  [?page :block/whiteboard? true]]
+                (conn/get-db repo))
+        tldrs (mapv (fn [row] (let [blocks (:block/_page row)
+                                    page (dissoc row :block/_page)]
+                                (whiteboard-clj->tldr page blocks))) result)]
+    tldrs))
+
+(get-all-whiteboard-tldrs (state/get-current-repo))

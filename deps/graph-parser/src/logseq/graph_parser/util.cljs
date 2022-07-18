@@ -124,7 +124,7 @@
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"
   [s]
-  (page-name-sanity (string/lower-case s)))
+  (when s (page-name-sanity (string/lower-case s))))
 
 (defn capitalize-all
   [s]

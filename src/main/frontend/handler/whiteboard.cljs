@@ -1,5 +1,6 @@
 (ns frontend.handler.whiteboard
   (:require [frontend.state :as state]
+            [frontend.db :as db]
             [clojure.string :as string]))
 
 ;; FIXME: embed /draw should be supported too

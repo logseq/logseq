@@ -405,14 +405,16 @@
             file                (:block/file page)
             journal?            (:block/journal? page)
             properties-block    (:data (outliner-tree/-get-down (outliner-core/block page)))
+            properties-content  (:block/content properties-block)
             properties-block-tx (when (and properties-block
-                                           (string/includes? (util/page-name-sanity-lc (:block/content properties-block))
+                                           properties-content
+                                           (string/includes? (util/page-name-sanity-lc properties-content)
                                                              old-page-name))
-                                  (let [front-matter? (and (property/front-matter? (:block/content properties-block))
+                                  (let [front-matter? (and (property/front-matter? properties-content)
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
                                      :block/content (property/insert-property (:block/format properties-block)
-                                                                              (:block/content properties-block)
+                                                                              properties-content
                                                                               :title
                                                                               new-name
                                                                               front-matter?)}))
@@ -438,7 +440,7 @@
 
       ;; Redirect to the newly renamed page
       (when redirect?
-        (route-handler/redirect! {:to          :page
+        (route-handler/redirect! {:to          (if (:block/whiteboard? page) :whiteboard :page)
                                   :push        false
                                   :path-params {:name new-page-name}}))
 

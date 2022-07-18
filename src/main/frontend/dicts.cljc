@@ -242,6 +242,7 @@
         :convert-markdown "Convert Markdown headings to unordered lists (# -> -)"
         :all-graphs "All graphs"
         :all-pages "All pages"
+        :all-whiteboards "All whiteboards"
         :all-files "All files"
         :remove-orphaned-pages "Remove orphaned pages"
         :all-journals "All journals"
