@@ -106,7 +106,8 @@
                             (:editor-cursor prev-e)
                             (:editor-cursor e))]
         (push-redo e)
-        (transact! new-txs {:undo? true})
+        (transact! new-txs (merge {:undo? true}
+                                  (select-keys e [:pagination-blocks-range])))
         (assoc e
                :txs-op new-txs
                :editor-cursor editor-cursor)))))
@@ -116,7 +117,8 @@
   (when-let [{:keys [txs]:as e} (pop-redo)]
     (let [new-txs (get-txs true txs)]
       (push-undo e)
-      (transact! new-txs {:redo? true})
+      (transact! new-txs (merge {:redo? true}
+                                (select-keys e [:pagination-blocks-range])))
       (assoc e :txs-op new-txs))))
 
 (defn listen-outliner-operation
@@ -124,6 +126,8 @@
   (when-not (empty? tx-data)
     (reset-redo)
     (let [updated-blocks (db-report/get-blocks tx-report)
-          entity {:blocks updated-blocks :txs tx-data
-                  :editor-cursor (:editor-cursor tx-meta)}]
+          entity {:blocks updated-blocks
+                  :txs tx-data
+                  :editor-cursor (:editor-cursor tx-meta)
+                  :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)}]
       (push-undo entity))))
