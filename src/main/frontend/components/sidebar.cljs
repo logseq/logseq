@@ -70,19 +70,21 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name icon display-name]
+  [name icon]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
-                     (let [name (util/safe-page-name-sanity-lc name)]
+                     (let [name (util/safe-page-name-sanity-lc name)
+                           source-page (db-model/get-alias-source-page (state/get-current-repo) name)
+                           page-name (if (empty? source-page) name (db-model/get-original-name source-page))] 
                        (if (gobj/get e "shiftKey")
-                         (when-let [page-entity (db/entity [:block/name name])]
+                         (when-let [page-entity (db/entity [:block/name page-name])]
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! name))))}
+                         (route-handler/redirect-to-page! page-name))))}
      [:span.page-icon icon]
-     (if (empty? display-name) (pdf-assets/fix-local-asset-filename name) display-name)]))
+     (pdf-assets/fix-local-asset-filename original-name)]))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "file-text")
@@ -94,7 +96,7 @@
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
   (rum/local nil ::dragging-over)
-  [state _t name icon display-name]
+  [state _t name icon]
   (let [up? (get state ::up?)
         dragging-over (get state ::dragging-over)
         target (state/sub :favorites/dragging)]
@@ -120,7 +122,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name icon display-name)]))
+     (page-name name icon)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -142,11 +144,9 @@
        [:ul.favorites.text-sm
         (for [name favorites]
           (when-not (string/blank? name)
-            (let [source-page (db-model/get-alias-source-page (state/get-current-repo) name) ]
-              (let [source-page-name (if (empty? source-page) name (db-model/get-original-name source-page))]
-                (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc source-page-name)])]
-                  (let [icon (get-page-icon entity)]
-                    (favorite-item t source-page-name icon name)))))))]))))
+            (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
+              (let [icon (get-page-icon entity)]
+                (favorite-item t name icon)))))]))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
