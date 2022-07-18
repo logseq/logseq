@@ -53,11 +53,7 @@
 (rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
   (rum/local "" ::password-confirm)
-  {:will-unmount (fn [state]
-                   (when-let [graph-uuid (:GraphUUID (last (:rum/args state)))]
-                     (js/setTimeout #(sync/trigger-input-password! graph-uuid) 5000))
-                   state)}
-  [state repo-url close-fn {:keys [type GraphName GraphUUID init-graph-keys]}]
+  [state repo-url close-fn {:keys [type GraphName GraphUUID init-graph-keys after-input-password]}]
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
@@ -104,7 +100,7 @@
                   [:span (t :submit)]
                   (when loading?
                     [:span.ml-1.scale-75 (ui/loading "")])]
-                 
+
                  :disabled loading?
                  :on-click
                  (fn []
@@ -130,9 +126,10 @@
                            (state/set-state! [:file-sync/set-remote-graph-password-result] {})
                            (async/go
                              (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
-                               (if (instance? ExceptionInfo persist-r)
+                               (if (instance? js/Error persist-r)
                                  (js/console.error persist-r)
-                                 (close-fn true))))))))))]]))
+                                 (when (fn? after-input-password)
+                                   (async/<! (after-input-password))))))))))))]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
