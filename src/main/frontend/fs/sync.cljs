@@ -1290,8 +1290,8 @@
     (when (string/ends-with? current-graph dir)
       (when-not (some-> (state/get-file-sync-state current-graph)
                         sync-state--stopped?)
-        (assert (some? (:mtime stat)) {:path path :stat stat})
-        (go (>! local-changes-chan (->FileChangeEvent type dir path stat)))))))
+        (when (:mtime stat)
+          (go (>! local-changes-chan (->FileChangeEvent type dir path stat))))))))
 
 ;;; ### encryption
 (def pwd-map
