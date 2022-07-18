@@ -72,7 +72,9 @@
 
 (defn- get-blocks-range
   [result-atom new-result]
-  (let [block? (and (coll? @result-atom) (map? (first @result-atom)) (:block/uuid (first @result-atom)))]
+  (let [block? (and (coll? new-result)
+                    (map? (first new-result))
+                    (:block/uuid (first new-result)))]
     (when block?
       {:old [(:db/id (first @result-atom))
              (:db/id (last @result-atom))]
@@ -84,7 +86,7 @@
   (when-let [result-atom (get-in @query-state [k :result])]
     (when tx-report
       (when-let [range (get-blocks-range result-atom new-result)]
-       (state/set-state! [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] range)))
+        (state/set-state! [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] range)))
     (reset! result-atom new-result)))
 
 (defn swap-new-result!
@@ -295,7 +297,7 @@
                       (d/q query db))
                     transform-fn)]
     (when-not (= new-result result)
-      (set-new-result! k new-result (:tx-report tx)))))
+      (set-new-result! k new-result tx))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
