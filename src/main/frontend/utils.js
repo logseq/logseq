@@ -291,12 +291,21 @@ export const toPosixPath = (input) => {
   return input && input.replace(/\\+/g, '/')
 }
 
+// Delegation of Path.js but unified into POXIS style
+// https://nodejs.org/api/path.html#pathparsepath
+// path.parse('/home/user/dir/file.txt');
+// Returns:
+// { root: '/',
+//   dir: '/home/user/dir',
+//   base: 'file.txt',
+//   ext: '.txt',
+//   name: 'file' }
 export const nodePath = Object.assign({}, path, {
   basename (input) {
     input = toPosixPath(input)
     return path.basename(input)
   },
-
+ 
   name (input) {
     input = toPosixPath(input)
     return path.parse(input).name

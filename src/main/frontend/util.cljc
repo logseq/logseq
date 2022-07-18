@@ -903,25 +903,23 @@
 #?(:cljs
    (defn url-encode
      [string]
-     (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
-
-(def windows-reserved-chars #"[:\\*\\?\"<>|]+")
+     (gp-util/url-encode string)))
 
 #?(:cljs
-   (do
-     (defn include-windows-reserved-chars?
-      [s]
-       (safe-re-find windows-reserved-chars s))
+   (defn url-decode
+     [string]
+     (some-> string str (js/decodeURIComponent))))
 
-     (defn create-title-property?
-       [s]
-       (and (string? s)
-            (or (include-windows-reserved-chars? s)
-                (string/includes? s "_")
-                (string/includes? s "/")
-                (string/includes? s ".")
-                (string/includes? s "%")
-                (string/includes? s "#"))))))
+#?(:cljs
+   (defn include-reserved-chars?
+     [s]
+     (safe-re-find gp-util/reserved-chars-pattern s)))
+
+#?(:cljs
+   (defn create-title-property?
+     [s]
+     (and (string? s)
+          (include-reserved-chars? s))))
 
 #?(:cljs
    (defn search-normalize
@@ -933,17 +931,9 @@
         normalize-str))))
 
 #?(:cljs
-   (defn file-name-sanity
-     "Sanitize page-name for file name (strict), for file writing."
-     [page-name]
-     (some-> page-name
-             gp-util/page-name-sanity
-             ;; for android filesystem compatiblity
-             (string/replace #"[\\#|%]+" url-encode)
-             ;; Windows reserved path characters
-             (string/replace windows-reserved-chars url-encode)
-             (string/replace #"/" url-encode)
-             (string/replace "*" "%2A"))))
+   (def file-name-sanity
+     "Delegate to gp-util to loosely couple app usages to graph-parser"
+     gp-util/file-name-sanity))
 
 #?(:cljs
    (def page-name-sanity-lc

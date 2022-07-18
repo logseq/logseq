@@ -135,6 +135,7 @@
              distinct)))
 
 (defn get-alias-source-page
+  "return the source page (page-name) of an alias"
   [repo alias]
   (when-let [db (and repo (conn/get-db repo))]
     (let [alias (util/page-name-sanity-lc alias)
@@ -147,6 +148,8 @@
                       db
                       alias)
                  (db-utils/seq-flatten))]
+      ;; may be a case that a user added same alias into multiple pages.
+      ;; only return the first result for idiot-proof
       (when (seq pages)
         (some (fn [page]
                 (let [aliases (->> (get-in page [:block/properties :alias])

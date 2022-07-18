@@ -102,17 +102,77 @@
                  (conj result (str prev "/" (first others)))))
         result))))
 
+(defn escape-namespace-slashes-and-multilowbars
+  "Encode slashes / as double lowbars __
+   Don't encode _ in most cases, except causing ambiguation"
+  [string]
+  (string/replace string #"__" "%5F%5F")
+  (string/replace string #"_/" "%5F/")
+  (string/replace string #"/_" "/%5F")
+  (string/replace string #"/" "__"))
+
+(defn decode-namespace-underlines
+  "Decode namespace underlines to slashed;
+   If continuous underlines, only decode at start;
+   Having empty namespace is invalid."
+  [string]
+  (string/replace string "[^_]__" "/"))
+
+(defn escape-urlencode-percent-signs
+  [string]
+  (string/replace string #"%" "_byted."))
+
+(defn decode-urlencode-byted
+  [string]
+  (string/replace string "_byted." "%"))
+
 (defn page-name-sanity
-  "Sanitize the page-name."
-  ([page-name]
-   (page-name-sanity page-name false))
-  ([page-name replace-slash?]
-   (let [page (some-> page-name
-                      (remove-boundary-slashes)
-                      (path-normalize))]
-     (if replace-slash?
-       (string/replace page #"/" "%2F")
-       page))))
+  "Sanitize the page-name. Unify different diacritics and other visual differences.
+   Two objectives:
+   1. To be the same as in the filesystem;
+   2. To be easier to search"
+  [page-name]
+  (some-> page-name
+          (remove-boundary-slashes)
+          (path-normalize)))
+
+(def windows-reserved-chars ":\\*\\?\"<>|")
+
+(def android-reserved-chars "\\#|%")
+
+(def other-reserved-chars "%") ;; reserved-for url encode
+
+(def reserved-chars-pattern
+  (re-pattern (str "["
+                   windows-reserved-chars
+                   android-reserved-chars
+                   other-reserved-chars
+                   "]+")))
+
+(defn url-encode
+  ;; Don't encode `/`, they will be handled in `escape-namespace-slashes-and-multilowbars`
+  ;; Don't encode `_` except the cases mentioned in `escape-namespace-slashes-and-multilowbars`
+  [string]
+  (some-> string str (js/encodeURIComponent) 
+          (.replace "+" "%20")
+          (.replace "*" "%2A")))
+
+(defn file-name-sanity
+  "Sanitize page-name for file name (strict), for file name in file writing."
+  [title]
+  (some-> title
+          page-name-sanity
+          (string/replace reserved-chars-pattern url-encode)
+          (escape-namespace-slashes-and-multilowbars)
+          (escape-urlencode-percent-signs)))
+
+(defn page-name-parsing
+  "Parse the file name back into page name"
+  [file-name]
+  (some-> file-name
+          (decode-urlencode-byted)
+          (decode-namespace-underlines)
+          (js/decodeURIComponent)))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"

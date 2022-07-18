@@ -52,6 +52,7 @@
   [journal? title]
   (when-let [s (if journal?
                  (date/journal-title->default title)
+                 ;; legacy in org-mode format, don't escape slashes except bug reported
                  (gp-util/page-name-sanity (string/lower-case title)))]
     ;; Win10 file path has a length limit of 260 chars
     (gp-util/safe-subs s 0 200)))
@@ -185,21 +186,21 @@
             (p/catch (fn [error] (js/console.error error))))))))
 
 (defn- compute-new-file-path
-  [old-path new-name]
+  "Construct the full path given old full path and the file sanitized body"
+  [old-path new-file-name-body]
   (let [result (string/split old-path "/")
-        file-name (gp-util/page-name-sanity new-name true)
         ext (last (string/split (last result) "."))
-        new-file (str file-name "." ext)
+        new-file (str new-file-name-body "." ext)
         parts (concat (butlast result) [new-file])]
     (string/join "/" parts)))
 
 (defn rename-file!
   "emit file-rename events to :file/rename-event-chan"
-  [file new-name ok-handler]
+  [file new-file-name-body ok-handler]
   (let [repo (state/get-current-repo)
         file (db/pull (:db/id file))
         old-path (:file/path file)
-        new-path (compute-new-file-path old-path new-name)]
+        new-path (compute-new-file-path old-path new-file-name-body)]
     ;; update db
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
@@ -411,7 +412,7 @@
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/file-name-sanity new-name)
+        new-file-name-body  (gp-util/file-name-sanity new-name) ;; w/o file extension
         new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
@@ -441,11 +442,11 @@
 
         ;; If page name changed after sanitization
         (when (or (util/create-title-property? new-page-name)
-                  (not= (gp-util/page-name-sanity new-name false) new-name))
+                  (not= (gp-util/page-name-sanity new-name) new-name))
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
-          (rename-file! file new-file-name (fn [] nil)))
+          (rename-file! file new-file-name-body (fn [] nil)))
 
         (rename-update-refs! page old-original-name new-name)
 

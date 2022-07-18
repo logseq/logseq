@@ -18,7 +18,13 @@
                :default [lambdaisland.glogi :as log])))
 
 (defn- get-page-name
-  [file ast page-name-order]
+  "Get page name with overridden order of
+     `title::` property
+     file name parsing
+     first block content
+   note: `page-name-order` is deprecated on Apr. 2021
+   "
+  [file ast]
   ;; headline
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
@@ -35,12 +41,11 @@
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (let [result (first (gp-util/split-last "." file-name))]
                           (if (gp-config/mldoc-support? (string/lower-case (gp-util/get-file-ext file)))
-                            (js/decodeURIComponent (string/replace result "." "/"))
+                            (gp-util/page-name-parsing result)
                             result)))]
         (or property-name
-            (if (= page-name-order "heading")
-              (or first-block-name file-name)
-              (or file-name first-block-name)))))))
+            file-name
+            first-block-name)))))
 
 (defn- extract-page-alias-and-tags
   [page-m page page-name properties]
@@ -108,9 +113,9 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [format ast properties file content {:keys [date-formatter page-name-order db] :as options}]
+  [format ast properties file content {:keys [date-formatter db] :as options}]
   (try
-    (let [page (get-page-name file ast page-name-order)
+    (let [page (get-page-name file ast)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (-> options
                        (assoc :page-name page-name
