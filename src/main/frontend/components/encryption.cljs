@@ -61,18 +61,22 @@
   (let [password (get state ::password)
         password-confirm (get state ::password-confirm)
         local-pw?  (= type :local)
-        input-remote-pw? (= type :input-pwd-remote)
+        remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
         set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])]
-    [:div.encrytion-password.sm:max-w-2xl
-     [:div.sm:flex.sm:items-start
+    [:div.encryption-password
+     [:div.cp__file-sync-related-normal-modal
+      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
+
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold.mb-4
         (if init-graph-keys
           "Encrypt this graph"
-          "Decrypt this graph")]]]
+          (if remote-pw?
+            "Unlock this remote graph!"
+            "Decrypt this graph"))]]]
 
-     (when (and input-remote-pw? init-graph-keys)
+     (when (and remote-pw? init-graph-keys)
        (ui/admonition
         :warning
         [:div.opacity-70
@@ -94,40 +98,41 @@
      (when-let [display-str (:fail set-remote-graph-pwd-result)]
        [:div display-str])
 
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click (fn []
-                     (let [value @password]
-                       (cond
-                         (string/blank? value)
-                         nil
+     [:div.mt-5.sm:mt-4.flex.justify-end.space-x-3
+      (ui/button (t :cancel) :background "gray" :class "opacity-60")
+      (ui/button [:span.inline-flex.items-center
+                  [:span (t :submit)]
+                  (when loading?
+                    [:span.ml-1.scale-75 (ui/loading "")])]
+                 
+                 :disabled loading?
+                 :on-click
+                 (fn []
+                   (let [value @password]
+                     (cond
+                       (string/blank? value)
+                       nil
 
-                         (and init-graph-keys (not= @password @password-confirm))
-                         (notification/show! "The passwords are not matched." :error)
+                       (and init-graph-keys (not= @password @password-confirm))
+                       (notification/show! "The passwords are not matched." :error)
 
-                         :else
-                         (case type
-                           :local
-                           (p/let [keys (encrypt/generate-key-pair-and-save! repo-url)
-                                   db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
-                             (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
-                             (close-fn true))
+                       :else
+                       (case type
+                         :local
+                         (p/let [keys (encrypt/generate-key-pair-and-save! repo-url)
+                                 db-encrypted-secret (encrypt/encrypt-with-passphrase value keys)]
+                                (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
+                                (close-fn true))
 
-                           (:create-pwd-remote :input-pwd-remote)
-                           (do
-                             (state/set-state! [:ui/loading? :set-graph-password] true)
-                             (state/set-state! [:file-sync/set-remote-graph-password-result] {})
-                             (async/go
-                               (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
-                                 (if (instance? ExceptionInfo persist-r)
-                                   (js/console.error persist-r)
-                                   (close-fn true)))))))))}
-        [:span.inline-flex
-         [:span (t :submit)]
-         (when loading?
-           [:span.ml-2 (ui/loading "")])]]]]]))
+                         (:create-pwd-remote :input-pwd-remote)
+                         (do
+                           (state/set-state! [:ui/loading? :set-graph-password] true)
+                           (state/set-state! [:file-sync/set-remote-graph-password-result] {})
+                           (async/go
+                             (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
+                               (if (instance? ExceptionInfo persist-r)
+                                 (js/console.error persist-r)
+                                 (close-fn true))))))))))]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))

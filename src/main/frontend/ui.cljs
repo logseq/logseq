@@ -628,7 +628,8 @@
   [content]
   [:div.flex.flex-row.items-center.inline
    [:span.icon.flex.items-center svg/loading]
-   [:span.text.pl-2 content]])
+   (when-not (string/blank? content)
+     [:span.text.pl-2 content])])
 
 (rum/defc rotating-arrow
   [collapsed?]
