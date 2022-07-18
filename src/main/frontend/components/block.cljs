@@ -3192,6 +3192,7 @@
       (block-handler/load-more! db-id last-block-id))))
 
 (rum/defcs lazy-blocks < rum/reactive
+  (rum/local nil ::loading?)
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
   [state config flat-blocks blocks->vec-tree]
@@ -3201,13 +3202,16 @@
                       (map (fn [b]
                              (assoc b :ui/selected? (contains? selected-blocks (:block/uuid b)))) flat-blocks)
                       flat-blocks)
-        blocks (blocks->vec-tree flat-blocks)]
+        blocks (blocks->vec-tree flat-blocks)
+        *loading? (::loading? state)]
     (if-not db-id
       (block-list config blocks)
-      (let [bottom-reached (fn []
-                             ;; To prevent scrolling after inserting new blocks
-                             (when (> (- (util/time-ms) (:start-time config)) 100)
-                               (load-more-blocks! config flat-blocks)))
+      (let [loading-more-data! (fn []
+                                 ;; To prevent scrolling after inserting new blocks
+                                 (when (> (- (util/time-ms) (:start-time config)) 100)
+                                   (reset! *loading? true)
+                                   (load-more-blocks! config flat-blocks)
+                                   (reset! *loading? false)))
             has-more? (and
                        (>= (count flat-blocks) model/initial-blocks-length)
                        (some? (model/get-next-open-block (db/get-db) (last flat-blocks) db-id)))
@@ -3216,14 +3220,20 @@
          (ui/infinite-list
           "main-content-container"
           (block-list config blocks)
-          {:on-load bottom-reached
+          {:on-load loading-more-data!
            :bottom-reached (fn []
                              (when-let [node (gdom/getElement dom-id)]
-                               (ui/bottom-reached? node 1000)))
+                               (ui/bottom-reached? node 300)))
            :has-more has-more?
-           :more (if (or (:preview? config) (:sidebar? config))
+           :more (cond
+                   (or (:preview? config) (:sidebar? config))
                    "More"
-                   (ui/loading "Loading"))})]))))
+
+                   @*loading?
+                   (ui/lazy-loading-placeholder)
+
+                   :else
+                   "")})]))))
 
 (rum/defcs blocks-container <
   {:init (fn [state]

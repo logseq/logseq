@@ -21,9 +21,9 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 100)
+(def initial-blocks-length 50)
 
-(def step-loading-blocks 50)
+(def step-loading-blocks 25)
 
 
 ;; TODO: extract to specific models and move data transform logic to the
@@ -715,7 +715,8 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  limit 25
+                  limit (inc (max (- initial-blocks-length (count previous-blocks))
+                                  (count tx-block-ids)))
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
                                                                            :scoped-block-id scoped-block-id})]
