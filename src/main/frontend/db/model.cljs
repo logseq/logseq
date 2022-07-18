@@ -695,7 +695,7 @@
 (defn- build-paginated-blocks-from-cache
   "Notice: tx-report could be nil."
   [repo-url tx-report result outliner-op page-id block-id tx-block-ids scoped-block-id]
-  (let [{:keys [tx-meta tx-data]} tx-report
+  (let [{:keys [tx-meta]} tx-report
         current-db (conn/get-db repo-url)]
     (cond
       (and (or (:undo? tx-meta) (:redo? tx-meta)) @result)
