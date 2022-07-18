@@ -1712,4 +1712,12 @@
                                 (whiteboard-clj->tldr page blocks))) result)]
     tldrs))
 
-(get-all-whiteboard-tldrs (state/get-current-repo))
+(defn get-all-whiteboard-names
+  [repo]
+  (->> (d/q
+       '[:find [(pull ?page [:block/name]) ...]
+         :where
+         [?page :block/name]
+         [?page :block/whiteboard? true]]
+       (conn/get-db repo))
+      (map :block/name)))
