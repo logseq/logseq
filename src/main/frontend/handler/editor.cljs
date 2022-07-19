@@ -1252,7 +1252,8 @@
 
       ;; if different direction, keep clear until one left
     (state/selection?)
-    (clear-last-selected-block!)))
+    (clear-last-selected-block!))
+  nil)
 
 (defn on-select-block
   [direction]
@@ -3053,7 +3054,8 @@
         (select-up-down direction)
 
         :else
-        (select-first-last direction)))))
+        (select-first-last direction)))
+    nil))
 
 (defn shortcut-select-up-down [direction]
   (fn [e]
