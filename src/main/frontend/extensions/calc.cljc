@@ -88,24 +88,24 @@
     :toassign   str/trim
     :comment    (constantly nil)
     :digits     int
-    :mode-fix   (fn format [places]
+    :format-fix (fn format [places]
                   (swap! env assoc :mode "fix" :places places)
                   (get @env "last"))
-    :mode-sci   (fn format [places]
+    :format-sci (fn format [places]
                   (swap! env assoc :mode "sci" :places places)
                   (get @env "last"))
-    :mode-frac  (fn format [max-denominator]
+    :format-frac (fn format [max-denominator]
                   (swap! env dissoc :mode :improper)
                   (swap! env assoc :mode "frac" :max-denominator max-denominator)
                   (get @env "last"))
-    :mode-frac-i (fn format [max-denominator]
+    :format-impf (fn format [max-denominator]
                   (swap! env assoc :mode "frac" :max-denominator max-denominator :improper true)
                   (get @env "last"))
-    :mode-norm  (fn format [precision]
+    :format-norm (fn format [precision]
                   (swap! env dissoc :mode :places)
                   (swap! env assoc :precision precision)
                   (get @env "last"))
-    :mode-base  (fn base [b]
+    :base       (fn base [b]
                   (swap! env assoc :base (str/lower-case b))
                   (get @env "last"))
     :variable   (fn resolve [var]
@@ -150,11 +150,19 @@
   (and (< (.-e num) digits)
        (.isInteger (.shiftedBy num (+ tolerance digits)))))
 
+(defn format-base [val base]
+  (let [sign (.-s val)
+       display-val (if (neg-int? sign) (.abs val) val)]
+    (str
+      (when (neg-int? sign) "-")
+      (case base 2 "0b" 8 "0o" 16 "0x")
+      (.toString display-val base))))
+
 (defn format-fraction [numerator denominator improper]
   (let [whole (.dividedToIntegerBy numerator denominator)]
     (if (or improper (.isZero whole))
       (str numerator "/" denominator )
-      (str whole "_"
+      (str whole " "
            (.abs (.modulo numerator denominator)) "/" denominator))))
 
 (defn format-normal [env val]
@@ -171,11 +179,11 @@
           places (get @env :places)]
       (cond
         (= base "hex")
-          (.toString val 16)
+          (format-base val 16)
         (= base "oct")
-          (.toString val 8)
+          (format-base val 8)
         (= base "bin")
-          (.toString val 2)
+          (format-base val 2)
 
         (= mode "fix")
           (if (can-fix? val places)
