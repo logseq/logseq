@@ -65,9 +65,11 @@
       [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
 
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold.mb-4
+       [:h3#modal-headline.text-xl.font-bold.text-center
         (if init-graph-keys
-          "Encrypt this graph"
+          (if remote-pw?
+            "Secure this remote graph!"
+            "Encrypt this graph")
           (if remote-pw?
             "Unlock this remote graph!"
             "Decrypt this graph"))]]]
