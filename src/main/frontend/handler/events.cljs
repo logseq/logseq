@@ -540,7 +540,8 @@
                   (assoc remote-graph-info
                          :type (or type :create-pwd-remote)
                          :repo repo-url)
-                  opts))))
+                  opts))
+   {:center? true :close-btn? false}))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
