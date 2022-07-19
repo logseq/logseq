@@ -87,7 +87,7 @@
                               (let [repo (state/get-current-repo)]
                                 (when (and repo (not (config/demo-graph? repo)))
                                   (let [graph-name
-                                        (util/node-path.basename repo)
+                                        (js/decodeURI (util/node-path.basename repo))
 
                                         confirm-fn
                                         (fn [close-fn]
