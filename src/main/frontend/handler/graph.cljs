@@ -98,7 +98,7 @@
 
            pages-after-exclude-filter (cond->> pages-after-journal-filter
                                         (not excluded-pages?)
-                                        (remove (fn [p] (=  true (:exclude-in-graph (:block/properties p))))))
+                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
 
             links (concat (seq relation)
                           (seq tagged-pages)
