@@ -56,7 +56,7 @@
        [:span (ui/icon "folder") [:label.pl-0.5 graph-name]]
        [:span.opacity-50.scale-75 (ui/icon "arrow-right")]
        [:span (ui/icon "cloud-lock")]]
-      [:h4.px-2 (config/get-repo-dir repo)]]
+      [:h4.px-2 (js/decodeURIComponent (config/get-repo-dir repo))]]
 
      [:p.flex.items-center.space-x-2.pt-6.flex.justify-center.sm:justify-end.-mb-2
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
