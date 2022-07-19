@@ -40,7 +40,7 @@ test('flashcard demo', async ({ page, block }) => {
   await block.mustFill('{{cards [[logseq]]}}')
   await page.keyboard.press('Enter')
   const queryCards = page.locator('text="No matched cards"')
-  await queryCards.waitFor({ state: 'hidden', timeout: 3000 })
+  await queryCards.waitFor({ state: 'hidden', timeout: 6000 })
 
   const numberLabel = page.locator('.cards-title')
   await numberLabel.waitFor({ state: 'visible' })
