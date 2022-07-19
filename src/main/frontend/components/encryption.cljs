@@ -52,10 +52,12 @@
 
 (rum/defcs input-password-inner < rum/reactive
   (rum/local "" ::password)
-  (rum/local "" ::password-confirm)
+  (rum/local "" ::pw-confirm)
+  (rum/local false ::pw-confirm-focused?)
   [state repo-url close-fn {:keys [type GraphName GraphUUID init-graph-keys after-input-password]}]
-  (let [password (get state ::password)
-        password-confirm (get state ::password-confirm)
+  (let [*password (get state ::password)
+        *pw-confirm (get state ::pw-confirm)
+        *pw-confirm-focused? (get state ::pw-confirm-focused?)
         local-pw?  (= type :local)
         remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
@@ -65,36 +67,71 @@
       [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
 
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-xl.font-bold.text-center
+       [:h3#modal-headline.text-2xl.font-bold.text-center
         (if init-graph-keys
           (if remote-pw?
             "Secure this remote graph!"
             "Encrypt this graph")
           (if remote-pw?
             "Unlock this remote graph!"
-            "Decrypt this graph"))]]]
+            "Decrypt this graph"))]]
 
-     (when (and remote-pw? init-graph-keys)
-       (ui/admonition
-        :warning
-        [:div.opacity-70
-         "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, and we recommend you keep a secure backup of the password."]))
+      (when (and remote-pw? init-graph-keys)
+        [:<>
+         [:h2.text-center.opacity-70.text-sm.py-2
+          "Each graph you want to synchronize via Logseq needs its own password for end-to-end encryption."]
+         [:div.input-hints.text-sm.py-2.px-3.rounded.mb-3.mt-4.flex.items-center
+          (if (and (not (string/blank? @*password))
+                   (not (string/blank? @*pw-confirm)))
+            (if (not= @*password @*pw-confirm)
+              [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
+              [:span.scale-125.pr-1.text-green-600 (ui/icon "circle-check" {:class "text-md mr-1"})])
+            [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})])
 
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:type "password"
-       :placeholder "Password"
-       :auto-focus true
-       :on-change (fn [e]
-                    (reset! password (util/evalue e)))}]
+          (if (not (string/blank? @*password))
+            (if (not (string/blank? @*pw-confirm))
+              (if (not= @*pw-confirm @*password)
+                [:span "Password fields are not matching!"]
+                [:span "Password fields are matching!"])
+              [:span "Enter your chosen password again!"])
+            [:span "Choose a strong and hard to guess password!"])
+          ]])
 
-     (when init-graph-keys
-       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-        {:type        "password"
-         :placeholder "Re-enter the password"
-         :on-change   (fn [e]
-                        (reset! password-confirm (util/evalue e)))}])
-     (when-let [display-str (:fail set-remote-graph-pwd-result)]
-       [:div display-str])
+      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+       {:type        "password"
+        :placeholder "Password"
+        :auto-focus  true
+        :on-change   (fn [e]
+                       (reset! *password (util/evalue e)))}]
+
+      (when init-graph-keys
+        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+         {:type        "password"
+          :placeholder "Re-enter the password"
+          :on-focus    #(reset! *pw-confirm-focused? true)
+          :on-blur     #(reset! *pw-confirm-focused? false)
+          :on-change   (fn [e]
+                         (reset! *pw-confirm (util/evalue e)))}])
+
+      (when-let [display-str (:fail set-remote-graph-pwd-result)]
+        [:div display-str])
+
+      (when init-graph-keys
+        [:div.init-remote-pw-tips.space-x-4.pt-2.hidden.sm:flex
+         [:div.flex-1.flex.items-center
+          [:span.px-3.scale-125 (ui/icon "key")]
+          [:p.dark:text-gray-100
+           [:span "Please make sure you "]
+           "remember the password you have set, "
+           [:span "and we recommend you "]
+           "keep a secure backup "
+           [:span "of the password."]]]
+
+         [:div.flex-1.flex.items-center
+          [:span.px-3.scale-125 (ui/icon "lock")]
+          [:p.dark:text-gray-100
+           "If you lose your password, all the data in the cloud can’t be decrypted. "
+           [:span "You will still be able to access the local version of your graph."]]]])]
 
      [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3
       (ui/button (t :cancel) :background "gray" :class "opacity-60")
@@ -106,12 +143,12 @@
                  :disabled loading?
                  :on-click
                  (fn []
-                   (let [value @password]
+                   (let [value @*password]
                      (cond
                        (string/blank? value)
                        nil
 
-                       (and init-graph-keys (not= @password @password-confirm))
+                       (and init-graph-keys (not= @*password @*pw-confirm))
                        (notification/show! "The passwords are not matched." :error)
 
                        :else
@@ -127,7 +164,7 @@
                            (state/set-state! [:ui/loading? :set-graph-password] true)
                            (state/set-state! [:file-sync/set-remote-graph-password-result] {})
                            (async/go
-                             (let [persist-r (async/<! (sync/encrypt+persist-pwd! @password GraphUUID))]
+                             (let [persist-r (async/<! (sync/encrypt+persist-pwd! @*password GraphUUID))]
                                (if (instance? js/Error persist-r)
                                  (js/console.error persist-r)
                                  (when (fn? after-input-password)

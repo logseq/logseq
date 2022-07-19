@@ -58,6 +58,7 @@
      :modal/panel-content                   nil
      :modal/fullscreen?                     false
      :modal/close-btn?                      nil
+     :modal/close-backdrop?                 true
      :modal/subsets                         []
 
 
@@ -1093,7 +1094,7 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [id label fullscreen? close-btn? center?]}]
+  ([modal-panel-content {:keys [id label fullscreen? close-btn? close-backdrop? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
@@ -1102,7 +1103,8 @@
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
           :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?) nil))
+          :modal/close-btn? close-btn?
+          :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)) nil))
 
 (defn close-modal!
   []

@@ -541,7 +541,7 @@
                          :type (or type :create-pwd-remote)
                          :repo repo-url)
                   opts))
-   {:center? true :close-btn? false}))
+   {:center? true :close-btn? false :close-backdrop? false}))
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]

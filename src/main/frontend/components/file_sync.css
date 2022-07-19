@@ -263,6 +263,23 @@
         @apply text-sm opacity-50 pt-1;
       }
     }
+
+    > .input-hints {
+      background-color: var(--ls-primary-background-color);
+    }
+
+    .init-remote-pw-tips {
+      > div {
+        background-color: var(--ls-tertiary-background-color);
+        padding: 6px 10px;
+        font-size: 14px;
+        border-radius: 4px;
+
+        p > span {
+          opacity: .6;
+        }
+      }
+    }
   }
 }
 
@@ -286,7 +303,7 @@ html[data-theme='light'] {
       }
     }
 
-    &-create-remote-modal {
+    &-related-normal-modal {
       .icon-wrap {
         background-color: #908E8B;
 
@@ -297,6 +314,10 @@ html[data-theme='light'] {
 
       > .folder-tip {
         background-color: var(--ls-tertiary-background-color);
+      }
+
+      > .input-hints {
+        background-color: #e1e1e1;
       }
     }
   }

@@ -474,14 +474,14 @@
     (shortcut-helper/decorate-binding binding)))
 
 (rum/defc modal-overlay
-  [state close-fn]
+  [state close-fn close-backdrop?]
   [:div.ui__modal-overlay
-   {:class (case state
-             "entering" "ease-out duration-300 opacity-0"
-             "entered" "ease-out duration-300 opacity-100"
-             "exiting" "ease-in duration-200 opacity-100"
-             "exited" "ease-in duration-200 opacity-0")
-    :on-click close-fn}
+   {:class    (case state
+                "entering" "ease-out duration-300 opacity-0"
+                "entered" "ease-out duration-300 opacity-100"
+                "exiting" "ease-in duration-200 opacity-100"
+                "exited" "ease-in duration-200 opacity-0")
+    :on-click #(when close-backdrop? (close-fn))}
    [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel-content <
@@ -536,6 +536,7 @@
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
         close-btn? (state/sub :modal/close-btn?)
+        close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
         close-fn (fn []
@@ -548,7 +549,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-overlay state close-fn)))
+        (modal-overlay state close-fn close-backdrop?)))
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -607,6 +608,7 @@
       (let [id (:modal/id modal)
             modal-panel-content (:modal/panel-content modal)
             close-btn? (:modal/close-btn? modal)
+            close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
             close-fn (fn []
@@ -618,7 +620,7 @@
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
-            (modal-overlay state close-fn)))
+            (modal-overlay state close-fn close-backdrop?)))
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
