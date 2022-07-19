@@ -54,9 +54,12 @@
                :push push})))
 
 (defn redirect-to-whiteboard!
-  [name]
-  (redirect! {:to :whiteboard
-              :path-params {:name (str name)}}))
+  ([name]
+   (redirect-to-whiteboard! name false))
+  ([name new?]
+   (redirect! {:to :whiteboard
+               :path-params {:name (str name)}
+               :query-params (when new? {:new? 1})})))
 
 (defn get-title
   [name path-params]

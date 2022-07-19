@@ -17,6 +17,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
+            [frontend.db.model :as model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
@@ -71,17 +72,22 @@
 
 (rum/defc page-name
   [name icon]
-  (let [original-name (db-model/get-page-original-name name)]
+  (let [original-name (db-model/get-page-original-name name)
+        whiteboard-page? (model/whiteboard-page? name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
-                       (if (gobj/get e "shiftKey")
+                       (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
                          (when-let [page-entity (db/entity [:block/name name])]
                            (state/sidebar-add-block!
                             (state/get-current-repo)
                             (:db/id page-entity)
                             :page))
-                         (route-handler/redirect-to-page! name))))}
-     [:span.page-icon icon]
+                         (if whiteboard-page?
+                           (route-handler/redirect-to-whiteboard! name)
+                           (route-handler/redirect-to-page! name)))))}
+     [:span.page-icon (if whiteboard-page?
+                        [:span.ti.ti-artboard]
+                        icon)]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
 (defn get-page-icon [page-entity]

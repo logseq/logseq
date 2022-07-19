@@ -275,6 +275,7 @@ a.page-title {
   margin-left: -8px;
   transition: none;
   display: block;
+  color: inherit;
 }
 
 html.is-native-android,

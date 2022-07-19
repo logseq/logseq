@@ -243,13 +243,15 @@
                       (state/set-modal! (confirm-fn)))
                     (util/stop e))]
       (if @*edit?
-        [:h1.title.ls-page-title
-         {:class (util/classnames [{:editing @*edit?}])}
+        [:span
+         {:class (util/classnames [{:editing @*edit?}])
+          :style {:width "400px"}}
          [:input.edit-input
           {:type          "text"
            :ref           input-ref
            :auto-focus    true
            :style         {:outline "none"
+                           :width "100%"
                            :font-weight 600}
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
            :default-value old-name
@@ -278,7 +280,7 @@
                                          :page))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
-         [:h1.title.ls-page-title {:data-ref page-name}
+         [:span {:data-ref page-name}
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
@@ -372,7 +374,7 @@
                                  (page-mouse-leave e *control-show?))}
               (page-blocks-collapse-control title *control-show? *all-collapsed?)])
            [:div.flex-1.flex-row
-            (page-title page-name icon title format fmt-journal?)]
+            [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]]
            (when (not config/publishing?)
              [:div.flex.flex-row
               (when plugin-handler/lsp-enabled?

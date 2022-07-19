@@ -1,7 +1,10 @@
 (ns frontend.handler.whiteboard
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [frontend.db.model :as model]
+            [frontend.db.utils :as db-utils]
+            [frontend.modules.outliner.file :as outliner-file]
+            [frontend.state :as state]
+            [datascript.core :as d]))
 
 ;; FIXME: embed /draw should be supported too
 (defn whiteboard-mode?
@@ -27,4 +30,13 @@
                               [{:id (.-id fs)
                                 :logseqLink page-or-block-id}])))))))
 
-;; (set! (. js/window -foo) (page-name->tldr "edn-test"))
+(def default-tldr
+  (js/JSON.parse "{\"currentPageId\":\"page1\",\"selectedIds\":[],\"pages\":[{\"id\":\"page\",\"name\":\"Page\",\"shapes\":[],\"bindings\":{},\"nonce\":1}],\"assets\":[]}"))
+
+(defn create-new-whiteboard-page!
+  ([name]
+   (model/transact-tldr! name default-tldr)
+   (let [uuid (or (parse-uuid name) (d/squuid))
+         entity (db-utils/entity [:block/name name])]
+     (outliner-file/sync-to-file entity)
+     (db-utils/transact! [{:db/id (:db/id entity) :block/uuid uuid}]))))

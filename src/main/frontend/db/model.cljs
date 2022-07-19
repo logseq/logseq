@@ -2,23 +2,24 @@
   "Core db functions."
   ;; TODO: Remove this config once how repos are passed to this ns are standardized
   {:clj-kondo/config {:linters {:unused-binding {:level :off}}}}
-  (:require [clojure.set :as set]
+  (:require [cljs.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
-            [logseq.db.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.db.rules :refer [rules]]
+            [frontend.util.drawer :as drawer]
             [logseq.db.default :as default-db]
-            [frontend.util.drawer :as drawer]))
+            [logseq.db.rules :refer [rules]]
+            [logseq.db.schema :as db-schema]
+            [logseq.graph-parser.config :as gp-config]
+            [logseq.graph-parser.util :as gp-util]))
 
 ;; lazy loading
 
