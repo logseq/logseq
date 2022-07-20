@@ -268,6 +268,34 @@
       background-color: var(--ls-primary-background-color);
     }
 
+    > .cloud-tip {
+      background-color: var(--ls-tertiary-background-color);
+
+      > ul {
+        > li.it {
+          @apply flex flex-1 border-l-2 justify-center items-center flex-col py-4;
+
+          border-color: var(--ls-quaternary-background-color);
+
+          &:first-child {
+            @apply border-l-0;
+          }
+
+          h1 {
+            @apply text-5xl relative;
+
+            sup {
+              @apply absolute text-lg font-semibold right-0 translate-x-8 opacity-60;
+            }
+          }
+
+          h2 {
+            @apply text-xs opacity-80 pt-2;
+          }
+        }
+      }
+    }
+
     .init-remote-pw-tips {
       > div {
         background-color: var(--ls-tertiary-background-color);

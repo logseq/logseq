@@ -397,6 +397,44 @@
     (ui/button "Close" :on-click close-fn :background "gray" :class "opacity-60")
     (ui/button "Send email notification")]])
 
+(rum/defc onboarding-congrats-successful-sync
+  [close-fn]
+
+  [:div.cp__file-sync-related-normal-modal
+   [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list")]]
+   
+   [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
+    [:span.dark:opacity-80 "Congrats to your first successful sync!"]]
+
+   [:h2.text-center.dark:opacity-70.text-sm.opacity-90
+    [:div "By using this graph with Logseq Sync you can now transition seamlessly between your different "]
+    [:div
+     [:span "devices. Go to the "]
+     [:span.dark:text-white "All Graphs "]
+     [:span "pages to manage your remote graph or switch to another local graph "]]
+    [:div "and sync it as well."]]
+
+   [:div.cloud-tip.rounded-md.mt-6
+    ;; TODO: better words
+    [:div.items-center.pt-6.opacity-90.flex.justify-center
+     [:span.pr-2 (ui/icon "bell-ringing" {:class "font-semibold"})]
+     [:strong "Logseq sync is still in Beta stage and the plan is not final!"]]
+
+    [:ul.flex.py-6.px-4
+     [:li.it
+      [:h1.dark:text-white "1"]
+      [:h2 "Remote Graphs"]]
+     [:li.it
+      [:h1.dark:text-white "50" [:sup "MB"]]
+      [:h2 "Storage per Graph"]]
+
+     [:li.it
+      [:h1.dark:text-white "50" [:sup "MB"]]
+      [:h2 "Total Storage"]]]]
+
+   [:div.pt-6.flex.justify-end.space-x-2
+    (ui/button "Done" :on-click close-fn)]])
+
 (defn make-onboarding-panel
   [type]
 
@@ -408,6 +446,9 @@
 
       :unavailable
       (onboarding-unavailable-file-sync close-fn)
+
+      :congrats
+      (onboarding-congrats-successful-sync close-fn)
 
       [:p
        [:h1.text-xl.font-bold "Not handled!"]
