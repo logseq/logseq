@@ -1,9 +1,10 @@
 (ns frontend.extensions.tldraw
   (:require ["/tldraw-logseq" :as TldrawLogseq]
             [frontend.components.page :refer [page]]
-            [frontend.search :as search]
-            [frontend.db.model :as model]
+            [frontend.handler.whiteboard :refer [page-name->tldr
+                                                 transact-tldr!]]
             [frontend.rum :as r]
+            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -11,11 +12,10 @@
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
-#_:clj-kondo/ignore
 (rum/defcs tldraw-app < rum/reactive
   (rum/local false ::view-mode?)
   [state name]
-  (let [data (model/page-name->tldr name)]
+  (let [data (page-name->tldr name)]
     (when name
       [:div.draw.tldraw.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
@@ -27,7 +27,7 @@
                 :searchHandler (comp clj->js vec search/page-search)
                 :onPersist (fn [app]
                              (let [document (gobj/get app "serialized")]
-                               (model/transact-tldr! name document)))
+                               (transact-tldr! name document)))
                 :model data
                 :onMount (fn [app]
                            (state/set-state! [:ui/whiteboards (::id state)] app)
