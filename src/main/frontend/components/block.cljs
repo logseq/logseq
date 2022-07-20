@@ -1704,8 +1704,7 @@
                            [(str class " checked") true])]
     (when class
       (ui/checkbox {:class class
-                    :style {:margin-top -2
-                            :margin-right 5}
+                    :style {:margin-right 5}
                     :checked checked?
                     :on-mouse-down (fn [e]
                                      (util/stop-propagation e))
