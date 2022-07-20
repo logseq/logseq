@@ -120,18 +120,19 @@
         (cond-> []
           synced-file-graph?
           (concat
-           (when no-active-files?
-             [{:title [:p.flex.justify-center "Everything is synced!"]}])
+           (if no-active-files?
+             [{:title [:p.flex.justify-center "Everything is synced!"]}]
+             [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
 
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "downloading-" f)
                          :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "queue-" f)
-                         :icon  (ui/icon "point")}) (take 10 queuing-files))
+                         :icon  (ui/icon "circle-dotted")}) (take 10 queuing-files))
            (map (fn [f] {:title [:div.file-item f]
                          :key   (str "uploading-" f)
-                         :icon  (ui/icon "arrow-narrow-up")}) uploading-files)
+                         :icon  (ui/icon "arrow-up")}) uploading-files)
 
            (when sync-state
              (map-indexed (fn [i f] (:time f)
@@ -141,7 +142,8 @@
                                   full-path  (js/decodeURI
                                               (str (config/get-repo-dir current-repo) path))
                                   page-name  (db/get-file-page full-path)]
-                              {:title [:div {:key i}
+                              {:title [:div.files-history
+                                       {:key i :class (when (= i 0) "is-first")}
                                        [:a.file-sync-item
                                         {:href (if page-name
                                                  (rfe/href :page {:name page-name})
@@ -153,13 +155,15 @@
         {:links-header
          [:<>
           (when (and synced-file-graph? queuing?)
-            [:div.px-2.py-1
+            [:div.head-ctls
              (ui/button "Sync now"
                         :class "block cursor-pointer"
                         :small? true
                         :on-click #(async/offer! fs-sync/immediately-local->remote-chan true))])
-          (when config/dev?
-            [:strong.debug-status (str status)])]}))]))
+
+          ;(when config/dev?
+          ;  [:strong.debug-status (str status)])
+          ]}))]))
 
 (rum/defc pick-local-graph-for-sync [graph]
   (rum/use-effect!
