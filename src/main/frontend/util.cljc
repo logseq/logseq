@@ -1031,6 +1031,15 @@
             res#))
         (do ~@body))))
 
+#?(:clj
+   (defmacro with-time
+     "Evaluates expr and prints the time it took. Returns the value of expr."
+     [expr]
+     `(let [start# (cljs.core/system-time)
+            ret# ~expr]
+        {:result ret#
+         :time (.toFixed (- (cljs.core/system-time) start#) 6)})))
+
 ;; TODO: profile and profileEnd
 
 ;; Copy from hiccup

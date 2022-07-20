@@ -640,12 +640,14 @@
                    (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
                  state)}
-  [state header content {:keys [title-trigger?]}]
+  [state header content {:keys [title-trigger? on-mouse-down]}]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
                         (util/stop e)
-                        (swap! collapsed? not))]
+                        (swap! collapsed? not)
+                        (when on-mouse-down
+                          (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title (cond->

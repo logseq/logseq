@@ -58,7 +58,9 @@
   ([query query-opts]
    (custom-query (state/get-current-repo) query query-opts))
   ([repo query query-opts]
-   (let [query' (replace-star-with-block-attrs! query)]
+   (let [query' (replace-star-with-block-attrs! query)
+         query-opts (if (:query-string query-opts) query-opts
+                        (assoc query-opts :query-string (str query)))]
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
        (query-dsl/custom-query repo query' query-opts)

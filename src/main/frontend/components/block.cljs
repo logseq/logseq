@@ -22,6 +22,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
+            [frontend.db.react :as react]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.highlight :as highlight]
@@ -2757,23 +2758,26 @@
            :query-atom query-atom
            :full-text-search? full-text-search?)))
 
+(defn- clear-custom-query!
+  [query]
+  (state/remove-custom-query-component! query)
+  (db/remove-custom-query! (state/get-current-repo) query))
+
 (rum/defcs ^:large-vars/cleanup-todo custom-query* < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)
-   :did-remount (fn [_old_state state]
-                  (trigger-custom-query! state))
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
-                     (state/remove-custom-query-component! query)
-                     (db/remove-custom-query! (state/get-current-repo) query))
+                     (clear-custom-query! (:query query)))
                    state)}
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
         repo (state/get-current-repo)
+        query-time (react/get-query-time query)
         view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -2816,13 +2820,27 @@
          (ui/foldable
           [:div.custom-query-title.flex.justify-between.w-full
            [:div.flex.items-center
-            (when (:full-text-search? state)
-              [:a.control.fade-link.mr-1.inline-flex
-               {:title "Refresh query result"
-                :on-mouse-down (fn [e]
-                                 (util/stop e)
-                                 (trigger-custom-query! state))}
-               (ui/icon "refresh" {:style {:font-size 20}})])
+            (when (or (:full-text-search? state)
+                      (and query-time (> query-time 80)))
+              (ui/tippy
+               {:html  [:div
+                        [:p
+                         (when (and query-time (> query-time 80))
+                           [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])
+                         (when (:full-text-search? state)
+                           [:span "Full-text search results will not be refreshed automatically."])]
+                        [:p
+                         "Click the refresh button instead if you want to see the latest result."]]
+                :interactive     true
+                :popperOptions   {:modifiers {:preventOverflow
+                                              {:enabled           true
+                                               :boundariesElement "viewport"}}}
+                :arrow true}
+               [:a.control.fade-link.mr-1.inline-flex
+                {:on-mouse-down (fn [e]
+                                  (util/stop e)
+                                  (trigger-custom-query! state))}
+                (ui/icon "refresh" {:style {:font-size 20}})]))
             [:span.title-text (cond
                                 (vector? title) title
                                 (string? title) (inline-text config
@@ -2903,7 +2921,10 @@
                :else
                [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])])
           {:default-collapsed? collapsed?
-           :title-trigger? true})]))))
+           :title-trigger? true
+           :on-mouse-down (fn [collapsed?]
+                            (when collapsed?
+                              (clear-custom-query! (:query q))))})]))))
 
 (rum/defc custom-query
   [config q]

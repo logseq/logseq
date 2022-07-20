@@ -95,6 +95,11 @@
     (let [new-result' (f @result-atom)]
       (reset! result-atom new-result'))))
 
+(defn get-query-time
+  [q]
+  (let [k [(state/get-current-repo) :custom q]]
+    (get-in @query-state [k :query-time])))
+
 (defn kv
   [key value]
   {:db/id -1
@@ -119,8 +124,9 @@
     (reset! query-state state)))
 
 (defn add-q!
-  [k query inputs result-atom transform-fn query-fn inputs-fn]
+  [k query time inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
+                              :query-time time
                               :inputs inputs
                               :result result-atom
                               :transform-fn transform-fn
@@ -169,29 +175,30 @@
           (add-query-component! k component))
         (if (and use-cache? result-atom)
           result-atom
-          (let [result (cond
-                         query-fn
-                         (query-fn db nil nil)
+          (let [{:keys [result time]} (util/with-time
+                                        (-> (cond
+                                              query-fn
+                                              (query-fn db nil nil)
 
-                         inputs-fn
-                         (let [inputs (inputs-fn)]
-                           (apply d/q query db inputs))
+                                              inputs-fn
+                                              (let [inputs (inputs-fn)]
+                                                (apply d/q query db inputs))
 
-                         kv?
-                         (d/entity db (last k))
+                                              kv?
+                                              (d/entity db (last k))
 
-                         (seq inputs)
-                         (apply d/q query db inputs)
+                                              (seq inputs)
+                                              (apply d/q query db inputs)
 
-                         :else
-                         (d/q query db))
-                result (transform-fn result)
+                                              :else
+                                              (d/q query db))
+                                            transform-fn))
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
             (if disable-reactive?
               result-atom
-              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))))))))
+              (add-q! k query time inputs result-atom transform-fn query-fn inputs-fn))))))))
 
 
 ;; TODO: Extract several parts to handlers
