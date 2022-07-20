@@ -76,6 +76,23 @@
             "Unlock this remote graph!"
             "Decrypt this graph"))]]
 
+      (when (and remote-pw? (not init-graph-keys))
+        [:<>
+
+         [:div.folder-tip.flex.flex-col.items-center
+          [:h3.-mt-1.5
+           [:span.flex.space-x-2 (ui/icon "cloud-lock") [:span GraphName]]]
+          [:h4.px-2.-mb-1.5 [:strong "UUID: "] GraphUUID]]
+
+         [:div.input-hints.text-sm.py-2.px-3.rounded.mb-2.mt-2.flex.items-center
+          (if-let [display-str (:fail set-remote-graph-pwd-result)]
+            [:<>
+             [:span.scale-125.pr-1.text-red-600 (ui/icon "alert-circle" {:class "text-md mr-1"})]
+             [:span.text-red-600 display-str]]
+            [:<>
+             [:span.scale-125.pr-1 (ui/icon "bulb" {:class "text-md mr-1"})]
+             [:span "Please enter the password for this graph to continue syncing."]])]])
+
       (when (and remote-pw? init-graph-keys)
         [:<>
          [:h2.text-center.opacity-70.text-sm.py-2
@@ -101,8 +118,11 @@
        {:type        "password"
         :placeholder "Password"
         :auto-focus  true
+        :disabled    loading?
         :on-change   (fn [e]
-                       (reset! *password (util/evalue e)))}]
+                       (reset! *password (util/evalue e))
+                       (when (:fail set-remote-graph-pwd-result)
+                         (state/set-state! [:file-sync/set-remote-graph-password-result] {})))}]
 
       (when init-graph-keys
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
@@ -110,11 +130,9 @@
           :placeholder "Re-enter the password"
           :on-focus    #(reset! *pw-confirm-focused? true)
           :on-blur     #(reset! *pw-confirm-focused? false)
+          :disabled    loading?
           :on-change   (fn [e]
                          (reset! *pw-confirm (util/evalue e)))}])
-
-      (when-let [display-str (:fail set-remote-graph-pwd-result)]
-        [:div display-str])
 
       (when init-graph-keys
         [:div.init-remote-pw-tips.space-x-4.pt-2.hidden.sm:flex
@@ -134,11 +152,11 @@
            [:span "You will still be able to access the local version of your graph."]]]])]
 
      [:div.mt-5.sm:mt-4.flex.justify-center.sm:justify-end.space-x-3
-      (ui/button (t :cancel) :background "gray" :class "opacity-60")
+      (ui/button (t :cancel) :background "gray" :disabled loading? :class "opacity-60" :on-click close-fn)
       (ui/button [:span.inline-flex.items-center
                   [:span (t :submit)]
                   (when loading?
-                    [:span.ml-1.scale-75 (ui/loading "")])]
+                    [:span.ml-1.scale-50 (ui/loading "")])]
 
                  :disabled loading?
                  :on-click

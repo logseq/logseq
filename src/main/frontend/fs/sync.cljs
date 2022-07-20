@@ -1392,7 +1392,9 @@
           pwd (get-in @pwd-map [graph-uuid :pwd])]
       (if restore-pwd-failed
         (do (util/drain-chan <restored-pwd)
-            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo {:GraphUUID graph-uuid} :input-pwd-remote
+            (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo
+                               (state/get-remote-graph-info-by-uuid graph-uuid)
+                               :input-pwd-remote
                                {:init-graph-keys init-graph-keys
                                 :after-input-password #(go (<! (restore-pwd! graph-uuid))
                                                            (offer! <restored-pwd true))}])

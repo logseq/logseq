@@ -492,6 +492,11 @@
   []
   (get-in @state [:file-sync/remote-graphs :graphs]))
 
+(defn get-remote-graph-info-by-uuid
+  [uuid]
+  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+    (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))
