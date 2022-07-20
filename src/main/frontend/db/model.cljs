@@ -1172,22 +1172,31 @@
                                      [?block :block/refs ?ref-page]]
                                    pages
                                    (butlast block-attrs))
-             result (if (not (options :filter?)) (->> query-result
-                                           react
-                                           (remove (fn [block]
-                                                     (= page-id (:db/id (:block/page block)))))
-                                           (sort-by-left-recursive)
-                                           db-utils/group-by-page
-                                           (map (fn [[k blocks]]
-                                                  (let [k (if (contains? aliases (:db/id k))
-                                                            (assoc k :block/alias? true)
-                                                            k)]
-                                                    [k blocks]))))
-
-                        (map (comp :block/original-name :block/page) (->> query-result
-                                                                          react
-                                                                          (remove (fn [block]
-                                                                                    (= page-id (:db/id (:block/page block))))) (sort-by-left-recursive))))]
+             result (if (:filter? options)
+                      (->> query-result
+                           react
+                           (remove (fn [block]
+                                     (= page-id (:db/id (:block/page block)))))
+                           (sort-by-left-recursive)
+                           (map (fn [x]
+                                  (cons (get-in x [:block/apge :db/id])
+                                        (map :db/id (:block/refs x)))))
+                           (apply concat)
+                           (distinct)
+                           (remove #{page-id})
+                           (map (fn [id] (:block/original-name (db-utils/entity id))))
+                           (remove nil?))
+                      (->> query-result
+                           react
+                           (remove (fn [block]
+                                     (= page-id (:db/id (:block/page block)))))
+                           (sort-by-left-recursive)
+                           db-utils/group-by-page
+                           (map (fn [[k blocks]]
+                                  (let [k (if (contains? aliases (:db/id k))
+                                            (assoc k :block/alias? true)
+                                            k)]
+                                    [k blocks])))))]
          result)))))
 
 (defn get-page-referenced-blocks-ids
@@ -1270,7 +1279,7 @@
 ;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
   ([block-uuid]
-   (get-block-referenced-blocks block-uuid {:filter? false}))
+   (get-block-referenced-blocks block-uuid {}))
   ([block-uuid options]
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
@@ -1287,9 +1296,7 @@
                                         block-attrs)
                                react
                                (sort-by-left-recursive))]
-         (if (options :filter?)
-           (map (comp :block/original-name :block/page) query-result)
-           (db-utils/group-by-page query-result)))))))
+         (db-utils/group-by-page query-result))))))
 
 (defn get-block-referenced-blocks-ids
   [block-uuid]

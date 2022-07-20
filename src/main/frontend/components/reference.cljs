@@ -137,6 +137,9 @@
                                                (db/get-block-referenced-blocks block-id {:filter? true})
                                                (db/get-page-referenced-blocks page-name {:filter? true}))
                                   references (db/get-page-linked-refs-refed-pages repo page-name)
+                                  _ (prn {:references references
+                                          :ref-blocks ref-blocks
+                                          :block-id block-id})
                                   references (->>
                                               (concat ref-blocks references)
                                               (remove nil?)
