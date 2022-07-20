@@ -53,6 +53,7 @@
     "electron-rebuild": "3.2.5"
   },
   "resolutions": {
-    "**/electron": "15.1.2"
+    "**/electron": "15.1.2",
+    "**/node-gyp": "9.0.0"
   }
 }
