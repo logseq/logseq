@@ -1156,16 +1156,16 @@
                                    pages
                                    (butlast block-attrs))
              result (if (not (options :filter?)) (->> query-result
-                                           react
-                                           (remove (fn [block]
-                                                     (= page-id (:db/id (:block/page block)))))
-                                           (sort-by-left-recursive)
-                                           db-utils/group-by-page
-                                           (map (fn [[k blocks]]
-                                                  (let [k (if (contains? aliases (:db/id k))
-                                                            (assoc k :block/alias? true)
-                                                            k)]
-                                                    [k blocks]))))
+                                                      react
+                                                      (remove (fn [block]
+                                                                (= page-id (:db/id (:block/page block)))))
+                                                      (sort-by-left-recursive)
+                                                      db-utils/group-by-page
+                                                      (map (fn [[k blocks]]
+                                                             (let [k (if (contains? aliases (:db/id k))
+                                                                       (assoc k :block/alias? true)
+                                                                       k)]
+                                                               [k blocks]))))
 
                         (map (comp :block/original-name :block/page) (->> query-result
                                                                           react
@@ -1356,10 +1356,10 @@
 (defn get-all-properties
   []
   (let [properties (d/q
-                     '[:find [?p ...]
-                       :where
-                       [_ :block/properties ?p]]
-                     (conn/get-db))
+                    '[:find [?p ...]
+                      :where
+                      [_ :block/properties ?p]]
+                    (conn/get-db))
         properties (remove (fn [m] (empty? m)) properties)]
     (->> (map keys properties)
          (apply concat)
@@ -1373,13 +1373,13 @@
                (get properties property))]
     (->>
      (d/q
-       '[:find [?property-val ...]
-         :in $ ?pred
-         :where
-         [_ :block/properties ?p]
-         [(?pred $ ?p) ?property-val]]
-       (conn/get-db)
-       pred)
+      '[:find [?property-val ...]
+        :in $ ?pred
+        :where
+        [_ :block/properties ?p]
+        [(?pred $ ?p) ?property-val]]
+      (conn/get-db)
+      pred)
      (map (fn [x] (if (coll? x) x [x])))
      (apply concat)
      (map str)
@@ -1644,12 +1644,18 @@
            ;; Use the block's id as the shape's id.
            {:id uuid})))
 
+(defn- get-shape-refs [shape]
+  (when (= "logseq-portal" (:type shape))
+    [{:db/id (:db/id (get-page (:pageId shape)))}]))
+
 (defn- shape->block [shape page-name]
-  (let [properties shape]
-    {:block/uuid (uuid (:id properties))
-     :block/page {:block/name page-name}
-     :block/content "" ;; give it empty string since some block utility requires it
-     :block/properties properties}))
+  (let [properties shape
+        block {:block/uuid (uuid (:id properties))
+               :block/page {:block/name page-name}
+               :block/content "" ;; give it empty string since some block utility requires it
+               :block/properties properties}
+        refs (get-shape-refs shape)]
+    (merge block (when refs {:block/refs refs}))))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
   (let [page-block {:block/name page-name
@@ -1659,7 +1665,7 @@
         blocks (mapv #(shape->block % page-name) (:shapes tldr-data))
         block-ids (set (map :block/uuid blocks))
         delete-shapes (filter (fn [shape]
-                                  (not (block-ids (:block/uuid shape))))
+                                (not (block-ids (:block/uuid shape))))
                               existing-blocks)
         delete-shapes-tx (mapv (fn [s] [:db/retractEntity (:db/id s)]) delete-shapes)]
     (concat [page-block] blocks delete-shapes-tx)))
@@ -1715,9 +1721,9 @@
 (defn get-all-whiteboard-names
   [repo]
   (->> (d/q
-       '[:find [(pull ?page [:block/name]) ...]
-         :where
-         [?page :block/name]
-         [?page :block/whiteboard? true]]
-       (conn/get-db repo))
-      (map :block/name)))
+        '[:find [(pull ?page [:block/name]) ...]
+          :where
+          [?page :block/name]
+          [?page :block/whiteboard? true]]
+        (conn/get-db repo))
+       (map :block/name)))
