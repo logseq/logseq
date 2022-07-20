@@ -1483,6 +1483,19 @@
                                                  :pwd-map @pwd-map))
     (<set-env rsapi prod? private-key public-key graph-uuid)))
 
+(defn- <ensure-set-env&keys
+  [graph-uuid *stopped?]
+  (go-loop []
+    (let [{:keys [change timeout]}
+          (async/alt! (get-graph-pwd-changed-chan graph-uuid) {:change true}
+                      (timeout 10000) {:timeout true})]
+      (cond
+        @*stopped? nil
+        change (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
+        timeout (recur)))))
+
+
+
 ;;; ### sync state
 
 (def full-sync-chan (chan 1))
@@ -1938,6 +1951,7 @@
         (let [next-state (<! (<loop-ensure-pwd&keys graph-uuid (state/get-current-repo) *stopped?))]
           (assert (s/valid? ::state next-state) next-state)
           (when (= next-state ::idle)
+            (<! (<ensure-set-env&keys graph-uuid *stopped?))
             ;; wait seconds to receive all file change events,
             ;; and then drop all of them.
             ;; WHY: when opening a graph(or switching to another graph),
@@ -1947,7 +1961,9 @@
             (<! (timeout 3000))
             (println :drain-local-changes-chan-at-starting
                      (count (util/drain-chan local-changes-chan))))
-          (.schedule this next-state nil))))
+          (if @*stopped?
+            (.schedule this ::stop nil)
+            (.schedule this next-state nil)))))
 
     (idle [this]
       (go
@@ -2155,10 +2171,7 @@
               (do
                 (state/set-file-sync-state repo @*sync-state)
                 (state/set-file-sync-manager sm)
-                ;; (let [*stop-after-5s (volatile! false)]
-                ;;   (go (<! (timeout 5000)) (vreset! *stop-after-5s true))
-                ;;   (<! (<ensure-pwd+keys-exists! graph-uuid repo *stop-after-5s)))
-                (<loop-set-env&keys-when-pwd-map-change graph-uuid (.-*stopped? sm))
+
                 (poll! stop-sync-chan)
                 (poll! remote->local-sync-chan)
                 (poll! remote->local-full-sync-chan)
