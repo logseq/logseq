@@ -1,10 +1,12 @@
 (ns frontend.components.whiteboard
   (:require [datascript.core :as d]
             [frontend.components.page :as page]
+            [frontend.components.reference :as reference]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :refer [create-new-whiteboard-page!
-                                                 page-name->tldr]]
+                                                 page-name->tldr
+                                                 get-whiteboard-entity]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -62,9 +64,18 @@
       (for [whiteboard-name whiteboard-names]
         [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
 
+(rum/defc whiteboard-references
+  [name]
+  (let [uuid (or (parse-uuid name) (:block/uuid (get-whiteboard-entity name)))
+        [show set-show] (rum/use-state false)]
+    [:div.ml-2
+     [:button.border.text-sm.bg-gray-500.text-white.px-2 {:on-click (fn [] (set-show not))} "references"]
+     (when show (reference/block-linked-references uuid))]))
+
 (rum/defc whiteboard
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
+
         new? (get-in route-match [:parameters :query :new?])]
 
     (rum/use-effect! (fn [_]
@@ -78,13 +89,14 @@
      {:key name
       :style {:padding "0.5px" :z-index 0}}
 
-     [:span.inline-flex.absolute.color-level.text-xl.m-2.px-2
-      {:key name
-       :style {:z-index 2000 :color "var(--ls-title-text-color, #222)"}}
+     [:div.absolute.p-4.flex.items-start
+      {:style {:z-index 2000}}
+      [:span.inline-flex.color-level.text-xl.px-2
+       (page/page-title name [:<>
+                              [:span.text-gray-500.ti.ti-artboard.mr-1
+                               {:style {:font-size "0.9em"}}]]
+                        name nil false)]
 
-      (page/page-title name [:<>
-                             [:span.text-gray-500.ti.ti-artboard.mr-1
-                              {:style {:font-size "0.9em"}}]]
-                       name nil false)]
+      (whiteboard-references name)]
 
      (tldraw-app name)]))
