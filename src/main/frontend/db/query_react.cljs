@@ -124,7 +124,8 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? (fn [_] nil) debug/pprint)]
+  (let [pprint (if config/dev? debug/pprint (fn [_] nil))
+        start-time (.now js/performance)]
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
@@ -137,4 +138,5 @@
           k [:custom query']]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
+      (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
       (apply react/q repo k query-opts query inputs))))
