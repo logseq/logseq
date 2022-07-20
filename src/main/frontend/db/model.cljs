@@ -1120,18 +1120,23 @@
 ;; get pages who mentioned this page
 ;; TODO: use :block/_refs
 (defn get-pages-that-mentioned-page
-  [repo page]
+  [repo page include-journals]
   (when (conn/get-db repo)
     (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
           pages (page-alias-set repo page)
+          query-base '[:find ?mentioned-page-name
+                       :in $ ?pages ?page-name
+                       :where
+                       [?block :block/refs ?p]
+                       [(contains? ?pages ?p)]
+                       [?block :block/page ?mentioned-page]
+                       [?mentioned-page :block/name ?mentioned-page-name]]
+          query  (if include-journals
+                   query-base
+                   (conj query-base '[?mentioned-page :block/journal? false]))
+
           mentioned-pages (->> (react/q repo [:frontend.db.react/page<-pages page-id] {:use-cache? false}
-                                        '[:find ?mentioned-page-name
-                                          :in $ ?pages ?page-name
-                                          :where
-                                          [?block :block/refs ?p]
-                                          [(contains? ?pages ?p)]
-                                          [?block :block/page ?mentioned-page]
-                                          [?mentioned-page :block/name ?mentioned-page-name]]
+                                        query
                                         pages
                                         page)
                                react
