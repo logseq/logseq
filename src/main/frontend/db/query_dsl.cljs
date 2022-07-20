@@ -539,7 +539,6 @@ Some bindings in this fn:
         result (if (coll? (first where))
                  (apply conj q where)
                  (conj q where))]
-    (prn "Datascript query: " result)
     result))
 
 (defn query

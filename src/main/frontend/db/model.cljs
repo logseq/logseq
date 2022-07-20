@@ -21,9 +21,9 @@
 
 ;; lazy loading
 
-(def initial-blocks-length 100)
+(def initial-blocks-length 50)
 
-(def step-loading-blocks 50)
+(def step-loading-blocks 25)
 
 
 ;; TODO: extract to specific models and move data transform logic to the
@@ -523,7 +523,7 @@
 
 (defn get-paginated-blocks-no-cache
   "Result should be sorted."
-  [db start-id {:keys [limit include-start? scoped-block-id]}]
+  [db start-id {:keys [limit include-start? scoped-block-id end-id]}]
   (when-let [start (d/entity db start-id)]
     (let [scoped-block-parents (when scoped-block-id
                                  (let [block (d/entity db scoped-block-id)]
@@ -536,9 +536,15 @@
                      result
                      (let [next-block (get-next-open-block db block scoped-block-id)]
                        (if next-block
-                         (if (and (seq scoped-block-parents)
-                                  (contains? scoped-block-parents (:db/id (:block/parent next-block))))
+                         (cond
+                           (and (seq scoped-block-parents)
+                                (contains? scoped-block-parents (:db/id (:block/parent next-block))))
                            result
+
+                           (and end-id (= end-id (:db/id next-block)))
+                           (conj result next-block)
+
+                           :else
                            (recur next-block (conj result next-block)))
                          result))))]
       (if include-start?
@@ -692,6 +698,14 @@
   (let [{:keys [tx-meta]} tx-report
         current-db (conn/get-db repo-url)]
     (cond
+      (and (or (:undo? tx-meta) (:redo? tx-meta)) @result)
+      (let [blocks-range (:pagination-blocks-range tx-meta)
+            [start-block-id end-block-id] (:new blocks-range)]
+        (get-paginated-blocks-no-cache current-db start-block-id
+                                       {:end-id end-block-id
+                                        :include-start? true
+                                        :scoped-block-id scoped-block-id}))
+
       (contains? #{:save-block :delete-blocks} outliner-op)
       @result
 
@@ -701,7 +715,9 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  limit 25
+                  limit (-> (max (- initial-blocks-length (count previous-blocks))
+                                 (count tx-block-ids))
+                            (+ 25))
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
                                                                            :scoped-block-id scoped-block-id})]
@@ -1293,7 +1309,9 @@
 ;; TODO: Replace recursive queries with datoms index implementation
 ;; see https://github.com/tonsky/datascript/issues/130#issuecomment-169520434
 (defn get-block-referenced-blocks
-  ([block-uuid & options]
+  ([block-uuid]
+   (get-block-referenced-blocks block-uuid {:filter? false}))
+  ([block-uuid options]
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
        (let [block (db-utils/entity [:block/uuid block-uuid])
