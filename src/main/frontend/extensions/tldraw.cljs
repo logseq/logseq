@@ -11,6 +11,7 @@
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
+#_:clj-kondo/ignore
 (rum/defcs tldraw-app < rum/reactive
   (rum/local false ::view-mode?)
   [state name]

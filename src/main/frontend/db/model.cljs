@@ -1697,20 +1697,20 @@
        (when-let [path (:file/path (db-utils/entity (:db/id file)))]
          (gp-config/whiteboard? path))))))
 
-;; fixme: caching?
-(defn get-all-whiteboard-tldrs
-  "Returns a vector of all whiteboard tldrs."
-  [repo]
-  (let [result (d/q
-                '[:find [(pull ?page [* {:block/_page [:block/properties]}]) ...]
-                  :where
-                  [?page :block/name]
-                  [?page :block/whiteboard? true]]
-                (conn/get-db repo))
-        tldrs (mapv (fn [row] (let [blocks (:block/_page row)
-                                    page (dissoc row :block/_page)]
-                                (whiteboard-clj->tldr page blocks))) result)]
-    tldrs))
+;; ;; fixme: caching?
+;; (defn get-all-whiteboard-tldrs
+;;   "Returns a vector of all whiteboard tldrs."
+;;   [repo]
+;;   (let [result (d/q
+;;                 '[:find [(pull ?page [* {:block/_page [:block/properties]}]) ...]
+;;                   :where
+;;                   [?page :block/name]
+;;                   [?page :block/whiteboard? true]]
+;;                 (conn/get-db repo))
+;;         tldrs (mapv (fn [row] (let [blocks (:block/_page row)
+;;                                     page (dissoc row :block/_page)]
+;;                                 (whiteboard-clj->tldr page blocks))) result)]
+;;     tldrs))
 
 (defn get-all-whiteboard-names
   [repo]

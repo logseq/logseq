@@ -1702,10 +1702,10 @@
   []
   (second (first (:ui/whiteboards @state))))
 
-(defn get-tldraw-api
-  []
-  (some-> (get-current-whiteboard)
-          (gobj/get "api")))
+;; (defn get-tldraw-api
+;;   []
+;;   (some-> (get-current-whiteboard)
+;;           (gobj/get "api")))
 
 (defn unlinked-dir?
   [dir]
