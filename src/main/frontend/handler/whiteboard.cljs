@@ -59,17 +59,21 @@
     [page-block blocks]))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
-  (let [shapes (map block->shape blocks)
+  (let [id (str (:block/uuid page-block))
+        shapes (map block->shape blocks)
         page-properties (:block/properties page-block)]
-    (clj->js {:currentPageId "page"
+    (clj->js {:currentPageId id
               :pages [(merge page-properties
-                             {:id "page"
+                             {:id id
                               :name "page"
                               :shapes shapes})]})))
 
 (defn page-name->tldr [page-name]
   (let [[page-block blocks] (get-whiteboard-clj page-name)]
     (whiteboard-clj->tldr page-block blocks)))
+
+(defn get-whiteboard-entity [page-name]
+  (db-utils/entity [:block/name page-name]))
 
 (defn transact-tldr! [page-name tldr]
   (let [{:keys [pages]} (js->clj tldr :keywordize-keys true)
@@ -86,10 +90,11 @@
                               [{:id (.-id fs)
                                 :logseqLink page-or-block-id}])))))))
 
-(defonce default-tldr
-  #js {:currentPageId "page1",
+(defn get-default-tldr
+  [page-id]
+  #js {:currentPageId page-id,
        :selectedIds #js [],
-       :pages #js [#js {:id "page",
+       :pages #js [#js {:id page-id,
                         :name "Page",
                         :shapes #js [],
                         :bindings #js {},
@@ -98,8 +103,12 @@
 
 (defn create-new-whiteboard-page!
   ([name]
-   (transact-tldr! name default-tldr)
-   (let [uuid (or (parse-uuid name) (d/squuid))
-         entity (db-utils/entity [:block/name name])]
-     (outliner-file/sync-to-file entity)
-     (db-utils/transact! [{:db/id (:db/id entity) :block/uuid uuid}]))))
+   (let [uuid (or (parse-uuid name) (d/squuid))]
+     (transact-tldr! name (get-default-tldr (str uuid)))
+     (let [entity (get-whiteboard-entity name)
+           tx (assoc (select-keys entity [:db/id])
+                     :block/uuid uuid)]
+       (db-utils/transact! [tx])
+       (let [page-entity (get-whiteboard-entity name)]
+         (when (and page-entity (nil? (:block/file page-entity)))
+           (outliner-file/sync-to-file page-entity)))))))

@@ -25,7 +25,7 @@ export class PencilShape extends TLDrawShape<PencilShapeProps> {
     point: [0, 0],
     points: [],
     isComplete: false,
-    stroke: 'var(--tl-foreground)',
+    stroke: 'var(--tl-foreground, #000)',
     fill: '#ffffff',
     strokeWidth: 2,
     opacity: 1,

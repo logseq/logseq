@@ -357,7 +357,7 @@ export abstract class TLShape<P extends TLShapeProps = TLShapeProps, M = any> {
     const bounds = this.getBounds()
     return (
       <rect
-        fill="var(--tl-foreground)"
+        fill="var(--tl-foreground, #000)"
         fillOpacity={0.2}
         width={bounds.width}
         height={bounds.height}

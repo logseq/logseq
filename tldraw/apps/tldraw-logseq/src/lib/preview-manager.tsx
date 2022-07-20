@@ -2,7 +2,7 @@ import { BoundsUtils, TLDocumentModel, TLShapeConstructor, TLViewport } from '@t
 import ReactDOMServer from 'react-dom/server'
 import { Shape, shapes } from './shapes'
 
-const SVG_EXPORT_PADDING = 0
+const SVG_EXPORT_PADDING = 16
 
 const ShapesMap = new Map(shapes.map(shape => [shape.id, shape]))
 
@@ -15,6 +15,7 @@ const getShapeClass = (type: string): TLShapeConstructor<Shape> => {
 
 export class PreviewManager {
   shapes: Shape[] | undefined
+  pageId: string | undefined;
   constructor(serializedApp?: TLDocumentModel<Shape>) {
     if (serializedApp) {
       this.load(serializedApp)
@@ -23,6 +24,7 @@ export class PreviewManager {
 
   load(snapshot: TLDocumentModel) {
     const page = snapshot.pages.find(p => snapshot.currentPageId === p.id)
+    this.pageId = page?.id
     this.shapes = page?.shapes.map(s => {
       const ShapeClass = getShapeClass(s.type)
       return new ShapeClass(s)
@@ -64,18 +66,18 @@ export class PreviewManager {
           {vBounds && (
             <>
               <rect
-                id="camera-rect"
+                id={this.pageId + "-camera-rect"}
                 transform={`translate(${vx}, ${vy})`}
                 width={vBounds.width}
                 height={vBounds.height}
               />
-              <mask id="camera-mask">
+              <mask id={this.pageId + "-camera-mask"}>
                 <rect width={commonBounds.width} height={commonBounds.height} fill="white" />
-                <use href="#camera-rect" fill="black" />
+                <use href={`#${this.pageId}-camera-rect`} fill="black" />
               </mask>
             </>
           )}
-          <g id="preview-shapes">
+          <g id={this.pageId + "-preview-shapes"}>
             {this.shapes?.map(s => {
               const {
                 bounds,
@@ -93,12 +95,12 @@ export class PreviewManager {
             })}
           </g>
         </defs>
-        <use href="#preview-shapes" />
+        <use href={`#${this.pageId}-preview-shapes`} />
         <rect
-          mask={vBounds ? 'url(#camera-mask)' : ''}
+          mask={vBounds ? `url(#${this.pageId}-camera-mask)` : ''}
           width={commonBounds.width}
           height={commonBounds.height}
-          fill="rgba(0, 0, 0, 0.2)"
+          fill="rgba(0, 0, 0, 0.02)"
         />
         {vBounds && (
           <use
@@ -107,7 +109,7 @@ export class PreviewManager {
             data-y={vy}
             data-width={vBounds.width}
             data-height={vBounds.height}
-            href="#camera-rect"
+            href={`#${this.pageId}-camera-rect`}
             fill="transparent"
             stroke="red"
             strokeWidth={4 / viewport.camera.zoom}

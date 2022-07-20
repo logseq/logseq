@@ -1,4 +1,5 @@
-import { nanoid } from 'nanoid'
+// @ts-expect-error no types for uuid
+import * as uuid from 'uuid'
 export * from './BoundsUtils'
 export * from './PointUtils'
 export * from './KeyUtils'
@@ -9,7 +10,7 @@ export * from './DataUtils'
 export * from './TextUtils'
 
 export function uniqueId() {
-  return nanoid()
+  return uuid.v1()
 }
 
 // via https://github.com/bameyrick/throttle-typescript

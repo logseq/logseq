@@ -40,13 +40,14 @@
 (rum/defc dashboard-card
   [page-name]
   (let [tldr (page-name->tldr page-name)]
-    [:a.border.p-4.rounded.text-xl
+    [:div.rounded.text-lg.cursor-pointer.color-level.flex.flex-col.gap-1.overflow-hidden.dashboard-card
      {:on-mouse-down
       (fn [e]
         (util/stop e)
         (route-handler/redirect-to-whiteboard! page-name))}
-     [:span page-name]
-     (tldraw-preview tldr)]))
+     [:div.truncate.bg-white.px-4.py-1.dashboard-card-title page-name]
+     [:div.p-4.h-64.flex.justify-center
+      (tldraw-preview tldr)]]))
 
 (rum/defc whiteboard-dashboard
   []
@@ -57,9 +58,9 @@
                 :on-click (fn [e]
                             (util/stop e)
                             (route-handler/redirect-to-whiteboard! (d/squuid) true)))
-     [:div.flex.flex-col.gap-4.py-2
+     [:div.gap-8.py-4.grid.grid-cols-4.grid-rows-auto
       (for [whiteboard-name whiteboard-names]
-        [:<> {:key whiteboard-name}])]]))
+        [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
 
 (rum/defc whiteboard
   [route-match]

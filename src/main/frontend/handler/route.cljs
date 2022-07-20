@@ -57,6 +57,7 @@
   ([name]
    (redirect-to-whiteboard! name false))
   ([name new?]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name)
    (redirect! {:to :whiteboard
                :path-params {:name (str name)}
                :query-params (when new? {:new? 1})})))
