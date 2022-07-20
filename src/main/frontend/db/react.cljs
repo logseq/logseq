@@ -281,30 +281,33 @@
      set)))
 
 (defn- execute-query!
-  [graph db k tx {:keys [query inputs transform-fn query-fn inputs-fn result]}]
-  (let [new-result (->
-                    (cond
-                      query-fn
-                      (let [result (query-fn db tx result)]
-                        (if (coll? result)
-                          (doall result)
-                          result))
+  [graph db k tx {:keys [query query-time inputs transform-fn query-fn inputs-fn result]}
+   {:keys [skip-query-time-check?]}]
+  (when (or skip-query-time-check?
+            (<= (or query-time 0) 80))
+    (let [new-result (->
+                     (cond
+                       query-fn
+                       (let [result (query-fn db tx result)]
+                         (if (coll? result)
+                           (doall result)
+                           result))
 
-                      inputs-fn
-                      (let [inputs (inputs-fn)]
-                        (apply d/q query db inputs))
+                       inputs-fn
+                       (let [inputs (inputs-fn)]
+                         (apply d/q query db inputs))
 
-                      (keyword? query)
-                      (db-utils/get-key-value graph query)
+                       (keyword? query)
+                       (db-utils/get-key-value graph query)
 
-                      (seq inputs)
-                      (apply d/q query db inputs)
+                       (seq inputs)
+                       (apply d/q query db inputs)
 
-                      :else
-                      (d/q query db))
-                    transform-fn)]
-    (when-not (= new-result result)
-      (set-new-result! k new-result tx))))
+                       :else
+                       (d/q query db))
+                     transform-fn)]
+     (when-not (= new-result result)
+       (set-new-result! k new-result tx)))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
@@ -322,17 +325,18 @@
                  (or (get affected-keys (vec (rest k)))
                      custom?
                      kv?))
-            (let [{:keys [query query-fn]} cache]
+            (let [{:keys [query query-fn]} cache
+                  immediately-run? (or
+                                    ;; modifying during cards review need to be executed immediately
+                                    (:cards-query? (meta query))
+                                    (state/edit-in-query-component))]
               (when (or query query-fn)
                 (try
-                  (let [f #(execute-query! repo-url db k tx cache)]
-                    ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                    (if (and custom?
-                             ;; modifying during cards review need to be executed immediately
-                             (not (:cards-query? (meta query)))
-                             (not (state/edit-in-query-component)))
-                      (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                      (f)))
+                  ;; Detects whether user is editing in a custom query, if so, execute the query immediately
+                  (if (and custom? (not immediately-run?))
+                    (async/put! (state/get-reactive-custom-queries-chan)
+                                [#(execute-query! repo-url db k tx cache nil) query])
+                    (execute-query! repo-url db k tx cache {:skip-query-time-check? immediately-run?}))
                   (catch js/Error e
                     (js/console.error e)))))))))))
 
