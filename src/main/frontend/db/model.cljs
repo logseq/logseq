@@ -2,8 +2,7 @@
   "Core db functions."
   ;; TODO: Remove this config once how repos are passed to this ns are standardized
   {:clj-kondo/config {:linters {:unused-binding {:level :off}}}}
-  (:require [cljs.pprint :as pprint]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]

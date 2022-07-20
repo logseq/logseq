@@ -16,7 +16,6 @@
             [frontend.util.priority :as priority]
             [frontend.util.property :as property]
             [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
 

@@ -17,7 +17,6 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
-            [frontend.db.model :as model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
@@ -73,7 +72,7 @@
 (rum/defc page-name
   [name icon]
   (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (model/whiteboard-page? name)]
+        whiteboard-page? (db-model/whiteboard-page? name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-page-name-sanity-lc name)]
                        (if (and (gobj/get e "shiftKey") (not whiteboard-page?))

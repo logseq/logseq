@@ -32,7 +32,6 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.util :as gp-util]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
