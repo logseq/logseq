@@ -329,10 +329,10 @@
                   immediately-run? (or
                                     ;; modifying during cards review need to be executed immediately
                                     (:cards-query? (meta query))
+                                    ;; detects whether user is editing in a custom query, if so, execute the query immediately
                                     (state/edit-in-query-component))]
               (when (or query query-fn)
                 (try
-                  ;; Detects whether user is editing in a custom query, if so, execute the query immediately
                   (if (and custom? (not immediately-run?))
                     (async/put! (state/get-reactive-custom-queries-chan)
                                 [#(execute-query! repo-url db k tx cache nil) query])
