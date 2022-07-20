@@ -403,7 +403,7 @@
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
   (ui/button
    [:span btn-text (when-not (util/sm-breakpoint?)
-                     (str " " (ui/render-keyboard-shortcut shortcut)))]
+                     [" " (ui/render-keyboard-shortcut shortcut)])]
    :id id
    :class id
    :background background
