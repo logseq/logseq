@@ -46,7 +46,7 @@
   get-custom-css get-date-scheduled-or-deadlines
   get-file-blocks get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
   get-files get-files-blocks get-files-full get-journals-length
-  get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks get-page-linked-refs-refed-pages
+  get-latest-journals get-page get-page-alias get-page-alias-names get-paginated-blocks
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages

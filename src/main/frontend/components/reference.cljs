@@ -14,7 +14,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.walk :as walk]))
 
 (defn- frequencies-sort
   [references]
@@ -85,7 +86,7 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
 
-(rum/defcs references* < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo references* < rum/reactive db-mixins/query
   (rum/local nil ::n-ref)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
@@ -133,17 +134,8 @@
                {:title "Filter"
                 :on-mouse-down (fn [e] (util/stop-propagation e))
                 :on-click (fn []
-                            (let [ref-blocks (if block-id
-                                               (db/get-block-referenced-blocks block-id {:filter? true})
-                                               (db/get-page-referenced-blocks page-name {:filter? true}))
-                                  references (db/get-page-linked-refs-refed-pages repo page-name)
-                                  _ (prn {:references references
-                                          :ref-blocks ref-blocks
-                                          :block-id block-id})
-                                  references (->>
-                                              (concat ref-blocks references)
-                                              (remove nil?)
-                                              (frequencies))]
+                            (let [ref-pages (db/get-page-referenced-blocks page-name {:filter? true})
+                                  references (frequencies ref-pages)]
                               (state/set-modal! (filter-dialog filters-atom references page-name)
                                                 {:center? true})))}
                (ui/icon "filter" {:class (cond
@@ -164,10 +156,44 @@
                      filters (when (seq filter-state)
                                (-> (group-by second filter-state)
                                    (update-vals #(map first %))))
-                     filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
-                     n-ref (apply +
-                                  (for [[_ rfs] filtered-ref-blocks]
-                                    (count rfs)))]
+                     filtered-ref-blocks (if block-id
+                                           ref-blocks
+                                           ;; TODO: move to handler
+                                           (let [ref-blocks' (->> ref-blocks
+                                                                  (mapcat second)
+                                                                  (mapcat #(tree-seq map? :block/children %))
+                                                                  (map #(dissoc % :block/children)))
+                                                 id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
+                                                 filtered-blocks (block-handler/filter-blocks repo page-name ref-blocks' filters)
+                                                 filtered-ids (set (map :db/id filtered-blocks))
+                                                 filtered-ids-with-parents (set
+                                                                            (mapcat (fn [id]
+                                                                                      (loop [parent (id->parent id)
+                                                                                             result [id]]
+                                                                                        (if parent
+                                                                                          (recur (id->parent parent) (conj result parent))
+                                                                                          result))) filtered-ids))
+                                                 result (when (seq filtered-ids)
+                                                          (walk/postwalk
+                                                           (fn [b]
+                                                             (cond
+                                                               (and (map? b) (:block/children b))
+                                                               (let [children (remove #(not (filtered-ids-with-parents (:db/id %))) (:block/children b))]
+                                                                 (if (seq children)
+                                                                   (assoc b :block/children children)
+                                                                   (let [b' (dissoc b :block/children)]
+                                                                     (if (filtered-ids-with-parents (:db/id b))
+                                                                       b'
+                                                                       nil))))
+
+                                                               (and (map? b) (:block/uuid b))
+                                                               (when (filtered-ids-with-parents (:db/id b)) b)
+
+                                                               :else
+                                                               b))
+                                                           ref-blocks))
+                                                 result (filter (fn [[_ blocks]] (seq (remove nil? blocks))) result)]
+                                             result))]
                  (reset! *n-ref n-ref)
                  [:div.references-blocks
                   (let [ref-hiccup (block/->hiccup filtered-ref-blocks

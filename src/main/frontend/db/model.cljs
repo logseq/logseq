@@ -1075,27 +1075,6 @@
                      pages)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
-(defn get-page-linked-refs-refed-pages
-  [repo page]
-  (when-let [db (conn/get-db repo)]
-    (->
-     (d/q
-      '[:find [?ref-page ...]
-        :in $ % ?page
-        :where
-        [?p :block/name ?page]
-        [?b :block/refs ?p]
-        (parent ?b ?bc)
-        (or
-         [?bc :block/refs ?other-p]
-         [?b :block/refs ?other-p])
-        [(not= ?p ?other-p)]
-        [?other-p :block/original-name ?ref-page]]
-      db
-      rules
-      (util/safe-page-name-sanity-lc page))
-     (distinct))))
-
 ;; Ignore files with empty blocks for now
 (defn get-pages-relation
   [repo with-journal?]
@@ -1163,31 +1142,32 @@
        (let [page-id (:db/id (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
-             query-result (react/q repo
-                                   [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
-                                   {}
-                                   '[:find [(pull ?block ?block-attrs) ...]
-                                     :in $ [?ref-page ...] ?block-attrs
-                                     :where
-                                     [?block :block/refs ?ref-page]]
-                                   pages
-                                   (butlast block-attrs))
+             query-result (react
+                           (react/q repo
+                             [:frontend.db.react/page<-blocks-or-block<-blocks page-id]
+                             {}
+                             '[:find [(pull ?block ?block-attrs) ...]
+                               :in $ [?ref-page ...] ?block-attrs
+                               :where
+                               [?block :block/refs ?ref-page]]
+                             pages
+                             block-attrs))
+             query-result (walk/postwalk-replace {:block/_parent :block/children} query-result)
              result (if (:filter? options)
                       (->> query-result
-                           react
+                           (mapcat #(tree-seq map? :block/children %))
+                           (map #(dissoc % :block/children))
                            (remove (fn [block]
                                      (= page-id (:db/id (:block/page block)))))
                            (sort-by-left-recursive)
                            (map (fn [x]
-                                  (cons (get-in x [:block/apge :db/id])
+                                  (cons (get-in x [:block/page :db/id])
                                         (map :db/id (:block/refs x)))))
                            (apply concat)
-                           (distinct)
                            (remove #{page-id})
                            (map (fn [id] (:block/original-name (db-utils/entity id))))
                            (remove nil?))
                       (->> query-result
-                           react
                            (remove (fn [block]
                                      (= page-id (:db/id (:block/page block)))))
                            (sort-by-left-recursive)

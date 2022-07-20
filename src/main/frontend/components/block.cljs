@@ -1525,7 +1525,8 @@
   [config children collapsed?]
   (let [ref? (:ref? config)
         query? (:custom-query? config)
-        children (and (coll? children) (filter map? children))]
+        children (when (coll? children)
+                   (remove nil? children))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -2438,7 +2439,7 @@
 
                      :else
                      db-collapsed?)
-        children (if (and ref-or-custom-query?
+        children (if (and custom-query?
                           (not collapsed?))
                    (map
                      (fn [b] (assoc b
@@ -3336,17 +3337,19 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                         (:ref? config)
-                         (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (blocks-container blocks config)
-              {})])))]
+          (let [blocks (remove nil? blocks)]
+            (when (seq blocks)
+              (let [alias? (:block/alias? page)
+                    page (db/entity (:db/id page))]
+                [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                             (:ref? config)
+                             (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
+                 (ui/foldable
+                  [:div
+                   (page-cp config page)
+                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                  (blocks-container blocks config)
+                  {})])))))]
 
      :else
      (blocks-container blocks config))])
