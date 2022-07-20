@@ -1033,7 +1033,7 @@
 
 #?(:clj
    (defmacro with-time
-     "Evaluates expr and prints the time it took. Returns the value of expr."
+     "Evaluates expr and prints the time it took. Returns the value of expr and the spent time."
      [expr]
      `(let [start# (cljs.core/system-time)
             ret# ~expr]
