@@ -280,7 +280,7 @@
                                          :page))
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
-         [:span {:data-ref page-name}
+         [:span.title {:data-ref page-name}
           (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
