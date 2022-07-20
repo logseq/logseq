@@ -715,8 +715,9 @@
         (let [start-page? (:block/name (db-utils/entity start-id))]
           (when-not start-page?
             (let [previous-blocks (take-while (fn [b] (not= start-id (:db/id b))) @result)
-                  limit (inc (max (- initial-blocks-length (count previous-blocks))
-                                  (count tx-block-ids)))
+                  limit (-> (max (- initial-blocks-length (count previous-blocks))
+                                 (count tx-block-ids))
+                            (+ 25))
                   more (get-paginated-blocks-no-cache current-db start-id {:limit limit
                                                                            :include-start? true
                                                                            :scoped-block-id scoped-block-id})]
