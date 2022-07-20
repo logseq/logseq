@@ -70,15 +70,30 @@
 ;; component -> query-key
 (defonce query-components (atom {}))
 
+(defn- get-blocks-range
+  [result-atom new-result]
+  (let [block? (and (coll? new-result)
+                    (map? (first new-result))
+                    (:block/uuid (first new-result)))]
+    (when block?
+      {:old [(:db/id (first @result-atom))
+             (:db/id (last @result-atom))]
+       :new [(:db/id (first new-result))
+             (:db/id (last new-result))]})))
+
 (defn set-new-result!
-  [k new-result]
+  [k new-result tx-report]
   (when-let [result-atom (get-in @query-state [k :result])]
+    (when tx-report
+      (when-let [range (get-blocks-range result-atom new-result)]
+        (state/set-state! [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] range)))
     (reset! result-atom new-result)))
 
 (defn swap-new-result!
   [k f]
   (when-let [result-atom (get-in @query-state [k :result])]
-    (swap! result-atom f)))
+    (let [new-result' (f @result-atom)]
+      (reset! result-atom new-result'))))
 
 (defn kv
   [key value]
@@ -89,7 +104,7 @@
 (defn remove-key!
   [repo-url key]
   (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
+  (set-new-result! [repo-url :kv key] nil nil))
 
 (defn clear-query-state!
   []
@@ -282,7 +297,7 @@
                       (d/q query db))
                     transform-fn)]
     (when-not (= new-result result)
-      (set-new-result! k new-result))))
+      (set-new-result! k new-result tx))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."

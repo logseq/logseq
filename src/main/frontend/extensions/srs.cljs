@@ -402,14 +402,15 @@
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
   (ui/button
-    [:span btn-text " " (ui/render-keyboard-shortcut shortcut)]
-    :id id
-    :class id
-    :background background
-    :on-click (fn [e]
-                (when-let [elem (gobj/get e "target")]
-                  (.add (.-classList elem) "opacity-25"))
-                (js/setTimeout #(on-click) 10))))
+   [:span btn-text (when-not (util/sm-breakpoint?)
+                     (str " " (ui/render-keyboard-shortcut shortcut)))]
+   :id id
+   :class id
+   :background background
+   :on-click (fn [e]
+               (when-let [elem (gobj/get e "target")]
+                 (.add (.-classList elem) "opacity-25"))
+               (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view
   < rum/reactive
@@ -455,20 +456,20 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
-              (ui/button
-                [:span (case next-phase
-                         1 "Hide answers"
-                         2 "Show answers"
-                         3 "Show clozes")
-                 (ui/render-keyboard-shortcut [:s])]
-                :class "mr-2 card-answers"
-                :on-click #(reset! phase next-phase)))
+              (btn-with-shortcut {:btn-text (case next-phase
+                                              1 "Hide answers"
+                                              2 "Show answers"
+                                              3 "Show clozes")
+                                  :shortcut  "s"
+                                  :class "mr-2 card-answers"
+                                  :on-click #(reset! phase next-phase)}))
             (when (and (> (count cards) 1) preview?)
-              (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
-                :class "mr-2 card-next"
-                :on-click (fn [e]
-                            (util/stop e)
-                            (skip-card card card-index cards phase review-records cb))))
+              (btn-with-shortcut {:btn-text "Next"
+                                  :shortcut "n"
+                                  :class "mr-2 card-next"
+                                  :on-click (fn [e]
+                                              (util/stop e)
+                                              (skip-card card card-index cards phase review-records cb))}))
 
             (when (and (not preview?) (= 1 next-phase))
               [:<>
