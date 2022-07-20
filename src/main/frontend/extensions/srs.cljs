@@ -261,7 +261,7 @@
                           (util/format "[[%s]]" (string/trim query-string))
                           query-string)
            {:keys [query sort-by rules]} (query-dsl/parse query-string)
-           query* (concat [['?b :block/refs '?bp] ['?bp :block/name card-hash-tag]]
+           query* (concat [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
                           (if (coll? (first query))
                             query
                             [query]))]

@@ -382,8 +382,7 @@
                                    :block/content    content
                                    :block/properties properties
                                    :block/properties-order (map first properties)
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))})))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
@@ -518,13 +517,12 @@
           conn (conn/get-db repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/left :block/parent] block-eids)
           tx-data (map (fn [block]
                          (let [id (:db/id block)]
                            (cond->
                             {:db/id id
                              :block/page {:db/id to-id}
-                             :block/path-refs (rename-update-block-refs! (:block/path-refs block) from-id to-id)
                              :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
 
                              (and from-first-child (= id (:db/id from-first-child)))

@@ -144,11 +144,11 @@
     (is (= 211 (count files)) "Correct file count")
     (is (= 41290 (count (d/datoms db :eavt))) "Correct datoms count")
 
-    (is (= 3600
-           (ffirst
-            (d/q '[:find (count ?b)
-                   :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
-        "Correct referenced blocks count")
+    ;; (is (= 3600
+    ;;        (ffirst
+    ;;         (d/q '[:find (count ?b)
+    ;;                :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+    ;;     "Correct referenced blocks count")
     (is (= 21
            (ffirst
             (d/q '[:find (count ?b)

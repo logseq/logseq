@@ -396,53 +396,6 @@
            block))
        blocks))
 
-(defn- with-path-refs
-  [blocks]
-  (loop [blocks blocks
-         acc []
-         parents []]
-    (if (empty? blocks)
-      acc
-      (let [block (first blocks)
-            cur-level (:block/level block)
-            level-diff (- cur-level
-                          (get (last parents) :block/level 0))
-            [path-refs parents]
-            (cond
-              (zero? level-diff)            ; sibling
-              (let [path-refs (mapcat :block/refs (drop-last parents))
-                    parents (conj (vec (butlast parents)) block)]
-                [path-refs parents])
-
-              (> level-diff 0)              ; child
-              (let [path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)])
-
-              (< level-diff 0)              ; new parent
-              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
-                    path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)]))
-            path-ref-pages (->> path-refs
-                                (concat (:block/refs block))
-                                (map (fn [ref]
-                                       (cond
-                                         (map? ref)
-                                         (:block/name ref)
-
-                                         :else
-                                         ref)))
-                                (remove string/blank?)
-                                (map (fn [ref]
-                                       (if (string? ref)
-                                         {:block/name (gp-util/page-name-sanity-lc ref)}
-                                         ref)))
-                                (remove vector?)
-                                (remove nil?)
-                                (distinct))]
-        (recur (rest blocks)
-               (conj acc (assoc block :block/path-refs path-ref-pages))
-               parents)))))
-
 (defn- block-tags->pages
   [{:keys [tags] :as block}]
   (if (seq tags)
@@ -522,7 +475,7 @@
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
-    (with-path-refs blocks)))
+    blocks))
 
 (defn- construct-block
   [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern supported-formats db date-formatter]}]

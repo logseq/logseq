@@ -39,7 +39,6 @@
     :block/format
     :block/refs
     :block/_refs
-    :block/path-refs
     :block/tags
     :block/content
     :block/marker
@@ -1085,8 +1084,11 @@
         :in $ % ?page
         :where
         [?p :block/name ?page]
-        [?b :block/path-refs ?p]
-        [?b :block/refs ?other-p]
+        [?b :block/refs ?p]
+        (parent ?b ?bc)
+        (or
+         [?bc :block/refs ?other-p]
+         [?b :block/refs ?other-p])
         [(not= ?p ?other-p)]
         [?other-p :block/original-name ?ref-page]]
       db

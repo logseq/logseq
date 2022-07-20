@@ -1912,9 +1912,7 @@
             :block/properties (apply dissoc (:block/properties block)
                                 (concat [:id :custom_id :custom-id]
                                         exclude-properties))
-            :block/content new-content
-            :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
-                                  (remove nil?))})))
+            :block/content new-content})))
 
 (defn- edit-last-block-after-inserted!
   [result]

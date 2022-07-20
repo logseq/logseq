@@ -30,9 +30,6 @@
    ;; reference blocks
    :block/refs {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
-   ;; referenced pages inherited from the parents
-   :block/path-refs {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
 
    ;; for pages
    :block/tags {:db/valueType :db.type/ref
@@ -102,7 +99,6 @@
 (def retract-attributes
   #{
     :block/refs
-    :block/path-refs
     :block/tags
     :block/alias
     :block/marker

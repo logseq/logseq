@@ -45,18 +45,10 @@ and handles unexpected failure."
            ast (format/to-edn content format nil)
            blocks (extract-blocks ast content with-id? format)
            new-block (first blocks)
-           parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
-                            :block/path-refs
-                            (map :db/id))
            {:block/keys [refs]} new-block
            ref-pages (filter :block/name refs)
-           path-ref-pages (->> (concat ref-pages parent-refs [(:db/id page)])
-                               (remove nil?))
            block (cond->
-                   (merge
-                    block
-                    new-block
-                    {:block/path-refs path-ref-pages})
+                   (merge block new-block)
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))
            block (dissoc block :block/title :block/body :block/level)]
