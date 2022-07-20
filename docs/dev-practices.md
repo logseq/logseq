@@ -110,12 +110,10 @@ For help on more options, run `node static/tests.js -h`.
 
 #### Autorun Tests
 
-To run tests automatically on file save, run `yarn
-shadow-cljs watch test --config-merge '{:autorun true}'`. The test output may
-appear where shadow-cljs was first invoked e.g. where `yarn watch` is running.
-Specific namespace(s) can be auto run with the `:ns-regexp` option e.g. `npx
-shadow-cljs watch test --config-merge '{:autorun true :ns-regexp
-"frontend.util.page-property-test"}'`.
+To run tests automatically on file save, run `clojure -M:test watch test
+--config-merge '{:autorun true}'`. Specific namespace(s) can be auto run with
+the `:ns-regexp` option e.g. `clojure -M:test watch test --config-merge
+'{:autorun true :ns-regexp "frontend.util.page-property-test"}'`.
 
 ## Logging
 

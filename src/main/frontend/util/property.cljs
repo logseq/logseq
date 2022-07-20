@@ -11,26 +11,26 @@
             [logseq.graph-parser.text :as text]
             [frontend.util.cursor :as cursor]))
 
-(def built-in-extended-properties (atom #{}))
-(defn register-built-in-properties
-  [props]
-  (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
-
-(defn built-in-properties
+(defn hidden-properties
+  "These are properties hidden from user including built-in ones and ones
+  configured by user"
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc
-     :ls-type :hl-type :hl-page :hl-stamp}
-   (set (map keyword config/markers))
-   (set (config/get-block-hidden-properties))
-   @built-in-extended-properties))
+   (gp-property/hidden-built-in-properties)
+   (set (config/get-block-hidden-properties))))
 
-(defn properties-built-in?
+;; TODO: Investigate if this behavior is correct for configured hidden
+;; properties and for editable built in properties
+(def built-in-properties
+  "Alias to hidden-properties to keep existing behavior"
+  hidden-properties)
+
+(defn properties-hidden?
   [properties]
   (and (seq properties)
        (let [ks (map (comp keyword string/lower-case name) (keys properties))
-             built-in-properties-set (built-in-properties)]
-         (every? built-in-properties-set ks))))
+             hidden-properties-set (hidden-properties)]
+         (every? hidden-properties-set ks))))
 
 (defn remove-empty-properties
   [content]

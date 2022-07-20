@@ -3,6 +3,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.util :as util]
+            [logseq.graph-parser.property :as gp-property]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
@@ -399,16 +400,17 @@
 (def review-finished
   [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
-    [:span btn-text " " (ui/render-keyboard-shortcut shortcut)]
-    :id id
-    :class id
-    :background background
-    :on-click (fn [e]
-                (when-let [elem (gobj/get e "target")]
-                  (.add (.-classList elem) "opacity-25"))
-                (js/setTimeout #(on-click) 10))))
+   [:span btn-text (when-not (util/sm-breakpoint?)
+                     [" " (ui/render-keyboard-shortcut shortcut)])]
+   :id id
+   :class (str id " " class)
+   :background background
+   :on-click (fn [e]
+               (when-let [elem (gobj/get e "target")]
+                 (.add (.-classList elem) "opacity-25"))
+               (js/setTimeout #(on-click) 10))))
 
 (rum/defcs view
   < rum/reactive
@@ -454,20 +456,22 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
-              (ui/button
-                [:span (case next-phase
-                         1 "Hide answers"
-                         2 "Show answers"
-                         3 "Show clozes")
-                 (ui/render-keyboard-shortcut [:s])]
-                :class "mr-2 card-answers"
-                :on-click #(reset! phase next-phase)))
+              (btn-with-shortcut {:btn-text (case next-phase
+                                              1 "Hide answers"
+                                              2 "Show answers"
+                                              3 "Show clozes")
+                                  :shortcut  "s"
+                                  :id "card-answers"
+                                  :class "mr-2"
+                                  :on-click #(reset! phase next-phase)}))
             (when (and (> (count cards) 1) preview?)
-              (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
-                :class "mr-2 card-next"
-                :on-click (fn [e]
-                            (util/stop e)
-                            (skip-card card card-index cards phase review-records cb))))
+              (btn-with-shortcut {:btn-text "Next"
+                                  :shortcut "n"
+                                  :id       "card-next"
+                                  :class    "mr-2"
+                                  :on-click (fn [e]
+                                              (util/stop e)
+                                              (skip-card card card-index cards phase review-records cb))}))
 
             (when (and (not preview?) (= 1 next-phase))
               [:<>
@@ -707,12 +711,12 @@
 (component-macro/register query-macro-name cards)
 
 ;;; register builtin properties
-(property/register-built-in-properties #{card-last-interval-property
-                                         card-repeats-property
-                                         card-last-reviewed-property
-                                         card-next-schedule-property
-                                         card-last-easiness-factor-property
-                                         card-last-score-property})
+(gp-property/register-built-in-properties #{card-last-interval-property
+                                            card-repeats-property
+                                            card-last-reviewed-property
+                                            card-next-schedule-property
+                                            card-last-easiness-factor-property
+                                            card-last-score-property})
 
 ;;; register slash commands
 (commands/register-slash-command ["Cards"
