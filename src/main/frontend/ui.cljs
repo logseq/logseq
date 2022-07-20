@@ -627,11 +627,12 @@
             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
-  [content]
-  [:div.flex.flex-row.items-center.inline
-   [:span.icon.flex.items-center svg/loading]
-   (when-not (string/blank? content)
-     [:span.text.pl-2 content])])
+  ([content] (loading content nil))
+  ([content opts]
+   [:div.flex.flex-row.items-center.inline
+    [:span.icon.flex.items-center (svg/loader-fn opts)
+     (when-not (string/blank? content)
+       [:span.text.pl-2 content])]]))
 
 (rum/defc rotating-arrow
   [collapsed?]
