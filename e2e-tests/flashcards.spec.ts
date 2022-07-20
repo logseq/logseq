@@ -3,7 +3,7 @@ import { test } from './fixtures'
 import { createRandomPage } from './utils'
 
 
-test.skip('flashcard demo', async ({ page, block }) => {
+test('flashcard demo', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('Why do you add cards? #card #logseq')
