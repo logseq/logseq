@@ -142,13 +142,13 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 211 (count files)) "Correct file count")
-    (is (= 41290 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 31977 (count (d/datoms db :eavt))) "Correct datoms count")
 
-    ;; (is (= 3600
-    ;;        (ffirst
-    ;;         (d/q '[:find (count ?b)
-    ;;                :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
-    ;;     "Correct referenced blocks count")
+    (is (= 1017
+           (ffirst
+            (d/q '[:find (count ?b)
+                   :where [?b :block/refs ?bp] [?bp :block/name]] db)))
+        "Correct referenced blocks count")
     (is (= 21
            (ffirst
             (d/q '[:find (count ?b)

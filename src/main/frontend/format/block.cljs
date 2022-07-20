@@ -38,15 +38,13 @@ and handles unexpected failure."
 (defn parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
+  ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
                                                         :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
            blocks (extract-blocks ast content with-id? format)
            new-block (first blocks)
-           {:block/keys [refs]} new-block
-           ref-pages (filter :block/name refs)
            block (cond->
                    (merge block new-block)
                    (> (count blocks) 1)
