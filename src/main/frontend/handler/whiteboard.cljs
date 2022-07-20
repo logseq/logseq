@@ -30,8 +30,15 @@
                               [{:id (.-id fs)
                                 :logseqLink page-or-block-id}])))))))
 
-(def default-tldr
-  (js/JSON.parse "{\"currentPageId\":\"page1\",\"selectedIds\":[],\"pages\":[{\"id\":\"page\",\"name\":\"Page\",\"shapes\":[],\"bindings\":{},\"nonce\":1}],\"assets\":[]}"))
+(defonce default-tldr
+  #js {:currentPageId "page1",
+       :selectedIds #js [],
+       :pages #js [#js {:id "page",
+                        :name "Page",
+                        :shapes #js [],
+                        :bindings #js {},
+                        :nonce 1}],
+       :assets #js []})
 
 (defn create-new-whiteboard-page!
   ([name]
