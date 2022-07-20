@@ -586,6 +586,7 @@
   (<decrypt-fnames [this fnames]))
 
 (defprotocol IRemoteAPI
+  (<user-info [this] "user info")
   (<get-remote-all-files-meta [this graph-uuid] "get all remote files' metadata")
   (<get-remote-files-meta [this graph-uuid filepaths] "get remote files' metadata")
   (<get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
@@ -892,6 +893,7 @@
 
 (extend-type RemoteAPI
   IRemoteAPI
+  (<user-info [this] (.<request this "user_info" {}))
   (<get-remote-all-files-meta [this graph-uuid]
     (let [file-meta-list      (transient #{})
           encrypted-path-list (transient [])]
