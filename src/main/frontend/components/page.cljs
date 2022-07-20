@@ -266,7 +266,8 @@
                             ;; Esc
                             (when (= 27 (.-keyCode e))
                               (reset! *title-value old-name)
-                              (reset! *edit? false)))}]]
+                              (reset! *edit? false)))
+           :on-focus (fn [] (js/setTimeout #(.select input-ref.current)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
