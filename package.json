@@ -63,7 +63,7 @@
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html",
         "cljs:build-electron": "clojure -A:cljs compile app electron",
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
-        "tldraw:build": "cd tldraw && yarn build",
+        "tldraw:build": "cd tldraw && yarn",
         "postinstall": "yarn tldraw:build"
     },
     "dependencies": {
