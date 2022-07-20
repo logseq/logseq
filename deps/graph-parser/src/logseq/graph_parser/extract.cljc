@@ -97,8 +97,7 @@
           ref-pages (atom #{})
           ref-tags (atom #{})
           blocks (map (fn [block]
-                        (let [block-ref-pages (seq (:block/refs block))
-                              page-lookup-ref [:block/name page-name]]
+                        (let [block-ref-pages (seq (:block/refs block))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
