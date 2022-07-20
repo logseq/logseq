@@ -400,12 +400,12 @@
 (def review-finished
   [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (ui/button
    [:span btn-text (when-not (util/sm-breakpoint?)
                      [" " (ui/render-keyboard-shortcut shortcut)])]
    :id id
-   :class id
+   :class (str id " " class)
    :background background
    :on-click (fn [e]
                (when-let [elem (gobj/get e "target")]
@@ -461,12 +461,14 @@
                                               2 "Show answers"
                                               3 "Show clozes")
                                   :shortcut  "s"
-                                  :class "mr-2 card-answers"
+                                  :id "card-answers"
+                                  :class "mr-2"
                                   :on-click #(reset! phase next-phase)}))
             (when (and (> (count cards) 1) preview?)
               (btn-with-shortcut {:btn-text "Next"
                                   :shortcut "n"
-                                  :class "mr-2 card-next"
+                                  :id       "card-next"
+                                  :class    "mr-2"
                                   :on-click (fn [e]
                                               (util/stop e)
                                               (skip-card card card-index cards phase review-records cb))}))
