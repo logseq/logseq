@@ -1929,8 +1929,7 @@
    (and (util/sup? target)
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
-   (dom/closest target "a")
-   (dom/closest target ".dsl-query")))
+   (dom/closest target "a")))
 
 (defn- block-content-on-mouse-down
   [e block block-id _content edit-input-id]
