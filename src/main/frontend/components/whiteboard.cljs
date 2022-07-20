@@ -58,7 +58,7 @@
                 :on-click (fn [e]
                             (util/stop e)
                             (route-handler/redirect-to-whiteboard! (d/squuid) true)))
-     [:div.gap-8.py-4.grid.grid-cols-4.grid-rows-auto
+     [:div.gap-8.py-4.grid.grid-rows-auto.md:grid-cols-3.lg:grid-cols-4.grid-cols-1
       (for [whiteboard-name whiteboard-names]
         [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
 
