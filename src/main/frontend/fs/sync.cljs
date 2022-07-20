@@ -1410,18 +1410,29 @@
   (swap! pwd-map dissoc graph-uuid)
   (remove-pwd! graph-uuid))
 
+(def <get-graph-encrypt-keys-memoize
+  (let [*cache (atom {})]
+    (fn [graph-uuid]
+      (go (or (get @*cache graph-uuid)
+              (let [{:keys [public-key encrypted-private-key] :as r}
+                    (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
+                (when (and public-key encrypted-private-key)
+                  (swap! *cache conj [graph-uuid r]))
+                r))))))
+
 (defn- <loop-ensure-pwd&keys
   [graph-uuid repo *stopped?]
   (go-loop []
     (if @*stopped?
       ::stop
-      (let [{:keys [public-key encrypted-private-key] :as r} (<! (<get-graph-encrypt-keys remoteapi graph-uuid))
+      (let [{:keys [public-key encrypted-private-key] :as r}
+            (<! (<get-graph-encrypt-keys-memoize graph-uuid))
             init-graph-keys (some-> (ex-data r) :err :status #(= 404 %))
             pwd (<! (<ensure-pwd-exists! repo graph-uuid init-graph-keys))]
 
         (cond
           (not pwd)
-          (do (<! <restored-pwd) ;loop to wait password
+          (do (<! <restored-pwd)        ;loop to wait password
               (recur))
 
           init-graph-keys
