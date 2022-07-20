@@ -56,9 +56,8 @@
 
 .logseq-tldraw .action-bar {
   position: absolute;
-  bottom: 0;
-
-  /* width: 100%; */
+  bottom: 0;;
+  border-radius: 0 10px 0 0;
   float: left;
   left: 0;
   grid-row: 1;
@@ -66,13 +65,11 @@
   align-items: center;
   padding: 8px;
   color: black;
-  border-top-right-radius: 15px;
-  border: black solid 1px;
-  border-left: none;
-  border-bottom: none;
+  border: none;
+  height:fit-content;
   z-index: 100000;
   user-select: none;
-  background: white;
+  background: var(--color-panel);
   font-size: inherit;
 }
 
@@ -82,6 +79,7 @@
 
 .logseq-tldraw .action-bar button {
   border-radius: 4px;
+  color: var(--ls-secondary-text-color)
 }
 
 .dropdown-menu-button {
