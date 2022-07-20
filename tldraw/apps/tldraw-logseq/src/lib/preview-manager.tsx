@@ -123,3 +123,18 @@ export class PreviewManager {
     return svgElement ? ReactDOMServer.renderToString(svgElement) : ''
   }
 }
+
+/**
+ * One off helper to generate tldraw preview
+ *
+ * @param serializedApp
+ */
+export function generateSVGFromApp(serializedApp: TLDocumentModel<Shape>) {
+  const preview = new PreviewManager(serializedApp)
+  return preview.exportAsSVG()
+}
+
+export function generateJSXFromApp(serializedApp: TLDocumentModel<Shape>) {
+  const preview = new PreviewManager(serializedApp)
+  return preview.generatePreviewJsx()
+}

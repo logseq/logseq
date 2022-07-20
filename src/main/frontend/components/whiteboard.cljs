@@ -3,7 +3,8 @@
             [frontend.components.page :as page]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :refer [create-new-whiteboard-page!]]
+            [frontend.handler.whiteboard :refer [create-new-whiteboard-page!
+                                                 page-name->tldr]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -24,13 +25,28 @@
     (when draw-component
       (draw-component name))))
 
+(rum/defc tldraw-preview < rum/reactive
+  {:init (fn [state]
+           (p/let [_ (loader/load :tldraw)]
+             (reset! tldraw-loaded? true))
+           state)}
+  [tldr]
+  (let [loaded? (rum/react tldraw-loaded?)
+        generate-preview (when loaded?
+                           (resolve 'frontend.extensions.tldraw/generate-preview))]
+    (when generate-preview
+      (generate-preview tldr))))
+
 (rum/defc dashboard-card
   [page-name]
-  [:a.border.p-4.rounded.text-xl
-   {:on-mouse-down
-    (fn [e]
-      (util/stop e)
-      (route-handler/redirect-to-whiteboard! page-name))} page-name])
+  (let [tldr (page-name->tldr page-name)]
+    [:a.border.p-4.rounded.text-xl
+     {:on-mouse-down
+      (fn [e]
+        (util/stop e)
+        (route-handler/redirect-to-whiteboard! page-name))}
+     [:span page-name]
+     (tldraw-preview tldr)]))
 
 (rum/defc whiteboard-dashboard
   []
@@ -43,7 +59,7 @@
                             (route-handler/redirect-to-whiteboard! (d/squuid) true)))
      [:div.flex.flex-col.gap-4.py-2
       (for [whiteboard-name whiteboard-names]
-        [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
+        [:<> {:key whiteboard-name}])]]))
 
 (rum/defc whiteboard
   [route-match]

@@ -12,6 +12,8 @@
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
+(def generate-preview (gobj/get TldrawLogseq "generateJSXFromApp"))
+
 (rum/defcs tldraw-app < rum/reactive
   (rum/local false ::view-mode?)
   [state name]
