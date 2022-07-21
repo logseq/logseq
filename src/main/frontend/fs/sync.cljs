@@ -1181,7 +1181,7 @@
               _ (swap! *sync-state sync-state--add-current-remote->local-files paths)
               r (<! (apply-filetxns graph-uuid base-path filetxns))
               _ (swap! *sync-state sync-state--remove-current-remote->local-files paths
-                       (instance? ExceptionInfo r))]
+                       (not (instance? ExceptionInfo r)))]
           ;; remove these recent-remote->local-file-items 5s later
           (go (<! (timeout 5000))
               (swap! *sync-state sync-state--remove-recent-remote->local-files
@@ -1397,7 +1397,8 @@
             (state/pub-event! [:modal/remote-encryption-input-pw-dialog repo
                                (state/get-remote-graph-info-by-uuid graph-uuid)
                                :input-pwd-remote
-                               {:init-graph-keys init-graph-keys
+                               {:GraphUUID graph-uuid
+                                :init-graph-keys init-graph-keys
                                 :after-input-password #(go (<! (restore-pwd! graph-uuid))
                                                            (offer! <restored-pwd true))}])
             nil)
@@ -1427,7 +1428,7 @@
       ::stop
       (let [{:keys [public-key encrypted-private-key] :as r}
             (<! (<get-graph-encrypt-keys-memoize graph-uuid))
-            init-graph-keys (some-> (ex-data r) :err :status #(= 404 %))
+            init-graph-keys (some-> (ex-data r) :err :status (= 404))
             pwd (<! (<ensure-pwd-exists! repo graph-uuid init-graph-keys))]
 
         (cond
