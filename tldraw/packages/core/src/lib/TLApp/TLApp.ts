@@ -218,7 +218,7 @@ export class TLApp<
       currentPageId: this.currentPageId,
       selectedIds: Array.from(this.selectedIds.values()),
       pages: Array.from(this.pages.values()).map(page => page.serialized),
-      assets: Object.values(this.assets),
+      assets: this.getCleanUpAssets()
     }
   }
 
@@ -338,6 +338,21 @@ export class TLApp<
     else (assets as T[]).forEach(asset => delete this.assets[(asset as T).id])
     this.persist()
     return this
+  }
+
+  getCleanUpAssets<T extends TLAsset>(): T[] {
+    let deleted = false
+    const usedAssets = new Set<T>()
+
+    this.pages.forEach(p =>
+      p.shapes.forEach(s => {
+        if (s.props.assetId && this.assets[s.props.assetId]) {
+          // @ts-expect-error ???
+          usedAssets.add(this.assets[s.props.assetId])
+        }
+      })
+    )
+    return Array.from(usedAssets)
   }
 
   createAssets<T extends TLAsset>(assets: T[]): this {
