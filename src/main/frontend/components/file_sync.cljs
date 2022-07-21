@@ -156,7 +156,7 @@
                                         {:href (if page-name
                                                  (rfe/href :page {:name page-name})
                                                  (rfe/href :file {:path full-path}))}
-                                        (str (:path f) (when page-name (str " - " page-name)))]
+                                        (str (:path f))]
                                        [:div.opacity-50 (util/time-ago (:time f))]]}))
                           (take 10 (:history sync-state))))))
 
