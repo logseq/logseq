@@ -6,6 +6,17 @@
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.state :as state]))
 
+;; (defn set-linked-page-or-block!
+;;   [page-or-block-id]
+;;   (when-let [app ^js (state/get-current-whiteboard)]
+;;     (let [shapes (:whiteboard/linked-shapes @state/state)]
+;;       (when (and (seq shapes) page-or-block-id)
+;;         (let [fs (first shapes)]
+;;           (.updateShapes app (clj->js
+;;                               [{:id (.-id fs)
+;;                                 :logseqLink page-or-block-id}])))))))
+
+
 ;; FIXME: embed /draw should be supported too
 (defn whiteboard-mode?
   []
@@ -71,7 +82,7 @@
         assets (:assets page-properties)
         page-properties (dissoc page-properties :assets)]
     (clj->js {:currentPageId id
-              :assets assets
+              :assets (or assets #js [])
               :pages [(merge page-properties
                              {:id id
                               :name "page"
@@ -89,15 +100,6 @@
         tx (tldr-page->blocks-tx page-name (assoc (first pages) :assets assets))]
     (db-utils/transact! tx)))
 
-(defn set-linked-page-or-block!
-  [page-or-block-id]
-  (when-let [app ^js (state/get-current-whiteboard)]
-    (let [shapes (:whiteboard/linked-shapes @state/state)]
-      (when (and (seq shapes) page-or-block-id)
-        (let [fs (first shapes)]
-          (.updateShapes app (clj->js
-                              [{:id (.-id fs)
-                                :logseqLink page-or-block-id}])))))))
 
 (defn get-default-tldr
   [page-id]

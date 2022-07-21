@@ -1,5 +1,6 @@
 (ns frontend.extensions.tldraw
   (:require ["/tldraw-logseq" :as TldrawLogseq]
+            [clojure.string :as string]
             [frontend.components.page :refer [page]]
             [frontend.handler.whiteboard :refer [page-name->tldr
                                                  transact-tldr!]]
@@ -18,7 +19,7 @@
   (rum/local false ::view-mode?)
   [state name]
   (let [data (page-name->tldr name)]
-    (when name
+    (when (and name (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}
         :on-blur #(state/set-block-component-editing-mode! false)

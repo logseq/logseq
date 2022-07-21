@@ -64,7 +64,10 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
       id: this.id,
       name: this.name,
       // @ts-expect-error maybe later
-      shapes: this.shapes.map(shape => shape.serialized).filter(s => !!s).map(s => toJS(s)),
+      shapes: this.shapes
+        .map(shape => shape.serialized)
+        .filter(s => !!s)
+        .map(s => toJS(s)),
       bindings: deepCopy(this.bindings),
       nonce: this.nonce,
     }
@@ -258,6 +261,17 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
         if (idx !== -1) {
           updated.shapes[idx] = nextShape
         }
+      }
+    })
+
+    // Cleanup outdated bindings
+    Object.keys(updated.bindings).forEach(id => {
+      if (
+        !updated.shapes.find(
+          shape => shape.id === updated.bindings[id].toId || updated.bindings[id].fromId
+        )
+      ) {
+        delete updated.bindings[id]
       }
     })
 
