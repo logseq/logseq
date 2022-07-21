@@ -1292,7 +1292,8 @@
     (when (string/ends-with? current-graph dir)
       (when-not (some-> (state/get-file-sync-state current-graph)
                         sync-state--stopped?)
-        (when (:mtime stat)
+        (println :debug :file-watch [type path stat])
+        (when (or (:mtime stat) (= type "unlink"))
           (go (>! local-changes-chan (->FileChangeEvent type dir path stat))))))))
 
 ;;; ### encryption
