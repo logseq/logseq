@@ -71,7 +71,7 @@
    {:id                "nav-journal-page"
     :text              (h/render-html [:section [:h2 "📆 Daily Journal Page"]
                                        [:p
-                                        [:span "This is today’s daily journal page. Here yo can dump your thoughts, learnings and ideas. Don’t worry about organizing. Just write and"]
+                                        [:span "This is today’s daily journal page. Here you can dump your thoughts, learnings and ideas. Don’t worry about organizing. Just write and"]
                                         [:a "[[link]]"]
                                         [:span "your thoughts."]]])
 
