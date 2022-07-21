@@ -87,7 +87,7 @@ export function useResizeObserver<T extends HTMLElement>(
       if (app.selectedIds.size) {
         app.api.zoomToSelection()
       } else {
-        app.api.cameraToCenter()
+        app.api.zoomToFit()
       }
     }, 50)
   }, [ref])

@@ -83,7 +83,7 @@
         page-properties (dissoc page-properties :assets)]
     (clj->js {:currentPageId id
               :assets (or assets #js[])
-              :selectedIds (if shape-id #js[shape-id] #js[])
+              :selectedIds (if (not-empty shape-id) #js[shape-id] #js[])
               :pages [(merge page-properties
                              {:id id
                               :name "page"
