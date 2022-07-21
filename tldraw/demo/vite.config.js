@@ -22,6 +22,7 @@ export default defineConfig({
   ],
   server: {
     port: '3031',
+    force: true,
     fs: {
       strict: false,
     },

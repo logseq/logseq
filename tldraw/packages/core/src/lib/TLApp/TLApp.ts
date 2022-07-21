@@ -348,7 +348,7 @@ export class TLApp<
   }
 
   copy = () => {
-    if (this.selectedShapesArray.length > 0) {
+    if (this.selectedShapesArray.length > 0 && !this.editingShape) {
       const tldrawString = JSON.stringify({
         type: 'logseq/whiteboard-shapes',
         shapes: this.selectedShapesArray.map(shape => shape.serialized),
@@ -362,7 +362,7 @@ export class TLApp<
   }
 
   paste = (e?: ClipboardEvent) => {
-    if (this.editingShape) {
+    if (!this.editingShape) {
       this.notify('paste', {
         point: this.inputs.currentPoint,
       })

@@ -23,7 +23,7 @@ export function useKeyboardEvents() {
       }
     })
     document.addEventListener('copy', e => {
-      if (!app.editingShape) {
+      if (!app.editingShape && app.selectedShapes.size > 0) {
         e.preventDefault()
         app.copy()
       }
