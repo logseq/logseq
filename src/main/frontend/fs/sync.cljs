@@ -760,8 +760,16 @@
                                                                              :token token})))))]
         r)))
 
-  (<download-version-files [_this _graph-uuid _base-path _filepaths]
-    (println :TODO :<download-version-files))
+  (<download-version-files [this graph-uuid base-path filepaths]
+    (go
+      (let [token (<! (<get-token this))
+            r (<! (<retry-rsapi 
+                   #(p->c (.updateLocalVersionFiles mobile-util/file-sync
+                                                                (clj->js {:graphUUID graph-uuid
+                                                                          :basePath base-path
+                                                                          :filePaths filepaths
+                                                                          :token token})))))]
+        r)))
 
   (<delete-local-files [_ _graph-uuid base-path filepaths]
     (go
