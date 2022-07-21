@@ -383,6 +383,56 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             }
         }
     }
+    
+    @objc func updateLocalVersionFiles(_ call: CAPPluginCall) {
+        guard let baseURL = call.getString("basePath").flatMap({path in URL(string: path)}),
+              let filePaths = call.getArray("filePaths") as? [String],
+              let graphUUID = call.getString("graphUUID") ,
+              let token = call.getString("token") else {
+                  call.reject("required paremeters: basePath, filePaths, graphUUID, token")
+                  return
+              }
+        
+        print("update local version files \(baseURL) \(filePaths)")
+    
+        let client = SyncClient(token: token, graphUUID: graphUUID)
+        client.delegate = self // receives notification
+
+        client.getVersionFiles(at: filePaths) {  (fileURLDict, error) in
+            if let error = error {
+                print("debug getVersionFiles error \(error)")
+                self.debugNotification(["event": "version-download:error", "data": ["message": "error while getting version files \(filePaths)"]])
+                call.reject(error.localizedDescription)
+            } else {
+                // handle multiple completionHandlers
+                let group = DispatchGroup()
+
+                var downloaded: [String] = []
+
+                for (filePath, remoteFileURL) in fileURLDict {
+                    group.enter()
+
+                    // NOTE: fileURLs from getFiles API is percent-encoded
+                    let localFileURL = baseURL.appendingPathComponent("logseq/version-files/").appendingPathComponent(filePath.decodeFromFname())
+                    remoteFileURL.download(toFile: localFileURL) {error in
+                        if let error = error {
+                            self.debugNotification(["event": "version-download:error", "data": ["message": "error while downloading \(filePath): \(error)"]])
+                            print("debug download \(error) in \(filePath)")
+                        } else {
+                            self.debugNotification(["event": "version-download:file", "data": ["file": filePath]])
+                            downloaded.append(filePath)
+                        }
+                        group.leave()
+                    }
+                }
+                group.notify(queue: .main) {
+                    self.debugNotification(["event": "version-download:done"])
+                    call.resolve(["ok": true, "data": downloaded])
+                }
+
+            }
+        }
+    }
 
     @objc func deleteRemoteFiles(_ call: CAPPluginCall) {
         guard var filePaths = call.getArray("filePaths") as? [String],
