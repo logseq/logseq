@@ -224,12 +224,15 @@
      :auth/id-token                         nil
 
      ;; file-sync
+     :file-sync/jstour-inst                   nil
      :file-sync/remote-graphs               {:loading false :graphs nil}
      :file-sync/sync-manager                nil
      :file-sync/sync-state-manager          nil
      :file-sync/sync-state                  nil
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
+     :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
+                                                {:welcome false :initial false :history false})
 
      :encryption/graph-parsing?             false
 

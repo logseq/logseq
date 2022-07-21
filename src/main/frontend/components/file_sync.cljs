@@ -21,10 +21,18 @@
             [logseq.graph-parser.config :as gp-config]
             [clojure.string :as string]
             [reitit.frontend.easy :as rfe]
+            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.db :as db]))
+
+(declare maybe-onboarding-show)
 
 (rum/defc create-remote-graph-panel
   [repo graph-name close-fn]
+
+  (rum/use-effect!
+   #(some->> (state/sub :file-sync/jstour-inst)
+             (.complete))
+   [])
 
   (let [on-confirm
         (fn []
@@ -378,7 +386,9 @@
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Later" :on-click close-fn :background "gray" :class "opacity-60")
-    (ui/button "Start syncing")]])
+    (ui/button "Start syncing" :on-click (fn []
+                                           (close-fn)
+                                           (maybe-onboarding-show :sync-initiate)))]])
 
 (rum/defc onboarding-unavailable-file-sync
   [close-fn]
@@ -457,3 +467,28 @@
       [:p
        [:h1.text-xl.font-bold "Not handled!"]
        [:a.button {:on-click close-fn} "Got it!"]])))
+
+(defn maybe-onboarding-show
+  [type]
+  (when-not (get (state/sub :file-sync/onboarding-state) (keyword type))
+    (try
+      (let [current-repo (state/get-current-repo)
+            local-repo?  (= current-repo config/local-repo)
+            login?       (boolean (state/sub :auth/id-token))]
+
+        (when login?
+          (case type
+
+            :welcome
+            (when (or local-repo?
+                      (:GraphUUID (repo-handler/get-detail-graph-info current-repo)))
+              (throw (js/Error. "current repo have been local or remote graph")))
+
+            (:sync-initiate :sync-learn :sync-history)
+            (do (quick-tour/ready
+                 #(quick-tour/start-file-sync type))
+                (throw (js/Error. nil))))
+
+          (state/pub-event! [:file-sync/onboarding-tip type])))
+      (catch js/Error e
+        (js/console.warn "[onboarding SKIP] " (name type) e)))))

@@ -72,11 +72,12 @@
     (async/<! (file-sync-handler/load-session-graphs))
     (p/let [repos (repo-handler/refresh-repos!)]
       (when-let [repo (state/get-current-repo)]
-        (when (some #(and (= (:url %) repo)
+        (if (some #(and (= (:url %) repo)
                           (vector? (:sync-meta %))
                           (util/uuid-string? (first (:sync-meta %)))
                           (util/uuid-string? (second (:sync-meta %)))) repos)
-          (file-sync-restart!))))))
+          (file-sync-restart!))
+        (file-sync/maybe-onboarding-show :welcome)))))
 
 (defmethod handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)

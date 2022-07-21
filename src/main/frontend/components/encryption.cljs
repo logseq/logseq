@@ -54,6 +54,11 @@
   (rum/local "" ::password)
   (rum/local "" ::pw-confirm)
   (rum/local false ::pw-confirm-focused?)
+  {:will-mount (fn [state]
+                 ;; try to close tour tips
+                 (some->> (state/sub :file-sync/jstour-inst)
+                          (.complete))
+                 state)}
   [state repo-url close-fn {:keys [type GraphName GraphUUID init-graph-keys after-input-password]}]
   (let [*password (get state ::password)
         *pw-confirm (get state ::pw-confirm)

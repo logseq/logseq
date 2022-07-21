@@ -181,30 +181,25 @@
     (.start jsTour)))
 
 (defn start-file-sync
-  []
-  (let [^js jsTour (js/Shepherd.Tour.
-                    (bean/->js
-                     {:useModalOverlay    true
-                      :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
-                                           :scrollTo false}}))
-        steps      (create-steps-file-sync! jsTour)
-        ;steps      (map-indexed #(assoc %2 :text (str (:text %2) (inject-steps-indicator (inc %1) (count steps)))) steps)
-        ]
+  [type]
+  (let [^js jsTour (state/sub :file-sync/jstour-inst)
+        ^js jsTour (or jsTour
+                       (let [^js inst (js/Shepherd.Tour.
+                                       (bean/->js
+                                        {:useModalOverlay    true
+                                         :defaultStepOptions {:classes  "cp__onboarding-quick-tour"
+                                                              :scrollTo false}}))
+                             steps    (create-steps-file-sync! inst)]
 
-    ;; events
-    (doto jsTour
-      ;(.on "show" show-skip!)
-      ;(.on "hide" hide-skip!)
-      ;(.on "complete" hide-skip!)
-      ;(.on "cancel" hide-skip!)
-      )
+                         (doseq [step steps]
+                           (.addStep inst (bean/->js step)))
 
-    (doseq [step steps]
-      (.addStep jsTour (bean/->js step)))
+                         (state/set-state! :file-sync/jstour-inst inst)
+
+                         inst))]
 
     (js/setTimeout
-     #(.show jsTour "sync-initiate")
-     1000)
+     #(.show jsTour (name type)) 200)
 
     ;(.start jsTour)
     ))
