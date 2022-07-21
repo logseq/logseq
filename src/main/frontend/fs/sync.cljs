@@ -341,8 +341,9 @@
   (every? true?
           (mapv
            (fn [^FileTxn filetxn]
-             (when (.-updated? filetxn)
-               (some? (-checksum filetxn))))
+             (if (.-updated? filetxn)
+               (some? (-checksum filetxn))
+               true))
            filetxns)))
 
 (defn- diff->filetxns
