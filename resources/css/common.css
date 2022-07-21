@@ -163,7 +163,6 @@ html:not(.is-native-android) {
 html {
   /* FIXME: rewrite revealjs.css ? */
   height: unset !important;
-  overflow: auto !important;
 }
 
 body {
