@@ -314,6 +314,9 @@
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
+(defmethod handle :copyDirectory [^js _window [_ src dest opts]]
+  (fs-extra/copy src dest opts))
+
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
 

@@ -307,6 +307,7 @@
     > .folder-tip {
       @apply mt-5 py-4 rounded-md;
 
+      -webkit-font-smoothing: antialiased;
       background-color: var(--ls-quaternary-background-color);
 
       .ti {
@@ -320,6 +321,14 @@
 
       h4 {
         @apply text-sm opacity-50 pt-1;
+      }
+
+      .out-icloud {
+        @apply w-full;
+
+        button {
+          @apply w-full border-none rounded-t-none translate-y-4;
+        }
       }
     }
 
