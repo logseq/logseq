@@ -61,8 +61,11 @@
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
         shapes (map block->shape blocks)
-        page-properties (:block/properties page-block)]
+        page-properties (:block/properties page-block)
+        assets (:assets page-properties)
+        page-properties (dissoc page-properties :assets)]
     (clj->js {:currentPageId id
+              :assets assets
               :pages [(merge page-properties
                              {:id id
                               :name "page"
@@ -76,8 +79,8 @@
   (db-utils/entity [:block/name page-name]))
 
 (defn transact-tldr! [page-name tldr]
-  (let [{:keys [pages]} (js->clj tldr :keywordize-keys true)
-        tx (tldr-page->blocks-tx page-name (first pages))]
+  (let [{:keys [pages assets]} (js->clj tldr :keywordize-keys true)
+        tx (tldr-page->blocks-tx page-name (assoc (first pages) :assets assets))]
     (db-utils/transact! tx)))
 
 (defn set-linked-page-or-block!

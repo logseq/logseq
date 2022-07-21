@@ -87,7 +87,7 @@
 
      ;; makes sure the whiteboard will not cover the borders
      {:key name
-      :style {:padding "0.5px" :z-index 0}}
+      :style {:padding "0.5px" :z-index 0 :transform "translateZ(0)" :text-rendering "geometricPrecision" :-webkit-font-smoothing "subpixel-antialiased"}}
 
      [:div.absolute.p-4.flex.items-start
       {:style {:z-index 2000}}
