@@ -911,15 +911,21 @@
      (some-> string str (js/decodeURIComponent))))
 
 #?(:cljs
+   (def safe-url-decode gp-util/safe-url-decode))
+
+#?(:cljs
    (defn include-reserved-chars?
      [s]
      (safe-re-find gp-util/reserved-chars-pattern s)))
 
 #?(:cljs
    (defn create-title-property?
-     [s]
-     (and (string? s)
-          (include-reserved-chars? s))))
+     [page-name]
+     (and (string? page-name)
+          (let [file-name  (gp-util/file-name-sanity page-name)
+                page-name' (gp-util/page-name-parsing file-name)]
+            (or (not= page-name page-name')
+                (include-reserved-chars? file-name))))))
 
 #?(:cljs
    (defn search-normalize

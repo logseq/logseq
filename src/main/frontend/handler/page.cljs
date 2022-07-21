@@ -100,19 +100,18 @@
 
 (defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
-    (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title? (create-title-property? journal?
-                                                (or
-                                                 (:block/original-name page)
-                                                 (:block/name page)))
-          page (if (seq properties) (assoc page :block/properties properties) page)
-          page-empty? (db/page-empty? (state/get-current-repo) (:block/name page))]
+    (let [page-entity   [:block/uuid (:block/uuid page)]
+          title         (util/get-page-original-name page)
+          create-title? (create-title-property? journal? title)
+          page          (if (seq properties) (assoc page :block/properties properties) page)
+          page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
         (not page-empty?)
         [page]
-
+        
         create-title?
         (let [properties-block (default-properties-block (build-title page) format page-entity properties)]
+          (js/console.error "`util/create-title-property?` return true for page " title)
           [page
            properties-block])
 
@@ -439,10 +438,9 @@
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
         (d/transact! (db/get-db repo false) page-txs)
-
-        ;; If page name changed after sanitization
-        (when (or (util/create-title-property? new-page-name)
-                  (not= (gp-util/page-name-sanity new-name) new-name))
+        
+        (when (util/create-title-property? new-page-name)
+          (js/console.error "`util/create-title-property?` return true for page " new-page-name)
           (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))

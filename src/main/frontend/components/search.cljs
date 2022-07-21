@@ -180,7 +180,7 @@
 (defn- search-item-render
   [search-q {:keys [type data alias]}]
   (let [search-mode (state/get-search-mode)
-        data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
+        data (if (string? data) (pdf-assets/fix-local-asset-pagename data) data)]
     [:div {:class "py-2"}
      (case type
        :graph-add-filter

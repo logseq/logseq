@@ -67,10 +67,7 @@
        nil)
      react)))
 
-(defn get-original-name
-  [page-entity]
-  (or (:block/original-name page-entity)
-      (:block/name page-entity)))
+(def get-original-name util/get-page-original-name)
 
 (defn get-tag-pages
   [repo tag-name]

@@ -102,29 +102,51 @@
                  (conj result (str prev "/" (first others)))))
         result))))
 
+;; Should not contains %
+;; Should not contains any reserved character
+(def PERCENT-ESCAPE-CODE "_0x")
+
+(def PERCENT-ESCAPE-CODE-PATTERN (re-pattern PERCENT-ESCAPE-CODE))
+
+(def PERCENT-ESCAPE-URLENCODED-PATTERN (re-pattern (str PERCENT-ESCAPE-CODE "[0-9A-Fa-f]{2}")))
+
+(defn escape-lowbar
+  "Escape when ambiguation happens"
+  [input]
+  (string/replace input #"_" "%5F"))
+
 (defn escape-namespace-slashes-and-multilowbars
   "Encode slashes / as double lowbars __
    Don't encode _ in most cases, except causing ambiguation"
   [string]
-  (string/replace string #"__" "%5F%5F")
-  (string/replace string #"_/" "%5F/")
-  (string/replace string #"/_" "/%5F")
-  (string/replace string #"/" "__"))
+  (-> string
+      ;; The ambiguation is caused by the unbounded _ (possible continuation of `_`s)
+      (string/replace PERCENT-ESCAPE-CODE-PATTERN escape-lowbar)
+      (string/replace #"__" escape-lowbar)
+      (string/replace #"_/" escape-lowbar)
+      (string/replace #"/_" escape-lowbar)
+      ;; After ambiguaous _ encoded, encode the slash
+      (string/replace #"/" "__")))
 
 (defn decode-namespace-underlines
   "Decode namespace underlines to slashed;
    If continuous underlines, only decode at start;
    Having empty namespace is invalid."
   [string]
-  (string/replace string "[^_]__" "/"))
+  (string/replace string #"__" "/"))
 
 (defn escape-urlencode-percent-signs
   [string]
-  (string/replace string #"%" "_byted."))
+  (string/replace string #"%" PERCENT-ESCAPE-CODE))
 
-(defn decode-urlencode-byted
+(defn- decode-urlencode-byted
   [string]
-  (string/replace string "_byted." "%"))
+  (string/replace string PERCENT-ESCAPE-CODE "%"))
+
+(defn decode-urlencode-escaped
+"Only decode when the percent sign escaped pattern is followed by a valid ascii hex code"
+  [string]
+  (string/replace string PERCENT-ESCAPE-URLENCODED-PATTERN decode-urlencode-byted))
 
 (defn page-name-sanity
   "Sanitize the page-name. Unify different diacritics and other visual differences.
@@ -150,12 +172,21 @@
                    "]+")))
 
 (defn url-encode
+  "This URL encoding is for filename escaping in Logseq"
   ;; Don't encode `/`, they will be handled in `escape-namespace-slashes-and-multilowbars`
   ;; Don't encode `_` except the cases mentioned in `escape-namespace-slashes-and-multilowbars`
   [string]
-  (some-> string str (js/encodeURIComponent) 
-          (.replace "+" "%20")
-          (.replace "*" "%2A")))
+  (some-> string str
+          (js/encodeURIComponent)
+          (string/replace #"\*" "%2A")))
+
+(defn safe-url-decode
+  [string]
+  (if (string/includes? string "%")
+    (try (some-> string str (js/decodeURIComponent))
+         (catch :default _
+           string))
+    string))
 
 (defn file-name-sanity
   "Sanitize page-name for file name (strict), for file name in file writing."
@@ -166,13 +197,22 @@
           (escape-namespace-slashes-and-multilowbars)
           (escape-urlencode-percent-signs)))
 
+(defn validize-namespaces
+  "Remove those empty namespaces from title to make it a valid page name."
+  [title]
+  (->> (string/split title "/")
+       (remove empty?)
+       (string/join "/")))
+
 (defn page-name-parsing
   "Parse the file name back into page name"
   [file-name]
   (some-> file-name
-          (decode-urlencode-byted)
+          (string/replace #"%" file-name-sanity) ;; a valid file name should contains no %. however, user might ruin it, so encode them
+          (decode-urlencode-escaped)
           (decode-namespace-underlines)
-          (js/decodeURIComponent)))
+          (js/decodeURIComponent)
+          (validize-namespaces)))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page name (mandate for :block/name)"
