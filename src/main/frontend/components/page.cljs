@@ -375,8 +375,9 @@
                :on-mouse-leave (fn [e]
                                  (page-mouse-leave e *control-show?))}
               (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-           [:div.flex-1.flex-row
-            [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]]
+           (when-not whiteboard?
+             [:div.flex-1.flex-row
+              [:h1.title.ls-page-title (page-title page-name icon title format fmt-journal?)]])
            (when (not config/publishing?)
              [:div.flex.flex-row
               (when plugin-handler/lsp-enabled?
