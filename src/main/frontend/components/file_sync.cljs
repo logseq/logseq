@@ -487,7 +487,8 @@
             (:sync-initiate :sync-learn :sync-history)
             (do (quick-tour/ready
                  #(quick-tour/start-file-sync type))
-                (throw (js/Error. nil))))
+                (throw (js/Error. nil)))
+            :default)
 
           (state/pub-event! [:file-sync/onboarding-tip type])))
       (catch js/Error e

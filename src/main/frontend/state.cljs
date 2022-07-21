@@ -232,7 +232,7 @@
      :file-sync/sync-uploading-files        nil
      :file-sync/sync-downloading-files      nil
      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
-                                                {:welcome false :initial false :history false})
+                                                {:welcome false})
 
      :encryption/graph-parsing?             false
 

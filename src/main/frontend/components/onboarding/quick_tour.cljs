@@ -124,7 +124,10 @@
                                     [:p "Clicking here will start the process of uploading your local files to an encrypted remote graph.."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
-    :buttons        [{:text "Continue" :action (.-complete jsTour)}]
+    :buttons        [{:text "Continue" :action (fn []
+                                                 (some->> (js/document.querySelector ".cp__file-sync-indicator a.button")
+                                                          (.click))
+                                                 (.complete jsTour))}]
     :popperOptions  {:modifiers [{:name    "preventOverflow"
                                   :options {:padding 20}}
                                  {:name    "offset"
@@ -136,7 +139,9 @@
                                     [:p "By clicking this icon you will see the progress of your local graph being synced with the cloud."]])
     :attachTo       {:element ".cp__file-sync-indicator" :on "bottom"}
     :canClickTarget true
-    :buttons        [{:text "Got it!" :action (.-complete jsTour)}]
+    :buttons        [{:text "Got it!" :action (fn []
+                                                (.complete jsTour)
+                                                (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :congrats]) 3000))}]
     :popperOptions  {:modifiers [{:name    "preventOverflow"
                                   :options {:padding 20}}
                                  {:name    "offset"

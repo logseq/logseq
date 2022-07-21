@@ -576,6 +576,9 @@
     (keyword type))
    (merge {:close-btn? false :center? true} opts)))
 
+(defmethod handle :file-sync/maybe-onboarding-show [[_ type]]
+  (file-sync/maybe-onboarding-show type))
+
 (defmethod handle :file-sync/storage-exceed-limit [[_]]
   (notification/show! "file sync storage exceed limit" :warning false)
   (file-sync-stop!))

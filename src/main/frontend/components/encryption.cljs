@@ -67,7 +67,7 @@
         remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
         set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])]
-    [:div.encryption-password.max-w-2xl
+    [:div.encryption-password.max-w-2xl.-mb-2
      [:div.cp__file-sync-related-normal-modal
       [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "lock-access")]]
 
@@ -191,7 +191,9 @@
                                (if (instance? js/Error persist-r)
                                  (js/console.error persist-r)
                                  (when (fn? after-input-password)
-                                   (async/<! (after-input-password))))))))))))]]))
+                                   (async/<! (after-input-password))
+                                   ;; TODO: it's better if based on sync state
+                                   (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000)))))))))))]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
