@@ -24,10 +24,11 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
             [frontend.search :as search]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -347,6 +348,7 @@
           page-name (:block/name page)
           page-original-name (:block/original-name page)
           title (or page-original-name page-name)
+          whiteboard? (whiteboard-handler/whiteboard-mode?)
           icon (or icon "")
           today? (and
                   journal?
@@ -400,12 +402,13 @@
          (tagged-pages repo page-name))
 
        ;; referenced blocks
-       [:div {:key "page-references"}
-        (rum/with-key
-          (reference/references route-page-name)
-          (str route-page-name "-refs"))]
+       (when-not whiteboard?
+         [:div {:key "page-references"}
+          (rum/with-key
+            (reference/references route-page-name)
+            (str route-page-name "-refs"))])
 
-       (when-not block?
+       (when-not (or block? whiteboard?)
          [:div
           (when (not journal?)
             (hierarchy/structures route-page-name))

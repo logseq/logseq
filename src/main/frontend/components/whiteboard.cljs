@@ -93,7 +93,7 @@
       {:style {:z-index 2000}}
       [:span.inline-flex.color-level.text-xl.px-2
        (page/page-title name [:<>
-                              [:span.text-gray-500.ti.ti-artboard.mr-1
+                              [:span.text-gray-500.ti.ti-artboard
                                {:style {:font-size "0.9em"}}]]
                         name nil false)]
 

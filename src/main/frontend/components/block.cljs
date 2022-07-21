@@ -634,7 +634,7 @@
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket "[["])
-       (when whiteboard? [:span.text-gray-500.ti.ti-artboard])
+       (when whiteboard? [:span.text-gray-500.ti.ti-artboard " "])
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)

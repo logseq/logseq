@@ -82,7 +82,8 @@
         assets (:assets page-properties)
         page-properties (dissoc page-properties :assets)]
     (clj->js {:currentPageId id
-              :assets (or assets #js [])
+              :assets (or assets #js[])
+              :selectedIds #js[]
               :pages [(merge page-properties
                              {:id id
                               :name "page"

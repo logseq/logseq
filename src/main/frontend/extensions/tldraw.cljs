@@ -1,6 +1,5 @@
 (ns frontend.extensions.tldraw
   (:require ["/tldraw-logseq" :as TldrawLogseq]
-            [clojure.string :as string]
             [frontend.components.page :refer [page]]
             [frontend.handler.whiteboard :refer [page-name->tldr
                                                  transact-tldr!]]
