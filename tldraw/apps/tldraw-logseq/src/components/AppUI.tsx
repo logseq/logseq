@@ -7,7 +7,7 @@ import { DevTools } from './Devtools'
 import { Minimap } from './Minimap'
 import { ActionBar } from './ActionBar'
 
-const isDev = process.env.NODE_ENV !== 'development'
+const isDev = process.env.NODE_ENV === 'development'
 
 export const AppUI = observer(function AppUI() {
   return (
