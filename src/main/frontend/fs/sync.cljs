@@ -341,8 +341,9 @@
   (every? true?
           (mapv
            (fn [^FileTxn filetxn]
-             (when (.-updated? filetxn)
-               (some? (-checksum filetxn))))
+             (if (.-updated? filetxn)
+               (some? (-checksum filetxn))
+               true))
            filetxns)))
 
 (defn- diff->filetxns
@@ -351,10 +352,6 @@
   {:post [(assert-filetxns %)]}
   (let [update? (= "update_files" TXType)
         delete? (= "delete_files" TXType)
-        decoded-tx-content (map (fn [[to-path from-path checksum]]
-                                  [(js/decodeURIComponent to-path)
-                                   (when from-path (js/decodeURIComponent from-path))
-                                   checksum]) TXContent)
         update-xf
         (comp
          (remove #(or (empty? (first %))
@@ -373,7 +370,7 @@
              "delete_files" delete-xf
              "update_files" update-xf
              "rename_file" rename-xf)]
-    (sequence xf decoded-tx-content)))
+    (sequence xf TXContent)))
 
 (defn- distinct-update-filetxns-xf
   "transducer.
@@ -763,8 +760,16 @@
                                                                              :token token})))))]
         r)))
 
-  (<download-version-files [_this _graph-uuid _base-path _filepaths]
-    (println :TODO :<download-version-files))
+  (<download-version-files [this graph-uuid base-path filepaths]
+    (go
+      (let [token (<! (<get-token this))
+            r (<! (<retry-rsapi 
+                   #(p->c (.updateLocalVersionFiles mobile-util/file-sync
+                                                                (clj->js {:graphUUID graph-uuid
+                                                                          :basePath base-path
+                                                                          :filePaths filepaths
+                                                                          :token token})))))]
+        r)))
 
   (<delete-local-files [_ _graph-uuid base-path filepaths]
     (go
@@ -1292,7 +1297,8 @@
     (when (string/ends-with? current-graph dir)
       (when-not (some-> (state/get-file-sync-state current-graph)
                         sync-state--stopped?)
-        (when (:mtime stat)
+        (println :debug :file-watch [type path stat])
+        (when (or (:mtime stat) (= type "unlink"))
           (go (>! local-changes-chan (->FileChangeEvent type dir path stat))))))))
 
 ;;; ### encryption
@@ -1686,7 +1692,7 @@
           {:stop true}
           (let [remote-all-files-meta remote-all-files-meta-or-exp
                 local-all-files-meta (<! local-all-files-meta-c)
-                diff-remote-files (diff-file-metadata-sets remote-all-files-meta local-all-files-meta )
+                diff-remote-files (diff-file-metadata-sets remote-all-files-meta local-all-files-meta)
                 recent-10-days-range ((juxt #(tc/to-long (t/minus % (t/days 10))) #(tc/to-long %))
                                       (t/today))
                 sorted-diff-remote-files
@@ -1696,7 +1702,7 @@
             (println "[full-sync(remote->local)]"
                  (count sorted-diff-remote-files) "files need to sync")
         (<! (.sync-files-remote->local!
-             this (map (juxt (comp js/encodeURIComponent relative-path) -checksum)
+             this (map (juxt relative-path -checksum)
                        sorted-diff-remote-files)
              latest-txid))))))))
 

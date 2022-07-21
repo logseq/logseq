@@ -83,6 +83,50 @@ public class SyncClient {
         task.resume()
     }
     
+    public func getVersionFiles(at filePaths: [String], completionHandler: @escaping ([String: URL], Error?) -> Void) {
+        let url = URL_BASE.appendingPathComponent("get_version_files")
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("Logseq-sync/0.1", forHTTPHeaderField: "User-Agent")
+        request.setValue("Bearer \(self.token)", forHTTPHeaderField: "Authorization")
+        
+        let payload = [
+            "GraphUUID": self.graphUUID ?? "",
+            "Files": filePaths.map { filePath in filePath.encodeAsFname()}
+        ] as [String : Any]
+        let bodyData = try? JSONSerialization.data(
+            withJSONObject: payload,
+            options: []
+        )
+        request.httpMethod = "POST"
+        request.httpBody = bodyData
+        
+        let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+            guard error == nil else {
+                completionHandler([:], error)
+                return
+            }
+            
+            if (response as? HTTPURLResponse)?.statusCode != 200 {
+                let body = String(data: data!, encoding: .utf8) ?? "";
+                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "http error \(body)"]))
+                return
+            }
+            
+            if let data = data {
+                let resp = try? JSONDecoder().decode([String:[String:String]].self, from: data)
+                let files = resp?["PresignedFileUrls"] ?? [:]
+                self.delegate?.debugNotification(["event": "version-download:prepare"])
+                completionHandler(files.mapValues({ url in URL(string: url)!}), nil)
+            } else {
+                // Handle unexpected error
+                completionHandler([:], NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "unexpected error"]))
+            }
+        }
+        task.resume()
+    }
+    
     
     public func deleteFiles(_ filePaths: [String], completionHandler: @escaping  (Int?, Error?) -> Void) {
         let url = URL_BASE.appendingPathComponent("delete_files")
