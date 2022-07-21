@@ -18,6 +18,7 @@ export class EditingShapeState<
   }
 
   onExit = () => {
+    this.app.persist()
     this.app.clearEditingShape()
   }
 

@@ -31,14 +31,20 @@
   (when (= "logseq-portal" (:type shape))
     [(select-keys (model/get-page (:pageId shape)) [:db/id])]))
 
+(defn- get-shape-text [shape]
+  (:text shape))
+
 (defn- shape->block [shape page-name]
   (let [properties shape
         block {:block/uuid (uuid (:id properties))
                :block/page {:block/name page-name}
                :block/content "" ;; give it empty string since some block utility requires it
                :block/properties properties}
-        refs (get-shape-refs shape)]
-    (merge block (when refs {:block/refs refs}))))
+        refs (get-shape-refs shape)
+        content (get-shape-text shape)]
+    (merge block
+           (when refs {:block/refs refs})
+           (when content {:block/content content}))))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
   (let [page-block {:block/name page-name

@@ -115,9 +115,7 @@
 (defn- search-on-chosen
   [repo search-q {:keys [type data alias]}]
   (search-handler/add-search-to-recent! repo search-q)
-  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)
-        search-mode (:search/mode @state/state)
-        whiteboard-link? (= search-mode :whiteboard/link)]
+  (let [whiteboard? (whiteboard-handler/whiteboard-mode?)]
     (search-handler/clear-search!)
     (case type
       :graph-add-filter
@@ -129,18 +127,11 @@
         (when whiteboard?
           (whiteboard-handler/create-page! search-q)))
 
-      :go-to-whiteboard
-      (route/redirect! {:to :whiteboard
-                        :path-params {:name search-q}})
-
       :page
       (let [data (or alias data)]
         (cond
-          whiteboard-link?
-          (whiteboard-handler/set-linked-page-or-block! data)
-
-          whiteboard?
-          (whiteboard-handler/create-page! data)
+          (model/whiteboard-page? data)
+          (route/redirect-to-whiteboard! data)
           :else
           (route/redirect-to-page! data)))
 
@@ -152,25 +143,25 @@
       (let [block-uuid (uuid (:block/uuid data))
             collapsed? (db/parents-collapsed? repo block-uuid)
             page (:block/page (db/entity [:block/uuid block-uuid]))
+            page-name (:block/name page)
             long-page? (block-handler/long-page? repo (:db/id page))]
-        (cond
-          whiteboard-link?
-          (do
-            (editor-handler/set-blocks-id! [block-uuid])
-            (whiteboard-handler/set-linked-page-or-block! (str block-uuid)))
 
-          whiteboard?
-          (whiteboard-handler/create-page! (str block-uuid))
+        (println page (model/whiteboard-page? page))
 
-          :else
-          (if page
-            (if (or collapsed? long-page?)
-              (route/redirect-to-page! block-uuid)
-              (route/redirect-to-page! (:block/name page) (str "ls-block-" (:block/uuid data))))
+        (if page
+          (cond
+            (model/whiteboard-page? page-name)
+            (route/redirect-to-whiteboard! page-name)
+
+            (or collapsed? long-page?)
+            (route/redirect-to-page! block-uuid)
+
+            :else
+            (route/redirect-to-page! page-name (str "ls-block-" (:block/uuid data))))
             ;; search indice outdated
-            (println "[Error] Block page missing: "
-                     {:block-id block-uuid
-                      :block (db/pull [:block/uuid block-uuid])}))))
+          (println "[Error] Block page missing: "
+                   {:block-id block-uuid
+                    :block (db/pull [:block/uuid block-uuid])})))
       nil))
   (state/close-modal!))
 
@@ -218,11 +209,6 @@
        [:div.text.font-bold (str (t :new-page) ": ")
         [:span.ml-1 (str "\"" (string/trim search-q) "\"")]]
 
-       :go-to-whiteboard
-       [:div.text.font-bold (str (t :go-to-whiteboard) ": ")
-        [:span.ml-1 (str "\"" search-q "\"")]]
-
-
        :page
        [:span {:data-page-ref data}
         (when alias
@@ -253,13 +239,13 @@
   (let [pages (when-not all? (map (fn [page]
                                     (let [alias (model/get-redirect-page-name page)]
                                       (cond->
-                                        {:type :page
-                                         :data page}
+                                       {:type :page
+                                        :data page}
                                         (and alias
                                              (not= (util/page-name-sanity-lc page)
                                                    (util/page-name-sanity-lc alias)))
                                         (assoc :alias alias))))
-                               (remove nil? pages)))
+                                  (remove nil? pages)))
         files (when-not all? (map (fn [file] {:type :file :data file}) files))
         blocks (map (fn [block] {:type :block :data block}) blocks)
         search-mode (state/sub :search/mode)
@@ -271,7 +257,6 @@
                       all?)
                    []
                    [{:type :new-page}])
-        go-to-whiteboard [{:type :go-to-whiteboard}]
         result (cond
                  config/publishing?
                  (concat pages files blocks)
@@ -280,7 +265,7 @@
                  (concat pages blocks)
 
                  :else
-                 (concat new-page go-to-whiteboard pages files blocks))
+                 (concat new-page pages files blocks))
         result (if (= search-mode :graph)
                  [{:type :graph-add-filter}]
                  result)
@@ -361,10 +346,10 @@
                             (let [page data]
                               (when (string? page)
                                 (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page)])]
-                                 (state/sidebar-add-block!
-                                  (state/get-current-repo)
-                                  (:db/id page)
-                                  :page))))
+                                  (state/sidebar-add-block!
+                                   (state/get-current-repo)
+                                   (:db/id page)
+                                   :page))))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
