@@ -25,10 +25,14 @@
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
           (into rules/rules
-                (-> rules/query-dsl-rules
-                    ;; TODO: Update linter to handle false positive on ?str-val
-                    (dissoc :property)
-                    vals)))}}
+                ;; TODO: Update linter to handle false positives in dissoc'ed rules
+                (->> (dissoc rules/query-dsl-rules :property :page-ref)
+                     vals
+                     (reduce (fn [acc x]
+                               (if (vector? (first x))
+                                 (concat acc x)
+                                 (conj acc x)))
+                             []))))}}
 
  :tasks/config
  {:large-vars
