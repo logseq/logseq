@@ -101,7 +101,7 @@ export const Canvas = observer(function Renderer<S extends TLReactShape>({
   useGestureEvents(rContainer)
   useCursor(rContainer, cursor, cursorRotation)
   useZoom(rContainer)
-  useKeyboardEvents()
+  useKeyboardEvents(rContainer)
   const events = useCanvasEvents()
   const onlySelectedShape = selectedShapes?.length === 1 && selectedShapes[0]
   const onlySelectedShapeWithHandles =
