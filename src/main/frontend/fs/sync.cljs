@@ -1181,7 +1181,7 @@
               _ (swap! *sync-state sync-state--add-current-remote->local-files paths)
               r (<! (apply-filetxns graph-uuid base-path filetxns))
               _ (swap! *sync-state sync-state--remove-current-remote->local-files paths
-                       (instance? ExceptionInfo r))]
+                       (not (instance? ExceptionInfo r)))]
           ;; remove these recent-remote->local-file-items 5s later
           (go (<! (timeout 5000))
               (swap! *sync-state sync-state--remove-recent-remote->local-files
