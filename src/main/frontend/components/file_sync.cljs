@@ -15,7 +15,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.components.lazy-editor :as lazy-editor]
             [rum.core :as rum]
-            [cljs-time.coerce :as tc]
             [electron.ipc :as ipc]
             [frontend.util.fs :as fs-util]
             [cljs.core.async :as async]
@@ -482,9 +481,9 @@
 
   [:div.cp__file-sync-related-normal-modal
    [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "checkup-list")]]
-   
+
    [:h1.text-xl.font-semibold.opacity-90.text-center.py-2
-    [:span.dark:opacity-80 "Congrats to your first successful sync!"]]
+    [:span.dark:opacity-80 "Congrats on your first successful sync!"]]
 
    [:h2.text-center.dark:opacity-70.text-sm.opacity-90
     [:div "By using this graph with Logseq Sync you can now transition seamlessly between your different "]

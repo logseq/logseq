@@ -1,6 +1,5 @@
 (ns frontend.handler.file-sync
   (:require ["path" :as path]
-            [cljs-time.coerce :as tc]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
@@ -10,7 +9,6 @@
             [frontend.fs.sync :as sync]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.handler.user :as user]
             [frontend.fs :as fs]))
 

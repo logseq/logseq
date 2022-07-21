@@ -209,7 +209,7 @@
     ;(.start jsTour)
     ))
 
-(defn- ready
+(defn ready
   [callback]
   (p/then
    (if (nil? js/window.Shepherd)

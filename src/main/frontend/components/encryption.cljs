@@ -63,7 +63,6 @@
   (let [*password (get state ::password)
         *pw-confirm (get state ::pw-confirm)
         *pw-confirm-focused? (get state ::pw-confirm-focused?)
-        local-pw?  (= type :local)
         remote-pw? (= type :input-pwd-remote)
         loading? (state/sub [:ui/loading? :set-graph-password])
         set-remote-graph-pwd-result (state/sub [:file-sync/set-remote-graph-password-result])]

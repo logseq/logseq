@@ -67,10 +67,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.fs :as fs]
             [frontend.handler.file-sync :as file-sync]
-            [shadow.loader :as loader]
-            [clojure.string :as str]))
+            [shadow.loader :as loader]))
 
 (defn safe-read-string
   ([s]
@@ -237,7 +235,7 @@
                 (and exist? (not loading?)))
           (content-fn)
           [:p.text-red-500.text-xs [:small.opacity-80
-                                    (util/format "%s not found!" (str/capitalize type))]])))))
+                                    (util/format "%s not found!" (string/capitalize type))]])))))
 
 (defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <

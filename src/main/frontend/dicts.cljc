@@ -2526,7 +2526,6 @@
         :graph/save-error "Falha ao salvar"
 
         :page/copy-page-url "Copiar URL da página"
-        :page/file-sync-versions "Versões da Página"
         :page/open-backup-directory "Abra a listagem de backups de página"
         :page/unfavorite "Desfavoritar página"
         :plugin/not-installed "Não instalado"
