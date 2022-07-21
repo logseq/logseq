@@ -392,7 +392,7 @@
                 (catch :default e
                   (js/console.error e)))
               (state/set-current-repo! current-repo)
-              (db/relisten-and-persist! current-repo)
+              (db/listen-and-persist! current-repo)
               (db/persist-if-idle! current-repo)
               (file-handler/restore-config! current-repo false)
               (.watch mobile-util/fs-watcher #js {:path current-repo-dir})

@@ -3,7 +3,7 @@ import { test } from './fixtures'
 import { createRandomPage } from './utils'
 
 
-test.skip('flashcard demo', async ({ page, block }) => {
+test('flashcard demo', async ({ page, block }) => {
   await createRandomPage(page)
 
   await block.mustFill('Why do you add cards? #card #logseq')
@@ -40,7 +40,7 @@ test.skip('flashcard demo', async ({ page, block }) => {
   await block.mustFill('{{cards [[logseq]]}}')
   await page.keyboard.press('Enter')
   const queryCards = page.locator('text="No matched cards"')
-  await queryCards.waitFor({ state: 'hidden', timeout: 1000 })
+  await queryCards.waitFor({ state: 'hidden', timeout: 6000 })
 
   const numberLabel = page.locator('.cards-title')
   await numberLabel.waitFor({ state: 'visible' })

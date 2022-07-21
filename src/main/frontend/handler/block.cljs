@@ -298,5 +298,3 @@
   (reset! *show-left-menu? false)
   (reset! *show-right-menu? false)
   (reset! *swipe nil))
-
-

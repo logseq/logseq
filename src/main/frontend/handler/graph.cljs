@@ -81,7 +81,7 @@
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages?]}]
+  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -95,12 +95,17 @@
             pages-after-journal-filter (if-not journal?
                                          (remove :block/journal? full-pages)
                                          full-pages)
+
+           pages-after-exclude-filter (cond->> pages-after-journal-filter
+                                        (not excluded-pages?)
+                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
+
             links (concat (seq relation)
                           (seq tagged-pages)
                           (seq namespaces))
             linked (set (flatten links))
             build-in-pages (set (map string/lower-case default-db/built-in-pages-names))
-            nodes (cond->> (map :block/name pages-after-journal-filter)
+            nodes (cond->> (map :block/name pages-after-exclude-filter)
                     (not builtin-pages?)
                     (remove (fn [p] (contains? build-in-pages (string/lower-case p))))
                     (not orphan-pages?)
