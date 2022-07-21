@@ -55,12 +55,13 @@
 
 (defn redirect-to-whiteboard!
   ([name]
-   (redirect-to-whiteboard! name false))
-  ([name new?]
+   (redirect-to-whiteboard! name nil))
+  ([name {:keys [new? block-id]}]
    (recent-handler/add-page-to-recent! (state/get-current-repo) name)
    (redirect! {:to :whiteboard
                :path-params {:name (str name)}
-               :query-params (when new? {:new? 1})})))
+               :query-params (merge {:block-id block-id}
+                                    (when new? {:new? 1}))})))
 
 (defn get-title
   [name path-params]

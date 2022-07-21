@@ -151,7 +151,7 @@
         (if page
           (cond
             (model/whiteboard-page? page-name)
-            (route/redirect-to-whiteboard! page-name)
+            (route/redirect-to-whiteboard! page-name {:block-id block-uuid})
 
             (or collapsed? long-page?)
             (route/redirect-to-page! block-uuid)

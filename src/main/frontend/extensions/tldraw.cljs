@@ -16,8 +16,8 @@
 
 (rum/defcs tldraw-app < rum/reactive
   (rum/local false ::view-mode?)
-  [state name]
-  (let [data (page-name->tldr name)]
+  [state name block-id]
+  (let [data (page-name->tldr name block-id)]
     (when (and name (not-empty (gobj/get data "currentPageId")))
       [:div.draw.tldraw.relative.w-full.h-full
        {:style {:overscroll-behavior "none"}

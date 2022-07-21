@@ -20,12 +20,12 @@
            (p/let [_ (loader/load :tldraw)]
              (reset! tldraw-loaded? true))
            state)}
-  [name]
+  [name shape-id]
   (let [loaded? (rum/react tldraw-loaded?)
         draw-component (when loaded?
                          (resolve 'frontend.extensions.tldraw/tldraw-app))]
     (when draw-component
-      (draw-component name))))
+      (draw-component name shape-id))))
 
 (rum/defc tldraw-preview < rum/reactive
   {:init (fn [state]
@@ -59,7 +59,7 @@
                 :small? true
                 :on-click (fn [e]
                             (util/stop e)
-                            (route-handler/redirect-to-whiteboard! (d/squuid) true)))
+                            (route-handler/redirect-to-whiteboard! (d/squuid) {:new? true})))
      [:div.gap-8.py-4.grid.grid-rows-auto.md:grid-cols-3.lg:grid-cols-4.grid-cols-1
       (for [whiteboard-name whiteboard-names]
         [:<> {:key whiteboard-name} (dashboard-card whiteboard-name)])]]))
@@ -75,8 +75,7 @@
 (rum/defc whiteboard
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
-
-        new? (get-in route-match [:parameters :query :new?])]
+        {:keys [new? block-id]} (get-in route-match [:parameters :query])]
 
     (rum/use-effect! (fn [_]
                        (when new? (create-new-whiteboard-page! name))
@@ -99,4 +98,4 @@
 
       (whiteboard-references name)]
 
-     (tldraw-app name)]))
+     (tldraw-app name block-id)]))

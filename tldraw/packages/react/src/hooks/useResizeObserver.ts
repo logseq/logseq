@@ -84,7 +84,11 @@ export function useResizeObserver<T extends HTMLElement>(
   React.useLayoutEffect(() => {
     updateBounds()
     setTimeout(() => {
-      app.api.cameraToCenter()
+      if (app.selectedIds.size) {
+        app.api.zoomToSelection()
+      } else {
+        app.api.cameraToCenter()
+      }
     }, 50)
   }, [ref])
 }

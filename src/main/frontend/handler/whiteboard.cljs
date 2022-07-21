@@ -75,7 +75,7 @@
         blocks (model/get-page-blocks-no-cache page-name)]
     [page-block blocks]))
 
-(defn- whiteboard-clj->tldr [page-block blocks]
+(defn- whiteboard-clj->tldr [page-block blocks shape-id]
   (let [id (str (:block/uuid page-block))
         shapes (map block->shape blocks)
         page-properties (:block/properties page-block)
@@ -83,15 +83,18 @@
         page-properties (dissoc page-properties :assets)]
     (clj->js {:currentPageId id
               :assets (or assets #js[])
-              :selectedIds #js[]
+              :selectedIds (if shape-id #js[shape-id] #js[])
               :pages [(merge page-properties
                              {:id id
                               :name "page"
                               :shapes shapes})]})))
 
-(defn page-name->tldr [page-name]
-  (let [[page-block blocks] (get-whiteboard-clj page-name)]
-    (whiteboard-clj->tldr page-block blocks)))
+(defn page-name->tldr 
+  ([page-name]
+   (page-name->tldr page-name nil))
+  ([page-name shape-id]
+   (let [[page-block blocks] (get-whiteboard-clj page-name)]
+     (whiteboard-clj->tldr page-block blocks shape-id))))
 
 (defn get-whiteboard-entity [page-name]
   (db-utils/entity [:block/name page-name]))

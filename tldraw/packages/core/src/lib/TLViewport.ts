@@ -137,7 +137,7 @@ export class TLViewport {
       (bounds.height - FIT_TO_SCREEN_PADDING) / height
     )
     zoom = Math.min(
-      TLViewport.maxZoom,
+      1,
       Math.max(
         TLViewport.minZoom,
         camera.zoom === zoom || camera.zoom < 1 ? Math.min(1, zoom) : zoom
