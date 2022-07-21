@@ -244,7 +244,7 @@
       (if @*edit?
         [:span
          {:class (util/classnames [{:editing @*edit?}])
-          :style {:width "400px"}}
+          :style {:width "600px"}}
          [:input.edit-input
           {:type          "text"
            :ref           input-ref

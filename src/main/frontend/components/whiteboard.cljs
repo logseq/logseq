@@ -42,7 +42,7 @@
 (rum/defc dashboard-card
   [page-name]
   (let [tldr (page-name->tldr page-name)]
-    [:div.rounded.text-lg.cursor-pointer.color-level.flex.flex-col.gap-1.overflow-hidden.dashboard-card
+    [:div.rounded.text-lg.cursor-pointer.flex.flex-col.gap-1.overflow-hidden.dashboard-card
      {:on-mouse-down
       (fn [e]
         (util/stop e)

@@ -100,7 +100,7 @@ export class PreviewManager {
           mask={vBounds ? `url(#${this.pageId}-camera-mask)` : ''}
           width={commonBounds.width}
           height={commonBounds.height}
-          fill="rgba(0, 0, 0, 0.02)"
+          fill="transparent"
         />
         {vBounds && (
           <use
