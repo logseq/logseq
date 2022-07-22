@@ -360,7 +360,7 @@
       (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
         (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
       (js/setTimeout (fn []
-                       (let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
+                       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
                          (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
                      100))))
 
