@@ -199,13 +199,13 @@
              [{:title [:p.flex.justify-center "Everything is synced!"]}]
              [{:title [:div.file-item.is-first ""] :options {:class "is-first-placeholder"}}])
 
-           (map (fn [f] {:title [:div.file-item f]
+           (map (fn [f] {:title [:div.file-item (js/decodeURIComponent f)]
                          :key   (str "downloading-" f)
                          :icon  (ui/icon "arrow-narrow-down")}) downloading-files)
-           (map (fn [f] {:title [:div.file-item f]
+           (map (fn [f] {:title [:div.file-item (js/decodeURIComponent f)]
                          :key   (str "queue-" f)
                          :icon  (ui/icon "circle-dotted")}) (take 10 queuing-files))
-           (map (fn [f] {:title [:div.file-item f]
+           (map (fn [f] {:title [:div.file-item (js/decodeURIComponent f)]
                          :key   (str "uploading-" f)
                          :icon  (ui/icon "arrow-up")}) uploading-files)
 
@@ -223,7 +223,7 @@
                                         {:href (if page-name
                                                  (rfe/href :page {:name page-name})
                                                  (rfe/href :file {:path full-path}))}
-                                        (str (:path f))]
+                                        (js/decodeURIComponent (:path f))]
                                        [:div.opacity-50 (util/time-ago (:time f))]]}))
                           (take 10 (:history sync-state))))))
 
