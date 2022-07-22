@@ -534,8 +534,9 @@ Some bindings in this fn:
 
 (defn query-wrapper
   [where blocks?]
-  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-            `[:find (~'pull ~'?b ~model/block-attrs)
+  (let [block-attrs (butlast model/block-attrs)
+        q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+            `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
               :where]
             '[:find (pull ?p [*])

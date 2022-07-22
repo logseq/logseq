@@ -1,7 +1,9 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
+            [frontend.db.model :as model]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [clojure.walk :as walk]))
 
 (defprotocol INode
   (-get-id [this])
@@ -50,6 +52,7 @@
     [false root-id]))
 
 (defn blocks->vec-tree
+  "`blocks` need to be in the same page."
   ([blocks root-id]
    (blocks->vec-tree (state/get-current-repo) blocks root-id))
   ([repo blocks root-id]
@@ -63,6 +66,44 @@
            (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
                  root-block (assoc root-block :block/children result)]
              [root-block])))))))
+
+(defn non-consecutive-blocks->vec-tree
+  "`blocks` need to be in the same page."
+  [blocks]
+  (let [blocks (model/sort-page-random-blocks blocks)
+        id->parent (zipmap (map :db/id blocks)
+                           (map (comp :db/id :block/parent) blocks))
+        walked-parents (atom #{})]
+    (loop [blocks blocks
+           result []]
+      (if-let [block (first blocks)]
+        (let [parent-id (get id->parent (:db/id block))
+              walked? (and parent-id (@walked-parents parent-id))
+              result' (cond
+                        walked?
+                        result
+
+                        (and parent-id (not walked?))
+                        (let [result' (walk/postwalk
+                                      (fn [x]
+                                        (if (and (map? x)
+                                                 (:block/uuid x)
+                                                 (= (:db/id x) parent-id)
+                                                 (not (@walked-parents parent-id)))
+                                          (do
+                                            (swap! walked-parents conj parent-id)
+                                            (assoc x :block/children
+                                                   (filter (fn [b] (= (:db/id (:block/parent b)) parent-id)) blocks)))
+                                          x))
+                                      result)]
+                          (if (= result' result)
+                            (conj result block)
+                            result'))
+
+                        :else
+                        (conj result block))]
+          (recur (rest blocks) result'))
+        result))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

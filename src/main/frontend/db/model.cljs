@@ -887,20 +887,6 @@
          block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
-(defn sub-block-direct-children
-  "Doesn't include nested children."
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (-> (react/q repo [:frontend.db.react/block-direct-children block-uuid] {}
-                 '[:find [(pull ?b [*]) ...]
-                   :in $ ?parent-id
-                   :where
-                   [?parent :block/uuid ?parent-id]
-                   [?b :block/parent ?parent]]
-                 block-uuid)
-        react
-        (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
-
 (defn get-block-children
   "Including nested children."
   [repo block-uuid]
@@ -1151,24 +1137,21 @@
                                [?block :block/refs ?ref-page]]
                              pages
                              (butlast block-attrs)))
-             result (if (:filter? options)
-                      (->> query-result
-                           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
-                           (sort-by-left-recursive)
-                           (mapcat (fn [x] (map :db/id (:block/refs x))))
-                           (remove #{page-id})
-                           (map (fn [id] (:block/original-name (db-utils/entity id)))))
-                      (->> query-result
-                           (remove (fn [block]
-                                     (= page-id (:db/id (:block/page block)))))
-                           (sort-by-left-recursive)
-                           db-utils/group-by-page
-                           (map (fn [[k blocks]]
-                                  (let [k (if (contains? aliases (:db/id k))
-                                            (assoc k :block/alias? true)
-                                            k)]
-                                    [k blocks])))))]
-         result)))))
+             query-result (->> query-result
+                               (remove (fn [block] (= page-id (:db/id (:block/page block)))))
+                               (sort-by-left-recursive))]
+         (if (:filter? options)
+           (->> query-result
+                (mapcat (fn [x] (map :db/id (:block/refs x))))
+                (remove #{page-id})
+                (map (fn [id] (:block/original-name (db-utils/entity id)))))
+           (->> query-result
+                db-utils/group-by-page
+                (map (fn [[k blocks]]
+                       (let [k (if (contains? aliases (:db/id k))
+                                 (assoc k :block/alias? true)
+                                 k)]
+                         [k blocks]))))))))))
 
 (defn get-page-referenced-blocks-ids
   "Faster and can be used for pagination later."
@@ -1179,12 +1162,14 @@
      (when-let [db (conn/get-db repo)]
        (let [pages (page-alias-set repo page)]
          (d/q
-          '[:find ?block
-            :in $ [?ref-page ...]
-            :where
-            [?block :block/refs ?ref-page]]
-          db
-          pages))))))
+           '[:find [?block ...]
+             :in $ [?ref-page ...]
+             :where
+             [?block :block/refs ?ref-page]
+             [?block :block/page ?p]
+             [(not= ?p ?ref-page)]]
+           db
+           pages))))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]

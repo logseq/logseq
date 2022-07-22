@@ -15,7 +15,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [frontend.modules.outliner.tree :as outliner-tree]))
 
 (defn- frequencies-sort
   [references]
@@ -165,35 +166,12 @@
                                                                   (map #(dissoc % :block/children)))
                                                  id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
                                                  filtered-blocks (block-handler/filter-blocks repo page-name ref-blocks' filters)
-                                                 filtered-ids (set (map :db/id filtered-blocks))
-                                                 filtered-ids-with-parents (set
-                                                                            (mapcat (fn [id]
-                                                                                      (loop [parent (id->parent id)
-                                                                                             result [id]]
-                                                                                        (if parent
-                                                                                          (recur (id->parent parent) (conj result parent))
-                                                                                          result))) filtered-ids))
-                                                 result (when (seq filtered-ids)
-                                                          (walk/postwalk
-                                                           (fn [b]
-                                                             (cond
-                                                               (and (map? b) (:block/children b))
-                                                               (let [children (remove #(not (filtered-ids-with-parents (:db/id %))) (:block/children b))]
-                                                                 (if (seq children)
-                                                                   (assoc b :block/children children)
-                                                                   (let [b' (dissoc b :block/children)]
-                                                                     (if (filtered-ids-with-parents (:db/id b))
-                                                                       b'
-                                                                       nil))))
-
-                                                               (and (map? b) (:block/uuid b))
-                                                               (when (filtered-ids-with-parents (:db/id b)) b)
-
-                                                               :else
-                                                               b))
-                                                           ref-blocks))
-                                                 result (filter (fn [[_ blocks]] (seq (remove nil? blocks))) result)]
-                                             result))]
+                                                 result filtered-blocks
+                                                 result (group-by :block/page result)]
+                                             (map (fn [[page blocks]]
+                                                    (def page page)
+                                                    (def blocks blocks)
+                                                    [page (outliner-tree/blocks->vec-tree blocks (:db/id page))]) result)))]
                  (reset! *n-ref n-ref)
                  [:div.references-blocks
                   (let [ref-hiccup (block/->hiccup filtered-ref-blocks

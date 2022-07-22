@@ -2439,13 +2439,6 @@
 
                      :else
                      db-collapsed?)
-        children (if (and custom-query?
-                          (not collapsed?))
-                   (map
-                     (fn [b] (assoc b
-                                    :block/level (inc (:block/level block))))
-                     (model/sub-block-direct-children repo uuid))
-                   children)
         breadcrumb-show? (:breadcrumb-show? config)
         *show-left-menu? (::show-block-left-menu? state)
         *show-right-menu? (::show-block-right-menu? state)
@@ -3313,14 +3306,14 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (and (:custom-query? config)
+     (and (or (:ref? config) (:custom-query? config))
           (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
           (let [alias? (:block/alias? page)
                 page (db/entity (:db/id page))
-                parent-blocks (group-by :block/parent blocks)]
+                blocks (tree/non-consecutive-blocks->vec-tree blocks)]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
                          (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
@@ -3328,8 +3321,8 @@
               [:div
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (for [[_parent blocks] parent-blocks]
-                (breadcrumb-with-container blocks config))
+              (for [parent-block blocks]
+                (breadcrumb-with-container [parent-block] config))
               {})])))]
 
      (and (:group-by-page? config)
