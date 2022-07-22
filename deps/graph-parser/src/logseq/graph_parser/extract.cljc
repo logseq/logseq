@@ -178,6 +178,25 @@
          :blocks blocks
          :ast ast}))))
 
+(defn get-shape-refs [shape]
+  (when (= "logseq-portal" (:type shape))
+    [{:block/name (:pageId shape)}]))
+
+(defn- with-whiteboard-block-refs
+  [shape]
+  (let [refs (get-shape-refs shape)]
+    (when refs {:block/refs refs})))
+
+(defn- with-whiteboard-content
+  [shape]
+  {:block/content (or (:text shape) "")})
+
+(defn with-whiteboard-block-props
+  [shape]
+  (merge {}
+         (with-whiteboard-block-refs shape)
+         (with-whiteboard-content shape)))
+
 (defn extract-whiteboard-edn
   "Extracts whiteboard page from given edn file
    Whiteboard page edn is a subset of page schema
@@ -192,7 +211,9 @@
         page-block (merge page-block page-entity (when-not (:block/uuid page-block) {:block/uuid (d/squuid)}))
         blocks (->> blocks
                     (map #(merge % {:block/level 1
-                                    :block/uuid (or (:block/uuid %) (gp-block/get-custom-id-or-new-id (:block/properties %)))}))
+                                    :block/uuid (or (:block/uuid %)
+                                                    (gp-block/get-custom-id-or-new-id (:block/properties %)))}
+                                 (with-whiteboard-block-props (:block/properties %))))
                     (gp-block/with-parent-and-left {:block/name page-name}))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages [page-block]

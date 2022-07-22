@@ -4,7 +4,8 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.file :as outliner-file]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.graph-parser.extract :refer [with-whiteboard-block-props]]))
 
 ;; (defn set-linked-page-or-block!
 ;;   [page-or-block-id]
@@ -38,24 +39,13 @@
            ;; Use the block's id as the shape's id.
            {:id uuid})))
 
-(defn- get-shape-refs [shape]
-  (when (= "logseq-portal" (:type shape))
-    [(select-keys (model/get-page (:pageId shape)) [:db/id])]))
-
-(defn- get-shape-text [shape]
-  (:text shape))
-
 (defn- shape->block [shape page-name]
   (let [properties shape
         block {:block/uuid (uuid (:id properties))
                :block/page {:block/name page-name}
-               :block/content "" ;; give it empty string since some block utility requires it
                :block/properties properties}
-        refs (get-shape-refs shape)
-        content (get-shape-text shape)]
-    (merge block
-           (when refs {:block/refs refs})
-           (when content {:block/content content}))))
+        additional-props (with-whiteboard-block-props shape)]
+    (merge block additional-props)))
 
 (defn- tldr-page->blocks-tx [page-name tldr-data]
   (let [page-block {:block/name page-name
@@ -89,7 +79,7 @@
                               :name "page"
                               :shapes shapes})]})))
 
-(defn page-name->tldr 
+(defn page-name->tldr
   ([page-name]
    (page-name->tldr page-name nil))
   ([page-name shape-id]
