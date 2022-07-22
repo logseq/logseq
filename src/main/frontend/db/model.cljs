@@ -867,7 +867,7 @@
               :in $ ?p %
               :where
               (child ?p ?c)
-              [?c :block/uuid ?id]]
+              [?c :db/id ?id]]
             db
             eid
             rules)
@@ -904,8 +904,7 @@
 (defn get-block-children
   "Including nested children."
   [repo block-uuid]
-  (let [ids (get-block-children-ids repo block-uuid)
-        ids (map (fn [id] [:block/uuid id]) ids)]
+  (let [ids (get-block-children-ids repo block-uuid)]
     (when (seq ids)
       (db-utils/pull-many repo '[*] ids))))
 
@@ -1151,22 +1150,14 @@
                                :where
                                [?block :block/refs ?ref-page]]
                              pages
-                             block-attrs))
-             query-result (walk/postwalk-replace {:block/_parent :block/children} query-result)
+                             (butlast block-attrs)))
              result (if (:filter? options)
                       (->> query-result
-                           (mapcat #(tree-seq map? :block/children %))
-                           (map #(dissoc % :block/children))
-                           (remove (fn [block]
-                                     (= page-id (:db/id (:block/page block)))))
+                           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
                            (sort-by-left-recursive)
-                           (map (fn [x]
-                                  (cons (get-in x [:block/page :db/id])
-                                        (map :db/id (:block/refs x)))))
-                           (apply concat)
+                           (mapcat (fn [x] (map :db/id (:block/refs x))))
                            (remove #{page-id})
-                           (map (fn [id] (:block/original-name (db-utils/entity id))))
-                           (remove nil?))
+                           (map (fn [id] (:block/original-name (db-utils/entity id)))))
                       (->> query-result
                            (remove (fn [block]
                                      (= page-id (:db/id (:block/page block)))))

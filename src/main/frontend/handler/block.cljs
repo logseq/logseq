@@ -24,9 +24,7 @@
 (defn filter-blocks
   [repo page-name ref-blocks filters]
   (let [page-id-set (set [(:db/id (db/entity [:block/name page-name]))])
-        ref-pages (->> (concat
-                        (mapcat :block/refs ref-blocks)
-                        (map :block/page ref-blocks))
+        ref-pages (->> (mapcat :block/refs ref-blocks)
                        (map :db/id)
                        (remove page-id-set)
                        set)

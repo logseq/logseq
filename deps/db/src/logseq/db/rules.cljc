@@ -140,19 +140,8 @@
 
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/page ?p]
-     (or-join [?b]
-      (and
-       [?b :block/page ?p]
-       [?p :block/name ?page-name])
-      (and
-       [?b :block/refs ?br]
-       (parent ?bp ?b)
-       [(get-else $ ?bp :block/refs "not found") ?bpr]
-       (or
-        [?br :block/name ?page-name]
-        [?bpr :block/name ?page-name])))
-     ]
+     [?b :block/refs ?br]
+     [?br :block/name ?page-name]]
 
    :parent
    '[[(parent ?p ?c)

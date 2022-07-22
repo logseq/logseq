@@ -666,13 +666,14 @@
                     move-blocks-next-tx [(build-move-blocks-next-tx blocks non-consecutive-blocks?)]
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(db/get-block-children-ids (state/get-current-repo) (:block/uuid %)) blocks)]
-                                         (map (fn [uuid] {:block/uuid uuid
-                                                          :block/page target-page}) children-ids)))
+                                         (map (fn [id] {:db/id id
+                                                        :block/page target-page}) children-ids)))
                     fix-non-consecutive-tx (->> (fix-non-consecutive-blocks blocks target-block sibling?)
                                                 (remove (fn [b]
                                                           (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
                     full-tx (util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
+                                     :move-op outliner-op
                                      :target (:db/id target-block)}
                               not-same-page?
                               (assoc :from-page first-block-page
