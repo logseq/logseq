@@ -33,16 +33,11 @@
                             :pageId page-title}])))))
 
 (defn- block->shape [block]
-  (let [properties (:block/properties block)
-        uuid (str (:block/uuid block))]
-    (merge properties
-           ;; Use the block's id as the shape's id.
-           {:id uuid})))
+  (:block/properties block))
 
 (defn- shape->block [shape page-name]
-  (let [properties shape
-        block {:block/uuid (uuid (:id properties))
-               :block/page {:block/name page-name}
+  (let [properties (assoc shape :ls-type :whiteboard-shape)
+        block {:block/page {:block/name page-name}
                :block/properties properties}
         additional-props (with-whiteboard-block-props shape)]
     (merge block additional-props)))

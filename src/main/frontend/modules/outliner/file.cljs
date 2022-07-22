@@ -23,6 +23,7 @@
 
 (def blocks-pull-keys-with-persisted-ids
   '[:block/properties
+    :block/uuid
     {:block/page      [:block/name :block/uuid]}
     {:block/left      [:block/name :block/uuid]}
     {:block/parent    [:block/name :block/uuid]}

@@ -193,7 +193,7 @@
 
 (defn with-whiteboard-block-props
   [shape]
-  (merge {}
+  (merge {:block/uuid (uuid (:id shape))}
          (with-whiteboard-block-refs shape)
          (with-whiteboard-content shape)))
 

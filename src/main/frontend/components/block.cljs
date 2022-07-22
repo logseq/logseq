@@ -770,6 +770,9 @@
                       ;; pdf annotation
                       [:annotation true] (pdf-assets/open-block-ref! block)
 
+                      [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
+                                                (get-in block [:block/page :block/name]) {:block-id block-id})
+
                       ;; default open block page
                       :else (route-handler/redirect-to-page! id))))))}
 
@@ -2075,6 +2078,9 @@
           (seq title)
           (build-block-title config block)
 
+          (= block-type :whiteboard-shape)
+          content
+
           :else
           nil)]
 
@@ -2095,7 +2101,8 @@
                  (let [hidden? (property/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq title) (seq body))))
-                 (not (:slide? config)))
+                 (not (:slide? config))
+                 (not= block-type :whiteboard-shape))
         (properties-cp config block))
 
       (when (and (not block-ref-with-title?) (seq body))

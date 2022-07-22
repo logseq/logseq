@@ -405,6 +405,7 @@
   justify-content: center;
   pointer-events: none;
   user-select: none;
+  font-family: var(--ls-font-family);
 }
 
 .logseq-tldraw .text-label-inner-wrapper {
