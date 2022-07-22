@@ -265,7 +265,7 @@
 
       (favorites t)
 
-      (when (and left-sidebar-open? (not config/publishing?)) (recent-pages t))
+      (when (not config/publishing?) (recent-pages t))
 
       (when-not (mobile-util/native-platform?)
        [:nav.px-2 {:aria-label "Sidebar"
