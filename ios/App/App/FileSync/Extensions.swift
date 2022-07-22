@@ -71,16 +71,6 @@ extension String {
         return computed.map { String(format: "%02hhx", $0) }.joined()
     }
     
-    func encodeAsFname() -> String {
-        var allowed = NSMutableCharacterSet.urlPathAllowed
-        allowed.remove(charactersIn: "&$@=;:+ ,?%#")
-        return self.addingPercentEncoding(withAllowedCharacters: allowed) ?? self
-    }
-    
-    func decodeFromFname() -> String {
-        return self.removingPercentEncoding ?? self
-    }
-    
     static func random(length: Int) -> String {
         let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         return String((0..<length).map{ _ in letters.randomElement()! })

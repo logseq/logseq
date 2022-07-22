@@ -49,7 +49,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": filePaths.map { filePath in filePath.encodeAsFname()}
+            "Files": filePaths
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
             withJSONObject: payload,
@@ -93,7 +93,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": filePaths.map { filePath in filePath.encodeAsFname()}
+            "Files": filePaths
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(
             withJSONObject: payload,
@@ -138,7 +138,7 @@ public class SyncClient {
         
         let payload = [
             "GraphUUID": self.graphUUID ?? "",
-            "Files": filePaths.map { filePath in filePath.encodeAsFname()},
+            "Files": filePaths,
             "TXId": self.txid,
         ] as [String : Any]
         let bodyData = try? JSONSerialization.data(

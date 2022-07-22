@@ -363,7 +363,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
 
                     let filePath = encryptedFilePathDict[encryptedFilePath]!
                     // NOTE: fileURLs from getFiles API is percent-encoded
-                    let localFileURL = baseURL.appendingPathComponent(filePath.decodeFromFname())
+                    let localFileURL = baseURL.appendingPathComponent(filePath)
                     remoteFileURL.download(toFile: localFileURL) {error in
                         if let error = error {
                             self.debugNotification(["event": "download:error", "data": ["message": "error while downloading \(filePath): \(error)"]])
@@ -413,7 +413,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
                     group.enter()
 
                     // NOTE: fileURLs from getFiles API is percent-encoded
-                    let localFileURL = baseURL.appendingPathComponent("logseq/version-files/").appendingPathComponent(filePath.decodeFromFname())
+                    let localFileURL = baseURL.appendingPathComponent("logseq/version-files/").appendingPathComponent(filePath)
                     remoteFileURL.download(toFile: localFileURL) {error in
                         if let error = error {
                             self.debugNotification(["event": "version-download:error", "data": ["message": "error while downloading \(filePath): \(error)"]])
@@ -500,7 +500,7 @@ public class FileSync: CAPPlugin, SyncDebugDelegate {
             for filePath in filePaths {
                 // NOTE: filePath from js may contain spaces
                 let fileURL = baseURL.appendingPathComponent(filePath)
-                files[filePath.encodeAsFname()] = fileURL
+                files[filePath]x = fileURL
             }
 
             // 2. upload_temp_file
