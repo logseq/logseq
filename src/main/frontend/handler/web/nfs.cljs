@@ -120,7 +120,7 @@
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ls-dir-files-with-handler!
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [empty-dir?-or-pred]}]
+  ([ok-handler {:keys [empty-dir?-or-pred dir-result-fn]}]
   (let [path-handles (atom {})
         electron? (util/electron?)
         mobile-native? (mobile-util/native-platform?)
@@ -129,9 +129,11 @@
         *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
-      (p/let [result (fs/open-dir (fn [path handle]
-                                    (when nfs?
-                                      (swap! path-handles assoc path handle))))
+      (p/let [result (if (fn? dir-result-fn)
+                       (dir-result-fn {:path-handles path-handles :nfs? nfs?})
+                       (fs/open-dir (fn [path handle]
+                                      (when nfs?
+                                        (swap! path-handles assoc path handle)))))
               _ (when-not (nil? empty-dir?-or-pred)
                   (cond
                     (boolean? empty-dir?-or-pred)
@@ -211,6 +213,21 @@
                    (when @*repo (state/set-loading-files! @*repo false))
                    (throw error)
                    )))))))
+
+(defn ls-dir-files-with-path!
+  ([path] (ls-dir-files-with-path! path nil))
+  ([path opts]
+   (when-let [dir-result-fn
+              (and path (fn [{:keys [path-handles nfs?]}]
+                          (p/let [files-result (fs/get-files
+                                                path
+                                                (fn [path handle]
+                                                  (when nfs?
+                                                    (swap! path-handles assoc path handle))))]
+                                 [path files-result])))]
+     (ls-dir-files-with-handler!
+      (:ok-handler opts)
+      (merge {:dir-result-fn dir-result-fn} opts)))))
 
 (defn- compute-diffs
   [old-files new-files]

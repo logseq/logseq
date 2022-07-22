@@ -7,6 +7,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.components.page :as page]
             [promesa.core :as p]
+            [frontend.handler.web.nfs :as web-nfs]
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo :as repo-handler]
@@ -47,6 +48,7 @@
                              (-> (ipc/ipc :copyDirectory graph-dir dest-dir)
                                  (.then #(do
                                            (notifications/show! (str "Cloned to => " dest-dir) :success)
+                                           (web-nfs/ls-dir-files-with-path! dest-dir)
                                            (close-fn)))
                                  (.catch #(js/console.error %))))))]
 
