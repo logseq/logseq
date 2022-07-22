@@ -15,8 +15,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            [clojure.walk :as walk]
-            [frontend.modules.outliner.tree :as outliner-tree]))
+            [clojure.walk :as walk]))
 
 (defn- frequencies-sort
   [references]
@@ -46,19 +45,20 @@
        (let [filters (rum/react filters-atom)]
          [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
           (for [[ref-name ref-count] filtered-references]
-            (let [lc-reference (string/lower-case ref-name)
-                  filtered (get filters lc-reference)
-                  color (condp = filtered
-                          true "text-green-400"
-                          false "text-red-400"
-                          nil)]
-              [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key ref-name :class color :style {:border-color "currentColor"}
-                                                                  :on-click (fn [e]
-                                                                              (swap! filters-atom #(if (nil? (get filters lc-reference))
-                                                                                                     (assoc % lc-reference (not (.-shiftKey e)))
-                                                                                                     (dissoc % lc-reference)))
-                                                                              (page-handler/save-filter! page-name @filters-atom))}
-               ref-name [:sub " " ref-count]]))]))]))
+            (when ref-name
+              (let [lc-reference (string/lower-case ref-name)
+                    filtered (get filters lc-reference)
+                    color (condp = filtered
+                            true "text-green-400"
+                            false "text-red-400"
+                            nil)]
+                [:button.border.rounded.px-1.mb-1.mr-1.select-none {:key ref-name :class color :style {:border-color "currentColor"}
+                                                                    :on-click (fn [e]
+                                                                                (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                                                                                       (assoc % lc-reference (not (.-shiftKey e)))
+                                                                                                       (dissoc % lc-reference)))
+                                                                                (page-handler/save-filter! page-name @filters-atom))}
+                 ref-name [:sub " " ref-count]])))]))]))
 
 (defn filter-dialog
   [filters-atom references page-name]
@@ -87,8 +87,65 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
 
-(rum/defcs ^:large-vars/cleanup-todo references* < rum/reactive db-mixins/query
-  (rum/local nil ::n-ref)
+(rum/defc scheduled-and-deadlines-cp
+  [page-name scheduled-or-deadlines]
+  (ui/foldable
+   [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
+   [:div.references-blocks.mb-6
+    (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
+                                     {:id (str page-name "-agenda")
+                                      :ref? true
+                                      :group-by-page? true
+                                      :editor-box editor/box}
+                                     {})]
+      (content/content page-name {:hiccup ref-hiccup}))]
+   {:title-trigger? true}))
+
+(rum/defc references-cp
+  [repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state refed-blocks-ids]
+  (let [threshold (state/get-linked-references-collapsed-threshold)
+        default-collapsed? (>= (count refed-blocks-ids) threshold)]
+    (ui/foldable
+     [:div.flex.flex-row.flex-1.justify-between.items-center
+      [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
+                                     (when (> n-ref 1) "s"))]
+      [:a.filter.fade-link
+       {:title "Filter"
+        :on-mouse-down (fn [e] (util/stop-propagation e))
+        :on-click (fn []
+                    (let [ref-pages (block-handler/get-blocks-refed-pages repo page-entity filtered-ref-blocks)
+                          ref-pages (map :block/original-name ref-pages)
+                          references (frequencies ref-pages)]
+                      (state/set-modal! (filter-dialog filters-atom references page-name)
+                                        {:center? true})))}
+       (ui/icon "filter" {:class (cond
+                                   (empty? filter-state)
+                                   ""
+                                   (every? true? (vals filter-state))
+                                   "text-green-400"
+                                   (every? false? (vals filter-state))
+                                   "text-red-400"
+                                   :else
+                                   "text-yellow-400")
+                          :style {:fontSize 24}})]]
+
+     (fn []
+       [:div.references-blocks
+        (let [ref-hiccup (block/->hiccup filtered-ref-blocks
+                                         {:id page-name
+                                          :ref? true
+                                          :breadcrumb-show? true
+                                          :group-by-page? true
+                                          :editor-box editor/box
+                                          :filters filters}
+                                         {})]
+          (content/content page-name
+                           {:hiccup ref-hiccup}))])
+
+     {:default-collapsed? default-collapsed?
+      :title-trigger? true})))
+
+(rum/defcs references* < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
@@ -97,94 +154,35 @@
   [state page-name refed-blocks-ids]
   (when page-name
     (let [page-name (string/lower-case page-name)
+          page-entity (db/entity [:block/name page-name])
           repo (state/get-current-repo)
-          threshold (state/get-linked-references-collapsed-threshold)
-          *n-ref (::n-ref state)
-          n-ref (or (rum/react *n-ref) (count refed-blocks-ids))
-          default-collapsed? (>= (count refed-blocks-ids) threshold)
           filters-atom (get state ::filters)
           filter-state (rum/react filters-atom)
           block-id (parse-uuid page-name)
-          page-name (string/lower-case page-name)
           scheduled-or-deadlines (when (scheduled-or-deadlines? page-name)
-                                   (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))]
-      (when (or (seq refed-blocks-ids)
+                                   (db/get-date-scheduled-or-deadlines (string/capitalize page-name)))
+          ref-blocks (if block-id
+                       (db/get-block-referenced-blocks block-id)
+                       (db/get-page-referenced-blocks page-name))
+          ref-pages (when-not block-id
+                      (block-handler/get-blocks-refed-pages repo page-entity ref-blocks))
+          filters (when (seq filter-state)
+                    (-> (group-by second filter-state)
+                        (update-vals #(map first %))))
+          filtered-ref-blocks (if block-id
+                                ref-blocks
+                                (block-handler/get-filtered-ref-blocks repo page-name ref-blocks filters ref-pages))
+          n-ref (if block-id (count ref-blocks) (count (mapcat second filtered-ref-blocks)))]
+      (when (or (seq ref-blocks)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
         [:div.references.flex-1.flex-row
          [:div.content.pt-6
           (when (seq scheduled-or-deadlines)
-            (ui/foldable
-             [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
-             [:div.references-blocks.mb-6
-              (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
-                                               {:id (str page-name "-agenda")
-                                                :ref? true
-                                                :group-by-page? true
-                                                :editor-box editor/box}
-                                               {})]
-                (content/content page-name {:hiccup ref-hiccup}))]
-             {:title-trigger? true}))
+            (scheduled-and-deadlines-cp page-name scheduled-or-deadlines))
 
           (when (seq refed-blocks-ids)
-            (ui/foldable
-             [:div.flex.flex-row.flex-1.justify-between.items-center
-              [:h2.font-bold.opacity-50 (str n-ref " Linked Reference"
-                                             (when (> n-ref 1) "s"))]
-              [:a.filter.fade-link
-               {:title "Filter"
-                :on-mouse-down (fn [e] (util/stop-propagation e))
-                :on-click (fn []
-                            (let [ref-pages (db/get-page-referenced-blocks page-name {:filter? true})
-                                  references (frequencies ref-pages)]
-                              (state/set-modal! (filter-dialog filters-atom references page-name)
-                                                {:center? true})))}
-               (ui/icon "filter" {:class (cond
-                                           (empty? filter-state)
-                                           ""
-                                           (every? true? (vals filter-state))
-                                           "text-green-400"
-                                           (every? false? (vals filter-state))
-                                           "text-red-400"
-                                           :else
-                                           "text-yellow-400")
-                                  :style {:fontSize 24}})]]
-
-             (fn []
-               (let [ref-blocks (if block-id
-                                  (db/get-block-referenced-blocks block-id)
-                                  (db/get-page-referenced-blocks page-name))
-                     filters (when (seq filter-state)
-                               (-> (group-by second filter-state)
-                                   (update-vals #(map first %))))
-                     filtered-ref-blocks (if block-id
-                                           ref-blocks
-                                           ;; TODO: move to handler
-                                           (let [ref-blocks' (->> ref-blocks
-                                                                  (mapcat second)
-                                                                  (mapcat #(tree-seq map? :block/children %))
-                                                                  (map #(dissoc % :block/children)))
-                                                 id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
-                                                 filtered-blocks (block-handler/filter-blocks repo page-name ref-blocks' filters)
-                                                 result filtered-blocks
-                                                 result (group-by :block/page result)]
-                                             (map (fn [[page blocks]]
-                                                    [page (outliner-tree/blocks->vec-tree blocks (:db/id page))]) result)))]
-                 (reset! *n-ref n-ref)
-                 [:div.references-blocks
-                  (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                                   {:id page-name
-                                                    :ref? true
-                                                    :breadcrumb-show? true
-                                                    :group-by-page? true
-                                                    :editor-box editor/box
-                                                    :filters filters}
-                                                   {})]
-                    (content/content page-name
-                                     {:hiccup ref-hiccup}))]))
-
-             {:default-collapsed? default-collapsed?
-              :title-trigger? true}))]]))))
+            (references-cp repo page-entity page-name filtered-ref-blocks n-ref filters-atom filters filter-state refed-blocks-ids))]]))))
 
 (rum/defc references < rum/reactive db-mixins/query
   [page-name]

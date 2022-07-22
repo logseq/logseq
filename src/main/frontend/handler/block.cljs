@@ -13,39 +13,14 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]))
+   [logseq.graph-parser.block :as gp-block]
+   [frontend.modules.outliner.tree :as outliner-tree]))
 
 ;;  Fns
 
 (defn long-page?
   [repo page-id]
   (>= (db/get-page-blocks-count repo page-id) db-model/initial-blocks-length))
-
-(defn filter-blocks
-  [repo page-name ref-blocks filters]
-  (let [page-id-set (set [(:db/id (db/entity [:block/name page-name]))])
-        ref-pages (->> (mapcat :block/refs ref-blocks)
-                       (map :db/id)
-                       (remove page-id-set)
-                       set)
-        ref-pages (db/pull-many repo '[:db/id :block/name] ref-pages)
-        ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
-        exclude-ids (->> (keep (fn [page] (get ref-pages page)) (get filters false))
-                         (set))
-        include-ids (->> (keep (fn [page] (get ref-pages page)) (get filters true))
-                         (set))]
-    (if (empty? filters)
-      ref-blocks
-      (cond->> ref-blocks
-        (seq exclude-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/refs block)))]
-                    (seq (set/intersection exclude-ids ids)))))
-
-        (seq include-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/refs block)))]
-                    (empty? (set/intersection include-ids ids)))))))))
 
 ;; TODO: reduced version
 (defn- walk-block
@@ -112,8 +87,8 @@
 (defn indent-outdent-block!
   [block direction]
   (outliner-tx/transact!
-   {:outliner-op :move-blocks}
-   (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
+    {:outliner-op :move-blocks}
+    (outliner-core/indent-outdent-blocks! [block] (= direction :right))))
 
 (defn select-block!
   [block-uuid]
@@ -272,3 +247,45 @@
   (reset! *show-left-menu? false)
   (reset! *show-right-menu? false)
   (reset! *swipe nil))
+
+(defn get-blocks-refed-pages
+  [repo page-entity ref-blocks]
+  (->> ref-blocks
+       (mapcat second)
+       (mapcat :block/refs)
+       (map :db/id)
+       (remove #{(:db/id page-entity)})
+       (db/pull-many repo '[:db/id :block/name :block/original-name])))
+
+(defn- filter-blocks
+  [repo page-name ref-blocks filters ref-pages]
+  (if (empty? filters)
+    ref-blocks
+    (let [ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
+          exclude-ids (->> (keep (fn [page] (get ref-pages page)) (get filters false))
+                           (set))
+          include-ids (->> (keep (fn [page] (get ref-pages page)) (get filters true))
+                           (set))]
+      (cond->> ref-blocks
+        (seq exclude-ids)
+        (remove (fn [block]
+                  (let [ids (set (map :db/id (:block/refs block)))]
+                    (seq (set/intersection exclude-ids ids)))))
+
+        (seq include-ids)
+        (remove (fn [block]
+                  (let [ids (set (map :db/id (:block/refs block)))]
+                    (empty? (set/intersection include-ids ids)))))))))
+
+(defn get-filtered-ref-blocks
+  [repo page-name ref-blocks filters ref-pages]
+  (let [ref-blocks' (->> ref-blocks
+                         (mapcat second)
+                         (mapcat #(tree-seq map? :block/children %))
+                         (map #(dissoc % :block/children)))
+        id->parent (zipmap (map :db/id ref-blocks') (map (comp :db/id :block/parent) ref-blocks'))
+        filtered-blocks (filter-blocks repo page-name ref-blocks' filters ref-pages)
+        result (group-by :block/page filtered-blocks)]
+    (map (fn [[page blocks]]
+           (let [blocks' (outliner-tree/non-consecutive-blocks->vec-tree blocks)]
+             [page blocks'])) result)))

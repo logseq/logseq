@@ -1140,18 +1140,13 @@
              query-result (->> query-result
                                (remove (fn [block] (= page-id (:db/id (:block/page block)))))
                                (sort-by-left-recursive))]
-         (if (:filter? options)
-           (->> query-result
-                (mapcat (fn [x] (map :db/id (:block/refs x))))
-                (remove #{page-id})
-                (map (fn [id] (:block/original-name (db-utils/entity id)))))
-           (->> query-result
-                db-utils/group-by-page
-                (map (fn [[k blocks]]
-                       (let [k (if (contains? aliases (:db/id k))
-                                 (assoc k :block/alias? true)
-                                 k)]
-                         [k blocks]))))))))))
+         (->> query-result
+              db-utils/group-by-page
+              (map (fn [[k blocks]]
+                     (let [k (if (contains? aliases (:db/id k))
+                               (assoc k :block/alias? true)
+                               k)]
+                       [k blocks])))))))))
 
 (defn get-page-referenced-blocks-ids
   "Faster and can be used for pagination later."

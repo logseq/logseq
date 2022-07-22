@@ -2788,7 +2788,9 @@
                                  (boolean (:result-transform q))
                                  (and (string? query) (string/includes? query "(by-page false)")))
         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                 (db-utils/group-by-page transformed-query-result)
+                 (->> (db-utils/group-by-page transformed-query-result)
+                      (map (fn [[page blocks]]
+                             [page (tree/non-consecutive-blocks->vec-tree blocks)])))
                  transformed-query-result)
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
@@ -2842,7 +2844,7 @@
                                                              title)
                                 :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
-            (str (count transformed-query-result) " results")]]
+            (str (count result) " results")]]
 
            ;;insert an "edit" button in the query view
            (when-not built-in?
@@ -3312,8 +3314,7 @@
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
           (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))
-                blocks (tree/non-consecutive-blocks->vec-tree blocks)]
+                page (db/entity (:db/id page))]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
                          (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
