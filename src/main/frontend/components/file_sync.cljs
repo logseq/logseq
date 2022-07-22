@@ -560,10 +560,13 @@
 
             (:sync-initiate :sync-learn :sync-history)
             (do (quick-tour/ready
-                 #(quick-tour/start-file-sync type))
+                 (fn []
+                   (quick-tour/start-file-sync type)
+                   (state/set-state! [:file-sync/onboarding-state type] true)))
                 (throw (js/Error. nil)))
             :default)
 
-          (state/pub-event! [:file-sync/onboarding-tip type])))
+          (state/pub-event! [:file-sync/onboarding-tip type])
+          (state/set-state! [:file-sync/onboarding-state (keyword type)] true)))
       (catch js/Error e
         (js/console.warn "[onboarding SKIP] " (name type) e)))))

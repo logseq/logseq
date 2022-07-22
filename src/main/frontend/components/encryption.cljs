@@ -192,7 +192,8 @@
                                  (when (fn? after-input-password)
                                    (async/<! (after-input-password))
                                    ;; TODO: it's better if based on sync state
-                                   (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000)))))))))))]]))
+                                   (when init-graph-keys
+                                     (js/setTimeout #(state/pub-event! [:file-sync/maybe-onboarding-show :sync-learn]) 10000))))))))))))]]))
 
 (defn input-password
   ([repo-url close-fn] (input-password repo-url close-fn {:type :local}))
