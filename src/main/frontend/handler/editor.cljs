@@ -2758,7 +2758,7 @@
         (do (util/stop e)
             (autopair input-id key format nil))
 
-        hashtag?
+        (and hashtag? (re-find #"\s+$" value))
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (if (= key "#")

@@ -1,6 +1,9 @@
 (ns frontend.handler.editor-test
   (:require [frontend.handler.editor :as editor]
-            [clojure.test :refer [deftest is testing are]]))
+            [clojure.test :refer [deftest is testing are]]
+            [frontend.util :as util]
+            [frontend.state :as state]
+            [frontend.util.cursor :as cursor]))
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -42,7 +45,39 @@
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
 
+(defn- keydown-not-matched-handler
+  "Spied version of editor/keydown-not-matched-handler"
+  [{:keys [value key format] :or {format "markdown"}}]
+  (with-redefs [util/get-selected-text (constantly false)
+                state/get-input (constantly #js {:value value})
+                cursor/get-caret-pos (constantly {})]
+    ((editor/keydown-not-matched-handler format)
+     #js {:key key} nil)))
+
+(deftest keydown-not-matched-handler-test
+  (testing "Tag autocompletion"
+    (keydown-not-matched-handler {:value "Some words " :key "#"})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Autocomplete tags if starting new word")
+    (state/set-editor-action! nil)
+
+    (keydown-not-matched-handler {:value "String" :key "#"})
+    (is (= nil (state/get-editor-action))
+        "Don't autocomplete tags if not starting a new word")
+    (state/set-editor-action! nil)
+
+    (keydown-not-matched-handler {:value "`One backtick " :key "#"})
+    (is (= :page-search-hashtag (state/get-editor-action))
+        "Autocomplete tags if only one backtick")
+    (state/set-editor-action! nil)
+
+    (keydown-not-matched-handler {:value "`String#gsub and String`" :key "#"})
+    (is (= nil (state/get-editor-action))
+        "Don't autocomplete tags within backticks")
+    (state/set-editor-action! nil)))
+
 (defn- set-marker
+  "Spied version of editor/set-marker"
   [marker content format]
   (let [actual-content (atom nil)]
     (with-redefs [editor/save-block-if-changed! (fn [_ content]
