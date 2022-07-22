@@ -1,29 +1,30 @@
 (ns frontend.components.file-sync
-  (:require [frontend.state :as state]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [frontend.fs.sync :as fs-sync]
-            [frontend.handler.notification :as notifications]
-            [frontend.ui :as ui]
-            [frontend.handler.page :as page-handler]
-            [frontend.components.page :as page]
-            [promesa.core :as p]
-            [frontend.handler.web.nfs :as web-nfs]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.util :as util]
-            [frontend.db.model :as db-model]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.components.lazy-editor :as lazy-editor]
-            [rum.core :as rum]
-            [electron.ipc :as ipc]
-            [frontend.util.fs :as fs-util]
-            [cljs.core.async :as async]
-            [logseq.graph-parser.config :as gp-config]
+  (:require [cljs.core.async :as async]
             [clojure.string :as string]
-            [reitit.frontend.easy :as rfe]
+            [electron.ipc :as ipc]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.onboarding.quick-tour :as quick-tour]
-            [frontend.db :as db]))
+            [frontend.components.page :as page]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.fs :as fs]
+            [frontend.fs.sync :as fs-sync]
+            [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.notification :as notifications]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.handler.web.nfs :as web-nfs]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.fs :as fs-util]
+            [logseq.graph-parser.config :as gp-config]
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -42,15 +43,22 @@
                             (not (mobile-util/iCloud-container-path? selected-path)))
         on-confirm     (fn []
                          (when-let [dest-dir (and selected-path?
-                                                  (util/node-path.join selected-path graph-name))]
-                           ;; TODO: mobile
-                           (when (util/electron?)
-                             (-> (ipc/ipc :copyDirectory graph-dir dest-dir)
-                                 (.then #(do
-                                           (notifications/show! (str "Cloned to => " dest-dir) :success)
-                                           (web-nfs/ls-dir-files-with-path! dest-dir)
-                                           (close-fn)))
-                                 (.catch #(js/console.error %))))))]
+                                                  ;; avoid using `util/node-path.join` to join mobile path since it replaces `file:///abc` to `file:/abc`
+                                                  (str (string/replace selected-path #"/+$" "") "/" graph-name))]
+                           (-> (cond
+                                 (util/electron?)
+                                 (ipc/ipc :copyDirectory graph-dir dest-dir)
+
+                                 (mobile-util/native-ios?)
+                                 (fs/copy! repo graph-dir dest-dir)
+
+                                 :else
+                                 nil)
+                               (.then #(do
+                                         (notifications/show! (str "Cloned to => " dest-dir) :success)
+                                         (web-nfs/ls-dir-files-with-path! dest-dir)
+                                         (close-fn)))
+                               (.catch #(js/console.error %)))))]
 
     [:div.cp__file-sync-related-normal-modal
      [:div.flex.justify-center.pb-4 [:span.icon-wrap (ui/icon "folders")]]
@@ -72,7 +80,7 @@
          (if (mobile-util/iCloud-container-path? selected-path)
            [:span.inline-block.pr-1.text-red-600.scale-75 (ui/icon "alert-circle")]
            [:span.inline-block.pr-1.text-green-600.scale-75 (ui/icon "circle-check")])
-         selected-path])
+         (js/decodeURIComponent selected-path)])
 
       [:div.out-icloud
        (ui/button
@@ -82,9 +90,20 @@
         :on-click
         (fn []
           ;; TODO: support mobile
-          (when (util/electron?)
+          (cond
+            (util/electron?)
             (p/let [path (ipc/ipc "openDialog")]
-                   (set-selected-path path)))))]]
+              (set-selected-path path))
+
+            (mobile-util/native-ios?)
+            (p/let [{:keys [path _localDocumentsPath]}
+                    (p/chain
+                     (.pickFolder mobile-util/folder-picker)
+                     #(js->clj % :keywordize-keys true))]
+              (set-selected-path path))
+
+            :else
+            nil)))]]
 
      [:p.flex.items-center.space-x-2.pt-6.flex.justify-center.sm:justify-end.-mb-2
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
@@ -102,8 +121,7 @@
         (fn []
           (async/go
             (close-fn)
-            (if (and (util/electron?)
-                     (mobile-util/iCloud-container-path? repo))
+            (if (mobile-util/iCloud-container-path? repo)
               (open-icloud-graph-clone-picker repo)
               (when-let [GraphUUID (get (async/<! (file-sync-handler/create-graph graph-name)) 2)]
                 (async/<! (fs-sync/sync-start))

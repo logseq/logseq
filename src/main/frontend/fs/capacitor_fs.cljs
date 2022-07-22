@@ -295,6 +295,15 @@
                             :to new-path}))])
        (fn [error]
          (log/error :rename-file-failed error)))))
+  (copy! [_this _repo old-path new-path]
+    (let [[old-path new-path] (map #(get-file-path "" %) [old-path new-path])]
+      (p/catch
+       (p/let [_ (.copy Filesystem
+                          (clj->js
+                           {:from old-path
+                            :to new-path}))])
+       (fn [error]
+         (log/error :copy-file-failed error)))))
   (stat [_this dir path]
     (let [path (get-file-path dir path)]
       (p/let [result (.stat Filesystem (clj->js
