@@ -169,8 +169,6 @@
                                                  result filtered-blocks
                                                  result (group-by :block/page result)]
                                              (map (fn [[page blocks]]
-                                                    (def page page)
-                                                    (def blocks blocks)
                                                     [page (outliner-tree/blocks->vec-tree blocks (:db/id page))]) result)))]
                  (reset! *n-ref n-ref)
                  [:div.references-blocks

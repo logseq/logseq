@@ -33,27 +33,18 @@
         exclude-ids (->> (keep (fn [page] (get ref-pages page)) (get filters false))
                          (set))
         include-ids (->> (keep (fn [page] (get ref-pages page)) (get filters true))
-                         (set))
-        exclude? (fn [block]
-                   (when block
-                     (let [ids (set (conj (map :db/id (:block/refs block))
-                                          (get-in block [:block/page :db/id])))]
-                       (seq (set/intersection exclude-ids ids)))))
-        parents-exclude? (fn parents-exclude? [block]
-                           (when block
-                             (or (exclude? block)
-                                 (when-let [parent-id (:db/id (:block/parent block))]
-                                   (parents-exclude? (some #(when (= parent-id (:db/id %)) %) ref-blocks))))))]
+                         (set))]
     (if (empty? filters)
       ref-blocks
       (cond->> ref-blocks
         (seq exclude-ids)
-        (remove parents-exclude?)
+        (remove (fn [block]
+                  (let [ids (set (map :db/id (:block/refs block)))]
+                    (seq (set/intersection exclude-ids ids)))))
 
         (seq include-ids)
         (remove (fn [block]
-                  (let [ids (set (conj (map :db/id (:block/refs block))
-                                       (get-in block [:block/page :db/id])))]
+                  (let [ids (set (map :db/id (:block/refs block)))]
                     (empty? (set/intersection include-ids ids)))))))))
 
 ;; TODO: reduced version

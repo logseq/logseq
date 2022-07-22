@@ -3322,7 +3322,9 @@
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
               (for [parent-block blocks]
-                (breadcrumb-with-container [parent-block] config))
+                (rum/with-key
+                  (breadcrumb-with-container [parent-block] config)
+                  (:db/id parent-block)))
               {})])))]
 
      (and (:group-by-page? config)
